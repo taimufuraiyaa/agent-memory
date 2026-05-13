@@ -1,0 +1,102 @@
+package sqlite
+
+import (
+	"context"
+	"path/filepath"
+	"testing"
+
+	"github.com/time/timebooks/agent-memory/internal/core"
+)
+
+func TestUpsertAndListMemoryVectorsByWorkspace(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "vectors.db")
+	store, err := Open(context.Background(), dbPath)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer func() { _ = store.Close() }()
+	if err := store.UpsertMemory(context.Background(), &core.MemoryEntry{
+		ID:          "m1",
+		Type:        core.SemanticMemory,
+		Content:     "alpha",
+		Workspace:   "ws",
+		Source:      core.MemorySource{Type: core.SourceCodeAnalysis},
+		StorageTier: core.TierVector,
+		Confidence:  0.9,
+	}); err != nil {
+		t.Fatalf("upsert memory: %v", err)
+	}
+	if err := store.UpsertMemoryVector(context.Background(), "m1", "ws", []float32{0.1, 0.2, 0.3}); err != nil {
+		t.Fatalf("upsert memory vector: %v", err)
+	}
+	vecs, err := store.ListMemoryVectorsByWorkspace(context.Background(), "ws")
+	if err != nil {
+		t.Fatalf("list vectors: %v", err)
+	}
+	got, ok := vecs["m1"]
+	if !ok {
+		t.Fatalf("expected vector for m1")
+	}
+	if len(got) != 3 {
+		t.Fatalf("expected vector len 3, got %d", len(got))
+	}
+}
+
+func TestSearchMemoryVectorsSQL(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "vectors-search.db")
+	store, err := Open(context.Background(), dbPath)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer func() { _ = store.Close() }()
+	ctx := context.Background()
+	if err := store.UpsertMemory(ctx, &core.MemoryEntry{
+		ID:          "m1",
+		Type:        core.SemanticMemory,
+		Content:     "orders",
+		Workspace:   "ws",
+		Source:      core.MemorySource{Type: core.SourceCodeAnalysis},
+		StorageTier: core.TierVector,
+		Confidence:  0.9,
+	}); err != nil {
+		t.Fatalf("upsert m1: %v", err)
+	}
+	if err := store.UpsertMemory(ctx, &core.MemoryEntry{
+		ID:          "m2",
+		Type:        core.ProceduralMemory,
+		Content:     "deployment",
+		Workspace:   "ws",
+		Source:      core.MemorySource{Type: core.SourceCodeAnalysis},
+		StorageTier: core.TierMarkdown,
+		Confidence:  0.9,
+	}); err != nil {
+		t.Fatalf("upsert m2: %v", err)
+	}
+	if err := store.UpsertMemoryVector(ctx, "m1", "ws", []float32{1, 0, 0}); err != nil {
+		t.Fatalf("vector m1: %v", err)
+	}
+	if err := store.UpsertMemoryVector(ctx, "m2", "ws", []float32{0, 1, 0}); err != nil {
+		t.Fatalf("vector m2: %v", err)
+	}
+	scores, err := store.SearchMemoryVectorsSQL(ctx, "ws", []float32{1, 0, 0}, 5, nil, nil)
+	if err != nil {
+		t.Fatalf("search vectors sql: %v", err)
+	}
+	if len(scores) == 0 || scores[0].MemoryID != "m1" {
+		t.Fatalf("expected m1 as top result, got %+v", scores)
+	}
+	filtered, err := store.SearchMemoryVectorsSQL(
+		ctx,
+		"ws",
+		[]float32{1, 0, 0},
+		5,
+		[]core.MemoryType{core.ProceduralMemory},
+		[]core.StorageTier{core.TierMarkdown},
+	)
+	if err != nil {
+		t.Fatalf("search vectors sql filtered: %v", err)
+	}
+	if len(filtered) != 1 || filtered[0].MemoryID != "m2" {
+		t.Fatalf("expected filtered result m2, got %+v", filtered)
+	}
+}
