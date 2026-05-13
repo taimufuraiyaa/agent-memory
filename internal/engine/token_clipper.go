@@ -63,7 +63,7 @@ func (c *TokenClipper) Clip(hits []RetrievalHit, budget int) ([]RetrievalHit, Cl
 		IncludedIDs: make([]string, 0, len(hits)),
 	}
 	for _, h := range hits {
-		t := c.counter.Count(h.Memory.Content)
+		t := c.counter.Count(memoryTextForRecall(h.Memory))
 		if t > budget && meta.UsedTokens == 0 {
 			meta.ClippedDetails = append(meta.ClippedDetails, ClippedItem{
 				ID:     h.Memory.ID,
@@ -88,4 +88,3 @@ func (c *TokenClipper) Clip(hits []RetrievalHit, budget int) ([]RetrievalHit, Cl
 	meta.ClippedCount = len(meta.ClippedDetails)
 	return out, meta
 }
-

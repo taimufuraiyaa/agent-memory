@@ -7,7 +7,7 @@ You MUST use the `agent-memory` CLI for memory retrieval and persistence.
 
 ### Before doing any self-research
 
-- Run a focused memory search for the key terms and entities you’re about to research.
+- Run a focused memory search for the key terms and entities you're about to research.
 - Then run a recall for the current task and use it as primary context before searching the web/docs/code.
 
 Commands:

@@ -13,17 +13,20 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+
+	"github.com/time/timebooks/agent-memory/internal/workspace"
 )
 
 type upgradeResult struct {
-	FromVersion   string `json:"from_version"`
-	ToSpecifier   string `json:"to_specifier"`
-	Module        string `json:"module"`
-	Method        string `json:"method"`
-	SourceDir     string `json:"source_dir,omitempty"`
-	TargetPath    string `json:"target_path"`
-	InstalledFrom string `json:"installed_from,omitempty"`
-	Replaced      bool   `json:"replaced"`
+	FromVersion   string                      `json:"from_version"`
+	ToSpecifier   string                      `json:"to_specifier"`
+	Module        string                      `json:"module"`
+	Method        string                      `json:"method"`
+	SourceDir     string                      `json:"source_dir,omitempty"`
+	TargetPath    string                      `json:"target_path"`
+	InstalledFrom string                      `json:"installed_from,omitempty"`
+	Replaced      bool                        `json:"replaced"`
+	AgentFiles    *workspace.WriteAgentFilesResult `json:"agent_files,omitempty"`
 }
 
 func validateTextOrJSONFormat(s string) (string, error) {
@@ -161,14 +164,60 @@ func newUpgradeCommand() *cobra.Command {
 	var srcDir string
 	var yes bool
 	var dryRun bool
+	var hooksOnly bool
+	var forceHooks bool
+	var noHooks bool
 
 	cmd := &cobra.Command{
 		Use:   "upgrade",
-		Short: "Upgrade agent-memory to the newest version (requires Go)",
+		Short: "Upgrade agent-memory binary and push hippocampus hooks to the current project",
+		Long: `Upgrade the agent-memory binary and write the hippocampus hook files
+(.kiro/hooks/memory-recall-gate.json and .kiro/hooks/memory-consolidation-gate.json)
+into the current project directory.
+
+Hooks are always written by default. Use --no-hooks to skip them.
+Use --hooks-only to push hooks without touching the binary (useful for existing projects).`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			f, err := validateTextOrJSONFormat(format)
 			if err != nil {
 				return err
+			}
+
+			cwd, err := os.Getwd()
+			if err != nil {
+				return err
+			}
+
+			writeAgentFiles := func(force bool) (*workspace.WriteAgentFilesResult, error) {
+				return workspace.WriteAgentFiles(workspace.WriteAgentFilesOptions{
+					CWD:   cwd,
+					Force: force,
+				})
+			}
+
+			printAgentFiles := func(af *workspace.WriteAgentFilesResult) {
+				for _, ide := range af.IDEs {
+					if len(ide.Written) > 0 {
+						_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  [%s] written: %s\n", ide.IDE, strings.Join(ide.Written, ", "))
+					}
+					if len(ide.Skipped) > 0 {
+						_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  [%s] skipped (up-to-date): %s\n", ide.IDE, strings.Join(ide.Skipped, ", "))
+					}
+				}
+			}
+
+			// --hooks-only: just write agent files, skip binary upgrade entirely.
+			if hooksOnly {
+				af, err := writeAgentFiles(forceHooks)
+				if err != nil {
+					return fmt.Errorf("agent files: %w", err)
+				}
+				res := upgradeResult{AgentFiles: af}
+				if f == "json" {
+					return writeSuccessEnvelope(cmd.OutOrStdout(), "upgrade", res)
+				}
+				printAgentFiles(af)
+				return nil
 			}
 
 			v := collectVersionInfo()
@@ -188,9 +237,7 @@ func newUpgradeCommand() *cobra.Command {
 			}
 
 			if strings.TrimSpace(srcDir) == "" {
-				if cwd, err := os.Getwd(); err == nil {
-					srcDir = findSourceRoot(cwd)
-				}
+				srcDir = findSourceRoot(cwd)
 			}
 
 			method := "go-install"
@@ -234,15 +281,25 @@ func newUpgradeCommand() *cobra.Command {
 			}
 
 			if dryRun {
+				if !noHooks {
+					af, err := writeAgentFiles(forceHooks)
+					if err != nil {
+						return fmt.Errorf("agent files: %w", err)
+					}
+					res.AgentFiles = af
+				}
 				if f == "json" {
 					return writeSuccessEnvelope(cmd.OutOrStdout(), "upgrade", res)
 				}
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "dry-run: would replace %s with %s (from %s)\n", target, installedFrom, spec)
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "dry-run: would replace %s (from %s)\n", target, spec)
+				if res.AgentFiles != nil {
+					printAgentFiles(res.AgentFiles)
+				}
 				return nil
 			}
 
 			if !yes {
-				return errors.New("upgrade requires --yes (or use --dry-run)")
+				return errors.New("upgrade requires --yes / -y (or use --dry-run)")
 			}
 
 			if err := replaceFileAtomic(target, installedFrom); err != nil {
@@ -253,10 +310,21 @@ func newUpgradeCommand() *cobra.Command {
 				_ = os.Remove(installedFrom)
 			}
 
+			if !noHooks {
+				af, err := writeAgentFiles(forceHooks)
+				if err != nil {
+					return fmt.Errorf("agent files: %w", err)
+				}
+				res.AgentFiles = af
+			}
+
 			if f == "json" {
 				return writeSuccessEnvelope(cmd.OutOrStdout(), "upgrade", res)
 			}
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "upgraded: %s (installed from %s)\n", target, installedFrom)
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "upgraded: %s\n", target)
+			if res.AgentFiles != nil {
+				printAgentFiles(res.AgentFiles)
+			}
 			return nil
 		},
 	}
@@ -266,7 +334,10 @@ func newUpgradeCommand() *cobra.Command {
 	cmd.Flags().StringVar(&to, "to", "latest", "Go version specifier (e.g. latest, v1.2.3)")
 	cmd.Flags().StringVar(&target, "target", "", "Target path to replace (default: current executable)")
 	cmd.Flags().StringVar(&srcDir, "src", "", "Build from local source checkout (repo root containing go.mod and cmd/agent-memory)")
-	cmd.Flags().BoolVar(&yes, "yes", false, "Confirm replacing the target binary")
+	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "Confirm replacing the target binary")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Show what would happen without replacing anything")
+	cmd.Flags().BoolVar(&hooksOnly, "hooks-only", false, "Only write hippocampus hook files, skip binary upgrade")
+	cmd.Flags().BoolVar(&noHooks, "no-hooks", false, "Skip writing hippocampus hook files")
+	cmd.Flags().BoolVar(&forceHooks, "force-hooks", false, "Overwrite hook files even if already up-to-date")
 	return cmd
 }

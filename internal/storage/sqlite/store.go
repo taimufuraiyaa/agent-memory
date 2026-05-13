@@ -90,6 +90,8 @@ func (s *Store) Migrate(ctx context.Context) error {
 			id TEXT PRIMARY KEY,
 			type TEXT NOT NULL,
 			content TEXT NOT NULL,
+			diagram_lang TEXT NOT NULL DEFAULT '',
+			diagram_code TEXT NOT NULL DEFAULT '',
 			workspace TEXT NOT NULL,
 			content_hash TEXT NOT NULL DEFAULT '',
 			source_json TEXT NOT NULL,
@@ -210,6 +212,12 @@ func (s *Store) Migrate(ctx context.Context) error {
 	if err := s.ensureColumn(ctx, "memories", "pinned", `ALTER TABLE memories ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0`); err != nil {
 		return err
 	}
+	if err := s.ensureColumn(ctx, "memories", "diagram_lang", `ALTER TABLE memories ADD COLUMN diagram_lang TEXT NOT NULL DEFAULT ''`); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "memories", "diagram_code", `ALTER TABLE memories ADD COLUMN diagram_code TEXT NOT NULL DEFAULT ''`); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -254,8 +262,8 @@ func (s *Store) InsertMemoryByHash(ctx context.Context, m *core.MemoryEntry, con
 	m.UpdatedAt = time.Now().UTC()
 
 	query := `
-INSERT OR IGNORE INTO memories (id, type, content, workspace, content_hash, source_json, entities_json, tags_json, confidence, storage_tier, pinned, superseded_by, access_count, last_accessed, decay_score, outcome_json, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+INSERT OR IGNORE INTO memories (id, type, content, diagram_lang, diagram_code, workspace, content_hash, source_json, entities_json, tags_json, confidence, storage_tier, pinned, superseded_by, access_count, last_accessed, decay_score, outcome_json, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	res, err := s.db.ExecContext(
 		ctx,
@@ -263,6 +271,8 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 		m.ID,
 		string(m.Type),
 		m.Content,
+		nullDiagramLang(m),
+		nullDiagramCode(m),
 		m.Workspace,
 		contentHash,
 		string(sourceJSON),
@@ -319,11 +329,13 @@ func (s *Store) upsertMemory(ctx context.Context, m *core.MemoryEntry, contentHa
 	m.UpdatedAt = time.Now().UTC()
 
 	query := `
-INSERT INTO memories (id, type, content, workspace, content_hash, source_json, entities_json, tags_json, confidence, storage_tier, pinned, superseded_by, access_count, last_accessed, decay_score, outcome_json, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO memories (id, type, content, diagram_lang, diagram_code, workspace, content_hash, source_json, entities_json, tags_json, confidence, storage_tier, pinned, superseded_by, access_count, last_accessed, decay_score, outcome_json, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(id) DO UPDATE SET
 	type=excluded.type,
 	content=excluded.content,
+	diagram_lang=excluded.diagram_lang,
+	diagram_code=excluded.diagram_code,
 	workspace=excluded.workspace,
 	content_hash=excluded.content_hash,
 	source_json=excluded.source_json,
@@ -345,6 +357,8 @@ ON CONFLICT(id) DO UPDATE SET
 		m.ID,
 		string(m.Type),
 		m.Content,
+		nullDiagramLang(m),
+		nullDiagramCode(m),
 		m.Workspace,
 		contentHash,
 		string(sourceJSON),
@@ -370,12 +384,13 @@ ON CONFLICT(id) DO UPDATE SET
 // GetMemory loads one memory entry by ID.
 func (s *Store) GetMemory(ctx context.Context, id string) (*core.MemoryEntry, error) {
 	row := s.db.QueryRowContext(ctx, `
-SELECT id, type, content, workspace, source_json, entities_json, tags_json, confidence, storage_tier, pinned, superseded_by, access_count, last_accessed, decay_score, outcome_json, created_at, updated_at
+SELECT id, type, content, diagram_lang, diagram_code, workspace, source_json, entities_json, tags_json, confidence, storage_tier, pinned, superseded_by, access_count, last_accessed, decay_score, outcome_json, created_at, updated_at
 FROM memories WHERE id = ?`, id)
 
 	var m core.MemoryEntry
 	var sourceJSON, entitiesJSON, tagsJSON string
 	var outcomeJSON sql.NullString
+	var diagramLang, diagramCode string
 	var pinned int
 	var supersededBy sql.NullString
 	var createdAt, updatedAt, lastAccessed string
@@ -383,6 +398,8 @@ FROM memories WHERE id = ?`, id)
 		&m.ID,
 		&m.Type,
 		&m.Content,
+		&diagramLang,
+		&diagramCode,
 		&m.Workspace,
 		&sourceJSON,
 		&entitiesJSON,
@@ -430,6 +447,7 @@ FROM memories WHERE id = ?`, id)
 		m.SupersededBy = &supersededBy.String
 	}
 	m.Pinned = pinned == 1
+	applyDiagram(&m, diagramLang, diagramCode)
 	return &m, nil
 }
 
@@ -446,7 +464,7 @@ func (s *Store) GetMemoryByHash(ctx context.Context, workspace, contentHash stri
 // ListMemoriesByWorkspace returns all memories in a workspace ordered by recency.
 func (s *Store) ListMemoriesByWorkspace(ctx context.Context, workspace string) ([]core.MemoryEntry, error) {
 	rows, err := s.db.QueryContext(ctx, `
-SELECT id, type, content, workspace, source_json, entities_json, tags_json, confidence, storage_tier, pinned, superseded_by, access_count, last_accessed, decay_score, outcome_json, created_at, updated_at
+SELECT id, type, content, diagram_lang, diagram_code, workspace, source_json, entities_json, tags_json, confidence, storage_tier, pinned, superseded_by, access_count, last_accessed, decay_score, outcome_json, created_at, updated_at
 FROM memories
 WHERE workspace = ?
 ORDER BY updated_at DESC`, workspace)
@@ -460,11 +478,12 @@ ORDER BY updated_at DESC`, workspace)
 		var m core.MemoryEntry
 		var sourceJSON, entitiesJSON, tagsJSON string
 		var outcomeJSON sql.NullString
+		var diagramLang, diagramCode string
 		var pinned int
 		var supersededBy sql.NullString
 		var createdAt, updatedAt, lastAccessed string
 		if err := rows.Scan(
-			&m.ID, &m.Type, &m.Content, &m.Workspace, &sourceJSON, &entitiesJSON, &tagsJSON,
+			&m.ID, &m.Type, &m.Content, &diagramLang, &diagramCode, &m.Workspace, &sourceJSON, &entitiesJSON, &tagsJSON,
 			&m.Confidence, &m.StorageTier, &pinned, &supersededBy, &m.AccessCount, &lastAccessed, &m.DecayScore, &outcomeJSON, &createdAt, &updatedAt,
 		); err != nil {
 			return nil, err
@@ -497,6 +516,7 @@ ORDER BY updated_at DESC`, workspace)
 		if supersededBy.Valid && supersededBy.String != "" {
 			m.SupersededBy = &supersededBy.String
 		}
+		applyDiagram(&m, diagramLang, diagramCode)
 		m.Pinned = pinned == 1
 		out = append(out, m)
 	}
@@ -561,6 +581,31 @@ func (s *Store) SetDecayScores(ctx context.Context, byID map[string]float64) err
 		}
 	}
 	return tx.Commit()
+}
+
+func nullDiagramLang(m *core.MemoryEntry) string {
+	if m == nil || m.Diagram == nil {
+		return ""
+	}
+	return strings.TrimSpace(m.Diagram.Lang)
+}
+
+func nullDiagramCode(m *core.MemoryEntry) string {
+	if m == nil || m.Diagram == nil {
+		return ""
+	}
+	return m.Diagram.Code
+}
+
+func applyDiagram(m *core.MemoryEntry, lang, code string) {
+	if m == nil {
+		return
+	}
+	lang = strings.TrimSpace(lang)
+	if lang == "" && strings.TrimSpace(code) == "" {
+		return
+	}
+	m.Diagram = &core.Diagram{Lang: lang, Code: code}
 }
 
 func nullIfEmpty(b []byte) any {

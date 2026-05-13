@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/time/timebooks/agent-memory/internal/core"
@@ -19,7 +20,7 @@ func TestSessionEndExtractor(t *testing.T) {
 	pipeline := NewWritePipeline(store)
 	ex := NewSessionEndExtractor(pipeline)
 
-	transcript := "We found that retries should be exponential.\nThe fix was success after timeout tuning."
+	transcript := "We found that retries should be exponential.\n```mermaid\nflowchart TD\n  A[Client] --> B[API]\n```\nThe fix was success after timeout tuning."
 	out, err := ex.ExtractAndStore(context.Background(), "ws", transcript)
 	if err != nil {
 		t.Fatalf("extract and store: %v", err)
@@ -33,6 +34,7 @@ func TestSessionEndExtractor(t *testing.T) {
 	}
 	hasProcedural := false
 	hasOutcome := false
+	hasMermaid := false
 	for _, m := range memories {
 		if m.Type == core.ProceduralMemory {
 			hasProcedural = true
@@ -40,8 +42,11 @@ func TestSessionEndExtractor(t *testing.T) {
 		if m.Type == core.OutcomeMemory {
 			hasOutcome = true
 		}
+		if m.Diagram != nil && strings.Contains(m.Diagram.Lang, "mermaid") && strings.Contains(m.Diagram.Code, "flowchart") {
+			hasMermaid = true
+		}
 	}
-	if !hasProcedural || !hasOutcome {
+	if !hasProcedural || !hasOutcome || !hasMermaid {
 		t.Fatalf("expected procedural and outcome memories from transcript extraction")
 	}
 }

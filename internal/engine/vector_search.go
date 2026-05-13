@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/time/timebooks/agent-memory/internal/core"
@@ -87,7 +88,11 @@ func (s *VectorSearcher) SearchWithOptions(ctx context.Context, opt VectorSearch
 		}
 		mv := cachedVectors[m.ID]
 		if len(mv) == 0 {
-			mv, err = s.provider.Embed(ctx, m.Content)
+			text := m.Content
+			if m.Diagram != nil && strings.TrimSpace(m.Diagram.Code) != "" {
+				text = strings.TrimSpace(text) + "\n" + m.Diagram.Code
+			}
+			mv, err = s.provider.Embed(ctx, text)
 			if err != nil {
 				return nil, err
 			}
