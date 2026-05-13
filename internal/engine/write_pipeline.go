@@ -28,6 +28,7 @@ type WriteInput struct {
 	Workspace string
 	Type      core.MemoryType
 	Content   string
+	Diagram   *core.Diagram
 	Source    core.MemorySource
 	Entities  []string
 	Tags      []string
@@ -71,8 +72,8 @@ type SecurityFilter interface {
 type FastExtractor struct{}
 
 func (e FastExtractor) Extract(_ context.Context, content string) (string, error) {
-	clean := strings.Join(strings.Fields(strings.TrimSpace(content)), " ")
-	if clean == "" {
+	clean := normalizePreservingFences(content)
+	if strings.TrimSpace(clean) == "" {
 		return "", errors.New("content is empty")
 	}
 	return clean, nil
@@ -122,9 +123,27 @@ func (p *WritePipeline) Write(ctx context.Context, in WriteInput) (*WriteResult,
 		return nil, errors.New("pipeline is not initialized")
 	}
 
+	if in.Diagram == nil {
+		withoutDiagram, d := extractDiagramFence(in.Content)
+		if d != nil {
+			in.Diagram = d
+			in.Content = withoutDiagram
+		}
+	}
+	if in.Diagram != nil {
+		in.Tags = appendUnique(in.Tags, "diagram")
+		if strings.TrimSpace(in.Diagram.Lang) != "" {
+			in.Tags = appendUnique(in.Tags, strings.ToLower(strings.TrimSpace(in.Diagram.Lang)))
+		}
+	}
+
+	validationContent := in.Content
+	if in.Diagram != nil && strings.TrimSpace(in.Diagram.Code) != "" {
+		validationContent = strings.TrimSpace(validationContent) + "\n" + in.Diagram.Code
+	}
 	if err := p.filter.Validate(ctx, SecurityValidationInput{
 		Workspace: in.Workspace,
-		Content:   in.Content,
+		Content:   validationContent,
 		Tags:      in.Tags,
 	}); err != nil {
 		return &WriteResult{Rejected: true, RejectReason: err.Error()}, nil
@@ -140,7 +159,15 @@ func (p *WritePipeline) Write(ctx context.Context, in WriteInput) (*WriteResult,
 	}
 	content, err := extractor.Extract(ctx, in.Content)
 	if err != nil {
-		return nil, err
+		if in.Diagram != nil && strings.TrimSpace(in.Diagram.Code) != "" {
+			lang := strings.TrimSpace(in.Diagram.Lang)
+			if lang == "" {
+				lang = "diagram"
+			}
+			content = "Diagram (" + lang + ")"
+		} else {
+			return nil, err
+		}
 	}
 
 	in.Content = content
@@ -163,13 +190,14 @@ func (p *WritePipeline) Write(ctx context.Context, in WriteInput) (*WriteResult,
 		}
 	}
 
-	hash := contentHash(in.Workspace, in.Type, content)
+	hash := contentHash(in.Workspace, in.Type, content, in.Diagram)
 	decision := p.router.Decide(in)
 	tier := decision.Tier
 	entry := &core.MemoryEntry{
 		ID:          uuid.NewString(),
 		Type:        in.Type,
 		Content:     content,
+		Diagram:     in.Diagram,
 		Workspace:   in.Workspace,
 		Source:      in.Source,
 		Entities:    in.Entities,
@@ -223,7 +251,72 @@ func appendUnique(tags []string, tag string) []string {
 	return append(tags, tag)
 }
 
-func contentHash(workspace string, mt core.MemoryType, content string) string {
-	sum := sha256.Sum256([]byte(workspace + "|" + string(mt) + "|" + strings.TrimSpace(content)))
+func contentHash(workspace string, mt core.MemoryType, content string, diagram *core.Diagram) string {
+	lang := ""
+	code := ""
+	if diagram != nil {
+		lang = strings.TrimSpace(diagram.Lang)
+		code = diagram.Code
+	}
+	sum := sha256.Sum256([]byte(workspace + "|" + string(mt) + "|" + strings.TrimSpace(content) + "|" + lang + "|" + code))
 	return hex.EncodeToString(sum[:])
+}
+
+func normalizePreservingFences(content string) string {
+	s := strings.ReplaceAll(content, "\r\n", "\n")
+	lines := strings.Split(s, "\n")
+	out := make([]string, 0, len(lines))
+	outside := make([]string, 0, 64)
+	inFence := false
+	for _, ln := range lines {
+		trim := strings.TrimSpace(ln)
+		if strings.HasPrefix(trim, "```") {
+			if len(outside) > 0 {
+				out = append(out, strings.Join(outside, " "))
+				outside = outside[:0]
+			}
+			out = append(out, trim)
+			inFence = !inFence
+			continue
+		}
+		if inFence {
+			out = append(out, ln)
+			continue
+		}
+		outside = append(outside, strings.Fields(ln)...)
+	}
+	if len(outside) > 0 {
+		out = append(out, strings.Join(outside, " "))
+	}
+	return strings.TrimSpace(strings.Join(out, "\n"))
+}
+
+func extractDiagramFence(content string) (string, *core.Diagram) {
+	s := strings.ReplaceAll(content, "\r\n", "\n")
+	lines := strings.Split(s, "\n")
+	out := make([]string, 0, len(lines))
+	for i := 0; i < len(lines); i++ {
+		trim := strings.TrimSpace(lines[i])
+		if strings.HasPrefix(trim, "```") {
+			lang := strings.ToLower(strings.TrimSpace(strings.TrimPrefix(trim, "```")))
+			switch lang {
+			case "mermaid", "plantuml", "dot", "graphviz":
+				codeLines := make([]string, 0, 32)
+				for i+1 < len(lines) {
+					if strings.TrimSpace(lines[i+1]) == "```" {
+						i++
+						break
+					}
+					codeLines = append(codeLines, lines[i+1])
+					i++
+				}
+				cleaned := strings.TrimSpace(strings.Join(out, "\n") + "\n" + strings.Join(lines[i+1:], "\n"))
+				cleaned = strings.TrimSpace(cleaned)
+				code := strings.TrimRight(strings.Join(codeLines, "\n"), "\n")
+				return cleaned, &core.Diagram{Lang: lang, Code: code}
+			}
+		}
+		out = append(out, lines[i])
+	}
+	return content, nil
 }

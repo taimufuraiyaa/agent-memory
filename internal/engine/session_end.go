@@ -30,7 +30,9 @@ func (s *SessionEndExtractor) ExtractAndStore(ctx context.Context, workspace, tr
 			Workspace: workspace,
 			Type:      it.Type,
 			Content:   it.Content,
+			Diagram:   it.Diagram,
 			Outcome:   it.Outcome,
+			Tags:      it.Tags,
 			Source:    core.MemorySource{Type: core.SourceAgentObservation},
 			Mode:      ExtractFast,
 		})
@@ -49,6 +51,8 @@ type extractedMemory struct {
 	Type    core.MemoryType
 	Content string
 	Outcome *core.Outcome
+	Tags    []string
+	Diagram *core.Diagram
 }
 
 func extractTranscriptMemories(transcript string) []extractedMemory {
@@ -56,10 +60,35 @@ func extractTranscriptMemories(transcript string) []extractedMemory {
 	out := make([]extractedMemory, 0)
 	outcomeRe := regexp.MustCompile(`(?i)\b(success|failed|failure|partial)\b`)
 	procRe := regexp.MustCompile(`(?i)\b(always|never|must|should)\b`)
-	for _, ln := range lines {
-		text := strings.TrimSpace(ln)
+	for i := 0; i < len(lines); i++ {
+		text := strings.TrimSpace(lines[i])
 		if text == "" {
 			continue
+		}
+		if strings.HasPrefix(text, "```") {
+			lang := strings.ToLower(strings.TrimSpace(strings.TrimPrefix(text, "```")))
+			switch lang {
+			case "mermaid", "plantuml", "dot", "graphviz":
+				start := i
+				for i+1 < len(lines) {
+					if strings.TrimSpace(lines[i+1]) == "```" {
+						i++
+						break
+					}
+					i++
+				}
+				code := strings.TrimRight(strings.Join(lines[start+1:i], "\n"), "\n")
+				if strings.TrimSpace(code) != "" {
+					tags := []string{"diagram", lang}
+					out = append(out, extractedMemory{
+						Type:    core.SemanticMemory,
+						Content: "Diagram (" + lang + ")",
+						Tags:    tags,
+						Diagram: &core.Diagram{Lang: lang, Code: code},
+					})
+				}
+				continue
+			}
 		}
 		switch {
 		case outcomeRe.MatchString(text):
@@ -87,4 +116,3 @@ func extractTranscriptMemories(transcript string) []extractedMemory {
 func splitLines(s string) []string {
 	return strings.Split(strings.ReplaceAll(s, "\r\n", "\n"), "\n")
 }
-

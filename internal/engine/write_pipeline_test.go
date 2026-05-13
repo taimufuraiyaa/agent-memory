@@ -203,6 +203,41 @@ func TestWritePipelineModes(t *testing.T) {
 	}
 }
 
+func TestWritePipelinePreservesDiagramFences(t *testing.T) {
+	store := mustOpenStore(t)
+	t.Cleanup(func() { _ = store.Close() })
+
+	p := NewWritePipeline(store)
+	res, err := p.Write(context.Background(), WriteInput{
+		Workspace: "ws",
+		Type:      core.SemanticMemory,
+		Content:   "Diagram follows:\n\n```mermaid\nflowchart TD\n  A[One] --> B[Two]\n```\n",
+		Source:    core.MemorySource{Type: core.SourceAgentObservation},
+	})
+	if err != nil {
+		t.Fatalf("write failed: %v", err)
+	}
+	if res.Rejected {
+		t.Fatalf("expected not rejected")
+	}
+	m, err := store.GetMemory(context.Background(), res.ID)
+	if err != nil {
+		t.Fatalf("get memory: %v", err)
+	}
+	if m.Diagram == nil || strings.TrimSpace(m.Diagram.Code) == "" {
+		t.Fatalf("expected diagram captured")
+	}
+	if m.Diagram.Lang != "mermaid" {
+		t.Fatalf("expected mermaid lang, got: %q", m.Diagram.Lang)
+	}
+	if !strings.Contains(m.Diagram.Code, "flowchart TD") {
+		t.Fatalf("expected mermaid code preserved, got: %q", m.Diagram.Code)
+	}
+	if !(strings.Contains(strings.Join(m.Tags, ","), "diagram") && strings.Contains(strings.Join(m.Tags, ","), "mermaid")) {
+		t.Fatalf("expected diagram+mermaid tags, got: %+v", m.Tags)
+	}
+}
+
 func TestWritePipelineMarkdownTierIntegration(t *testing.T) {
 	store := mustOpenStore(t)
 	t.Cleanup(func() { _ = store.Close() })

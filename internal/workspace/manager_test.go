@@ -167,3 +167,47 @@ func TestManagerInitConcurrentSafety(t *testing.T) {
 		t.Fatalf("expected exactly one successful init, got %d (failures=%d)", successes, failures)
 	}
 }
+
+func TestWriteAgentFilesUpsertsCursorRulesFile(t *testing.T) {
+	cwd := t.TempDir()
+	rulePath := filepath.Join(cwd, ".cursorrules")
+	if err := os.WriteFile(rulePath, []byte("# AI Agent Rules - demo\n"), 0o644); err != nil {
+		t.Fatalf("write .cursorrules: %v", err)
+	}
+
+	res, err := WriteAgentFiles(WriteAgentFilesOptions{
+		CWD:       cwd,
+		Workspace: "ws-demo",
+		Force:     false,
+	})
+	if err != nil {
+		t.Fatalf("write agent files: %v", err)
+	}
+	if res == nil {
+		t.Fatalf("expected result")
+	}
+
+	after, err := os.ReadFile(rulePath)
+	if err != nil {
+		t.Fatalf("read .cursorrules: %v", err)
+	}
+	s := string(after)
+	if !strings.Contains(s, "## agent-memory (MANDATORY)") {
+		t.Fatalf("expected agent-memory section in .cursorrules")
+	}
+	if !strings.Contains(s, "workspace: ws-demo") {
+		t.Fatalf("expected workspace to be written in .cursorrules")
+	}
+
+	res2, err := WriteAgentFiles(WriteAgentFilesOptions{
+		CWD:       cwd,
+		Workspace: "ws-demo",
+		Force:     false,
+	})
+	if err != nil {
+		t.Fatalf("write agent files (2): %v", err)
+	}
+	if res2 == nil {
+		t.Fatalf("expected result (2)")
+	}
+}

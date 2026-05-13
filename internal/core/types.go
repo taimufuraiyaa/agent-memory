@@ -67,6 +67,7 @@ type MemoryEntry struct {
 	Type      MemoryType `json:"type" db:"type"`
 	Content   string     `json:"content" db:"content"`
 	Embedding []float32  `json:"-" db:"embedding"`
+	Diagram   *Diagram   `json:"diagram,omitempty"`
 
 	Workspace string  `json:"workspace" db:"workspace"`
 	SessionID *string `json:"session_id,omitempty" db:"session_id"`
@@ -93,6 +94,11 @@ type MemoryEntry struct {
 
 	Outcome   *Outcome   `json:"outcome,omitempty"`
 	Relations []Relation `json:"relations,omitempty"`
+}
+
+type Diagram struct {
+	Lang string `json:"lang"`
+	Code string `json:"code"`
 }
 
 // MemoryPatch supports partial updates.

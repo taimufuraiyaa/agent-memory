@@ -19,7 +19,7 @@ func AssembleRecallSections(task string, hits []RetrievalHit) string {
 		return b.String()
 	}
 	for i, h := range hits {
-		fmt.Fprintf(&b, "%d. [%s] %s\n", i+1, h.Memory.Type, strings.TrimSpace(h.Memory.Content))
+		fmt.Fprintf(&b, "%d. [%s]\n%s\n\n", i+1, h.Memory.Type, memoryTextForRecall(h.Memory))
 	}
 	return b.String()
 }
@@ -161,4 +161,19 @@ func keywordOverlap(keywords map[string]struct{}, text string) float64 {
 		}
 	}
 	return float64(count) / float64(len(parts))
+}
+
+func memoryTextForRecall(m core.MemoryEntry) string {
+	base := strings.TrimSpace(m.Content)
+	if m.Diagram == nil || strings.TrimSpace(m.Diagram.Code) == "" {
+		return base
+	}
+	lang := strings.TrimSpace(m.Diagram.Lang)
+	if lang == "" {
+		lang = "mermaid"
+	}
+	if base == "" {
+		base = "Diagram (" + lang + ")"
+	}
+	return base + "\n```" + lang + "\n" + strings.TrimRight(m.Diagram.Code, "\n") + "\n```"
 }
