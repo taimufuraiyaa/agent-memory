@@ -1,0 +1,9 @@
+{
+  "name": "@agent-memory/dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Deferred V1.5+ dashboard package scaffold",
+  "scripts": {
+    "build": "node -e \"console.log('dashboard scaffold build ok')\""
+  }
+}

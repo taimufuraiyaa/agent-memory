@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Agent Memory Dashboard</title>
+  <style>
+    body { font-family: -apple-system, sans-serif; max-width: 920px; margin: 24px auto; padding: 0 16px; }
+    h1 { margin-bottom: 8px; }
+    .card { border: 1px solid #ddd; border-radius: 8px; padding: 12px; margin: 12px 0; }
+    .muted { color: #666; }
+    pre { background: #f6f8fa; padding: 12px; border-radius: 8px; overflow-x: auto; }
+    label { display: block; margin-bottom: 8px; }
+    .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+    .row > * { flex: 1 1 auto; }
+    .controls { display: flex; gap: 8px; flex-wrap: wrap; }
+    .pill { display: inline-flex; gap: 6px; align-items: center; padding: 4px 8px; border: 1px solid #ddd; border-radius: 999px; background: #fff; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  </style>
+</head>
+<body>
+  <h1>Agent Memory Dashboard</h1>
+  <p class="muted">Engineer inspection surface. Search/preview use the same in-process engine path as the CLI.</p>
+
+  <div class="card">
+    <label for="workspace">Workspace</label>
+    <select id="workspace"></select>
+  </div>
+
+  <div class="card">
+    <h3>Stats</h3>
+    <pre id="stats">Loading...</pre>
+  </div>
+
+  <div class="card">
+    <h3>Dashboard Payload</h3>
+    <pre id="summary">Loading...</pre>
+  </div>
+
+  <div class="card">
+    <h3>Engineer Search (T30)</h3>
+    <label for="query">Query</label>
+    <input id="query" type="text" value="order event" style="width:100%;padding:8px;margin-bottom:8px;" />
+    <div class="row" style="margin-bottom:8px;">
+      <label class="pill"><input id="explain" type="checkbox" checked /> Explain</label>
+      <label class="pill">Top K <input id="topk" type="number" value="10" min="1" max="200" style="width:90px;" /></label>
+      <label class="pill">Outcome
+        <select id="outcome" style="padding:4px;">
+          <option value="">any</option>
+          <option value="success">success</option>
+          <option value="failure">failure</option>
+          <option value="partial">partial</option>
+        </select>
+      </label>
+      <label class="pill">Min confidence <input id="minconf" type="number" step="0.01" min="0" max="1" style="width:90px;" /></label>
+      <label class="pill">Min decay <input id="mindecay" type="number" step="0.01" min="0" max="1" style="width:90px;" /></label>
+    </div>
+    <div class="row" style="margin-bottom:8px;">
+      <label>Types</label>
+      <div class="controls">
+        <label class="pill"><input type="checkbox" class="type" value="episodic" /> episodic</label>
+        <label class="pill"><input type="checkbox" class="type" value="semantic" checked /> semantic</label>
+        <label class="pill"><input type="checkbox" class="type" value="procedural" /> procedural</label>
+        <label class="pill"><input type="checkbox" class="type" value="outcome" /> outcome</label>
+      </div>
+    </div>
+    <div class="row" style="margin-bottom:8px;">
+      <label>Tiers</label>
+      <div class="controls">
+        <label class="pill"><input type="checkbox" class="tier" value="markdown" /> markdown</label>
+        <label class="pill"><input type="checkbox" class="tier" value="vector" checked /> vector</label>
+        <label class="pill"><input type="checkbox" class="tier" value="vector+graph" /> vector+graph</label>
+        <label class="pill"><input type="checkbox" class="tier" value="document" /> document</label>
+      </div>
+    </div>
+    <div class="row" style="margin-bottom:8px;">
+      <label class="pill">Entities <input id="entities" type="text" placeholder="comma,separated" style="width:260px;" /></label>
+      <label class="pill">From <input id="from" type="date" /></label>
+      <label class="pill">To <input id="to" type="date" /></label>
+    </div>
+    <div class="controls" style="margin-bottom:8px;">
+      <button id="searchBtn">Run Search</button>
+      <button id="copySearchBtn">Open in CLI</button>
+      <span id="copySearchMsg" class="muted"></span>
+    </div>
+    <pre id="searchOut">Search not run yet.</pre>
+  </div>
+
+  <div class="card">
+    <h3>Recall Preview (T30)</h3>
+    <label for="task">Task</label>
+    <input id="task" type="text" value="investigate order event failures" style="width:100%;padding:8px;margin-bottom:8px;" />
+    <div class="controls" style="margin-bottom:8px;">
+      <label class="pill">Top K <input id="recallTopK" type="number" value="50" min="1" max="500" style="width:110px;" /></label>
+      <label class="pill">Budget <input id="budget" type="number" value="4000" min="1" style="width:110px;" /></label>
+      <button id="previewBtn">Run Recall Preview</button>
+      <button id="copyRecallBtn">Open in CLI</button>
+      <span id="copyRecallMsg" class="muted"></span>
+    </div>
+    <div class="row" style="align-items:stretch;">
+      <pre id="previewContext" style="flex:2">Preview not run yet.</pre>
+      <pre id="previewDetails" style="flex:1">Preview not run yet.</pre>
+    </div>
+  </div>
+
+  <script>
+    const workspaceSel = document.getElementById('workspace');
+    const statsEl = document.getElementById('stats');
+    const summaryEl = document.getElementById('summary');
+    const queryEl = document.getElementById('query');
+    const explainEl = document.getElementById('explain');
+    const topKEl = document.getElementById('topk');
+    const outcomeEl = document.getElementById('outcome');
+    const minConfEl = document.getElementById('minconf');
+    const minDecayEl = document.getElementById('mindecay');
+    const entitiesEl = document.getElementById('entities');
+    const fromEl = document.getElementById('from');
+    const toEl = document.getElementById('to');
+    const searchOutEl = document.getElementById('searchOut');
+    const taskEl = document.getElementById('task');
+    const recallTopKEl = document.getElementById('recallTopK');
+    const budgetEl = document.getElementById('budget');
+    const previewContextEl = document.getElementById('previewContext');
+    const previewDetailsEl = document.getElementById('previewDetails');
+    const searchBtn = document.getElementById('searchBtn');
+    const previewBtn = document.getElementById('previewBtn');
+    const copySearchBtn = document.getElementById('copySearchBtn');
+    const copyRecallBtn = document.getElementById('copyRecallBtn');
+    const copySearchMsg = document.getElementById('copySearchMsg');
+    const copyRecallMsg = document.getElementById('copyRecallMsg');
+
+    function json(v) { return JSON.stringify(v, null, 2); }
+
+    async function fetchJSON(url) {
+      const r = await fetch(url);
+      if (!r.ok) throw new Error(`HTTP ${r.status} for ${url}`);
+      const env = await r.json();
+      if (!env.ok) throw new Error(env?.error?.message || 'request failed');
+      return env.data;
+    }
+    
+    async function postJSON(url, payload) {
+      const r = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status} for ${url}`);
+      const env = await r.json();
+      if (!env.ok) throw new Error(env?.error?.message || 'request failed');
+      return env.data;
+    }
+
+    async function loadWorkspaces() {
+      const list = await fetchJSON('/api/v1/projects/list');
+      const projects = list.projects || [];
+      workspaceSel.innerHTML = '';
+      for (const p of projects) {
+        const opt = document.createElement('option');
+        opt.value = p.name;
+        opt.textContent = p.name;
+        workspaceSel.appendChild(opt);
+      }
+      if (!workspaceSel.value && projects.length > 0) workspaceSel.value = projects[0].name;
+    }
+
+    async function refresh() {
+      const ws = workspaceSel.value;
+      if (!ws) return;
+      const stats = await fetchJSON(`/api/v1/stats?workspace=${encodeURIComponent(ws)}`);
+      const summary = await fetchJSON(`/api/v1/dashboard?workspace=${encodeURIComponent(ws)}`);
+      statsEl.textContent = json(stats);
+      summaryEl.textContent = json(summary);
+    }
+
+    async function runSearch() {
+      const ws = workspaceSel.value;
+      const filters = {};
+      const types = Array.from(document.querySelectorAll('input.type:checked')).map(x => x.value);
+      const tiers = Array.from(document.querySelectorAll('input.tier:checked')).map(x => x.value);
+      if (types.length) filters.type = types;
+      if (tiers.length) filters.tiers = tiers;
+      if (outcomeEl.value) filters.outcome_result = outcomeEl.value;
+      if (minConfEl.value) filters.min_confidence = Number(minConfEl.value);
+      if (minDecayEl.value) filters.min_decay_score = Number(minDecayEl.value);
+      const ents = entitiesEl.value.split(',').map(s => s.trim()).filter(Boolean);
+      if (ents.length) filters.entities = ents;
+      if (fromEl.value || toEl.value) filters.date_range = { from: fromEl.value, to: toEl.value };
+      const payload = {
+        workspace: ws,
+        query: queryEl.value,
+        top_k: Number(topKEl.value || 10),
+        mode: 'search',
+        explain: explainEl.checked,
+        filters: Object.keys(filters).length ? filters : undefined,
+      };
+      const out = await postJSON('/api/v1/memories/search', payload);
+      searchOutEl.textContent = json(out);
+    }
+
+    function renderPreviewDetails(out) {
+      const lines = [];
+      lines.push(`tokens: ${out.tokens_used}/${out.tokens_budget}`);
+      if (out.tier_distribution) lines.push(`tiers: ${JSON.stringify(out.tier_distribution)}`);
+      lines.push('');
+      const included = out.memories_included || [];
+      lines.push(`included (${included.length})`);
+      for (const m of included) {
+        const score = typeof m.score === 'number' ? m.score.toFixed(6) : '';
+        lines.push(`- ${m.id} ${m.type} ${m.tier} score=${score} tokens=${m.tokens}`);
+      }
+      lines.push('');
+      const clipped = out.memories_clipped || [];
+      lines.push(`clipped (${clipped.length})`);
+      for (const c of clipped) {
+        lines.push(`- ${c.id} reason=${c.reason} would_add_tokens=${c.would_add_tokens}`);
+      }
+      return lines.join('\n');
+    }
+
+    async function runPreview() {
+      const ws = workspaceSel.value;
+      const out = await postJSON('/api/v1/memories/recall/preview', {
+        workspace: ws,
+        task_description: taskEl.value,
+        top_k: Number(recallTopKEl.value || 50),
+        token_budget: Number(budgetEl.value || 4000),
+        explain: explainEl.checked,
+      });
+      previewContextEl.textContent = out.context_block || '';
+      previewDetailsEl.textContent = renderPreviewDetails(out);
+    }
+
+    function buildSearchCLI() {
+      const ws = workspaceSel.value;
+      const types = Array.from(document.querySelectorAll('input.type:checked')).map(x => x.value);
+      const tiers = Array.from(document.querySelectorAll('input.tier:checked')).map(x => x.value);
+      const parts = [
+        'agent-memory', 'search',
+        '--workspace', ws,
+        '--query', JSON.stringify(queryEl.value),
+        '--top-k', String(Number(topKEl.value || 10)),
+        '--mode', 'search',
+        '--format', 'json',
+      ];
+      if (explainEl.checked) parts.push('--explain');
+      for (const t of types) parts.push('--type', t);
+      for (const t of tiers) parts.push('--tier', t);
+      if (outcomeEl.value) parts.push('--outcome-result', outcomeEl.value);
+      if (minConfEl.value) parts.push('--min-confidence', String(Number(minConfEl.value)));
+      if (minDecayEl.value) parts.push('--min-decay-score', String(Number(minDecayEl.value)));
+      const ents = entitiesEl.value.split(',').map(s => s.trim()).filter(Boolean);
+      for (const e of ents) parts.push('--entity', e);
+      if (fromEl.value) parts.push('--from', fromEl.value);
+      if (toEl.value) parts.push('--to', toEl.value);
+      return parts.join(' ');
+    }
+
+    function buildRecallCLI() {
+      const ws = workspaceSel.value;
+      const parts = [
+        'agent-memory', 'recall',
+        '--workspace', ws,
+        '--task', JSON.stringify(taskEl.value),
+        '--top-k', String(Number(recallTopKEl.value || 50)),
+        '--budget', String(Number(budgetEl.value || 4000)),
+        '--format', 'raw',
+      ];
+      return parts.join(' ');
+    }
+
+    async function copyText(text, msgEl) {
+      msgEl.textContent = '';
+      try {
+        await navigator.clipboard.writeText(text);
+        msgEl.textContent = 'Copied';
+      } catch (e) {
+        msgEl.textContent = text;
+      }
+    }
+
+    workspaceSel.addEventListener('change', refresh);
+    searchBtn.addEventListener('click', async () => {
+      try { await runSearch(); } catch (e) { searchOutEl.textContent = String(e); }
+    });
+    copySearchBtn.addEventListener('click', async () => copyText(buildSearchCLI(), copySearchMsg));
+    previewBtn.addEventListener('click', async () => {
+      try { await runPreview(); } catch (e) { previewOutEl.textContent = String(e); }
+    });
+    copyRecallBtn.addEventListener('click', async () => copyText(buildRecallCLI(), copyRecallMsg));
+
+    (async function main() {
+      try {
+        await loadWorkspaces();
+        await refresh();
+        await runSearch();
+        await runPreview();
+      } catch (e) {
+        statsEl.textContent = String(e);
+        summaryEl.textContent = String(e);
+        searchOutEl.textContent = String(e);
+        previewContextEl.textContent = String(e);
+        previewDetailsEl.textContent = String(e);
+      }
+    })();
+  </script>
+</body>
+</html>

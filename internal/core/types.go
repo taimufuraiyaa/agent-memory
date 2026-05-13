@@ -1,0 +1,229 @@
+package core
+
+import (
+	"errors"
+	"strings"
+	"time"
+)
+
+// MemoryType is a string enum describing the kind of memory.
+type MemoryType string
+
+const (
+	EpisodicMemory   MemoryType = "episodic"
+	SemanticMemory   MemoryType = "semantic"
+	ProceduralMemory MemoryType = "procedural"
+	OutcomeMemory    MemoryType = "outcome"
+)
+
+// StorageTier describes where a memory is routed.
+type StorageTier string
+
+const (
+	TierMarkdown    StorageTier = "markdown"
+	TierVector      StorageTier = "vector"
+	TierVectorGraph StorageTier = "vector+graph"
+	TierDocument    StorageTier = "document"
+	TierCold        StorageTier = "cold"
+)
+
+// SourceType indicates where a memory came from.
+type SourceType string
+
+const (
+	SourceAgentObservation SourceType = "agent_observation"
+	SourceUserInput        SourceType = "user_input"
+	SourceCodeAnalysis     SourceType = "code_analysis"
+	SourceConsolidation    SourceType = "consolidation"
+	SourceReflection       SourceType = "reflection"
+	SourceReconstruction   SourceType = "reconstruction"
+)
+
+// RelationType indicates relationship edges between memories.
+type RelationType string
+
+const (
+	RelCalls       RelationType = "calls"
+	RelDependsOn   RelationType = "depends_on"
+	RelContains    RelationType = "contains"
+	RelContradicts RelationType = "contradicts"
+	RelSupersedes  RelationType = "supersedes"
+	RelLedTo       RelationType = "led_to"
+	RelDerivedFrom RelationType = "derived_from"
+)
+
+// OutcomeResult records the result of an approach.
+type OutcomeResult string
+
+const (
+	OutcomeSuccess OutcomeResult = "success"
+	OutcomeFailure OutcomeResult = "failure"
+	OutcomePartial OutcomeResult = "partial"
+)
+
+// MemoryEntry is the canonical memory record.
+type MemoryEntry struct {
+	ID        string     `json:"id" db:"id"`
+	Type      MemoryType `json:"type" db:"type"`
+	Content   string     `json:"content" db:"content"`
+	Embedding []float32  `json:"-" db:"embedding"`
+
+	Workspace string  `json:"workspace" db:"workspace"`
+	SessionID *string `json:"session_id,omitempty" db:"session_id"`
+	AgentID   *string `json:"agent_id,omitempty" db:"agent_id"`
+	UserID    *string `json:"user_id,omitempty" db:"user_id"`
+
+	Source     MemorySource `json:"source"`
+	Entities   []string     `json:"entities" db:"entities"`
+	Tags       []string     `json:"tags" db:"tags"`
+	Confidence float64      `json:"confidence" db:"confidence"`
+
+	CreatedAt      time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at" db:"updated_at"`
+	LastAccessedAt time.Time `json:"last_accessed_at" db:"last_accessed"`
+	AccessCount    int       `json:"access_count" db:"access_count"`
+	DecayScore     float64   `json:"decay_score" db:"decay_score"`
+	SupersededBy   *string   `json:"superseded_by,omitempty" db:"superseded_by"`
+
+	StorageTier StorageTier `json:"storage_tier" db:"storage_tier"`
+	Importance  float64     `json:"importance" db:"importance"`
+	Pinned      bool        `json:"pinned" db:"pinned"`
+	PromotedAt  *time.Time  `json:"promoted_at,omitempty" db:"promoted_at"`
+	DemotedAt   *time.Time  `json:"demoted_at,omitempty" db:"demoted_at"`
+
+	Outcome   *Outcome   `json:"outcome,omitempty"`
+	Relations []Relation `json:"relations,omitempty"`
+}
+
+// MemoryPatch supports partial updates.
+type MemoryPatch struct {
+	Content      *string      `json:"content,omitempty"`
+	Confidence   *float64     `json:"confidence,omitempty"`
+	Tags         *[]string    `json:"tags,omitempty"`
+	SupersededBy *string      `json:"superseded_by,omitempty"`
+	StorageTier  *StorageTier `json:"storage_tier,omitempty"`
+	Pinned       *bool        `json:"pinned,omitempty"`
+}
+
+// MemorySource describes where memory data came from.
+type MemorySource struct {
+	Type      SourceType `json:"type"`
+	SessionID string     `json:"session_id,omitempty"`
+	FilePath  string     `json:"file_path,omitempty"`
+	LineRange []int      `json:"line_range,omitempty"`
+}
+
+// Relation is a graph edge from this memory to another memory.
+type Relation struct {
+	TargetID string            `json:"target_id"`
+	Type     RelationType      `json:"type"`
+	Weight   float64           `json:"weight"`
+	Metadata map[string]string `json:"metadata,omitempty"`
+}
+
+// Outcome captures why an attempt succeeded or failed.
+type Outcome struct {
+	Result         OutcomeResult `json:"result"`
+	Approach       string        `json:"approach"`
+	Reason         string        `json:"reason"`
+	LinkedMemories []string      `json:"linked_memories"`
+}
+
+// SearchFilters controls retrieval filtering.
+type SearchFilters struct {
+	Types         []MemoryType
+	Tiers         []StorageTier
+	Workspace     string
+	MinConfidence *float64
+	OutcomeResult *OutcomeResult
+	Entities      []string
+}
+
+// RecallOptions controls session-start recall behavior.
+type RecallOptions struct {
+	Workspace       string
+	TaskDescription string
+	TokenBudget     int
+}
+
+// StoreStats describes high-level store health.
+type StoreStats struct {
+	Workspace      string `json:"workspace"`
+	MemoryCount    int    `json:"memory_count"`
+	TombstoneCount int    `json:"tombstone_count"`
+}
+
+// MemoryTombstone is a compact breadcrumb for evicted/superseded memory.
+type MemoryTombstone struct {
+	ID              string     `json:"id"`
+	MemoryID        string     `json:"memory_id"`
+	Workspace       string     `json:"workspace"`
+	Type            MemoryType `json:"type"`
+	EntityHash      string     `json:"entity_hash"`
+	FragmentSummary string     `json:"fragment_summary,omitempty"`
+	EvictionReason  string     `json:"eviction_reason"`
+	LineageMemoryID string     `json:"lineage_memory_id,omitempty"`
+	EvictedAt       time.Time  `json:"evicted_at"`
+	CooldownUntil   time.Time  `json:"cooldown_until"`
+}
+
+// ConsolidationResult summarizes one lifecycle run.
+type ConsolidationResult struct {
+	Scored    int `json:"scored"`
+	Merged    int `json:"merged"`
+	Evicted   int `json:"evicted"`
+	Promoted  int `json:"promoted"`
+	DurationM int `json:"duration_ms"`
+}
+
+// Validate enforces basic invariants for in-memory domain objects.
+func (m *MemoryEntry) Validate() error {
+	if m == nil {
+		return errors.New("memory entry is nil")
+	}
+	if strings.TrimSpace(m.ID) == "" {
+		return errors.New("id is required")
+	}
+	if strings.TrimSpace(m.Content) == "" {
+		return errors.New("content is required")
+	}
+	if strings.TrimSpace(m.Workspace) == "" {
+		return errors.New("workspace is required")
+	}
+	if !isMemoryType(m.Type) {
+		return errors.New("invalid memory type")
+	}
+	if m.StorageTier != "" && !isStorageTier(m.StorageTier) {
+		return errors.New("invalid storage tier")
+	}
+	if m.Confidence < 0 || m.Confidence > 1 {
+		return errors.New("confidence must be between 0 and 1")
+	}
+	return nil
+}
+
+func IsMemoryType(v MemoryType) bool {
+	return isMemoryType(v)
+}
+
+func IsStorageTier(v StorageTier) bool {
+	return isStorageTier(v)
+}
+
+func isMemoryType(v MemoryType) bool {
+	switch v {
+	case EpisodicMemory, SemanticMemory, ProceduralMemory, OutcomeMemory:
+		return true
+	default:
+		return false
+	}
+}
+
+func isStorageTier(v StorageTier) bool {
+	switch v {
+	case TierMarkdown, TierVector, TierVectorGraph, TierDocument, TierCold:
+		return true
+	default:
+		return false
+	}
+}

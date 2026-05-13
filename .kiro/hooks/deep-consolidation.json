@@ -1,0 +1,12 @@
+{
+  "name": "Deep Consolidation",
+  "version": "2.0.0",
+  "description": "Cross-session memory consolidation: finds patterns across multiple sessions, promotes repeated failures to procedural rules, merges episodic clusters into semantic facts. Run this periodically (weekly or after a large batch of work).",
+  "when": {
+    "type": "userTriggered"
+  },
+  "then": {
+    "type": "runCommand",
+    "command": "rtk agent-memory consolidate --deep --days 30"
+  }
+}
