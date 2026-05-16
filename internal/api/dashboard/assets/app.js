@@ -35181,17 +35181,23 @@ function sanitize(html2) {
   });
 }
 function MarkdownView({ markdown, clamp }) {
-  const html2 = reactExports.useMemo(() => {
-    const rendered = marked.parse(markdown ?? "", { async: false });
-    return sanitize(rendered);
+  const tokens = reactExports.useMemo(() => {
+    return marked.lexer(markdown ?? "");
   }, [markdown]);
-  return /* @__PURE__ */ jsxRuntimeExports.jsx(
-    "div",
-    {
-      className: clamp ? "md mdClamp" : "md",
-      dangerouslySetInnerHTML: { __html: html2 }
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: clamp ? "md mdClamp" : "md", children: tokens.map((token2, i2) => {
+    if (token2.type === "code" && token2.lang === "mermaid") {
+      return /* @__PURE__ */ jsxRuntimeExports.jsx(DiagramViewer, { diagram: { lang: "mermaid", code: token2.text } }, i2);
     }
-  );
+    const html2 = sanitize(marked.parser([token2]));
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "div",
+      {
+        className: "mdPart",
+        dangerouslySetInnerHTML: { __html: html2 }
+      },
+      i2
+    );
+  }) });
 }
 const allTypes = [
   { key: "semantic", label: "semantic" },
@@ -35253,15 +35259,7 @@ function App() {
   const [recallTopK, setRecallTopK] = reactExports.useState(50);
   const [budget, setBudget] = reactExports.useState(4e3);
   const [busy, setBusy] = reactExports.useState(false);
-  const [messages, setMessages] = reactExports.useState([
-    {
-      id: makeID(),
-      role: "system",
-      mode: "search",
-      text: "Ask a question in English. Use Search to find relevant memories; use Recall Preview to see the exact context block an agent would receive.",
-      createdAt: Date.now()
-    }
-  ]);
+  const [messages, setMessages] = reactExports.useState([]);
   const projectLabel = reactExports.useMemo(() => {
     const p2 = projects.find((x2) => x2.name === workspace);
     if (!p2) return workspace || "workspace";
@@ -35478,53 +35476,195 @@ function App() {
             className: "iconBtn iconBtnInfo",
             onClick: () => setInfoOpen(true),
             "aria-label": "Info",
-            title: "Info",
-            children: "i"
+            title: "System Info",
+            style: { width: 32, height: 32, padding: 0, borderRadius: "8px", border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.7)", transition: "all 0.2s ease" },
+            children: /* @__PURE__ */ jsxRuntimeExports.jsxs("svg", { width: "16", height: "16", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "2", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("circle", { cx: "12", cy: "12", r: "10" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M12 16v-4M12 8h.01" })
+            ] })
           }
         ),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("a", { className: "topLink", href: "/health", target: "_blank", rel: "noreferrer noopener", children: "health" })
+        /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "a",
+          {
+            className: "topLink",
+            href: "/health",
+            target: "_blank",
+            rel: "noreferrer noopener",
+            style: { display: "inline-flex", alignItems: "center", gap: "6px", padding: "6px 12px", borderRadius: "8px", textDecoration: "none", fontSize: "12px", fontWeight: 500, color: "rgba(255,255,255,0.7)", border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.05)", transition: "all 0.2s ease" },
+            children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("svg", { width: "14", height: "14", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "2", children: /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M22 12h-4l-3 9L9 3l-3 9H2" }) }),
+              "Health"
+            ]
+          }
+        )
       ] })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "chatLayout chatLayoutNoSidebar", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("main", { className: "chatMain", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "thread", children: messages.map((m2) => /* @__PURE__ */ jsxRuntimeExports.jsx(Message, { m: m2 }, m2.id)) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "composerDock", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "composer", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "composerTop", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "composerMeta", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "composerMode", children: mode === "search" ? "Search" : "Recall Preview" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "composerHint", children: mode === "search" ? "Ask a question to find memories." : "Describe a task to preview recall output." })
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "composerActions", children: /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "btn", onClick: () => setAdvancedOpen((v2) => !v2), children: advancedOpen ? "Hide Advanced" : "Advanced" }) })
-        ] }),
-        advancedOpen ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "composerAdvanced", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "composerRow", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "composerRowTitle", children: "Mode" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "modePills modePillsInline", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "composerDock", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "composer", children: [
+          advancedOpen ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "composerAdvanced", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "composerRow", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "composerRowTitle", children: "Mode" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "modePills modePillsInline", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "button",
+                  {
+                    className: mode === "search" ? "modePill modePillOn" : "modePill",
+                    onClick: () => setMode("search"),
+                    type: "button",
+                    children: "Search"
+                  }
+                ),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "button",
+                  {
+                    className: mode === "recall" ? "modePill modePillOn" : "modePill",
+                    onClick: () => setMode("recall"),
+                    type: "button",
+                    children: "Recall Preview"
+                  }
+                )
+              ] })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "check", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("input", { type: "checkbox", checked: explain, onChange: (e2) => setExplain(e2.target.checked) }),
+              "Explain scoring"
+            ] }),
+            mode === "search" ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "row row2", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Top K" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    "input",
+                    {
+                      className: "input",
+                      type: "number",
+                      min: 1,
+                      max: 200,
+                      value: topK,
+                      onChange: (e2) => setTopK(Number(e2.target.value))
+                    }
+                  )
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Outcome" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                    "select",
+                    {
+                      className: "input",
+                      value: outcome,
+                      onChange: (e2) => setOutcome(e2.target.value),
+                      children: [
+                        /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: "any" }),
+                        /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "success", children: "success" }),
+                        /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "failure", children: "failure" }),
+                        /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "partial", children: "partial" })
+                      ]
+                    }
+                  )
+                ] })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Types" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "chips", children: allTypes.map((t2) => /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: types.has(t2.key) ? "chip chipOn" : "chip", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "input",
+                  {
+                    type: "checkbox",
+                    checked: types.has(t2.key),
+                    onChange: (e2) => {
+                      const next2 = new Set(types);
+                      if (e2.target.checked) next2.add(t2.key);
+                      else next2.delete(t2.key);
+                      setTypes(next2);
+                    }
+                  }
+                ),
+                t2.label
+              ] }, t2.key)) }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Tiers" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "chips", children: allTiers.map((t2) => /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: tiers.has(t2.key) ? "chip chipOn" : "chip", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "input",
+                  {
+                    type: "checkbox",
+                    checked: tiers.has(t2.key),
+                    onChange: (e2) => {
+                      const next2 = new Set(tiers);
+                      if (e2.target.checked) next2.add(t2.key);
+                      else next2.delete(t2.key);
+                      setTiers(next2);
+                    }
+                  }
+                ),
+                t2.label
+              ] }, t2.key)) }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "row row2", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Min confidence" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    "input",
+                    {
+                      className: "input",
+                      inputMode: "decimal",
+                      value: minConfidence,
+                      onChange: (e2) => setMinConfidence(e2.target.value),
+                      placeholder: "0.00 – 1.00"
+                    }
+                  )
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Min decay" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    "input",
+                    {
+                      className: "input",
+                      inputMode: "decimal",
+                      value: minDecay,
+                      onChange: (e2) => setMinDecay(e2.target.value),
+                      placeholder: "0.00 – 1.00"
+                    }
+                  )
+                ] })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Entities (comma-separated)" }),
               /* @__PURE__ */ jsxRuntimeExports.jsx(
-                "button",
+                "input",
                 {
-                  className: mode === "search" ? "modePill modePillOn" : "modePill",
-                  onClick: () => setMode("search"),
-                  type: "button",
-                  children: "Search"
+                  className: "input",
+                  value: entities,
+                  onChange: (e2) => setEntities(e2.target.value),
+                  placeholder: "orders, kafka, schema"
                 }
               ),
-              /* @__PURE__ */ jsxRuntimeExports.jsx(
-                "button",
-                {
-                  className: mode === "recall" ? "modePill modePillOn" : "modePill",
-                  onClick: () => setMode("recall"),
-                  type: "button",
-                  children: "Recall Preview"
-                }
-              )
-            ] })
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "check", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("input", { type: "checkbox", checked: explain, onChange: (e2) => setExplain(e2.target.checked) }),
-            "Explain scoring"
-          ] }),
-          mode === "search" ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "row row2", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "row row2", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "From" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    "input",
+                    {
+                      className: "input",
+                      type: "date",
+                      value: fromDate,
+                      onChange: (e2) => setFromDate(e2.target.value)
+                    }
+                  )
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "To" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    "input",
+                    {
+                      className: "input",
+                      type: "date",
+                      value: toDate,
+                      onChange: (e2) => setToDate(e2.target.value)
+                    }
+                  )
+                ] })
+              ] })
+            ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "row row2", children: [
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Top K" }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -35533,167 +35673,35 @@ function App() {
                     className: "input",
                     type: "number",
                     min: 1,
-                    max: 200,
-                    value: topK,
-                    onChange: (e2) => setTopK(Number(e2.target.value))
+                    max: 500,
+                    value: recallTopK,
+                    onChange: (e2) => setRecallTopK(Number(e2.target.value))
                   }
                 )
               ] }),
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Outcome" }),
-                /* @__PURE__ */ jsxRuntimeExports.jsxs(
-                  "select",
-                  {
-                    className: "input",
-                    value: outcome,
-                    onChange: (e2) => setOutcome(e2.target.value),
-                    children: [
-                      /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: "any" }),
-                      /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "success", children: "success" }),
-                      /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "failure", children: "failure" }),
-                      /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "partial", children: "partial" })
-                    ]
-                  }
-                )
-              ] })
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Types" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "chips", children: allTypes.map((t2) => /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: types.has(t2.key) ? "chip chipOn" : "chip", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx(
-                "input",
-                {
-                  type: "checkbox",
-                  checked: types.has(t2.key),
-                  onChange: (e2) => {
-                    const next2 = new Set(types);
-                    if (e2.target.checked) next2.add(t2.key);
-                    else next2.delete(t2.key);
-                    setTypes(next2);
-                  }
-                }
-              ),
-              t2.label
-            ] }, t2.key)) }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Tiers" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "chips", children: allTiers.map((t2) => /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: tiers.has(t2.key) ? "chip chipOn" : "chip", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx(
-                "input",
-                {
-                  type: "checkbox",
-                  checked: tiers.has(t2.key),
-                  onChange: (e2) => {
-                    const next2 = new Set(tiers);
-                    if (e2.target.checked) next2.add(t2.key);
-                    else next2.delete(t2.key);
-                    setTiers(next2);
-                  }
-                }
-              ),
-              t2.label
-            ] }, t2.key)) }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "row row2", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Min confidence" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Budget" }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx(
                   "input",
                   {
                     className: "input",
-                    inputMode: "decimal",
-                    value: minConfidence,
-                    onChange: (e2) => setMinConfidence(e2.target.value),
-                    placeholder: "0.00 – 1.00"
-                  }
-                )
-              ] }),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Min decay" }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx(
-                  "input",
-                  {
-                    className: "input",
-                    inputMode: "decimal",
-                    value: minDecay,
-                    onChange: (e2) => setMinDecay(e2.target.value),
-                    placeholder: "0.00 – 1.00"
-                  }
-                )
-              ] })
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Entities (comma-separated)" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "input",
-              {
-                className: "input",
-                value: entities,
-                onChange: (e2) => setEntities(e2.target.value),
-                placeholder: "orders, kafka, schema"
-              }
-            ),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "row row2", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "From" }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx(
-                  "input",
-                  {
-                    className: "input",
-                    type: "date",
-                    value: fromDate,
-                    onChange: (e2) => setFromDate(e2.target.value)
-                  }
-                )
-              ] }),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "To" }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx(
-                  "input",
-                  {
-                    className: "input",
-                    type: "date",
-                    value: toDate,
-                    onChange: (e2) => setToDate(e2.target.value)
+                    type: "number",
+                    min: 1,
+                    value: budget,
+                    onChange: (e2) => setBudget(Number(e2.target.value))
                   }
                 )
               ] })
             ] })
-          ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "row row2", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Top K" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx(
-                "input",
-                {
-                  className: "input",
-                  type: "number",
-                  min: 1,
-                  max: 500,
-                  value: recallTopK,
-                  onChange: (e2) => setRecallTopK(Number(e2.target.value))
-                }
-              )
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Budget" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx(
-                "input",
-                {
-                  className: "input",
-                  type: "number",
-                  min: 1,
-                  value: budget,
-                  onChange: (e2) => setBudget(Number(e2.target.value))
-                }
-              )
-            ] })
-          ] })
-        ] }) : null,
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "composerInputRow", children: [
+          ] }) : null,
           /* @__PURE__ */ jsxRuntimeExports.jsx(
             "textarea",
             {
               className: "composerInput",
               value: draft,
               onChange: (e2) => setDraft(e2.target.value),
-              placeholder: mode === "search" ? "Ask about the project memory…" : "Describe the task to recall…",
-              rows: 1,
+              placeholder: mode === "search" ? "How can I help you today?" : "Describe the task to recall…",
+              rows: 2,
               onKeyDown: (e2) => {
                 if (e2.key === "Enter" && !e2.shiftKey) {
                   e2.preventDefault();
@@ -35702,14 +35710,23 @@ function App() {
               }
             }
           ),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "sendBtn", onClick: submit, disabled: !workspace || busy || !draft.trim(), children: "Send" })
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "composerToolbar", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "composerToolbarLeft", children: /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "btn btnGhost", style: { padding: "8px", color: "rgba(255,255,255,0.6)", border: "none", background: "transparent" }, title: "Add attachment", children: /* @__PURE__ */ jsxRuntimeExports.jsx("svg", { width: "20", height: "20", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "2", children: /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M12 5v14M5 12h14" }) }) }) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "composerToolbarRight", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { className: "btn btnGhost", style: { border: "none", background: "transparent", padding: "4px 8px", color: "rgba(255,255,255,0.5)", fontSize: "12px" }, onClick: () => setAdvancedOpen((v2) => !v2), children: [
+                advancedOpen ? "Hide Advanced" : "Advanced Settings",
+                " ⌄"
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "sendBtn", onClick: submit, disabled: !workspace || busy || !draft.trim(), children: /* @__PURE__ */ jsxRuntimeExports.jsx("svg", { width: "18", height: "18", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "2", children: /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M12 19V5M5 12l7-7 7 7" }) }) })
+            ] })
+          ] })
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "composerFoot", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "muted small", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "composerFoot", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "muted small", style: { display: "block", textAlign: "center" }, children: [
           "Served locally by ",
           /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mono", children: "agent-memory serve" }),
           ". Markdown is sanitized; Mermaid renders when present."
         ] }) })
-      ] }) })
+      ] })
     ] }) }),
     infoOpen ? /* @__PURE__ */ jsxRuntimeExports.jsx(
       "div",
