@@ -14,6 +14,7 @@ func NewRootCommand() *cobra.Command {
 
 	cmd.SilenceUsage = true
 	cmd.SilenceErrors = true
+	cmd.PersistentFlags().Bool("pretty", false, "Pretty print JSON output")
 	cmd.AddCommand(newWriteCommand())
 	cmd.AddCommand(newSearchCommand())
 	cmd.AddCommand(newRecallCommand())
