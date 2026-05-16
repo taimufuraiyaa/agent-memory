@@ -59,12 +59,33 @@ func writeErrorEnvelope(out io.Writer, command, message string) error {
 	})
 }
 
+func isPretty() bool {
+	for _, arg := range os.Args {
+		if arg == "--pretty" || arg == "--pretty=true" {
+			return true
+		}
+		if arg == "--pretty=false" {
+			return false
+		}
+	}
+	return false
+}
+
 func writeJSON(out io.Writer, payload any) error {
-	b, err := json.Marshal(payload)
+	var b []byte
+	var err error
+	if isPretty() {
+		b, err = json.MarshalIndent(payload, "", "  ")
+	} else {
+		b, err = json.Marshal(payload)
+	}
 	if err != nil {
 		return err
 	}
 	_, err = out.Write(b)
+	if err == nil && isPretty() {
+		_, err = out.Write([]byte("\n"))
+	}
 	return err
 }
 
