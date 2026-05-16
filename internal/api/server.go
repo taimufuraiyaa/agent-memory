@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -8,20 +9,64 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"sync"
 
 	"github.com/time/timebooks/agent-memory/internal/core"
+	"github.com/time/timebooks/agent-memory/internal/embeddings"
 	"github.com/time/timebooks/agent-memory/internal/engine"
 	"github.com/time/timebooks/agent-memory/internal/storage/sqlite"
 	"github.com/time/timebooks/agent-memory/internal/workspace"
 )
 
 type Service struct {
-	Workspace string
+	Workspace         string
+	BaseDir           string
+	EmbeddingProvider embeddings.Provider
+
+	mu     sync.RWMutex
+	stores map[string]*workspaceAssets
+}
+
+type workspaceAssets struct {
+	Store     *sqlite.Store
 	Writer    *engine.WritePipeline
 	Retrieval *engine.RetrievalEngine
 	Clipper   *engine.TokenClipper
-	Store     *sqlite.Store
-	BaseDir   string
+}
+
+func (s *Service) resolve(ctx context.Context, ws string) (*workspaceAssets, error) {
+	if ws == "" {
+		ws = s.Workspace
+	}
+	s.mu.RLock()
+	assets, ok := s.stores[ws]
+	s.mu.RUnlock()
+	if ok {
+		return assets, nil
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if assets, ok := s.stores[ws]; ok {
+		return assets, nil
+	}
+
+	dbPath := filepath.Join(s.BaseDir, ws+".db")
+	store, err := sqlite.Open(ctx, dbPath)
+	if err != nil {
+		return nil, err
+	}
+	assets = &workspaceAssets{
+		Store:     store,
+		Writer:    engine.NewWritePipeline(store),
+		Retrieval: engine.NewRetrievalEngine(engine.NewVectorSearcher(store, s.EmbeddingProvider)),
+		Clipper:   engine.NewTokenClipper(nil),
+	}
+	if s.stores == nil {
+		s.stores = make(map[string]*workspaceAssets)
+	}
+	s.stores[ws] = assets
+	return assets, nil
 }
 
 func NewMux(svc *Service) *http.ServeMux {
@@ -56,11 +101,16 @@ func NewMux(svc *Service) *http.ServeMux {
 		if ws == "" {
 			ws = workspaceFromRequest(r, svc.Workspace)
 		}
+		assets, err := svc.resolve(r.Context(), ws)
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
+			return
+		}
 		src := core.MemorySource{Type: core.SourceUserInput}
 		if req.Source != nil && req.Source.Type != "" {
 			src = *req.Source
 		}
-		out, err := svc.Writer.Write(r.Context(), engine.WriteInput{
+		out, err := assets.Writer.Write(r.Context(), engine.WriteInput{
 			Workspace: ws,
 			Type:      req.Type,
 			Content:   req.Content,
@@ -119,6 +169,11 @@ func NewMux(svc *Service) *http.ServeMux {
 		ws := strings.TrimSpace(req.Workspace)
 		if ws == "" {
 			ws = workspaceFromRequest(r, svc.Workspace)
+		}
+		assets, err := svc.resolve(r.Context(), ws)
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
+			return
 		}
 		topK := req.TopK
 		if topK <= 0 {
@@ -220,7 +275,7 @@ func NewMux(svc *Service) *http.ServeMux {
 				DateTo:        dateTo,
 			},
 		}
-		out, err := svc.Retrieval.Retrieve(r.Context(), engine.RetrievalOptions{
+		out, err := assets.Retrieval.Retrieve(r.Context(), engine.RetrievalOptions{
 			Workspace: opt.Workspace,
 			Query:     opt.Query,
 			TopK:      opt.TopK,
@@ -232,8 +287,8 @@ func NewMux(svc *Service) *http.ServeMux {
 			return
 		}
 		hits := out.Hits
-		if svc.Store != nil {
-			_ = svc.Store.AddTokenMetric(r.Context(), ws, "search", sumHitTokens(hits), sumHitTokens(hits))
+		if assets.Store != nil {
+			_ = assets.Store.AddTokenMetric(r.Context(), ws, "search", sumHitTokens(hits), sumHitTokens(hits))
 		}
 		results := renderSearchResults(hits, req.Explain)
 		writeOK(w, http.StatusOK, map[string]any{
@@ -268,6 +323,11 @@ func NewMux(svc *Service) *http.ServeMux {
 		if ws == "" {
 			ws = workspaceFromRequest(r, svc.Workspace)
 		}
+		assets, err := svc.resolve(r.Context(), ws)
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
+			return
+		}
 		task := strings.TrimSpace(req.TaskDescription)
 		if task == "" {
 			task = strings.TrimSpace(req.Task)
@@ -283,7 +343,7 @@ func NewMux(svc *Service) *http.ServeMux {
 		if topK <= 0 {
 			topK = 50
 		}
-		retrieved, err := svc.Retrieval.Retrieve(r.Context(), engine.RetrievalOptions{
+		retrieved, err := assets.Retrieval.Retrieve(r.Context(), engine.RetrievalOptions{
 			Workspace: ws,
 			Query:     task,
 			TopK:      topK,
@@ -294,7 +354,7 @@ func NewMux(svc *Service) *http.ServeMux {
 			return
 		}
 		rebalanced := engine.RebalanceRecallHits(task, retrieved.Hits)
-		included, meta := svc.Clipper.Clip(rebalanced, budget)
+		included, meta := assets.Clipper.Clip(rebalanced, budget)
 		contextBlock := engine.AssembleRecallSections(task, included)
 		data := map[string]any{
 			"context_block":    contextBlock,
@@ -336,6 +396,11 @@ func NewMux(svc *Service) *http.ServeMux {
 		if ws == "" {
 			ws = workspaceFromRequest(r, svc.Workspace)
 		}
+		assets, err := svc.resolve(r.Context(), ws)
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
+			return
+		}
 		task := strings.TrimSpace(req.TaskDescription)
 		if task == "" {
 			task = strings.TrimSpace(req.Task)
@@ -351,7 +416,7 @@ func NewMux(svc *Service) *http.ServeMux {
 		if topK <= 0 {
 			topK = 50
 		}
-		retrieved, err := svc.Retrieval.Retrieve(r.Context(), engine.RetrievalOptions{
+		retrieved, err := assets.Retrieval.Retrieve(r.Context(), engine.RetrievalOptions{
 			Workspace: ws,
 			Query:     task,
 			TopK:      topK,
@@ -362,7 +427,7 @@ func NewMux(svc *Service) *http.ServeMux {
 			return
 		}
 		rebalanced := engine.RebalanceRecallHits(task, retrieved.Hits)
-		included, meta := svc.Clipper.Clip(rebalanced, budget)
+		included, meta := assets.Clipper.Clip(rebalanced, budget)
 		tierDist := make(map[string]int)
 		mems := make([]map[string]any, 0, len(included))
 		var fullMems []core.MemoryEntry
@@ -425,8 +490,14 @@ func NewMux(svc *Service) *http.ServeMux {
 			writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
 			return
 		}
-		extractor := engine.NewSessionEndExtractor(svc.Writer)
-		out, err := extractor.ExtractAndStore(r.Context(), svc.Workspace, req.Transcript)
+		ws := workspaceFromRequest(r, svc.Workspace)
+		assets, err := svc.resolve(r.Context(), ws)
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
+			return
+		}
+		extractor := engine.NewSessionEndExtractor(assets.Writer)
+		out, err := extractor.ExtractAndStore(r.Context(), ws, req.Transcript)
 		if err != nil {
 			writeErr(w, http.StatusBadRequest, "runtime", err.Error())
 			return
@@ -445,8 +516,14 @@ func NewMux(svc *Service) *http.ServeMux {
 			writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
 			return
 		}
-		extractor := engine.NewSessionEndExtractor(svc.Writer)
-		out, err := extractor.ExtractAndStore(r.Context(), svc.Workspace, req.Transcript)
+		ws := workspaceFromRequest(r, svc.Workspace)
+		assets, err := svc.resolve(r.Context(), ws)
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
+			return
+		}
+		extractor := engine.NewSessionEndExtractor(assets.Writer)
+		out, err := extractor.ExtractAndStore(r.Context(), ws, req.Transcript)
 		if err != nil {
 			writeErr(w, http.StatusBadRequest, "runtime", err.Error())
 			return
@@ -569,16 +646,17 @@ func NewMux(svc *Service) *http.ServeMux {
 			writeErr(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
 			return
 		}
-		if svc.Store == nil {
-			writeErr(w, http.StatusBadRequest, "runtime", "store unavailable")
+		ws := workspaceFromRequest(r, svc.Workspace)
+		assets, err := svc.resolve(r.Context(), ws)
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
 			return
 		}
 		format := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("format")))
 		if format == "" {
 			format = "json"
 		}
-		ws := workspaceFromRequest(r, svc.Workspace)
-		memories, err := svc.Store.ListMemoriesByWorkspace(r.Context(), ws)
+		memories, err := assets.Store.ListMemoriesByWorkspace(r.Context(), ws)
 		if err != nil {
 			writeErr(w, http.StatusBadRequest, "runtime", err.Error())
 			return
@@ -594,8 +672,10 @@ func NewMux(svc *Service) *http.ServeMux {
 			writeErr(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
 			return
 		}
-		if svc.Store == nil {
-			writeErr(w, http.StatusBadRequest, "runtime", "store unavailable")
+		ws := workspaceFromRequest(r, svc.Workspace)
+		assets, err := svc.resolve(r.Context(), ws)
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
 			return
 		}
 		var req engine.ExportBundle
@@ -613,10 +693,10 @@ func NewMux(svc *Service) *http.ServeMux {
 		imported := 0
 		for _, m := range req.Memories {
 			if strings.TrimSpace(m.Workspace) == "" {
-				m.Workspace = svc.Workspace
+				m.Workspace = ws
 			}
 			mm := m
-			if err := svc.Store.UpsertMemory(r.Context(), &mm); err != nil {
+			if err := assets.Store.UpsertMemory(r.Context(), &mm); err != nil {
 				writeErr(w, http.StatusBadRequest, "runtime", err.Error())
 				return
 			}
@@ -632,10 +712,6 @@ func NewMux(svc *Service) *http.ServeMux {
 			writeErr(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
 			return
 		}
-		if svc.Store == nil {
-			writeErr(w, http.StatusBadRequest, "runtime", "store unavailable")
-			return
-		}
 		var req struct {
 			Query     string `json:"query"`
 			Confirm   bool   `json:"confirm"`
@@ -645,11 +721,16 @@ func NewMux(svc *Service) *http.ServeMux {
 			writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
 			return
 		}
-		re := engine.NewReconstructionEngine(svc.Store, svc.Writer)
 		ws := strings.TrimSpace(req.Workspace)
 		if ws == "" {
 			ws = workspaceFromRequest(r, svc.Workspace)
 		}
+		assets, err := svc.resolve(r.Context(), ws)
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
+			return
+		}
+		re := engine.NewReconstructionEngine(assets.Store, assets.Writer)
 		out, err := re.Reconstruct(r.Context(), ws, req.Query, req.Confirm)
 		if err != nil {
 			writeErr(w, http.StatusBadRequest, "runtime", err.Error())
@@ -662,12 +743,13 @@ func NewMux(svc *Service) *http.ServeMux {
 			writeErr(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
 			return
 		}
-		if svc.Store == nil {
-			writeErr(w, http.StatusBadRequest, "runtime", "store unavailable")
+		workspace := workspaceFromRequest(r, svc.Workspace)
+		assets, err := svc.resolve(r.Context(), workspace)
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
 			return
 		}
-		workspace := workspaceFromRequest(r, svc.Workspace)
-		memories, err := svc.Store.ListMemoriesByWorkspace(r.Context(), workspace)
+		memories, err := assets.Store.ListMemoriesByWorkspace(r.Context(), workspace)
 		if err != nil {
 			writeErr(w, http.StatusBadRequest, "runtime", err.Error())
 			return
@@ -684,17 +766,18 @@ func NewMux(svc *Service) *http.ServeMux {
 			writeErr(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
 			return
 		}
-		if svc.Store == nil {
-			writeErr(w, http.StatusBadRequest, "runtime", "store unavailable")
+		workspace := workspaceFromRequest(r, svc.Workspace)
+		assets, err := svc.resolve(r.Context(), workspace)
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
 			return
 		}
-		workspace := workspaceFromRequest(r, svc.Workspace)
-		memories, err := svc.Store.ListMemoriesByWorkspace(r.Context(), workspace)
+		memories, err := assets.Store.ListMemoriesByWorkspace(r.Context(), workspace)
 		if err != nil {
 			writeErr(w, http.StatusBadRequest, "runtime", err.Error())
 			return
 		}
-		tokenTotals, err := svc.Store.AggregateTokenMetrics(r.Context(), workspace)
+		tokenTotals, err := assets.Store.AggregateTokenMetrics(r.Context(), workspace)
 		if err != nil {
 			writeErr(w, http.StatusBadRequest, "runtime", err.Error())
 			return

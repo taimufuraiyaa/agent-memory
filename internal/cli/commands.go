@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -442,48 +444,6 @@ func newSessionEndCommand() *cobra.Command {
 	return cmd
 }
 
-func newServeCommand() *cobra.Command {
-	var flags commonFlags
-	var addr string
-	cmd := &cobra.Command{
-		Use:   "serve",
-		Short: "Start local HTTP API",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx := cmd.Context()
-			cfg, err := resolveRuntime(flags)
-			if err != nil {
-				return err
-			}
-			store, provider, err := openDeps(ctx, cfg)
-			if err != nil {
-				return err
-			}
-			defer func() { _ = store.Close() }()
-
-			svc := &api.Service{
-				Workspace: cfg.workspace,
-				Writer:    engine.NewWritePipeline(store),
-				Retrieval: engine.NewRetrievalEngine(engine.NewVectorSearcher(store, provider)),
-				Clipper:   engine.NewTokenClipper(nil),
-				Store:     store,
-				BaseDir:   filepath.Dir(cfg.dbPath),
-			}
-			server := &http.Server{
-				Addr:    addr,
-				Handler: api.NewMux(svc),
-			}
-			host := addr
-			if strings.HasPrefix(addr, ":") {
-				host = "localhost" + addr
-			}
-			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "serving on http://%s\n", host)
-			return server.ListenAndServe()
-		},
-	}
-	addCommonFlags(cmd, &flags)
-	cmd.Flags().StringVar(&addr, "addr", ":3210", "HTTP listen address")
-	return cmd
-}
 
 func openInBrowser(url string) error {
 	if strings.TrimSpace(url) == "" {
@@ -511,10 +471,114 @@ func dashboardURLForListenerAddr(addr string) string {
 	return fmt.Sprintf("http://%s:%s/dashboard/", host, port)
 }
 
+type dashboardPID struct {
+	PID       int       `json:"pid"`
+	Workspace string    `json:"workspace"`
+	Addr      string    `json:"addr"`
+	URL       string    `json:"url"`
+	StartedAt time.Time `json:"started_at"`
+}
+
+func dashboardPIDPath(cfg runtimeConfig) string {
+	base := filepath.Dir(cfg.dbPath)
+	return filepath.Join(base, fmt.Sprintf("dashboard.%s.pid", cfg.workspace))
+}
+
+func readDashboardPID(path string) (dashboardPID, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return dashboardPID{}, err
+	}
+	var out dashboardPID
+	if err := json.Unmarshal(b, &out); err == nil && out.PID > 0 {
+		return out, nil
+	}
+	var pid int
+	if _, err := fmt.Sscanf(strings.TrimSpace(string(b)), "%d", &pid); err == nil && pid > 0 {
+		return dashboardPID{PID: pid}, nil
+	}
+	return dashboardPID{}, errors.New("invalid dashboard pid file")
+}
+
+func writeDashboardPID(path string, v dashboardPID) error {
+	b, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, b, 0o644)
+}
+
+func isProcessAlive(pid int) bool {
+	if pid <= 0 {
+		return false
+	}
+	p, err := os.FindProcess(pid)
+	if err != nil {
+		return false
+	}
+	if err := p.Signal(syscall.Signal(0)); err == nil {
+		return true
+	}
+	return false
+}
+
+func stopProcess(pid int) error {
+	if pid <= 0 {
+		return errors.New("pid is required")
+	}
+	p, err := os.FindProcess(pid)
+	if err != nil {
+		return err
+	}
+	if err := p.Kill(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validateDashboardStartAddr(addr string) error {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		if strings.HasPrefix(addr, ":") && len(addr) > 1 && addr != ":0" {
+			return nil
+		}
+		_ = host
+		return fmt.Errorf("invalid addr: %s", addr)
+	}
+	if port == "0" {
+		return errors.New("addr cannot use port 0 with --start (pick a fixed port)")
+	}
+	return nil
+}
+
+func startDashboardProcess(cfg runtimeConfig, addr string) (int, error) {
+	exe, err := os.Executable()
+	if err != nil {
+		return 0, err
+	}
+	args := []string{
+		"dashboard",
+		"--no-open",
+		"--addr", addr,
+		"--workspace", cfg.workspace,
+		"--db", cfg.dbPath,
+		"--model-dir", cfg.modelDir,
+	}
+	c := exec.Command(exe, args...)
+	c.Stdout = io.Discard
+	c.Stderr = io.Discard
+	if err := c.Start(); err != nil {
+		return 0, err
+	}
+	return c.Process.Pid, nil
+}
+
 func newDashboardCommand() *cobra.Command {
 	var flags commonFlags
 	var addr string
 	var noOpen bool
+	var start bool
+	var stop bool
 	cmd := &cobra.Command{
 		Use:     "dashboard",
 		Short:   "Open the local dashboard (starts the HTTP server)",
@@ -534,6 +598,60 @@ func newDashboardCommand() *cobra.Command {
 				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "opening %s\n", url)
 				return openInBrowser(url)
 			}
+			if start && stop {
+				return errors.New("only one of --start or --stop can be set")
+			}
+			if stop {
+				pidPath := dashboardPIDPath(cfg)
+				v, err := readDashboardPID(pidPath)
+				if err != nil {
+					return fmt.Errorf("dashboard stop: %w", err)
+				}
+				_ = stopProcess(v.PID)
+				_ = os.Remove(pidPath)
+				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "stopped dashboard (pid=%d)\n", v.PID)
+				return nil
+			}
+			if start {
+				if err := validateDashboardStartAddr(addr); err != nil {
+					return err
+				}
+				pidPath := dashboardPIDPath(cfg)
+				if v, err := readDashboardPID(pidPath); err == nil && isProcessAlive(v.PID) {
+					url := v.URL
+					if strings.TrimSpace(url) == "" {
+						url = dashboardURLForListenerAddr(addr)
+					}
+					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "dashboard already running (pid=%d)\n", v.PID)
+					if noOpen {
+						_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s\n", url)
+						return nil
+					}
+					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "opening %s\n", url)
+					return openInBrowser(url)
+				}
+				_ = os.Remove(pidPath)
+
+				url := dashboardURLForListenerAddr(addr)
+				pid, err := startDashboardProcess(cfg, addr)
+				if err != nil {
+					return err
+				}
+				_ = writeDashboardPID(pidPath, dashboardPID{
+					PID:       pid,
+					Workspace: cfg.workspace,
+					Addr:      addr,
+					URL:       url,
+					StartedAt: time.Now().UTC(),
+				})
+				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "started dashboard (pid=%d) %s\n", pid, url)
+				if noOpen {
+					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s\n", url)
+					return nil
+				}
+				_ = openInBrowser(url)
+				return nil
+			}
 			store, provider, err := openDeps(ctx, cfg)
 			if err != nil {
 				return err
@@ -541,12 +659,9 @@ func newDashboardCommand() *cobra.Command {
 			defer func() { _ = store.Close() }()
 
 			svc := &api.Service{
-				Workspace: cfg.workspace,
-				Writer:    engine.NewWritePipeline(store),
-				Retrieval: engine.NewRetrievalEngine(engine.NewVectorSearcher(store, provider)),
-				Clipper:   engine.NewTokenClipper(nil),
-				Store:     store,
-				BaseDir:   filepath.Dir(cfg.dbPath),
+				Workspace:         cfg.workspace,
+				BaseDir:           filepath.Dir(cfg.dbPath),
+				EmbeddingProvider: provider,
 			}
 			server := &http.Server{
 				Addr:    addr,
@@ -575,6 +690,8 @@ func newDashboardCommand() *cobra.Command {
 	addCommonFlags(cmd, &flags)
 	cmd.Flags().StringVar(&addr, "addr", ":3210", "HTTP listen address")
 	cmd.Flags().BoolVar(&noOpen, "no-open", false, "Do not open a browser; just print the URL")
+	cmd.Flags().BoolVar(&start, "start", false, "Start dashboard server in the background and exit")
+	cmd.Flags().BoolVar(&stop, "stop", false, "Stop the background dashboard server (started via --start)")
 	return cmd
 }
 

@@ -2,7 +2,6 @@ package api
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -13,16 +12,10 @@ import (
 
 	"github.com/time/timebooks/agent-memory/internal/embeddings"
 	"github.com/time/timebooks/agent-memory/internal/engine"
-	"github.com/time/timebooks/agent-memory/internal/storage/sqlite"
 )
 
 func TestServerWriteSearchRecall(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "api.db")
-	store, err := sqlite.Open(context.Background(), dbPath)
-	if err != nil {
-		t.Fatalf("open store: %v", err)
-	}
-	defer func() { _ = store.Close() }()
+	baseDir := t.TempDir()
 	modelDir := filepath.Join(t.TempDir(), "model")
 	if err := os.MkdirAll(modelDir, 0o755); err != nil {
 		t.Fatalf("mkdir model: %v", err)
@@ -32,12 +25,9 @@ func TestServerWriteSearchRecall(t *testing.T) {
 		t.Fatalf("provider: %v", err)
 	}
 	svc := &Service{
-		Workspace: "ws",
-		Writer:    engine.NewWritePipeline(store),
-		Retrieval: engine.NewRetrievalEngine(engine.NewVectorSearcher(store, provider)),
-		Clipper:   engine.NewTokenClipper(nil),
-		Store:     store,
-		BaseDir:   filepath.Dir(dbPath),
+		Workspace:         "ws",
+		BaseDir:           baseDir,
+		EmbeddingProvider: provider,
 	}
 	ts := httptest.NewServer(NewMux(svc))
 	defer ts.Close()
@@ -108,11 +98,11 @@ func TestServerWriteSearchRecall(t *testing.T) {
 		t.Fatalf("expected recall preview tier distribution")
 	}
 	previewFull := postJSON(t, ts.URL+"/api/v1/memories/recall/preview", map[string]any{
-		"workspace":         "ws",
-		"task_description":  "investigate order event",
-		"top_k":             2,
-		"token_budget":      20,
-		"include_memories":  true,
+		"workspace":        "ws",
+		"task_description": "investigate order event",
+		"top_k":            2,
+		"token_budget":     20,
+		"include_memories": true,
 	})
 	if _, ok := previewFull["memories_included_full"]; !ok {
 		t.Fatalf("expected recall preview full included memories when include_memories is true")
@@ -189,19 +179,10 @@ func TestServerProjectLifecycleRoutes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("provider: %v", err)
 	}
-	dbPath := filepath.Join(baseDir, "svc.db")
-	store, err := sqlite.Open(context.Background(), dbPath)
-	if err != nil {
-		t.Fatalf("open store: %v", err)
-	}
-	defer func() { _ = store.Close() }()
 	svc := &Service{
-		Workspace: "svc",
-		Writer:    engine.NewWritePipeline(store),
-		Retrieval: engine.NewRetrievalEngine(engine.NewVectorSearcher(store, provider)),
-		Clipper:   engine.NewTokenClipper(nil),
-		Store:     store,
-		BaseDir:   baseDir,
+		Workspace:         "svc",
+		BaseDir:           baseDir,
+		EmbeddingProvider: provider,
 	}
 	ts := httptest.NewServer(NewMux(svc))
 	defer ts.Close()

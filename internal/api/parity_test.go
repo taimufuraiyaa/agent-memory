@@ -21,15 +21,13 @@ import (
 )
 
 func TestSearchParityHTTPVsEngine(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "parity.db")
+	baseDir := t.TempDir()
+	dbPath := filepath.Join(baseDir, "ws.db")
 	store, err := sqlite.Open(context.Background(), dbPath)
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}
 	defer func() { _ = store.Close() }()
-	if err := os.MkdirAll(filepath.Join(t.TempDir(), "model"), 0o755); err != nil {
-		t.Fatalf("mkdir model: %v", err)
-	}
 	modelDir := filepath.Join(t.TempDir(), "model")
 	if err := os.MkdirAll(modelDir, 0o755); err != nil {
 		t.Fatalf("mkdir model: %v", err)
@@ -54,7 +52,7 @@ func TestSearchParityHTTPVsEngine(t *testing.T) {
 		t.Fatalf("direct retrieval: %v", err)
 	}
 
-	svc := &apipkg.Service{Workspace: "ws", Writer: pipe, Retrieval: retrieval, Clipper: engine.NewTokenClipper(nil)}
+	svc := &apipkg.Service{Workspace: "ws", BaseDir: baseDir, EmbeddingProvider: provider}
 	ts := httptest.NewServer(apipkg.NewMux(svc))
 	defer ts.Close()
 
@@ -90,7 +88,8 @@ func TestSearchParityHTTPVsEngine(t *testing.T) {
 }
 
 func TestRecallPreviewParityWithRawRecall(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "parity-recall.db")
+	baseDir := t.TempDir()
+	dbPath := filepath.Join(baseDir, "ws.db")
 	store, err := sqlite.Open(context.Background(), dbPath)
 	if err != nil {
 		t.Fatalf("open store: %v", err)
@@ -108,14 +107,7 @@ func TestRecallPreviewParityWithRawRecall(t *testing.T) {
 	_, _ = pipe.Write(context.Background(), engine.WriteInput{Workspace: "ws", Type: core.SemanticMemory, Content: "orders service emits order.created events", Source: core.MemorySource{Type: core.SourceUserInput}})
 	_, _ = pipe.Write(context.Background(), engine.WriteInput{Workspace: "ws", Type: core.ProceduralMemory, Content: "when order queue fails, inspect retry DLQ first", Source: core.MemorySource{Type: core.SourceUserInput}})
 
-	svc := &apipkg.Service{
-		Workspace: "ws",
-		Writer:    pipe,
-		Retrieval: engine.NewRetrievalEngine(engine.NewVectorSearcher(store, provider)),
-		Clipper:   engine.NewTokenClipper(nil),
-		Store:     store,
-		BaseDir:   filepath.Dir(dbPath),
-	}
+	svc := &apipkg.Service{Workspace: "ws", BaseDir: baseDir, EmbeddingProvider: provider}
 	ts := httptest.NewServer(apipkg.NewMux(svc))
 	defer ts.Close()
 
@@ -167,7 +159,8 @@ func TestRecallPreviewParityWithRawRecall(t *testing.T) {
 }
 
 func TestSearchParityHTTPVsCLI(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "parity-cli.db")
+	baseDir := t.TempDir()
+	dbPath := filepath.Join(baseDir, "ws.db")
 	store, err := sqlite.Open(context.Background(), dbPath)
 	if err != nil {
 		t.Fatalf("open store: %v", err)
@@ -187,14 +180,7 @@ func TestSearchParityHTTPVsCLI(t *testing.T) {
 	_, _ = pipe.Write(context.Background(), engine.WriteInput{Workspace: "ws", Type: core.SemanticMemory, Content: "orders service emits order.created", Source: core.MemorySource{Type: core.SourceUserInput}})
 	_, _ = pipe.Write(context.Background(), engine.WriteInput{Workspace: "ws", Type: core.SemanticMemory, Content: "payments retries timeouts", Source: core.MemorySource{Type: core.SourceUserInput}})
 
-	svc := &apipkg.Service{
-		Workspace: "ws",
-		Writer:    pipe,
-		Retrieval: engine.NewRetrievalEngine(engine.NewVectorSearcher(store, provider)),
-		Clipper:   engine.NewTokenClipper(nil),
-		Store:     store,
-		BaseDir:   filepath.Dir(dbPath),
-	}
+	svc := &apipkg.Service{Workspace: "ws", BaseDir: baseDir, EmbeddingProvider: provider}
 	ts := httptest.NewServer(apipkg.NewMux(svc))
 	defer ts.Close()
 
@@ -268,7 +254,8 @@ func TestSearchParityHTTPVsCLI(t *testing.T) {
 }
 
 func TestSearchParityHTTPVsCLIWithTierFilter(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "parity-cli-filter.db")
+	baseDir := t.TempDir()
+	dbPath := filepath.Join(baseDir, "ws.db")
 	store, err := sqlite.Open(context.Background(), dbPath)
 	if err != nil {
 		t.Fatalf("open store: %v", err)
@@ -310,13 +297,7 @@ func TestSearchParityHTTPVsCLIWithTierFilter(t *testing.T) {
 	insert("m_md", core.TierMarkdown, "order created event")
 	insert("m_doc", core.TierDocument, "payments timeout remediation")
 
-	svc := &apipkg.Service{
-		Workspace: "ws",
-		Retrieval: engine.NewRetrievalEngine(engine.NewVectorSearcher(store, provider)),
-		Clipper:   engine.NewTokenClipper(nil),
-		Store:     store,
-		BaseDir:   filepath.Dir(dbPath),
-	}
+	svc := &apipkg.Service{Workspace: "ws", BaseDir: baseDir, EmbeddingProvider: provider}
 	ts := httptest.NewServer(apipkg.NewMux(svc))
 	defer ts.Close()
 
@@ -387,7 +368,8 @@ func TestSearchParityHTTPVsCLIWithTierFilter(t *testing.T) {
 }
 
 func TestRecallPreviewParityHTTPVsCLIRaw(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "parity-cli-recall.db")
+	baseDir := t.TempDir()
+	dbPath := filepath.Join(baseDir, "ws.db")
 	store, err := sqlite.Open(context.Background(), dbPath)
 	if err != nil {
 		t.Fatalf("open store: %v", err)
@@ -407,14 +389,7 @@ func TestRecallPreviewParityHTTPVsCLIRaw(t *testing.T) {
 	_, _ = pipe.Write(context.Background(), engine.WriteInput{Workspace: "ws", Type: core.SemanticMemory, Content: "orders service emits order.created events", Source: core.MemorySource{Type: core.SourceUserInput}})
 	_, _ = pipe.Write(context.Background(), engine.WriteInput{Workspace: "ws", Type: core.ProceduralMemory, Content: "when order queue fails, inspect retry DLQ first", Source: core.MemorySource{Type: core.SourceUserInput}})
 
-	svc := &apipkg.Service{
-		Workspace: "ws",
-		Writer:    pipe,
-		Retrieval: engine.NewRetrievalEngine(engine.NewVectorSearcher(store, provider)),
-		Clipper:   engine.NewTokenClipper(nil),
-		Store:     store,
-		BaseDir:   filepath.Dir(dbPath),
-	}
+	svc := &apipkg.Service{Workspace: "ws", BaseDir: baseDir, EmbeddingProvider: provider}
 	ts := httptest.NewServer(apipkg.NewMux(svc))
 	defer ts.Close()
 
