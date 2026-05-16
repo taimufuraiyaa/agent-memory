@@ -30,6 +30,7 @@ func NewRootCommand() *cobra.Command {
 	cmd.AddCommand(newListCommand())
 	cmd.AddCommand(newDeleteCommand())
 	cmd.AddCommand(newServeCommand())
+	cmd.AddCommand(newDashboardCommand())
 	cmd.AddCommand(newVersionCommand())
 	cmd.AddCommand(newUpgradeCommand())
 	return cmd

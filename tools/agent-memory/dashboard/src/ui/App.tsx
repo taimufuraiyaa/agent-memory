@@ -340,12 +340,20 @@ export function App() {
             className="iconBtn iconBtnInfo"
             onClick={() => setInfoOpen(true)}
             aria-label="Info"
-            title="Info"
+            title="System Info"
+            style={{ width: 32, height: 32, padding: 0, borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.7)', transition: 'all 0.2s ease' }}
           >
-            i
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
           </button>
-          <a className="topLink" href="/health" target="_blank" rel="noreferrer noopener">
-            health
+          <a 
+            className="topLink" 
+            href="/health" 
+            target="_blank" 
+            rel="noreferrer noopener"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 12px', borderRadius: '8px', textDecoration: 'none', fontSize: '12px', fontWeight: 500, color: 'rgba(255,255,255,0.7)', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.05)', transition: 'all 0.2s ease' }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+            Health
           </a>
         </div>
       </header>
@@ -360,20 +368,6 @@ export function App() {
 
           <div className="composerDock">
             <div className="composer">
-              <div className="composerTop">
-                <div className="composerMeta">
-                  <span className="composerMode">{mode === 'search' ? 'Search' : 'Recall Preview'}</span>
-                  <span className="composerHint">
-                    {mode === 'search' ? 'Ask a question to find memories.' : 'Describe a task to preview recall output.'}
-                  </span>
-                </div>
-                <div className="composerActions">
-                  <button className="btn" onClick={() => setAdvancedOpen((v) => !v)}>
-                    {advancedOpen ? 'Hide Advanced' : 'Advanced'}
-                  </button>
-                </div>
-              </div>
-
               {advancedOpen ? (
                 <div className="composerAdvanced">
                   <div className="composerRow">
@@ -546,29 +540,39 @@ export function App() {
                 </div>
               ) : null}
 
-              <div className="composerInputRow">
-                <textarea
-                  className="composerInput"
-                  value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
-                  placeholder={mode === 'search' ? 'Ask a question in English. Use Search to find relevant memories; use Recall Preview to see the exact context block an agent would receive.' : 'Describe the task to recall…'}
-                  rows={1}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault()
-                      submit()
-                    }
-                  }}
-                />
-                <button className="sendBtn" onClick={submit} disabled={!workspace || busy || !draft.trim()}>
-                  Send
-                </button>
+              <textarea
+                className="composerInput"
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                placeholder={mode === 'search' ? 'How can I help you today?' : 'Describe the task to recall…'}
+                rows={2}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault()
+                    submit()
+                  }
+                }}
+              />
+              <div className="composerToolbar">
+                <div className="composerToolbarLeft">
+                  <button className="btn btnGhost" style={{ padding: '8px', color: 'rgba(255,255,255,0.6)', border: 'none', background: 'transparent' }} title="Add attachment">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14"/></svg>
+                  </button>
+                </div>
+                <div className="composerToolbarRight">
+                  <button className="btn btnGhost" style={{ border: 'none', background: 'transparent', padding: '4px 8px', color: 'rgba(255,255,255,0.5)', fontSize: '12px' }} onClick={() => setAdvancedOpen((v) => !v)}>
+                    {advancedOpen ? 'Hide Advanced' : 'Advanced Settings'} ⌄
+                  </button>
+                  <button className="sendBtn" onClick={submit} disabled={!workspace || busy || !draft.trim()}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+                  </button>
+                </div>
               </div>
-              <div className="composerFoot">
-                <span className="muted small">
-                  Served locally by <span className="mono">agent-memory serve</span>. Markdown is sanitized; Mermaid renders when present.
-                </span>
-              </div>
+            </div>
+            <div className="composerFoot">
+              <span className="muted small" style={{ display: 'block', textAlign: 'center' }}>
+                Served locally by <span className="mono">agent-memory serve</span>. Markdown is sanitized; Mermaid renders when present.
+              </span>
             </div>
           </div>
         </main>
