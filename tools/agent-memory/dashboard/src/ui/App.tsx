@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import {
   getStats,
   listProjects,
@@ -110,6 +110,13 @@ export function App() {
   const [budget, setBudget] = useState<number>(4000)
   const [busy, setBusy] = useState<boolean>(false)
   const [messages, setMessages] = useState<ChatMessage[]>([])
+  const threadRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (threadRef.current) {
+      threadRef.current.scrollTop = threadRef.current.scrollHeight
+    }
+  }, [messages])
 
   const projectLabel = useMemo(() => {
     const p = projects.find((x) => x.name === workspace)
@@ -360,7 +367,7 @@ export function App() {
 
       <div className="chatLayout chatLayoutNoSidebar">
         <main className="chatMain">
-          <div className="thread">
+          <div className="thread" ref={threadRef}>
             {messages.map((m) => (
               <Message key={m.id} m={m} />
             ))}
@@ -733,6 +740,11 @@ function ResultCard({ m }: { m: MemoryEntry }) {
       </button>
       <div className="memBody">
         <MarkdownView markdown={m.content} clamp={!open} />
+        {m.diagram ? (
+          <div className="diagramBlock">
+            <DiagramViewer diagram={m.diagram} />
+          </div>
+        ) : null}
         {open ? (
           <>
             <div className="memMetaGrid">
@@ -753,13 +765,6 @@ function ResultCard({ m }: { m: MemoryEntry }) {
                 <div className="memMetaValue">{pillList(m.tags ?? [])}</div>
               </div>
             </div>
-
-            {m.diagram ? (
-              <div className="diagramBlock">
-                <div className="memMetaLabel">Diagram</div>
-                <DiagramViewer diagram={m.diagram} />
-              </div>
-            ) : null}
 
             {m.score_breakdown ? (
               <details className="detailsFold">

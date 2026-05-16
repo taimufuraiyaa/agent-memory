@@ -35260,6 +35260,12 @@ function App() {
   const [budget, setBudget] = reactExports.useState(4e3);
   const [busy, setBusy] = reactExports.useState(false);
   const [messages, setMessages] = reactExports.useState([]);
+  const threadRef = reactExports.useRef(null);
+  reactExports.useEffect(() => {
+    if (threadRef.current) {
+      threadRef.current.scrollTop = threadRef.current.scrollHeight;
+    }
+  }, [messages]);
   const projectLabel = reactExports.useMemo(() => {
     const p2 = projects.find((x2) => x2.name === workspace);
     if (!p2) return workspace || "workspace";
@@ -35501,7 +35507,7 @@ function App() {
       ] })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "chatLayout chatLayoutNoSidebar", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("main", { className: "chatMain", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "thread", children: messages.map((m2) => /* @__PURE__ */ jsxRuntimeExports.jsx(Message, { m: m2 }, m2.id)) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "thread", ref: threadRef, children: messages.map((m2) => /* @__PURE__ */ jsxRuntimeExports.jsx(Message, { m: m2 }, m2.id)) }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "composerDock", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "composer", children: [
           advancedOpen ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "composerAdvanced", children: [
@@ -35858,6 +35864,7 @@ function ResultCard({ m: m2 }) {
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memBody", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(MarkdownView, { markdown: m2.content, clamp: !open }),
+      m2.diagram ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "diagramBlock", children: /* @__PURE__ */ jsxRuntimeExports.jsx(DiagramViewer, { diagram: m2.diagram }) }) : null,
       open ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memMetaGrid", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memMeta", children: [
@@ -35877,10 +35884,6 @@ function ResultCard({ m: m2 }) {
             /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memMetaValue", children: pillList(m2.tags ?? []) })
           ] })
         ] }),
-        m2.diagram ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "diagramBlock", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memMetaLabel", children: "Diagram" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(DiagramViewer, { diagram: m2.diagram })
-        ] }) : null,
         m2.score_breakdown ? /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "detailsFold", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "detailsSum", children: "Score breakdown" }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("pre", { className: "pre", children: JSON.stringify(m2.score_breakdown, null, 2) })

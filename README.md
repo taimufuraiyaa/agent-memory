@@ -2,10 +2,8 @@
 A persistent, multi-tier memory layer for AI coding agents (Cursor, Claude Code, Codex, Cline, custom). It retains knowledge across sessions, learns from outcomes, and reduces repeated research/token consumption through hybrid storage and lifecycle management.
 
 ## Status
-- V1 design/spec phase complete.
 - Core implementation is actively in progress and runnable in this repository.
-- Current source of truth is under `.kiro/specs/agent-memory/`.
-- Build work is tracked in `tasks.md` (29 V1 tasks, with `T15` deferred to V1.5+).
+- CLI + local HTTP dashboard are available.
 
 ## Why This Exists
 Current agents are mostly stateless between sessions. Markdown-only notes and vector-only stores each solve part of the problem, but not the full memory lifecycle.
@@ -22,16 +20,9 @@ Current agents are mostly stateless between sessions. Markdown-only notes and ve
 All local-first by default: SQLite per project plus local ONNX embeddings.
 
 ## Quickstart (Current Reality)
-Use specs-first workflow before code changes:
-
 ```bash
 cd /Users/time/timebooks/agent-memory
 ```
-
-Then read, in order:
-1. `.kiro/specs/agent-memory/requirements.md`
-2. `.kiro/specs/agent-memory/design.md`
-3. `.kiro/specs/agent-memory/tasks.md`
 
 Build/test baseline:
 
@@ -161,8 +152,6 @@ agent-memory delete --project-name old-project-name --keep-data --yes
 ```
 
 ## Planned Command Catalog (V1)
-Full contract details: `design.md` §9.1. Implementation plan: `tasks.md`.
-
 | Command | Purpose | Run From |
 |---|---|---|
 | `agent-memory init` (`i`) | Wire current project (create DB + Cursor rule) | Inside project |
@@ -195,7 +184,7 @@ Run `agent-memory serve` to expose `http://localhost:3210/dashboard/` for human 
 | Inspect clipped-by-budget memories | Recall preview side panel |
 | Copy equivalent CLI command | "Open in CLI" action |
 
-Hard contract: dashboard and CLI search use the same in-process retrieval engine path (parity-tested in CI in `tasks.md` -> `T30`).
+Hard contract: dashboard and CLI search use the same in-process retrieval engine path (parity-tested in CI).
 
 ## AI Agent Integration (V1 Plan)
 V1 is CLI-first. No daemon, MCP, or Node is required for the agent path.
@@ -237,47 +226,20 @@ MCP is deferred to V1.5+ as a thin TypeScript wrapper over the same CLI contract
 Per project:
 - `.cursor/rules/agent-memory.mdc` stores workspace hint for agents.
 
-## Specs In This Repo
-| File | Read When... |
-|---|---|
-| `.kiro/specs/agent-memory/requirements.md` | You need functional/non-functional requirements and V1 scope |
-| `.kiro/specs/agent-memory/design.md` | You need architecture, memory model, lifecycle, API contracts |
-| `.kiro/specs/agent-memory/design-requirement.md` | You want requirement-depth companion and benchmark framing |
-| `.kiro/specs/agent-memory/tasks.md` | You are implementing and tracking task-by-task progress |
-| `.kiro/specs/agent-memory/design-tasks.md` | Historical/alternate task planning draft |
+## Roadmap
+### V1
+- Local-first SQLite storage per project with deterministic local embeddings
+- CLI-first workflow: write/search/recall/session-end + project lifecycle commands
+- Optional local dashboard for search + recall preview
+- Study/bootstrap from local files and directories
 
-## Scope Summary
-### In V1 (planned)
-- Four memory types + hybrid tiers + routing (`T23/T24/T25`)
-- Tombstones + gap detection + reconstruction (`T26/T27`)
-- Local SQLite + local ONNX embeddings
-- Single Go binary as core runtime target
-- CLI as primary AI-agent surface (`T14`)
-- Project lifecycle commands (`T29`)
-- Bootstrap study (`T28`) for local files/directories
-- Engineer NL search + explain/parity (`T30`)
+### V1.5
+- Optional MCP integration as a thin wrapper over the CLI contract
 
-### Deferred
-- V1.5+: MCP shim (`T15`)
-- V2+: external study fetchers (Confluence/Jira/Notion), multi-user shared tier, cross-workspace recall
+### V2+
+- External connectors (Confluence/Jira/Notion), shared/team memory, cross-workspace recall
 
 ## Privacy / Security
 - Local-first by default (`~/.agent-memory/`).
-- Write pipeline includes secret/PII filtering controls (`tasks.md` -> `T21`).
+- Write pipeline includes secret/PII filtering controls.
 - Data leaves local machine only when explicitly configured in future remote modes.
-
-## Contributing / Next Steps
-Current implementation order (from `tasks.md`):
-- Phase 1: `T01-T04`
-- Phase 2: `T05-T08`, `T23`, `T24`
-- Phase 3: `T09-T12`, `T25`, `T26`, `T27`
-- Phase 4: `T13`, `T14`, `T16`, `T17`, `T28`, `T29`
-- Phase 5: `T18`, `T30`, `T19-T22`
-
-## Release Checks
-- Validate specs/task sync: ensure changed work has matching checkbox updates in `.kiro/specs/agent-memory/tasks.md`.
-- Run deterministic CLI contract checks via test suite (`internal/cli/*test.go`).
-- Run lifecycle/retrieval/security/e2e tests:
-  - `go test ./...`
-- Confirm build artifact is clean:
-  - `go build ./...`
