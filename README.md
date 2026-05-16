@@ -45,6 +45,19 @@ go build ./...
 ### Prerequisites
 - Go `>= 1.26.3` (see [go.mod](file:///Users/time/timebooks/agent-memory/go.mod))
 
+### Install via Homebrew (tap)
+
+This repo includes a Homebrew formula at `Formula/agent-memory.rb` for `--HEAD` installs (build from source).
+
+```bash
+brew tap taimufuraiyaa/agent-memory https://github.com/taimufuraiyaa/agent-memory.git
+brew install --HEAD taimufuraiyaa/agent-memory/agent-memory
+```
+
+Notes:
+- Do not wrap the URL in backticks; backticks execute a command in your shell.
+- If you fork this repo, replace `taimufuraiyaa` with your GitHub username/org.
+
 ### Install the CLI binary
 
 From this repo:
@@ -114,6 +127,19 @@ agent-memory serve --addr :3210
 
 Then open:
 - `http://localhost:3210/dashboard/`
+
+Or use the convenience command (starts the server and opens the browser):
+
+```bash
+agent-memory dashboard
+```
+
+Background start/stop:
+
+```bash
+agent-memory dashboard --start
+agent-memory dashboard --stop
+```
 
 What you can do in the dashboard:
 - Pick a workspace from the dropdown (this comes from `agent-memory init` / `agent-memory list`).
