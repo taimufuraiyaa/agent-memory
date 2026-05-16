@@ -12,12 +12,58 @@ Current agents are mostly stateless between sessions. Markdown-only notes and ve
 | Tier | What It Holds | Why |
 |---|---|---|
 | Markdown | Pinned conventions, project rules, AGENTS.md-style facts | Always loaded, zero retrieval cost |
-| Vector | Semantic recall over discovered facts (`SQLite + sqlite-vec`) | Fast similarity search without mandatory cloud |
+| Vector | Semantic recall over discovered facts (SQLite-backed; deterministic and local) | Fast similarity search without mandatory cloud |
 | Graph | Service/topic/file relationships | Captures structural links vectors miss |
 | Document | Raw episodic transcripts, larger analyses | Cold archive referenced by other tiers |
 | Tombstones + Reconstruction | Markers of forgotten memories + recovery strategies | "Tip of the tongue" graceful re-investigation |
 
 Local-first by default: per-workspace SQLite databases under `~/.agent-memory/`, plus an embeddings layer (local model support is evolving).
+
+## How Recall Works (System Design)
+At a high level, `agent-memory` treats recall as a ranked retrieval problem under a strict token budget.
+
+### 1) Search vs Recall
+- `search` is for interactive inspection: find relevant memories for a query.
+- `recall` is for session start: assemble a compact context block that fits the budget.
+
+### 2) Retrieval signals (explainable)
+Retrieval starts with a semantic candidate set, then re-ranks with multiple signals:
+- Semantic similarity (vector-based)
+- Recency (recently updated items matter more)
+- Outcome signal (successful/failure outcomes can be boosted depending on mode)
+- Decay penalty (old/unhelpful items fade)
+- Tier bias (some tiers are preferred for recall stability)
+
+These signals are combined with mode-specific weights (e.g., recall weights differ from search weights) and returned with a per-item breakdown when `explain` is enabled.
+
+### 3) Budgeted recall assembly
+For `recall`, ranked hits are then:
+- Rebalanced by task intent (prioritize procedural vs outcome vs semantic depending on the task wording)
+- Clipped to a hard token budget (deterministic baseline counter today)
+- Emitted as a stable, sectioned `context_block` so the agent can paste it directly into the system prompt
+
+If something doesn’t fit, it is reported as “clipped” with a reason (budget exceeded vs item too large).
+
+## Forgetting, Decay, and Reconstruction
+Forgetting is an explicit part of the system so the memory store stays useful over time.
+
+### Decay scoring
+Each memory gets a decay score in `[0, 1]` (higher = more decayed) based on:
+- Time since update (type-specific half-lives)
+- Access frequency (frequently used memories decay slower)
+- Pins and successful outcomes (can slow decay)
+
+Decay is used both as a ranking signal and as an input to lifecycle decisions.
+
+### Lifecycle (REM cycle)
+The lifecycle manager periodically performs maintenance steps like:
+- Consolidation (merge overlapping items into cleaner “facts”)
+- Conflict detection/resolution
+- Tier movement (promote/demote between Markdown/Vector, and keep Markdown within a token budget)
+- Eviction when the store exceeds limits
+
+### Tombstones and reconstruction
+When an item is evicted, the system leaves a small tombstone (a breadcrumb). If a later query matches a “gap” signal (you’re asking about something the store used to contain), the reconstruction engine can propose or create a reconstructed semantic memory derived from those historical fragments (with safeguards to avoid reconstruction loops).
 
 ## Quickstart
 ```bash
@@ -107,16 +153,13 @@ agent-memory session-end --transcript "we found the root cause..." --format json
 ### Dashboard (optional)
 
 ```bash
-agent-memory serve --addr :3210
+agent-memory dashboard --addr :3210
 ```
 
-Then open:
-- `http://localhost:3210/dashboard/`
-
-Or use the convenience command (starts the server and opens the browser):
+To print the URL without opening a browser:
 
 ```bash
-agent-memory dashboard
+agent-memory dashboard --addr :3210 --no-open
 ```
 
 Background start/stop:
@@ -158,7 +201,7 @@ agent-memory delete --project-name old-project-name --keep-data --yes
 | `agent-memory session-end` | Extract learnings from session transcript | Agent |
 | `agent-memory study` | Bootstrap from README/docs/code | One-off + incremental |
 | `agent-memory help agent-prompt` | Print recommended agent prompt snippet | One-off |
-| `agent-memory serve` | Optional local HTTP API + dashboard | Engineer inspection |
+| `agent-memory dashboard` (`ui`) | Open the local dashboard (starts the HTTP server) | Engineer inspection |
 
 Planned CLI contract:
 - Deterministic JSON envelope on stdout with `--format json`.
@@ -166,7 +209,7 @@ Planned CLI contract:
 - Stable exit codes (`0/1/2/3/4/5/124`).
 
 ## Engineer Dashboard (Search + Recall Preview)
-Run `agent-memory serve` to expose `http://localhost:3210/dashboard/` for human inspection.
+Run `agent-memory dashboard` to start the local HTTP server and open `http://localhost:3210/dashboard/` for human inspection.
 
 | Engineer Can... | How |
 |---|---|
