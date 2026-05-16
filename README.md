@@ -17,24 +17,19 @@ Current agents are mostly stateless between sessions. Markdown-only notes and ve
 | Document | Raw episodic transcripts, larger analyses | Cold archive referenced by other tiers |
 | Tombstones + Reconstruction | Markers of forgotten memories + recovery strategies | "Tip of the tongue" graceful re-investigation |
 
-All local-first by default: SQLite per project plus local ONNX embeddings.
+Local-first by default: per-workspace SQLite databases under `~/.agent-memory/`, plus an embeddings layer (local model support is evolving).
 
-## Quickstart (Current Reality)
+## Quickstart
 ```bash
-cd /Users/time/timebooks/agent-memory
-```
-
-Build/test baseline:
-
-```bash
+cd agent-memory
 go test ./...
 go build ./...
 ```
 
-## Install (Current Reality)
+## Install
 
 ### Prerequisites
-- Go `>= 1.26.3` (see [go.mod](file:///Users/time/timebooks/agent-memory/go.mod))
+- Go toolchain matching [go.mod](go.mod) (currently `go 1.26.3`)
 
 ### Install via Homebrew (tap)
 
@@ -47,21 +42,20 @@ brew install --HEAD taimufuraiyaa/agent-memory/agent-memory
 
 Notes:
 - Do not wrap the URL in backticks; backticks execute a command in your shell.
-- If you fork this repo, replace `taimufuraiyaa` with your GitHub username/org.
 
 ### Install the CLI binary
 
 From this repo:
 
 ```bash
-cd /Users/time/timebooks/agent-memory
+cd agent-memory
 go install ./cmd/agent-memory
 ```
 
 Or use the installer (also downloads the local embedding model):
 
 ```bash
-cd /Users/time/timebooks/agent-memory
+cd agent-memory
 go run install.go
 ```
 
@@ -110,7 +104,7 @@ agent-memory recall --task "debug order event regression" --budget 400 --format 
 agent-memory session-end --transcript "we found the root cause..." --format json
 ```
 
-### Engineer dashboard (optional)
+### Dashboard (optional)
 
 ```bash
 agent-memory serve --addr :3210
@@ -133,11 +127,10 @@ agent-memory dashboard --stop
 ```
 
 What you can do in the dashboard:
-- Pick a workspace from the dropdown (this comes from `agent-memory init` / `agent-memory list`).
+- Switch workspaces/projects from the dropdown (this comes from `agent-memory init` / `agent-memory list`).
 - Run natural-language search with optional filters (type, tier, outcome, confidence, decay, entities, date range).
 - Toggle explain mode to see the score breakdown fields (`semantic_similarity`, `recency`, `outcome_boost`, `decay_weight`, `tier_bias`) plus `match_reason`.
 - Use Recall Preview to see the exact `context_block` the agent would load for a task, plus which memories were clipped by the token budget (`memories_clipped`) and why.
-- Use “Open in CLI” to copy a ready-to-paste `agent-memory search ...` / `agent-memory recall ...` command that matches the current UI settings.
 
 Notes:
 - The dashboard is local-only and served by the same Go binary; there is no separate Node/React dev server required.
@@ -182,7 +175,6 @@ Run `agent-memory serve` to expose `http://localhost:3210/dashboard/` for human 
 | Filter by type/tier/date/outcome/decay | Search panel filters |
 | Preview exact agent recall block | `POST /api/v1/memories/recall/preview` |
 | Inspect clipped-by-budget memories | Recall preview side panel |
-| Copy equivalent CLI command | "Open in CLI" action |
 
 Hard contract: dashboard and CLI search use the same in-process retrieval engine path (parity-tested in CI).
 
