@@ -24,5 +24,6 @@ pnpm-debug.log*
 .env
 .env.local
 .env.*.local
+.kiro/specs/
 .DS_Store
 Thumbs.db
