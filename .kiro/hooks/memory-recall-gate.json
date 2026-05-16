@@ -7,6 +7,6 @@
   },
   "then": {
     "type": "askAgent",
-    "prompt": "Before responding to the user, do the following first:\n1. Extract 3-5 key terms from the user's message.\n2. Run: rtk agent-memory search --query \"<key terms>\" --top-k 8\n3. Run: rtk agent-memory recall --task \"<user message>\" --budget 800 --format raw\n4. If results are found, use them as primary context before answering.\n5. If no results are found, proceed with general knowledge and note the gap.\nDo not skip this step even for simple questions."
+    "prompt": "Before responding to the user, do the following first:\n1. Extract 3-5 key terms from the user's message.\n2. Run: agent-memory search --query \"<key terms>\" --top-k 8\n3. Run: agent-memory recall --task \"<user message>\" --budget 800 --format raw\n4. If results are found, use them as primary context before answering.\n5. If no results are found, proceed with general knowledge and note the gap.\nDo not skip this step even for simple questions."
   }
 }

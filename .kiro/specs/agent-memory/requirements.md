@@ -40,7 +40,7 @@ AI coding agents repeatedly re-discover the same project context (architecture, 
 ## 5. Functional Requirements
 ### 5.1 Workspace and Project Lifecycle
 - **FR-WS-1**: Support per-workspace memory stores (default: one SQLite DB per workspace).
-- **FR-WS-2**: Provide CLI commands to initialize, rename, list, and delete workspaces/projects; maintain a local registry.
+- **FR-WS-2**: Provide CLI commands to initialize, reinstall (re-write IDE hooks/rules without changing DB/project name), rename, list, and delete workspaces/projects; maintain a local registry.
 - **FR-WS-3**: Workspace resolution must be deterministic (flag/env/cwd detection); all operations are scoped to one workspace.
 
 ### 5.2 Memory Write Pipeline

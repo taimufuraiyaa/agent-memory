@@ -2307,13 +2307,14 @@ After this, the very next `agent-memory recall --workspace ops --task "How does 
 
 #### 9.1.8 Project Lifecycle commands - wire any project from inside it
 
-> **Purpose.** Once the binary is installed (one-time, per machine via `install.sh`), each project gets its own SQLite-backed memory. These four commands manage the full project lifecycle and are designed to be run **from inside the project directory** - `cd` into a project, run one command, you're done.
+> **Purpose.** Once the binary is installed (one-time, per machine via `install.sh`), each project gets its own SQLite-backed memory. These five commands manage the full project lifecycle and are designed to be run **from inside the project directory** - `cd` into a project, run one command, you're done.
 
 ##### Why these four
 
 | Command                         | What it does                                                                                                                                                                                         | Run from                                                |
 | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
 | `agent-memory init` (alias `i`) | Creates the project's SQLite DB, drops a per-project Cursor rule into `./.cursor/rules/agent-memory.mdc` with the project name baked in, and (with `--study`) bootstraps memory from local docs/code | inside the project dir                                  |
+| `agent-memory reinstall`        | Re-writes the project's agent integration files (hooks + rules) to the current canonical templates without changing the DB or project name                                                             | inside the project dir                                  |
 | `agent-memory rename`           | Renames an existing project (moves the DB file, updates any local Cursor rule that references the old name)                                                                                          | anywhere, but auto-updates the cwd's rule if applicable |
 | `agent-memory list`             | Lists every project registered on this machine - name, DB path, size, memory count, last activity                                                                                                    | anywhere                                                |
 | `agent-memory delete`           | Removes a project (DB + entries from the workspace registry). Refuses without `--yes`. Optional `--keep-data` archives the DB to `~/.agent-memory/archived/`.                                        | anywhere                                                |

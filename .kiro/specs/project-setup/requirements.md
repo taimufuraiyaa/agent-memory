@@ -39,11 +39,3 @@ This spec defines the initial setup for the `agent-memory` repository so that al
 1. WHEN writing a Kiro `design.md` THEN the agent SHALL include alternatives and trade-offs.
 2. WHEN writing a Kiro `design.md` THEN the agent SHALL document risks, edge cases, failure modes, and rollout considerations where relevant.
 3. WHEN writing a Kiro `design.md` THEN the agent SHALL NOT include example code.
-
-### Requirement 5 — RTK Command Prefix
-
-**User Story:** As an AI agent user, I want all shell commands prefixed with RTK, so that command output is token-optimized and consistent.
-
-#### Acceptance Criteria (EARS)
-1. WHEN an agent suggests or runs a shell command THEN the agent SHALL prefix the command with `rtk`.
-2. WHEN a command must be run “raw” for debugging THEN the agent SHALL use `rtk proxy <cmd>`.

@@ -36,15 +36,11 @@ Then read, in order:
 Build/test baseline:
 
 ```bash
-rtk go test ./...
-rtk go build ./...
+go test ./...
+go build ./...
 ```
 
 ## Install (Current Reality)
-
-Note on `rtk`:
-- In this repo/docs, commands are shown prefixed with `rtk` (a token-saving CLI proxy used in development).
-- If you don’t have `rtk` installed, run the same commands but remove the leading `rtk`.
 
 ### Prerequisites
 - Go `>= 1.26.3` (see [go.mod](file:///Users/time/timebooks/agent-memory/go.mod))
@@ -54,15 +50,15 @@ Note on `rtk`:
 From this repo:
 
 ```bash
-rtk cd /Users/time/timebooks/agent-memory
-rtk go install ./cmd/agent-memory
+cd /Users/time/timebooks/agent-memory
+go install ./cmd/agent-memory
 ```
 
 Or use the installer (also downloads the local embedding model):
 
 ```bash
-rtk cd /Users/time/timebooks/agent-memory
-rtk go run install.go
+cd /Users/time/timebooks/agent-memory
+go run install.go
 ```
 
 This installs `agent-memory` into your Go bin directory (usually `$(go env GOPATH)/bin`). Ensure that directory is on your `PATH`.
@@ -70,7 +66,7 @@ This installs `agent-memory` into your Go bin directory (usually `$(go env GOPAT
 Verify:
 
 ```bash
-rtk agent-memory --help
+agent-memory --help
 ```
 
 ### Enable `agent-memory` for any project
@@ -78,22 +74,22 @@ rtk agent-memory --help
 Inside each project’s root directory (the place you run your agent from):
 
 ```bash
-rtk agent-memory init
+agent-memory init
 ```
 
 If you want a one-shot install + initialize-the-current-folder flow, run:
 
 ```bash
-rtk go run install.go --init-here
+go run install.go --init-here
 ```
 
 Common options:
 
 ```bash
-rtk agent-memory init --project-name my-project
-rtk agent-memory init --study
-rtk agent-memory init --reuse
-rtk agent-memory init --force
+agent-memory init --project-name my-project
+agent-memory init --study
+agent-memory init --reuse
+agent-memory init --force
 ```
 
 What `init` does:
@@ -104,16 +100,16 @@ What `init` does:
 ### Day-to-day usage (inside a project)
 
 ```bash
-rtk agent-memory write --type semantic --content "orders service publishes order.created"
-rtk agent-memory search --query "order event" --top-k 5
-rtk agent-memory recall --task "debug order event regression" --budget 400 --format raw
-rtk agent-memory session-end --transcript "we found the root cause..." --format json
+agent-memory write --type semantic --content "orders service publishes order.created"
+agent-memory search --query "order event" --top-k 5
+agent-memory recall --task "debug order event regression" --budget 400 --format raw
+agent-memory session-end --transcript "we found the root cause..." --format json
 ```
 
 ### Engineer dashboard (optional)
 
 ```bash
-rtk agent-memory serve --addr :3210
+agent-memory serve --addr :3210
 ```
 
 Then open:
@@ -133,9 +129,9 @@ Notes:
 ### Managing multiple projects
 
 ```bash
-rtk agent-memory list --format text
-rtk agent-memory rename --to new-project-name
-rtk agent-memory delete --project-name old-project-name --keep-data --yes
+agent-memory list --format text
+agent-memory rename --to new-project-name
+agent-memory delete --project-name old-project-name --keep-data --yes
 ```
 
 ## Planned Command Catalog (V1)
@@ -256,6 +252,6 @@ Current implementation order (from `tasks.md`):
 - Validate specs/task sync: ensure changed work has matching checkbox updates in `.kiro/specs/agent-memory/tasks.md`.
 - Run deterministic CLI contract checks via test suite (`internal/cli/*test.go`).
 - Run lifecycle/retrieval/security/e2e tests:
-  - `rtk go test ./...`
+  - `go test ./...`
 - Confirm build artifact is clean:
-  - `rtk go build ./...`
+  - `go build ./...`
