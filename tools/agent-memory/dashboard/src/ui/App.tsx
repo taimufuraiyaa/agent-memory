@@ -110,7 +110,28 @@ export function App() {
   const [budget, setBudget] = useState<number>(4000)
   const [busy, setBusy] = useState<boolean>(false)
   const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [theme, setTheme] = useState<'light' | 'dark'>('dark')
   const threadRef = useRef<HTMLDivElement>(null)
+  const composerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent | TouchEvent) => {
+      if (composerRef.current && !composerRef.current.contains(event.target as Node)) {
+        setAdvancedOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    document.addEventListener('touchstart', handleClickOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+      document.removeEventListener('touchstart', handleClickOutside)
+    }
+  }, [])
+
+  useEffect(() => {
+    document.body.classList.remove('light', 'dark')
+    document.body.classList.add(theme)
+  }, [theme])
 
   useEffect(() => {
     if (threadRef.current) {
@@ -322,19 +343,101 @@ export function App() {
   return (
     <div className="shell chatShell">
       <header className="topbar chatTopbar">
-        <div className="brand">
-          <div className="brandMark" aria-hidden="true" />
-          <div className="brandText">
-            <div className="brandTitle">Agent Memory</div>
-            <div className="brandSub">Chat-style human inspection (English-only)</div>
+        <div className="topbarRow">
+          <div className="brand">
+            <div className="brandMark" aria-hidden="true" />
+            <div className="brandText">
+              <div className="brandTitle">
+                Agent Memory <span style={{ fontSize: '10px', opacity: 0.5, fontWeight: 400 }}>v1.0.12</span>
+              </div>
+              <div className="brandSub">Chat-style human inspection (English-only)</div>
+            </div>
+          </div>
+          <div className="topbarRight">
+            <button
+              className="iconBtn iconBtnInfo"
+              onClick={() => setInfoOpen(true)}
+              aria-label="Info"
+              title="System Info"
+              style={{
+                width: 32,
+                height: 32,
+                padding: 0,
+                borderRadius: '8px',
+                border: '1px solid var(--top-btn-border)',
+                background: 'var(--top-btn-bg)',
+                color: 'var(--top-btn-text)',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10" />
+                <path d="M12 16v-4M12 8h.01" />
+              </svg>
+            </button>
+            <button
+              className="topLink"
+              onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 12px',
+                borderRadius: '8px',
+                border: '1px solid var(--top-btn-border)',
+                background: 'var(--top-btn-bg)',
+                color: 'var(--top-btn-text)',
+                transition: 'all 0.2s ease',
+                cursor: 'pointer',
+                fontSize: '12px',
+                fontWeight: 500,
+              }}
+            >
+              {theme === 'dark' ? (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="5" />
+                  <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
+                </svg>
+              ) : (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" />
+                </svg>
+              )}
+              {theme === 'dark' ? 'Light' : 'Dark'}
+            </button>
+            <a
+              className="topLink"
+              href="/health"
+              target="_blank"
+              rel="noreferrer noopener"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 12px',
+                borderRadius: '8px',
+                textDecoration: 'none',
+                fontSize: '12px',
+                fontWeight: 500,
+                color: 'var(--top-btn-text)',
+                border: '1px solid var(--top-btn-border)',
+                background: 'var(--top-btn-bg)',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+              </svg>
+              Health
+            </a>
           </div>
         </div>
-        <div className="topbarRight">
+        <nav className="mainSidebar" aria-label="Main sidebar">
           <select
-            className="headerSelect"
+            className="projectSelect"
             value={workspace}
             onChange={(e) => setWorkspace(e.target.value)}
-            aria-label="Workspace"
+            aria-label="Switch project"
           >
             {projects.length === 0 ? <option value="">(no workspaces)</option> : null}
             {projects.map((p) => (
@@ -343,33 +446,51 @@ export function App() {
               </option>
             ))}
           </select>
-          <button
-            className="iconBtn iconBtnInfo"
-            onClick={() => setInfoOpen(true)}
-            aria-label="Info"
-            title="System Info"
-            style={{ width: 32, height: 32, padding: 0, borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.7)', transition: 'all 0.2s ease' }}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
-          </button>
-          <a 
-            className="topLink" 
-            href="/health" 
-            target="_blank" 
-            rel="noreferrer noopener"
-            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 12px', borderRadius: '8px', textDecoration: 'none', fontSize: '12px', fontWeight: 500, color: 'rgba(255,255,255,0.7)', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.05)', transition: 'all 0.2s ease' }}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
-            Health
-          </a>
-        </div>
+          <div className="mainSidebarGroup" aria-label="Features">
+            <button
+              className={mode === 'search' ? 'navItem navItemOn' : 'navItem'}
+              onClick={() => setMode('search')}
+              type="button"
+              aria-label="Search mode"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="11" cy="11" r="7" />
+                <path d="M21 21l-4.3-4.3" />
+              </svg>
+              <span className="navLabel">Search</span>
+            </button>
+            <button
+              className={mode === 'recall' ? 'navItem navItemOn' : 'navItem'}
+              onClick={() => setMode('recall')}
+              type="button"
+              aria-label="Recall preview mode"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M3 12a9 9 0 101.8-5.4" />
+                <path d="M3 4v6h6" />
+              </svg>
+              <span className="navLabel">Recall Preview</span>
+            </button>
+            <button
+              className={advancedOpen ? 'navItem navItemOn' : 'navItem'}
+              onClick={() => setAdvancedOpen((v) => !v)}
+              type="button"
+              aria-label="Toggle advanced options"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M12 2l2.2 6.6L21 9l-5 4 1.6 7L12 16.8 6.4 20 8 13 3 9l6.8-.4L12 2z" />
+              </svg>
+              <span className="navLabel">Advanced</span>
+            </button>
+          </div>
+        </nav>
       </header>
 
       <div className="chatLayout chatLayoutNoSidebar">
         <main className="chatMain">
           <div className="thread" ref={threadRef}>
             {messages.map((m) => (
-              <Message key={m.id} m={m} />
+              <Message key={m.id} m={m} theme={theme} />
             ))}
           </div>
 
@@ -649,7 +770,7 @@ export function App() {
   )
 }
 
-function Message({ m }: { m: ChatMessage }) {
+function Message({ m, theme }: { m: ChatMessage; theme: 'light' | 'dark' }) {
   const isUser = m.role === 'user'
   const isSystem = m.role === 'system'
   return (
@@ -671,7 +792,7 @@ function Message({ m }: { m: ChatMessage }) {
               </div>
               <div className="assistantList">
                 {m.payload.results.map((r) => (
-                  <ResultCard key={r.id} m={r} />
+                  <ResultCard key={r.id} m={r} theme={theme} />
                 ))}
               </div>
             </div>
@@ -704,7 +825,7 @@ function Message({ m }: { m: ChatMessage }) {
               </div>
               <div className="assistantList">
                 {(m.payload.recall.memories_included_full ?? []).map((r) => (
-                  <ResultCard key={r.id} m={r} />
+                  <ResultCard key={r.id} m={r} theme={theme} />
                 ))}
               </div>
 
@@ -722,7 +843,7 @@ function Message({ m }: { m: ChatMessage }) {
   )
 }
 
-function ResultCard({ m }: { m: MemoryEntry }) {
+function ResultCard({ m, theme }: { m: MemoryEntry; theme: 'light' | 'dark' }) {
   const [open, setOpen] = useState(false)
   return (
     <article className="memCard">
@@ -742,7 +863,7 @@ function ResultCard({ m }: { m: MemoryEntry }) {
         <MarkdownView markdown={m.content} clamp={!open} />
         {m.diagram ? (
           <div className="diagramBlock">
-            <DiagramViewer diagram={m.diagram} />
+            <DiagramViewer diagram={m.diagram} theme={theme} />
           </div>
         ) : null}
         {open ? (
