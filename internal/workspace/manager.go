@@ -82,6 +82,18 @@ type DeleteResult struct {
 	ArchivedPath string `json:"archived_path,omitempty"`
 }
 
+type ReinstallOptions struct {
+	CWD         string
+	ProjectName string
+	Force       bool
+}
+
+type ReinstallResult struct {
+	Project    string                 `json:"project"`
+	DBPath     string                 `json:"db_path"`
+	AgentFiles *WriteAgentFilesResult `json:"agent_files"`
+}
+
 func NewManager(baseDir string) (*Manager, error) {
 	if strings.TrimSpace(baseDir) == "" {
 		home, err := os.UserHomeDir()
@@ -109,6 +121,98 @@ func ValidateProjectName(name string) (string, error) {
 		return "", errors.New("project name is reserved")
 	}
 	return name, nil
+}
+
+func FindProjectRoot(start string) string {
+	dir := start
+	for i := 0; i < 12; i++ {
+		if dirExists(filepath.Join(dir, ".git")) ||
+			dirExists(filepath.Join(dir, ".cursor")) ||
+			dirExists(filepath.Join(dir, ".kiro")) ||
+			dirExists(filepath.Join(dir, ".agents")) ||
+			dirExists(filepath.Join(dir, ".trae")) ||
+			fileExists(filepath.Join(dir, ".cursorrules")) ||
+			fileExists(filepath.Join(dir, ".aierules")) ||
+			fileExists(filepath.Join(dir, ".windsurfrules")) ||
+			fileExists(filepath.Join(dir, "CLAUDE.md")) {
+			return dir
+		}
+		next := filepath.Dir(dir)
+		if next == dir {
+			break
+		}
+		dir = next
+	}
+	return start
+}
+
+func detectWorkspaceFromCWD(start string) (workspace string, root string, ok bool) {
+	dir := start
+	for i := 0; i < 12; i++ {
+		candidates := []string{
+			filepath.Join(dir, ".cursor", "rules", "agent-memory.mdc"),
+			filepath.Join(dir, ".agents", "rules", "agent-memory.md"),
+			filepath.Join(dir, ".trae", "rules", "project_rules.md"),
+			filepath.Join(dir, ".cursorrules"),
+			filepath.Join(dir, ".aierules"),
+			filepath.Join(dir, ".windsurfrules"),
+			filepath.Join(dir, "CLAUDE.md"),
+		}
+		for _, p := range candidates {
+			if !fileExists(p) {
+				continue
+			}
+			ws, err := readWorkspaceFromRule(p)
+			if err == nil && strings.TrimSpace(ws) != "" {
+				return strings.TrimSpace(ws), dir, true
+			}
+		}
+		next := filepath.Dir(dir)
+		if next == dir {
+			break
+		}
+		dir = next
+	}
+	return "", "", false
+}
+
+func (m *Manager) Reinstall(ctx context.Context, opt ReinstallOptions) (*ReinstallResult, error) {
+	_ = ctx
+	root := FindProjectRoot(opt.CWD)
+	name := strings.TrimSpace(opt.ProjectName)
+	if name == "" {
+		if detected, detectedRoot, ok := detectWorkspaceFromCWD(opt.CWD); ok {
+			name = detected
+			root = detectedRoot
+		}
+	}
+	if name == "" {
+		return nil, errors.New("project name not found (run from project root or pass --project-name)")
+	}
+	name, err := ValidateProjectName(name)
+	if err != nil {
+		return nil, err
+	}
+	reg, err := m.readRegistry()
+	if err != nil {
+		return nil, err
+	}
+	p := findProject(reg, name)
+	if p == nil {
+		return nil, errors.New("project not found in registry (run init first)")
+	}
+	if !fileExists(p.DBPath) {
+		return nil, fmt.Errorf("db file missing: %s", p.DBPath)
+	}
+	af, err := WriteAgentFiles(WriteAgentFilesOptions{
+		CWD:       root,
+		Workspace: name,
+		Force:     opt.Force,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &ReinstallResult{Project: name, DBPath: p.DBPath, AgentFiles: af}, nil
 }
 
 func (m *Manager) Init(ctx context.Context, opt InitOptions) (*InitResult, error) {
@@ -518,13 +622,13 @@ Always use `+"`"+`agent-memory`+"`"+` as the memory system:
 - At the end of a session: store a short session summary via `+"`"+`session-end`+"`"+`.
 
 Commands:
-- `+"`"+`rtk agent-memory init`+"`"+`
-- `+"`"+`rtk agent-memory search --query "<keywords/entities>" --top-k 8`+"`"+`
-- `+"`"+`rtk agent-memory recall --task "<one-line task>" --budget 800 --format raw`+"`"+`
-- `+"`"+`rtk agent-memory write --type semantic --content "<durable fact + source>"`+"`"+`
-- `+"`"+`rtk agent-memory write --type procedural --content "<repeatable steps/checklist>"`+"`"+`
-- `+"`"+`rtk agent-memory write --type outcome --content "<what you tried>" --outcome-result success|failure|partial --outcome-approach "<how>" --outcome-reason "<why>"`+"`"+`
-- `+"`"+`rtk agent-memory session-end --transcript "<session summary or transcript>" --format json`+"`"+`
+- `+"`"+`agent-memory init`+"`"+`
+- `+"`"+`agent-memory search --query "<keywords/entities>" --top-k 8`+"`"+`
+- `+"`"+`agent-memory recall --task "<one-line task>" --budget 800 --format raw`+"`"+`
+- `+"`"+`agent-memory write --type semantic --content "<durable fact + source>"`+"`"+`
+- `+"`"+`agent-memory write --type procedural --content "<repeatable steps/checklist>"`+"`"+`
+- `+"`"+`agent-memory write --type outcome --content "<what you tried>" --outcome-result success|failure|partial --outcome-approach "<how>" --outcome-reason "<why>"`+"`"+`
+- `+"`"+`agent-memory session-end --transcript "<session summary or transcript>" --format json`+"`"+`
 `, workspace)
 }
 
@@ -632,7 +736,7 @@ func HippocampusHooks() []HookFile {
   },
   "then": {
     "type": "askAgent",
-    "prompt": "Before responding to the user, do the following first:\n1. Extract 3-5 key terms from the user's message.\n2. Run: rtk agent-memory search --query \"<key terms>\" --top-k 8\n3. Run: rtk agent-memory recall --task \"<user message>\" --budget 800 --format raw\n4. If results are found, use them as primary context before answering.\n5. If no results are found, proceed with general knowledge and note the gap.\nDo not skip this step even for simple questions."
+    "prompt": "Before responding to the user, do the following first:\n1. Extract 3-5 key terms from the user's message.\n2. Run: agent-memory search --query \"<key terms>\" --top-k 8\n3. Run: agent-memory recall --task \"<user message>\" --budget 800 --format raw\n4. If results are found, use them as primary context before answering.\n5. If no results are found, proceed with general knowledge and note the gap.\nDo not skip this step even for simple questions."
   }
 }
 `,
@@ -648,7 +752,7 @@ func HippocampusHooks() []HookFile {
   },
   "then": {
     "type": "askAgent",
-    "prompt": "Review what happened in this session and do the following:\n1. Identify anything worth keeping using this filter:\n   - Structural delta: new service, integration, or data flow discovered\n   - Hidden why: non-obvious design decision or trade-off\n   - Interface contract: API schema, data model, or protocol change\n   - Systemic insight: complex logic spanning multiple files\n   - ANY failure: always write failures, no filter applies\n2. For each qualifying item, write it with the correct type:\n   - Fact about the system -> rtk agent-memory write --type semantic --content \"<fact>\"\n   - Convention or repeatable process -> rtk agent-memory write --type procedural --content \"<steps>\"\n   - Attempt result (success or failure) -> rtk agent-memory write --type outcome --content \"<what was tried>\" --outcome-result success|failure|partial --outcome-approach \"<how>\" --outcome-reason \"<why>\"\n3. Run session-end compaction: rtk agent-memory session-end --transcript \"<one paragraph summary of this session>\" --format json\nDo not skip step 3 even if nothing was written in step 2."
+    "prompt": "Review what happened in this session and do the following:\n1. Identify anything worth keeping using this filter:\n   - Structural delta: new service, integration, or data flow discovered\n   - Hidden why: non-obvious design decision or trade-off\n   - Interface contract: API schema, data model, or protocol change\n   - Systemic insight: complex logic spanning multiple files\n   - ANY failure: always write failures, no filter applies\n2. For each qualifying item, write it with the correct type:\n   - Fact about the system -> agent-memory write --type semantic --content \"<fact>\"\n   - Convention or repeatable process -> agent-memory write --type procedural --content \"<steps>\"\n   - Attempt result (success or failure) -> agent-memory write --type outcome --content \"<what was tried>\" --outcome-result success|failure|partial --outcome-approach \"<how>\" --outcome-reason \"<why>\"\n3. Run session-end compaction: agent-memory session-end --transcript \"<one paragraph summary of this session>\" --format json\nDo not skip step 3 even if nothing was written in step 2."
   }
 }
 `,
@@ -951,8 +1055,8 @@ You MUST use the `+"`"+`agent-memory`+"`"+` CLI for memory retrieval and persist
 - Then run a recall for the current task and use it as primary context before searching the web/docs/code.
 
 Commands:
-- `+"`"+`rtk agent-memory search --query "<keywords/entities>" --top-k 8`+"`"+`
-- `+"`"+`rtk agent-memory recall --task "<one-line task>" --budget 800 --format raw`+"`"+`
+- `+"`"+`agent-memory search --query "<keywords/entities>" --top-k 8`+"`"+`
+- `+"`"+`agent-memory recall --task "<one-line task>" --budget 800 --format raw`+"`"+`
 
 ### While working
 
@@ -960,21 +1064,21 @@ Commands:
 - Prefer short, atomic memories. Include the source (file path / command / URL) in the content when available.
 
 Commands:
-- `+"`"+`rtk agent-memory write --type semantic --content "<durable fact + source>"`+"`"+`
-- `+"`"+`rtk agent-memory write --type procedural --content "<repeatable steps/checklist>"`+"`"+`
+- `+"`"+`agent-memory write --type semantic --content "<durable fact + source>"`+"`"+`
+- `+"`"+`agent-memory write --type procedural --content "<repeatable steps/checklist>"`+"`"+`
 
 ### After attempts (success/failure)
 
 - Record outcomes that would prevent repeating mistakes or preserve a working approach.
 
 Command:
-- `+"`"+`rtk agent-memory write --type outcome --content "<what you tried>" --outcome-result success|failure|partial --outcome-approach "<how>" --outcome-reason "<why>"`+"`"+`
+- `+"`"+`agent-memory write --type outcome --content "<what you tried>" --outcome-result success|failure|partial --outcome-approach "<how>" --outcome-reason "<why>"`+"`"+`
 
 ### At the end of a session
 
 - Extract learnings from the session summary/transcript into memory.
 
 Command:
-- `+"`"+`rtk agent-memory session-end --transcript "<session summary or transcript>" --format json`+"`"+`
+- `+"`"+`agent-memory session-end --transcript "<session summary or transcript>" --format json`+"`"+`
 `, workspace)
 }

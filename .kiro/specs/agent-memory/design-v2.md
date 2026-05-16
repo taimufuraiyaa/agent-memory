@@ -53,7 +53,7 @@ The agent always starts with relevant history. It doesn't decide whether to look
   "when": { "type": "promptSubmit" },
   "then": {
     "type": "askAgent",
-    "prompt": "Before responding, run: rtk agent-memory search --query '<key terms>' --top-k 8 and rtk agent-memory recall --task '<user message>' --budget 800 --format raw. Use the results as context first."
+    "prompt": "Before responding, run: agent-memory search --query '<key terms>' --top-k 8 and agent-memory recall --task '<user message>' --budget 800 --format raw. Use the results as context first."
   }
 }
 ```
@@ -78,7 +78,7 @@ The agent always saves what it learned. It doesn't decide whether to write — t
   "when": { "type": "agentStop" },
   "then": {
     "type": "askAgent",
-    "prompt": "Review this session. Write anything durable using: rtk agent-memory write --type semantic|procedural|outcome --content '<content>'. Then run: rtk agent-memory session-end --transcript '<summary>' --format json"
+    "prompt": "Review this session. Write anything durable using: agent-memory write --type semantic|procedural|outcome --content '<content>'. Then run: agent-memory session-end --transcript '<summary>' --format json"
   }
 }
 ```
@@ -136,7 +136,7 @@ v2 adds a **deep consolidation** pass that runs across multiple sessions — it 
 It's not a daemon. It's a single CLI command you can run manually or schedule:
 
 ```bash
-rtk agent-memory consolidate --deep
+agent-memory consolidate --deep
 ```
 
 ---

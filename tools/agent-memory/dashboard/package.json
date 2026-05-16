@@ -2,8 +2,26 @@
   "name": "@agent-memory/dashboard",
   "version": "0.1.0",
   "private": true,
-  "description": "Deferred V1.5+ dashboard package scaffold",
+  "description": "React + TypeScript dashboard (built to embedded static assets)",
   "scripts": {
-    "build": "node -e \"console.log('dashboard scaffold build ok')\""
+    "dev": "vite",
+    "build": "vite build",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "dompurify": "^3.2.6",
+    "marked": "^15.0.12",
+    "mermaid": "^11.12.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/dompurify": "^3.2.0",
+    "@types/node": "^22.15.30",
+    "@types/react": "^18.3.23",
+    "@types/react-dom": "^18.3.7",
+    "@vitejs/plugin-react": "^4.6.0",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5"
   }
 }

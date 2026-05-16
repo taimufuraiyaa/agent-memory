@@ -71,6 +71,42 @@ func newInitCommand() *cobra.Command {
 	return cmd
 }
 
+func newReinstallCommand() *cobra.Command {
+	var f lifecycleFlags
+	var projectName string
+	var force bool
+	cmd := &cobra.Command{
+		Use:   "reinstall",
+		Short: "Reinstall project agent files without changing DB or project name",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateOutputFormat(f.format, false); err != nil {
+				return err
+			}
+			cwd, err := os.Getwd()
+			if err != nil {
+				return err
+			}
+			mgr, err := workspace.NewManager(f.baseDir)
+			if err != nil {
+				return err
+			}
+			out, err := mgr.Reinstall(cmd.Context(), workspace.ReinstallOptions{
+				CWD:         cwd,
+				ProjectName: projectName,
+				Force:       force,
+			})
+			if err != nil {
+				return err
+			}
+			return writeSuccessEnvelope(cmd.OutOrStdout(), "reinstall", out)
+		},
+	}
+	addLifecycleFlags(cmd, &f)
+	cmd.Flags().StringVarP(&projectName, "project-name", "n", "", "Project name (optional: auto-detect from cwd rule)")
+	cmd.Flags().BoolVar(&force, "force", true, "Overwrite IDE hook/rule files even if already present")
+	return cmd
+}
+
 func newRenameCommand() *cobra.Command {
 	var f lifecycleFlags
 	var from, to string

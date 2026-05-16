@@ -326,6 +326,7 @@ func NewMux(svc *Service) *http.ServeMux {
 			TopK    int    `json:"top_k"`
 			Budget  int    `json:"budget"`
 			Explain bool   `json:"explain"`
+			IncludeMemories bool `json:"include_memories"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
@@ -364,6 +365,10 @@ func NewMux(svc *Service) *http.ServeMux {
 		included, meta := svc.Clipper.Clip(rebalanced, budget)
 		tierDist := make(map[string]int)
 		mems := make([]map[string]any, 0, len(included))
+		var fullMems []core.MemoryEntry
+		if req.IncludeMemories {
+			fullMems = make([]core.MemoryEntry, 0, len(included))
+		}
 		for _, h := range included {
 			tier := string(h.Memory.StorageTier)
 			tierDist[tier]++
@@ -378,8 +383,11 @@ func NewMux(svc *Service) *http.ServeMux {
 				item["score_breakdown"] = scoreBreakdownForHit(h)
 			}
 			mems = append(mems, item)
+			if req.IncludeMemories {
+				fullMems = append(fullMems, h.Memory)
+			}
 		}
-		writeOK(w, http.StatusOK, map[string]any{
+		out := map[string]any{
 			"context_block":       engine.AssembleRecallSections(task, included),
 			"tokens_used":         meta.UsedTokens,
 			"tokens_budget":       meta.Budget,
@@ -395,7 +403,11 @@ func NewMux(svc *Service) *http.ServeMux {
 			"retrieval_mode":      retrieved.Mode,
 			"retrieval_weights":   retrieved.Weights,
 			"retrieved_hit_count": len(retrieved.Hits),
-		})
+		}
+		if req.IncludeMemories {
+			out["memories_included_full"] = fullMems
+		}
+		writeOK(w, http.StatusOK, out)
 	}
 
 	mux.HandleFunc("/api/v1/memories/recall/preview", recallPreviewHandler)

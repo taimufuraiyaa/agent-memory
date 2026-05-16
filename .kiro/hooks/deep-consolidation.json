@@ -7,6 +7,6 @@
   },
   "then": {
     "type": "runCommand",
-    "command": "rtk agent-memory consolidate --deep --days 30"
+    "command": "agent-memory consolidate --deep --days 30"
   }
 }

@@ -137,6 +137,80 @@ func TestManagerInitReuseAndForce(t *testing.T) {
 	}
 }
 
+func TestManagerReinstallKeepsDBAndProjectName(t *testing.T) {
+	base := t.TempDir()
+	cwd := t.TempDir()
+	mgr, err := NewManager(base)
+	if err != nil {
+		t.Fatalf("new manager: %v", err)
+	}
+
+	initOut, err := mgr.Init(context.Background(), InitOptions{
+		CWD:         cwd,
+		ProjectName: "proj-r",
+	})
+	if err != nil {
+		t.Fatalf("init: %v", err)
+	}
+
+	if err := os.MkdirAll(filepath.Join(cwd, ".kiro", "hooks"), 0o755); err != nil {
+		t.Fatalf("mkdir .kiro/hooks: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(cwd, ".kiro", "hooks", "memory-recall-gate.json"), []byte(`{"bad":true}`), 0o644); err != nil {
+		t.Fatalf("write bad hook: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(cwd, ".aierules"), []byte("# AI Agent Rules\n"), 0o644); err != nil {
+		t.Fatalf("write .aierules: %v", err)
+	}
+
+	sub := filepath.Join(cwd, "cmd")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatalf("mkdir subdir: %v", err)
+	}
+
+	out, err := mgr.Reinstall(context.Background(), ReinstallOptions{
+		CWD:   sub,
+		Force: true,
+	})
+	if err != nil {
+		t.Fatalf("reinstall: %v", err)
+	}
+	if out.Project != "proj-r" {
+		t.Fatalf("unexpected project: %s", out.Project)
+	}
+	if out.DBPath != initOut.DBPath {
+		t.Fatalf("db path changed: %s != %s", out.DBPath, initOut.DBPath)
+	}
+	if out.AgentFiles == nil {
+		t.Fatalf("expected agent files result")
+	}
+
+	cursorRule := filepath.Join(cwd, ".cursor", "rules", "agent-memory.mdc")
+	b, err := os.ReadFile(cursorRule)
+	if err != nil {
+		t.Fatalf("read cursor rule: %v", err)
+	}
+	if !strings.Contains(string(b), "workspace: proj-r") {
+		t.Fatalf("expected cursor rule workspace to remain proj-r")
+	}
+
+	hook, err := os.ReadFile(filepath.Join(cwd, ".kiro", "hooks", "memory-recall-gate.json"))
+	if err != nil {
+		t.Fatalf("read hook: %v", err)
+	}
+	if !strings.Contains(string(hook), "agent-memory search") {
+		t.Fatalf("expected hook to be rewritten")
+	}
+
+	rules, err := os.ReadFile(filepath.Join(cwd, ".aierules"))
+	if err != nil {
+		t.Fatalf("read .aierules: %v", err)
+	}
+	if !strings.Contains(string(rules), "workspace: proj-r") {
+		t.Fatalf("expected workspace in .aierules")
+	}
+}
+
 func TestManagerInitConcurrentSafety(t *testing.T) {
 	base := t.TempDir()
 	cwd := t.TempDir()

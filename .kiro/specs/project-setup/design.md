@@ -48,7 +48,6 @@ This repository currently stores rules/specs and has no runtime interfaces. The 
 
 - Spec directory shape: `.kiro/specs/<feature>/{requirements.md,design.md,tasks.md}`
 - Mermaid safety rule: quote all node labels
-- Shell command format: always `rtk <cmd>`
 
 ## Alternatives Considered
 

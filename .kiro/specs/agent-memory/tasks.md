@@ -721,6 +721,7 @@ Deferred (gray, dashed): T15 (MCP server shim) -- written after V1 is shipped an
 - [x] Implement `init/rename/list/delete` and cursor rule template behavior.
 - [x] Implement `--reuse`, `--force`, `--keep-data`, and self-healing scan.
 - [x] Extend `init` to write multi-IDE rule files via `--ide` targets (cursor, antigravity, aierules, cursorrules, windsurfrules, claude).
+- [x] Add `reinstall` to re-write IDE hooks/rules for the current project without changing DB or project name.
 - [x] Add `agent-memory upgrade` to update the installed binary via `go install <module>@<version>` and replace the current executable.
 **Acceptance criteria**
 - [x] Lifecycle commands behave deterministically and safely under concurrency.
@@ -927,7 +928,7 @@ Adds a `promptSubmit` hook that fires before every agent turn. It runs `search` 
 **Implementation subtasks**
 
 - [x] Create `.kiro/hooks/memory-recall-gate.json` with `promptSubmit` trigger and `askAgent` action
-- [x] Write the gate prompt: extract key terms from user message → run `rtk agent-memory search --query <terms> --top-k 8` → run `rtk agent-memory recall --task <message> --budget 800 --format raw` → inject results as context prefix
+- [x] Write the gate prompt: extract key terms from user message → run `agent-memory search --query <terms> --top-k 8` → run `agent-memory recall --task <message> --budget 800 --format raw` → inject results as context prefix
 - [x] Handle empty results gracefully (proceed with general knowledge, note the gap)
 - [x] Add a result cache check: skip search if the query is identical to the previous turn's query (avoids redundant CLI calls)
 - [x] Write a test fixture: given a known memory in the store, verify the gate injects it before the agent responds
@@ -963,7 +964,7 @@ Adds an `agentStop` hook that fires after every agent turn. It reviews the sessi
 **Implementation subtasks**
 
 - [x] Create `.kiro/hooks/memory-consolidation-gate.json` with `agentStop` trigger and `askAgent` action
-- [x] Write the gate prompt: review session → apply quality filter → write qualifying memories with correct type (`semantic` / `procedural` / `outcome`) → always write failures regardless of filter → run `rtk agent-memory session-end --transcript <summary> --format json`
+- [x] Write the gate prompt: review session → apply quality filter → write qualifying memories with correct type (`semantic` / `procedural` / `outcome`) → always write failures regardless of filter → run `agent-memory session-end --transcript <summary> --format json`
 - [x] Ensure the gate prompt is short and imperative (reduces chance of agent skipping it)
 - [x] Add failure bypass rule explicitly in the prompt: "if the attempt failed, write it as outcome regardless of other criteria"
 - [x] Write a test fixture: given a session where the agent learned a new fact, verify the gate writes it to memory

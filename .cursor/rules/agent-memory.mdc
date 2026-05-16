@@ -11,8 +11,8 @@ You MUST use the `agent-memory` CLI for memory retrieval and persistence.
 - Then run a recall for the current task and use it as primary context before searching the web/docs/code.
 
 Commands:
-- `rtk agent-memory search --query "<keywords/entities>" --top-k 8`
-- `rtk agent-memory recall --task "<one-line task>" --budget 800 --format raw`
+- `agent-memory search --query "<keywords/entities>" --top-k 8`
+- `agent-memory recall --task "<one-line task>" --budget 800 --format raw`
 
 ### While working
 
@@ -20,19 +20,19 @@ Commands:
 - Prefer short, atomic memories. Include the source (file path / command / URL) in the content when available.
 
 Commands:
-- `rtk agent-memory write --type semantic --content "<durable fact + source>"`
-- `rtk agent-memory write --type procedural --content "<repeatable steps/checklist>"`
+- `agent-memory write --type semantic --content "<durable fact + source>"`
+- `agent-memory write --type procedural --content "<repeatable steps/checklist>"`
 
 ### After attempts (success/failure)
 
 - Record outcomes that would prevent repeating mistakes or preserve a working approach.
 
 Command:
-- `rtk agent-memory write --type outcome --content "<what you tried>" --outcome-result success|failure|partial --outcome-approach "<how>" --outcome-reason "<why>"`
+- `agent-memory write --type outcome --content "<what you tried>" --outcome-result success|failure|partial --outcome-approach "<how>" --outcome-reason "<why>"`
 
 ### At the end of a session
 
 - Extract learnings from the session summary/transcript into memory.
 
 Command:
-- `rtk agent-memory session-end --transcript "<session summary or transcript>" --format json`
+- `agent-memory session-end --transcript "<session summary or transcript>" --format json`

@@ -107,6 +107,16 @@ func TestServerWriteSearchRecall(t *testing.T) {
 	if _, ok := previewResp["tier_distribution"]; !ok {
 		t.Fatalf("expected recall preview tier distribution")
 	}
+	previewFull := postJSON(t, ts.URL+"/api/v1/memories/recall/preview", map[string]any{
+		"workspace":         "ws",
+		"task_description":  "investigate order event",
+		"top_k":             2,
+		"token_budget":      20,
+		"include_memories":  true,
+	})
+	if _, ok := previewFull["memories_included_full"]; !ok {
+		t.Fatalf("expected recall preview full included memories when include_memories is true")
+	}
 	sessionResp := postJSON(t, ts.URL+"/api/v1/memories/session-end", map[string]any{"transcript": "we should always run migrations\nresult was success"})
 	if _, ok := sessionResp["total_extracted"]; !ok {
 		t.Fatalf("expected session-end extraction response")
