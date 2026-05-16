@@ -3,19 +3,30 @@ import DOMPurify from 'dompurify'
 import mermaid from 'mermaid'
 import type { Diagram } from '../lib/api'
 
-let mermaidReady = false
-
-function ensureMermaid() {
-  if (mermaidReady) return
+function ensureMermaid(theme: 'light' | 'dark') {
   mermaid.initialize({
     startOnLoad: false,
-    securityLevel: 'strict',
-    theme: 'dark',
+    securityLevel: 'loose',
+    theme: theme === 'dark' ? 'dark' : 'default',
+    fontFamily: 'Inter, system-ui, sans-serif',
+    flowchart: {
+      htmlLabels: false,
+      useMaxWidth: true,
+    },
+    sequence: {
+      htmlLabels: false,
+      useMaxWidth: true,
+    },
+    themeVariables: {
+      nodeTextColor: theme === 'dark' ? '#f8fafc' : '#1a1b1e',
+      primaryTextColor: theme === 'dark' ? '#f8fafc' : '#1a1b1e',
+      textColor: theme === 'dark' ? '#f8fafc' : '#1a1b1e',
+      mainBkg: theme === 'dark' ? '#0f172a' : '#ffffff',
+    },
   })
-  mermaidReady = true
 }
 
-export function DiagramViewer({ diagram }: { diagram: Diagram }) {
+export function DiagramViewer({ diagram, theme }: { diagram: Diagram; theme: 'light' | 'dark' }) {
   const [mode, setMode] = useState<'render' | 'code'>(diagram.lang === 'mermaid' ? 'render' : 'code')
   const [svg, setSvg] = useState<string>('')
   const [err, setErr] = useState<string>('')
@@ -25,28 +36,35 @@ export function DiagramViewer({ diagram }: { diagram: Diagram }) {
 
   useEffect(() => {
     if (!isMermaid || mode !== 'render') return
-    ensureMermaid()
+    ensureMermaid(theme)
     let cancelled = false
     setErr('')
     setSvg('')
     const id = `m-${rid.replace(/[:]/g, '')}`
+    
+    // Use a temporary container to help Mermaid calculate dimensions/styles
+    const container = document.createElement('div')
+    container.style.visibility = 'hidden'
+    container.style.position = 'absolute'
+    document.body.appendChild(container)
+
     mermaid
-      .render(id, diagram.code)
+      .render(id, diagram.code, container)
       .then((r: { svg: string }) => {
         if (cancelled) return
-        const clean = DOMPurify.sanitize(r.svg, {
-          USE_PROFILES: { svg: true, svgFilters: true },
-        })
-        setSvg(clean)
+        setSvg(r.svg)
       })
       .catch((e: unknown) => {
         if (cancelled) return
         setErr(e instanceof Error ? e.message : String(e))
       })
+      .finally(() => {
+        document.body.removeChild(container)
+      })
     return () => {
       cancelled = true
     }
-  }, [diagram.code, isMermaid, mode, rid])
+  }, [diagram.code, isMermaid, mode, rid, theme])
 
   return (
     <div className="diagram">
