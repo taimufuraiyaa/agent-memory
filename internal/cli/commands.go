@@ -5,9 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -482,6 +485,99 @@ func newServeCommand() *cobra.Command {
 	return cmd
 }
 
+func openInBrowser(url string) error {
+	if strings.TrimSpace(url) == "" {
+		return errors.New("url is required")
+	}
+	switch runtime.GOOS {
+	case "darwin":
+		return exec.Command("open", url).Run()
+	case "windows":
+		return exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Run()
+	default:
+		return exec.Command("xdg-open", url).Run()
+	}
+}
+
+func dashboardURLForListenerAddr(addr string) string {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return "http://localhost:3210/dashboard/"
+	}
+	host = strings.Trim(host, "[]")
+	if host == "" || host == "0.0.0.0" || host == "::" {
+		host = "localhost"
+	}
+	return fmt.Sprintf("http://%s:%s/dashboard/", host, port)
+}
+
+func newDashboardCommand() *cobra.Command {
+	var flags commonFlags
+	var addr string
+	var noOpen bool
+	cmd := &cobra.Command{
+		Use:     "dashboard",
+		Short:   "Open the local dashboard (starts the HTTP server)",
+		Aliases: []string{"ui"},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+			cfg, err := resolveRuntime(flags)
+			if err != nil {
+				return err
+			}
+			if cfg.apiURL != "" {
+				url := strings.TrimRight(cfg.apiURL, "/") + "/dashboard/"
+				if noOpen {
+					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s\n", url)
+					return nil
+				}
+				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "opening %s\n", url)
+				return openInBrowser(url)
+			}
+			store, provider, err := openDeps(ctx, cfg)
+			if err != nil {
+				return err
+			}
+			defer func() { _ = store.Close() }()
+
+			svc := &api.Service{
+				Workspace: cfg.workspace,
+				Writer:    engine.NewWritePipeline(store),
+				Retrieval: engine.NewRetrievalEngine(engine.NewVectorSearcher(store, provider)),
+				Clipper:   engine.NewTokenClipper(nil),
+				Store:     store,
+				BaseDir:   filepath.Dir(cfg.dbPath),
+			}
+			server := &http.Server{
+				Addr:    addr,
+				Handler: api.NewMux(svc),
+			}
+
+			ln, err := net.Listen("tcp", addr)
+			if err != nil {
+				return err
+			}
+			url := dashboardURLForListenerAddr(ln.Addr().String())
+			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "serving on %s\n", url)
+			if !noOpen {
+				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "opening %s\n", url)
+				_ = openInBrowser(url)
+			}
+			errCh := make(chan error, 1)
+			go func() { errCh <- server.Serve(ln) }()
+			err = <-errCh
+			if errors.Is(err, http.ErrServerClosed) {
+				return nil
+			}
+			return err
+		},
+	}
+	addCommonFlags(cmd, &flags)
+	cmd.Flags().StringVar(&addr, "addr", ":3210", "HTTP listen address")
+	cmd.Flags().BoolVar(&noOpen, "no-open", false, "Do not open a browser; just print the URL")
+	return cmd
+}
+
 func newStudyCommand() *cobra.Command {
 	var flags commonFlags
 	var sources []string
@@ -824,10 +920,10 @@ become procedural rules, large episodic clusters merge into semantic facts.`,
 				return err
 			}
 			return writeSuccessEnvelope(cmd.OutOrStdout(), "consolidate", map[string]any{
-				"merged":    len(merged),
+				"merged":     len(merged),
 				"merged_ids": merged,
-				"deep":      false,
-				"dry_run":   dryRun,
+				"deep":       false,
+				"dry_run":    dryRun,
 			})
 		},
 	}
