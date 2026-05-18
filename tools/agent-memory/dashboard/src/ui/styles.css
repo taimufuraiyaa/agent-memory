@@ -597,12 +597,15 @@ body.light .detailDrawerTop {
 .memCard {
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 18px;
+  border-left: 4px solid var(--accent-primary);
+  border-radius: 16px;
   overflow: hidden;
   transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   box-shadow: var(--shadow-sm);
   cursor: pointer;
   position: relative;
+  display: flex;
+  flex-direction: column;
 }
 
 .memCard:hover {
@@ -613,6 +616,7 @@ body.light .detailDrawerTop {
 }
 
 .memCardOn {
+  border-left-width: 6px;
   border-color: var(--accent-primary) !important;
   box-shadow: 0 0 0 2px var(--accent-glow), var(--shadow-md) !important;
   background: var(--bg-card-hover) !important;
@@ -679,6 +683,20 @@ body.light .memPill {
   background: rgba(0, 0, 0, 0.06);
 }
 
+.memPillAccent {
+  background: var(--accent-primary);
+  color: #000 !important;
+  font-weight: 800;
+  border: none;
+}
+
+.memPillVisual {
+  background: var(--accent-secondary);
+  color: #000 !important;
+  font-weight: 800;
+  border: none;
+}
+
 .memBody {
   padding: 20px;
   font-size: 14px;
@@ -708,6 +726,38 @@ body.light .memPill {
 
 .memCard:hover .memBodyCompact::after, .memCardOn .memBodyCompact::after {
   background: linear-gradient(to top, var(--bg-card-hover), transparent);
+}
+
+.memFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  background: rgba(0, 0, 0, 0.35);
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+}
+
+body.light .memFooter {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.memFooterLeft, .memFooterRight {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.memMetric {
+  color: var(--text-subtle);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.memMetric strong {
+  color: var(--accent-primary);
+  font-weight: 700;
 }
 
 .memMetaGrid {

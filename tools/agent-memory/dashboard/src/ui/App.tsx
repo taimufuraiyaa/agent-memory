@@ -1079,23 +1079,35 @@ function ResultCard({
   isSelected: boolean
   onSelect: (m: MemoryEntry) => void
 }) {
+  const timeStr = formatTS(m.created_at || m.updated_at)
   return (
     <article className={isSelected ? 'memCard memCardOn' : 'memCard'} onClick={() => onSelect(m)}>
       <div className="memHdr">
         <div className="memHdrLeft">
           <span className="memDot" aria-hidden="true" />
-          <span className="mono memID">{m.id.slice(0, 12)}…</span>
+          <span className="mono memID" title={m.id}>{m.id.slice(0, 16)}…</span>
         </div>
         <div className="memHdrRight">
-          <span className="memPill">{m.type}</span>
-          <span className="memPill">{m.storage_tier}</span>
-          {typeof m.score === 'number' ? <span className="memPill">score {m.score.toFixed(3)}</span> : null}
-          <span className="memPill">conf {m.confidence.toFixed(2)}</span>
+          {timeStr ? <span className="memTime" style={{ fontSize: '12px', opacity: 0.7 }}>{timeStr}</span> : null}
         </div>
       </div>
       <div className="memBody memBodyCompact">
         <MarkdownView markdown={m.content} clamp={true} theme={theme} />
       </div>
+      <div className="memFooter">
+        <div className="memFooterLeft">
+          <span className="memPill memPillAccent">{m.type}</span>
+          <span className="memPill">{m.storage_tier}</span>
+          {hasDiagram(m) ? <span className="memPill memPillVisual">📊 visual</span> : null}
+        </div>
+        <div className="memFooterRight">
+          {typeof m.score === 'number' ? (
+            <span className="memMetric">Score: <strong>{m.score.toFixed(3)}</strong></span>
+          ) : null}
+          <span className="memMetric">Conf: <strong>{Math.round(m.confidence * 100)}%</strong></span>
+        </div>
+      </div>
     </article>
   )
 }
+
