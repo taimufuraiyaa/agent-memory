@@ -104,6 +104,19 @@ export function getStats(workspace?: string): Promise<Record<string, unknown>> {
   return api(`/api/v1/stats${qs}`, { method: 'GET' })
 }
 
+export type RecentMemoriesResponse = {
+  results: MemoryEntry[]
+  workspace: string
+  limit: number
+}
+
+export function listRecentMemories(input: { workspace: string; limit?: number }): Promise<RecentMemoriesResponse> {
+  const qs = new URLSearchParams()
+  qs.set('workspace', input.workspace)
+  if (typeof input.limit === 'number') qs.set('limit', String(input.limit))
+  return api(`/api/v1/memories/recent?${qs.toString()}`, { method: 'GET' })
+}
+
 export function searchMemories(input: {
   workspace: string
   query: string

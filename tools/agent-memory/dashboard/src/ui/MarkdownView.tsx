@@ -15,7 +15,7 @@ function sanitize(html: string): string {
   })
 }
 
-export function MarkdownView({ markdown, clamp }: { markdown: string; clamp: boolean }) {
+export function MarkdownView({ markdown, clamp, theme }: { markdown: string; clamp: boolean; theme: 'light' | 'dark' }) {
   const tokens = useMemo(() => {
     return marked.lexer(markdown ?? '')
   }, [markdown])
@@ -24,7 +24,7 @@ export function MarkdownView({ markdown, clamp }: { markdown: string; clamp: boo
     <div className={clamp ? 'md mdClamp' : 'md'}>
       {tokens.map((token, i) => {
         if (token.type === 'code' && token.lang === 'mermaid') {
-          return <DiagramViewer key={i} diagram={{ lang: 'mermaid', code: token.text }} />
+          return <DiagramViewer key={i} diagram={{ lang: 'mermaid', code: token.text }} theme={theme} />
         }
         
         // For other tokens, we render them as HTML

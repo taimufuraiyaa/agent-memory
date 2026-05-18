@@ -32,8 +32,18 @@ func TestServerWriteSearchRecall(t *testing.T) {
 	ts := httptest.NewServer(NewMux(svc))
 	defer ts.Close()
 
-	writeBody := map[string]any{"type": "semantic", "content": "orders service publishes order.created"}
-	postJSON(t, ts.URL+"/api/v1/memories/write", writeBody)
+	postJSON(t, ts.URL+"/api/v1/memories/write", map[string]any{"type": "semantic", "content": "orders service publishes order.created"})
+	postJSON(t, ts.URL+"/api/v1/memories/write", map[string]any{"type": "semantic", "content": "orders service publishes order.cancelled"})
+
+	recent := getJSON(t, ts.URL+"/api/v1/memories/recent?workspace=ws&limit=1")
+	recentResults, _ := recent["results"].([]any)
+	if len(recentResults) != 1 {
+		t.Fatalf("expected 1 recent result, got %+v", recentResults)
+	}
+	recentFirst, _ := recentResults[0].(map[string]any)
+	if content, _ := recentFirst["content"].(string); content != "orders service publishes order.cancelled" {
+		t.Fatalf("expected most recent memory content to be returned first, got %+v", recentFirst)
+	}
 
 	searchResp := postJSON(t, ts.URL+"/api/v1/memories/search", map[string]any{"query": "order event", "top_k": 1, "mode": "search"})
 	if len(searchResp["results"].([]any)) == 0 {
@@ -159,12 +169,8 @@ func TestServerWriteSearchRecall(t *testing.T) {
 		t.Fatalf("get dashboard html: %v", err)
 	}
 	defer func() { _ = res.Body.Close() }()
-	if res.StatusCode != http.StatusOK {
-		t.Fatalf("expected dashboard shell to load, got %d", res.StatusCode)
-	}
-	html, _ := io.ReadAll(res.Body)
-	if !bytes.Contains(html, []byte("Agent Memory Dashboard")) {
-		t.Fatalf("expected dashboard html title")
+	if res.StatusCode == http.StatusOK {
+		t.Fatalf("expected /dashboard/ to not be served by API server in standalone dashboard mode")
 	}
 }
 

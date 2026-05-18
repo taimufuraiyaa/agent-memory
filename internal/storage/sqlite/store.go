@@ -523,6 +523,74 @@ ORDER BY updated_at DESC`, workspace)
 	return out, rows.Err()
 }
 
+func (s *Store) ListRecentMemoriesByWorkspace(ctx context.Context, workspace string, limit int) ([]core.MemoryEntry, error) {
+	if limit <= 0 {
+		limit = 25
+	}
+	if limit > 200 {
+		limit = 200
+	}
+	rows, err := s.db.QueryContext(ctx, `
+SELECT id, type, content, diagram_lang, diagram_code, workspace, source_json, entities_json, tags_json, confidence, storage_tier, pinned, superseded_by, access_count, last_accessed, decay_score, outcome_json, created_at, updated_at
+FROM memories
+WHERE workspace = ?
+ORDER BY created_at DESC
+LIMIT ?`, workspace, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	out := make([]core.MemoryEntry, 0, limit)
+	for rows.Next() {
+		var m core.MemoryEntry
+		var sourceJSON, entitiesJSON, tagsJSON string
+		var outcomeJSON sql.NullString
+		var diagramLang, diagramCode string
+		var pinned int
+		var supersededBy sql.NullString
+		var createdAt, updatedAt, lastAccessed string
+		if err := rows.Scan(
+			&m.ID, &m.Type, &m.Content, &diagramLang, &diagramCode, &m.Workspace, &sourceJSON, &entitiesJSON, &tagsJSON,
+			&m.Confidence, &m.StorageTier, &pinned, &supersededBy, &m.AccessCount, &lastAccessed, &m.DecayScore, &outcomeJSON, &createdAt, &updatedAt,
+		); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal([]byte(sourceJSON), &m.Source); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal([]byte(entitiesJSON), &m.Entities); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal([]byte(tagsJSON), &m.Tags); err != nil {
+			return nil, err
+		}
+		if outcomeJSON.Valid && outcomeJSON.String != "" {
+			var o core.Outcome
+			if err := json.Unmarshal([]byte(outcomeJSON.String), &o); err != nil {
+				return nil, err
+			}
+			m.Outcome = &o
+		}
+		if t, err := time.Parse(time.RFC3339Nano, createdAt); err == nil {
+			m.CreatedAt = t
+		}
+		if t, err := time.Parse(time.RFC3339Nano, updatedAt); err == nil {
+			m.UpdatedAt = t
+		}
+		if t, err := time.Parse(time.RFC3339Nano, lastAccessed); err == nil {
+			m.LastAccessedAt = t
+		}
+		if supersededBy.Valid && supersededBy.String != "" {
+			m.SupersededBy = &supersededBy.String
+		}
+		applyDiagram(&m, diagramLang, diagramCode)
+		m.Pinned = pinned == 1
+		out = append(out, m)
+	}
+	return out, rows.Err()
+}
+
 // CountMemories returns the number of persisted memories.
 func (s *Store) CountMemories(ctx context.Context) (int, error) {
 	row := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM memories`)

@@ -7,9 +7,10 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
-	"time"
 	"sync"
+	"time"
 
 	"github.com/time/timebooks/agent-memory/internal/core"
 	"github.com/time/timebooks/agent-memory/internal/embeddings"
@@ -71,10 +72,6 @@ func (s *Service) resolve(ctx context.Context, ws string) (*workspaceAssets, err
 
 func NewMux(svc *Service) *http.ServeMux {
 	mux := http.NewServeMux()
-	mux.Handle("/dashboard/", dashboardHandler())
-	mux.HandleFunc("/dashboard", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, "/dashboard/", http.StatusPermanentRedirect)
-	})
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		writeOK(w, http.StatusOK, map[string]any{"status": "ok"})
 	})
@@ -299,6 +296,47 @@ func NewMux(svc *Service) *http.ServeMux {
 			"requested_query": req.Query,
 		})
 	})
+	mux.HandleFunc("/api/v1/memories/recent", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			writeErr(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+			return
+		}
+		ws := workspaceFromRequest(r, svc.Workspace)
+		assets, err := svc.resolve(r.Context(), ws)
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
+			return
+		}
+		if assets.Store == nil {
+			writeErr(w, http.StatusInternalServerError, "runtime", "store is not available")
+			return
+		}
+		limit := 25
+		if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+			v, err := strconv.Atoi(raw)
+			if err != nil {
+				writeErr(w, http.StatusBadRequest, "validation", "invalid limit")
+				return
+			}
+			limit = v
+		}
+		if limit <= 0 {
+			limit = 25
+		}
+		if limit > 200 {
+			limit = 200
+		}
+		results, err := assets.Store.ListRecentMemoriesByWorkspace(r.Context(), ws, limit)
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
+			return
+		}
+		writeOK(w, http.StatusOK, map[string]any{
+			"results":   results,
+			"workspace": ws,
+			"limit":     limit,
+		})
+	})
 	mux.HandleFunc("/api/v1/memories/recall", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			writeErr(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
@@ -382,11 +420,11 @@ func NewMux(svc *Service) *http.ServeMux {
 			TaskDescription string `json:"task_description"`
 			TokenBudget     int    `json:"token_budget"`
 
-			Task    string `json:"task"`
-			TopK    int    `json:"top_k"`
-			Budget  int    `json:"budget"`
-			Explain bool   `json:"explain"`
-			IncludeMemories bool `json:"include_memories"`
+			Task            string `json:"task"`
+			TopK            int    `json:"top_k"`
+			Budget          int    `json:"budget"`
+			Explain         bool   `json:"explain"`
+			IncludeMemories bool   `json:"include_memories"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
