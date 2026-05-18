@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -18,15 +19,19 @@ import (
 )
 
 type upgradeResult struct {
-	FromVersion   string                      `json:"from_version"`
-	ToSpecifier   string                      `json:"to_specifier"`
-	Module        string                      `json:"module"`
-	Method        string                      `json:"method"`
-	SourceDir     string                      `json:"source_dir,omitempty"`
-	TargetPath    string                      `json:"target_path"`
-	InstalledFrom string                      `json:"installed_from,omitempty"`
-	Replaced      bool                        `json:"replaced"`
-	AgentFiles    *workspace.WriteAgentFilesResult `json:"agent_files,omitempty"`
+	FromVersion      string                           `json:"from_version"`
+	ToSpecifier      string                           `json:"to_specifier"`
+	Module           string                           `json:"module"`
+	Method           string                           `json:"method"`
+	SourceDir        string                           `json:"source_dir,omitempty"`
+	TargetPath       string                           `json:"target_path"`
+	InstalledFrom    string                           `json:"installed_from,omitempty"`
+	Replaced         bool                             `json:"replaced"`
+	AgentFiles       *workspace.WriteAgentFilesResult `json:"agent_files,omitempty"`
+	DashboardUpdated bool                             `json:"dashboard_updated,omitempty"`
+	DashboardDir     string                           `json:"dashboard_dir,omitempty"`
+	DashboardSource  string                           `json:"dashboard_source,omitempty"`
+	DashboardError   string                           `json:"dashboard_error,omitempty"`
 }
 
 func validateTextOrJSONFormat(s string) (string, error) {
@@ -37,6 +42,19 @@ func validateTextOrJSONFormat(s string) (string, error) {
 		return "json", nil
 	default:
 		return "", fmt.Errorf("invalid format: allowed values are json|text")
+	}
+}
+
+func envBool(key string) bool {
+	v := strings.TrimSpace(os.Getenv(key))
+	if v == "" {
+		return false
+	}
+	switch strings.ToLower(v) {
+	case "1", "true", "yes", "y", "on":
+		return true
+	default:
+		return false
 	}
 }
 
@@ -156,6 +174,123 @@ func replaceFileAtomic(dst string, src string) error {
 	return os.Rename(tmp, dst)
 }
 
+func defaultAgentMemoryDataDir() string {
+	if runtime.GOOS == "windows" {
+		if v := strings.TrimSpace(os.Getenv("LOCALAPPDATA")); v != "" {
+			return filepath.Join(v, "agent-memory")
+		}
+	}
+	if v := strings.TrimSpace(os.Getenv("HOME")); v != "" {
+		return filepath.Join(v, ".agent-memory")
+	}
+	cwd, _ := os.Getwd()
+	return filepath.Join(cwd, ".agent-memory")
+}
+
+func resolveDashboardDir(override string) string {
+	if v := strings.TrimSpace(override); v != "" {
+		return v
+	}
+	if v := strings.TrimSpace(os.Getenv("AGENT_MEMORY_DASHBOARD_DIR")); v != "" {
+		return v
+	}
+	return filepath.Join(defaultAgentMemoryDataDir(), "dashboard")
+}
+
+func copyDir(dst, src string) error {
+	dstAbs, err := filepath.Abs(dst)
+	if err != nil {
+		return err
+	}
+	srcAbs, err := filepath.Abs(src)
+	if err != nil {
+		return err
+	}
+	if dstAbs == srcAbs {
+		return nil
+	}
+	if err := os.MkdirAll(dst, 0o755); err != nil {
+		return err
+	}
+
+	return filepath.WalkDir(src, func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		rel, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+		if rel == "." {
+			return nil
+		}
+		if d.IsDir() {
+			name := d.Name()
+			if name == "node_modules" || name == "dist" || name == ".git" {
+				return filepath.SkipDir
+			}
+			return os.MkdirAll(filepath.Join(dst, rel), 0o755)
+		}
+		in, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = in.Close() }()
+		outPath := filepath.Join(dst, rel)
+		if err := os.MkdirAll(filepath.Dir(outPath), 0o755); err != nil {
+			return err
+		}
+		out, err := os.OpenFile(outPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
+		if err != nil {
+			return err
+		}
+		_, copyErr := io.Copy(out, in)
+		closeErr := out.Close()
+		if copyErr != nil {
+			_ = os.Remove(outPath)
+			return copyErr
+		}
+		if closeErr != nil {
+			_ = os.Remove(outPath)
+			return closeErr
+		}
+		return nil
+	})
+}
+
+func updateStandaloneDashboardFromSource(srcRoot, dstDir string) (string, error) {
+	if strings.TrimSpace(srcRoot) == "" {
+		return "", errors.New("source dir is required")
+	}
+	if strings.TrimSpace(dstDir) == "" {
+		return "", errors.New("dashboard dir is required")
+	}
+	src := filepath.Join(srcRoot, "tools", "agent-memory", "dashboard")
+	if st, err := os.Stat(src); err != nil || !st.IsDir() {
+		return src, fmt.Errorf("dashboard source not found: %s", src)
+	}
+	if !fileExists(filepath.Join(src, "package.json")) {
+		return src, fmt.Errorf("dashboard source package.json missing: %s", src)
+	}
+	if _, err := exec.LookPath("npm"); err != nil {
+		return src, errors.New("npm is required to refresh the standalone dashboard")
+	}
+	if err := copyDir(dstDir, src); err != nil {
+		return src, err
+	}
+	ci := exec.Command("npm", "ci")
+	ci.Dir = dstDir
+	_, errOut, err := runAndCapture(ci)
+	if err != nil {
+		msg := strings.TrimSpace(errOut)
+		if msg == "" {
+			msg = err.Error()
+		}
+		return src, fmt.Errorf("npm ci failed: %s", msg)
+	}
+	return src, nil
+}
+
 func newUpgradeCommand() *cobra.Command {
 	var format string
 	var module string
@@ -167,6 +302,8 @@ func newUpgradeCommand() *cobra.Command {
 	var hooksOnly bool
 	var forceHooks bool
 	var noHooks bool
+	var noDashboard bool
+	var dashboardDir string
 
 	cmd := &cobra.Command{
 		Use:   "upgrade",
@@ -237,6 +374,11 @@ Use --hooks-only to push hooks without touching the binary (useful for existing 
 			}
 
 			if strings.TrimSpace(srcDir) == "" {
+				if v := strings.TrimSpace(os.Getenv("AGENT_MEMORY_SRC_DIR")); v != "" {
+					srcDir = v
+				}
+			}
+			if strings.TrimSpace(srcDir) == "" {
 				srcDir = findSourceRoot(cwd)
 			}
 
@@ -298,8 +440,11 @@ Use --hooks-only to push hooks without touching the binary (useful for existing 
 				return nil
 			}
 
+			if !yes && envBool("AGENT_MEMORY_UPGRADE_YES") {
+				yes = true
+			}
 			if !yes {
-				return errors.New("upgrade requires --yes / -y (or use --dry-run)")
+				return errors.New("upgrade requires --yes / -y (or set AGENT_MEMORY_UPGRADE_YES=1, or use --dry-run)")
 			}
 
 			if err := replaceFileAtomic(target, installedFrom); err != nil {
@@ -318,12 +463,29 @@ Use --hooks-only to push hooks without touching the binary (useful for existing 
 				res.AgentFiles = af
 			}
 
+			if !noDashboard && strings.TrimSpace(srcDir) != "" {
+				dst := resolveDashboardDir(dashboardDir)
+				res.DashboardDir = dst
+				src, err := updateStandaloneDashboardFromSource(srcDir, dst)
+				res.DashboardSource = src
+				if err != nil {
+					res.DashboardError = err.Error()
+				} else {
+					res.DashboardUpdated = true
+				}
+			}
+
 			if f == "json" {
 				return writeSuccessEnvelope(cmd.OutOrStdout(), "upgrade", res)
 			}
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "upgraded: %s\n", target)
 			if res.AgentFiles != nil {
 				printAgentFiles(res.AgentFiles)
+			}
+			if res.DashboardUpdated {
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  dashboard updated: %s\n", res.DashboardDir)
+			} else if strings.TrimSpace(res.DashboardError) != "" {
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  dashboard update skipped: %s\n", res.DashboardError)
 			}
 			return nil
 		},
@@ -339,5 +501,7 @@ Use --hooks-only to push hooks without touching the binary (useful for existing 
 	cmd.Flags().BoolVar(&hooksOnly, "hooks-only", false, "Only write hippocampus hook files, skip binary upgrade")
 	cmd.Flags().BoolVar(&noHooks, "no-hooks", false, "Skip writing hippocampus hook files")
 	cmd.Flags().BoolVar(&forceHooks, "force-hooks", false, "Overwrite hook files even if already up-to-date")
+	cmd.Flags().BoolVar(&noDashboard, "no-dashboard", false, "Skip refreshing standalone dashboard from source checkout")
+	cmd.Flags().StringVar(&dashboardDir, "dashboard-dir", "", "Dashboard install dir (default: $AGENT_MEMORY_DASHBOARD_DIR or ~/.agent-memory/dashboard)")
 	return cmd
 }

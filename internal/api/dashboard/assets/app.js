@@ -7086,6 +7086,12 @@ function getStats(workspace) {
   const qs = workspace ? `?workspace=${encodeURIComponent(workspace)}` : "";
   return api(`/api/v1/stats${qs}`, { method: "GET" });
 }
+function listRecentMemories(input) {
+  const qs = new URLSearchParams();
+  qs.set("workspace", input.workspace);
+  if (typeof input.limit === "number") qs.set("limit", String(input.limit));
+  return api(`/api/v1/memories/recent?${qs.toString()}`, { method: "GET" });
+}
 function searchMemories(input) {
   return api("/api/v1/memories/search", {
     method: "POST",
@@ -32988,7 +32994,6 @@ function ensureMermaid(theme) {
       useMaxWidth: true
     },
     sequence: {
-      htmlLabels: false,
       useMaxWidth: true
     },
     themeVariables: {
@@ -35195,13 +35200,13 @@ function sanitize(html2) {
     ADD_ATTR: ["target", "rel"]
   });
 }
-function MarkdownView({ markdown, clamp }) {
+function MarkdownView({ markdown, clamp, theme }) {
   const tokens = reactExports.useMemo(() => {
     return marked.lexer(markdown ?? "");
   }, [markdown]);
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: clamp ? "md mdClamp" : "md", children: tokens.map((token2, i2) => {
     if (token2.type === "code" && token2.lang === "mermaid") {
-      return /* @__PURE__ */ jsxRuntimeExports.jsx(DiagramViewer, { diagram: { lang: "mermaid", code: token2.text } }, i2);
+      return /* @__PURE__ */ jsxRuntimeExports.jsx(DiagramViewer, { diagram: { lang: "mermaid", code: token2.text }, theme }, i2);
     }
     const html2 = sanitize(marked.parser([token2]));
     return /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -35274,6 +35279,7 @@ function App() {
   const [recallTopK, setRecallTopK] = reactExports.useState(50);
   const [budget, setBudget] = reactExports.useState(4e3);
   const [busy, setBusy] = reactExports.useState(false);
+  const [recentsBusy, setRecentsBusy] = reactExports.useState(false);
   const [messages, setMessages] = reactExports.useState([]);
   const [theme, setTheme] = reactExports.useState("dark");
   const threadRef = reactExports.useRef(null);
@@ -35351,6 +35357,49 @@ function App() {
       date_to: toDate || void 0
     };
   }, [entities, fromDate, minConfidence, minDecay, outcome, tiers, toDate, types]);
+  async function showRecentsCapture() {
+    var _a2;
+    if (!workspace) return;
+    if (recentsBusy) return;
+    setRecentsBusy(true);
+    const pendingID = makeID();
+    const pending = {
+      id: pendingID,
+      role: "assistant",
+      mode: "search",
+      text: "Loading recent memories…",
+      createdAt: Date.now(),
+      pending: true
+    };
+    setMessages((m2) => [...m2, pending]);
+    try {
+      const r2 = await listRecentMemories({ workspace, limit: topK });
+      const hitCount = ((_a2 = r2.results) == null ? void 0 : _a2.length) ?? 0;
+      setMessages(
+        (m2) => m2.map(
+          (x2) => x2.id === pendingID ? {
+            ...x2,
+            pending: false,
+            text: hitCount > 0 ? `Recent memories (${hitCount}).` : "No recent memories found.",
+            payload: { results: r2.results ?? [] }
+          } : x2
+        )
+      );
+    } catch (e2) {
+      setMessages(
+        (m2) => m2.map(
+          (x2) => x2.id === pendingID ? {
+            ...x2,
+            pending: false,
+            text: "Request failed.",
+            error: e2 instanceof Error ? e2.message : String(e2)
+          } : x2
+        )
+      );
+    } finally {
+      setRecentsBusy(false);
+    }
+  }
   async function runDeepSearch(query) {
     const q2 = query.trim();
     if (!q2 || !workspace) return;
@@ -35625,6 +35674,24 @@ function App() {
                   /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M3 4v6h6" })
                 ] }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "navLabel", children: "Recall Preview" })
+              ]
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "button",
+            {
+              className: "navItem",
+              onClick: showRecentsCapture,
+              type: "button",
+              "aria-label": "Recents capture",
+              disabled: recentsBusy || !workspace,
+              title: "Show recently added memories",
+              children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("svg", { width: "16", height: "16", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "2", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("circle", { cx: "12", cy: "12", r: "9" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M12 7v5l3 2" })
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "navLabel", children: "Recents capture" })
               ]
             }
           ),
@@ -35932,7 +35999,7 @@ function Message({ m: m2, theme }) {
       /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "msgTime", children: formatClock(m2.createdAt) })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "msgBody", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(MarkdownView, { markdown: m2.text, clamp: false }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(MarkdownView, { markdown: m2.text, clamp: false, theme }),
       m2.error ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "callout calloutBad", children: m2.error }) : null,
       ((_a2 = m2.payload) == null ? void 0 : _a2.results) ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "assistantBlock", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "assistantHdr", children: [
@@ -36001,7 +36068,7 @@ function ResultCard({ m: m2, theme }) {
       ] })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memBody", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(MarkdownView, { markdown: m2.content, clamp: !open }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(MarkdownView, { markdown: m2.content, clamp: !open, theme }),
       m2.diagram ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "diagramBlock", children: /* @__PURE__ */ jsxRuntimeExports.jsx(DiagramViewer, { diagram: m2.diagram, theme }) }) : null,
       open ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memMetaGrid", children: [

@@ -1,23 +1,25 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
+const apiTarget = process.env.VITE_API_TARGET || 'http://localhost:3210'
+
 export default defineConfig({
-  base: '/dashboard/',
+  base: '/',
   plugins: [react()],
   server: {
     proxy: {
       '/api': {
-        target: 'http://localhost:3210',
+        target: apiTarget,
         changeOrigin: true,
       },
       '/health': {
-        target: 'http://localhost:3210',
+        target: apiTarget,
         changeOrigin: true,
       },
     },
   },
   build: {
-    outDir: '../../../internal/api/dashboard',
+    outDir: 'dist',
     emptyOutDir: true,
     sourcemap: false,
     minify: false,
