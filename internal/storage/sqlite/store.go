@@ -182,6 +182,32 @@ func (s *Store) Migrate(ctx context.Context) error {
 			created_at TEXT NOT NULL
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_token_metrics_workspace ON token_metrics(workspace)`,
+		`CREATE TABLE IF NOT EXISTS sessions (
+			workspace TEXT NOT NULL,
+			session_id TEXT NOT NULL,
+			project_root TEXT NOT NULL DEFAULT '',
+			cwd TEXT NOT NULL DEFAULT '',
+			started_at TEXT NOT NULL DEFAULT '',
+			ended_at TEXT NOT NULL DEFAULT '',
+			observation_count INTEGER NOT NULL DEFAULT 0,
+			last_seen_at TEXT NOT NULL,
+			PRIMARY KEY(workspace, session_id)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_sessions_workspace_last_seen ON sessions(workspace, last_seen_at DESC)`,
+		`CREATE TABLE IF NOT EXISTS observations (
+			id TEXT PRIMARY KEY,
+			workspace TEXT NOT NULL,
+			session_id TEXT NOT NULL,
+			occurred_at TEXT NOT NULL,
+			kind TEXT NOT NULL,
+			tool_name TEXT NOT NULL DEFAULT '',
+			summary TEXT NOT NULL,
+			content_hash TEXT NOT NULL DEFAULT '',
+			created_at TEXT NOT NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_observations_workspace_occurred ON observations(workspace, occurred_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_observations_workspace_session_occurred ON observations(workspace, session_id, occurred_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_observations_dedup ON observations(workspace, content_hash, occurred_at DESC) WHERE content_hash != ''`,
 	}
 	for _, stmt := range stmts {
 		if _, err := s.db.ExecContext(ctx, stmt); err != nil {
@@ -216,6 +242,12 @@ func (s *Store) Migrate(ctx context.Context) error {
 		return err
 	}
 	if err := s.ensureColumn(ctx, "memories", "diagram_code", `ALTER TABLE memories ADD COLUMN diagram_code TEXT NOT NULL DEFAULT ''`); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "token_metrics", "run_label", `ALTER TABLE token_metrics ADD COLUMN run_label TEXT NOT NULL DEFAULT ''`); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "token_metrics", "memory_enabled", `ALTER TABLE token_metrics ADD COLUMN memory_enabled INTEGER NOT NULL DEFAULT 1`); err != nil {
 		return err
 	}
 	return nil

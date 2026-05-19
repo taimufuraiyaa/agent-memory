@@ -29,3 +29,31 @@ func TestTokenMetricsAggregate(t *testing.T) {
 		t.Fatalf("unexpected aggregate result: %+v", out)
 	}
 }
+
+func TestTokenMetricsAggregateByGroup(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "metrics-group.db")
+	store, err := Open(context.Background(), dbPath)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer func() { _ = store.Close() }()
+	ctx := context.Background()
+
+	if err := store.AddTokenMetricV2(ctx, "ws", "recall", 10, 100, "on", true); err != nil {
+		t.Fatalf("add metric on: %v", err)
+	}
+	if err := store.AddTokenMetricV2(ctx, "ws", "recall", 0, 0, "off", false); err != nil {
+		t.Fatalf("add metric off: %v", err)
+	}
+	if err := store.AddTokenMetricV2(ctx, "ws", "search", 5, 5, "on", true); err != nil {
+		t.Fatalf("add metric on #2: %v", err)
+	}
+
+	groups, err := store.AggregateTokenMetricsByGroup(ctx, "ws")
+	if err != nil {
+		t.Fatalf("aggregate by group: %v", err)
+	}
+	if len(groups) != 2 {
+		t.Fatalf("expected 2 groups, got %+v", groups)
+	}
+}
