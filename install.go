@@ -134,7 +134,9 @@ func runInstall(cfg config) {
 
 	if cfg.writeEnvFile {
 		vars := map[string]string{
-			"AGENT_MEMORY_UPGRADE_YES": "1",
+			"AGENT_MEMORY_UPGRADE_YES":     "1",
+			"AGENT_MEMORY_OBSERVE_ENABLED": "1",
+			"AGENT_MEMORY_ENABLED":         "1",
 		}
 		if strings.TrimSpace(dashInstalled) != "" {
 			vars["AGENT_MEMORY_DASHBOARD_DIR"] = cfg.dashboardDir
@@ -338,29 +340,91 @@ func detectRepoRoot(cfg config) string {
 
 func writeEnv(cfg config, vars map[string]string) error {
 	envPath := filepath.Join(cfg.dataDir, "agent-memory.env")
-	var b strings.Builder
-	for k, v := range vars {
-		if strings.TrimSpace(k) == "" || strings.TrimSpace(v) == "" {
-			continue
-		}
-		if runtime.GOOS == "windows" {
-			b.WriteString("set ")
-			b.WriteString(k)
-			b.WriteString("=")
-			b.WriteString(v)
-			b.WriteString("\r\n")
-		} else {
-			b.WriteString("export ")
-			b.WriteString(k)
-			b.WriteString("=")
-			b.WriteString(strconv.Quote(v))
-			b.WriteString("\n")
-		}
+	merged, err := mergeEnvFile(envPath, vars)
+	if err != nil {
+		return err
 	}
-	if b.Len() == 0 {
+	if strings.TrimSpace(merged) == "" {
 		return nil
 	}
-	return os.WriteFile(envPath, []byte(b.String()), 0644)
+	return os.WriteFile(envPath, []byte(merged), 0644)
+}
+
+func mergeEnvFile(path string, vars map[string]string) (string, error) {
+	existing := ""
+	if b, err := os.ReadFile(path); err == nil {
+		existing = string(b)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return "", err
+	}
+
+	lines := []string{}
+	if existing != "" {
+		lines = strings.Split(strings.ReplaceAll(existing, "\r\n", "\n"), "\n")
+	}
+
+	index := map[string]int{}
+	for i, ln := range lines {
+		k, _, ok := parseEnvAssignment(ln)
+		if !ok {
+			continue
+		}
+		if _, exists := index[k]; !exists {
+			index[k] = i
+		}
+	}
+
+	for k, v := range vars {
+		k = strings.TrimSpace(k)
+		v = strings.TrimSpace(v)
+		if k == "" || v == "" {
+			continue
+		}
+		newLine := formatEnvAssignment(k, v)
+		if at, ok := index[k]; ok {
+			lines[at] = newLine
+		} else {
+			lines = append(lines, newLine)
+			index[k] = len(lines) - 1
+		}
+	}
+
+	out := strings.TrimRight(strings.Join(lines, "\n"), "\n") + "\n"
+	return out, nil
+}
+
+func parseEnvAssignment(line string) (string, string, bool) {
+	ln := strings.TrimSpace(line)
+	if ln == "" {
+		return "", "", false
+	}
+	if strings.HasPrefix(ln, "#") {
+		return "", "", false
+	}
+	if strings.HasPrefix(ln, "export ") {
+		ln = strings.TrimSpace(strings.TrimPrefix(ln, "export "))
+	}
+	if strings.HasPrefix(strings.ToLower(ln), "set ") {
+		ln = strings.TrimSpace(ln[4:])
+	}
+	parts := strings.SplitN(ln, "=", 2)
+	if len(parts) != 2 {
+		return "", "", false
+	}
+	k := strings.TrimSpace(parts[0])
+	v := strings.TrimSpace(parts[1])
+	if k == "" {
+		return "", "", false
+	}
+	v = strings.Trim(v, `"'`)
+	return k, v, true
+}
+
+func formatEnvAssignment(k, v string) string {
+	if runtime.GOOS == "windows" {
+		return "set " + k + "=" + v
+	}
+	return "export " + k + "=" + strconv.Quote(v)
 }
 
 func ensureShellAutoload(cfg config) error {

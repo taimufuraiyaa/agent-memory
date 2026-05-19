@@ -24,6 +24,28 @@ func AssembleRecallSections(task string, hits []RetrievalHit) string {
 	return b.String()
 }
 
+func AssembleRecallSectionsWithObservations(task string, observationBlock string, hits []RetrievalHit) string {
+	var b strings.Builder
+	b.WriteString("## Task\n")
+	b.WriteString(strings.TrimSpace(task))
+	b.WriteString("\n\n")
+	observationBlock = strings.TrimSpace(observationBlock)
+	if observationBlock != "" {
+		b.WriteString("## Recent Observations\n")
+		b.WriteString(observationBlock)
+		b.WriteString("\n\n")
+	}
+	b.WriteString("## Relevant Memories\n")
+	if len(hits) == 0 {
+		b.WriteString("- none\n")
+		return b.String()
+	}
+	for i, h := range hits {
+		fmt.Fprintf(&b, "%d. [%s]\n%s\n\n", i+1, h.Memory.Type, memoryTextForRecall(h.Memory))
+	}
+	return b.String()
+}
+
 // RebalanceRecallHits applies task-aware ordering and type quotas for recall.
 func RebalanceRecallHits(task string, hits []RetrievalHit) []RetrievalHit {
 	if len(hits) <= 1 {

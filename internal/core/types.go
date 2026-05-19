@@ -159,6 +159,28 @@ type StoreStats struct {
 	TombstoneCount int    `json:"tombstone_count"`
 }
 
+type Observation struct {
+	ID         string    `json:"id"`
+	Workspace  string    `json:"workspace"`
+	SessionID  string    `json:"session_id"`
+	OccurredAt time.Time `json:"occurred_at"`
+	Kind       string    `json:"kind"`
+	ToolName   *string   `json:"tool_name,omitempty"`
+	Summary    string    `json:"summary"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+
+type Session struct {
+	Workspace         string     `json:"workspace"`
+	SessionID         string     `json:"session_id"`
+	ProjectRoot       string     `json:"project_root,omitempty"`
+	CWD               string     `json:"cwd,omitempty"`
+	StartedAt         *time.Time `json:"started_at,omitempty"`
+	EndedAt           *time.Time `json:"ended_at,omitempty"`
+	ObservationCount  int        `json:"observation_count"`
+	LastSeenAt        time.Time  `json:"last_seen_at"`
+}
+
 // MemoryTombstone is a compact breadcrumb for evicted/superseded memory.
 type MemoryTombstone struct {
 	ID              string     `json:"id"`

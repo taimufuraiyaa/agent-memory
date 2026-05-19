@@ -32,6 +32,9 @@ type upgradeResult struct {
 	DashboardDir     string                           `json:"dashboard_dir,omitempty"`
 	DashboardSource  string                           `json:"dashboard_source,omitempty"`
 	DashboardError   string                           `json:"dashboard_error,omitempty"`
+	EnvFile          string                           `json:"env_file,omitempty"`
+	EnvUpdated       bool                             `json:"env_updated,omitempty"`
+	EnvError         string                           `json:"env_error,omitempty"`
 }
 
 func validateTextOrJSONFormat(s string) (string, error) {
@@ -475,6 +478,25 @@ Use --hooks-only to push hooks without touching the binary (useful for existing 
 				}
 			}
 
+			if envPath, updated, err := ensureEnvVarIfPresent("AGENT_MEMORY_OBSERVE_ENABLED", "1"); err != nil {
+				res.EnvFile = envPath
+				res.EnvError = err.Error()
+			} else if updated {
+				res.EnvFile = envPath
+				res.EnvUpdated = true
+			} else if envPath != "" {
+				res.EnvFile = envPath
+			}
+			if envPath, updated, err := ensureEnvVarIfPresent("AGENT_MEMORY_ENABLED", "1"); err != nil {
+				res.EnvFile = envPath
+				res.EnvError = err.Error()
+			} else if updated {
+				res.EnvFile = envPath
+				res.EnvUpdated = true
+			} else if envPath != "" {
+				res.EnvFile = envPath
+			}
+
 			if f == "json" {
 				return writeSuccessEnvelope(cmd.OutOrStdout(), "upgrade", res)
 			}
@@ -486,6 +508,11 @@ Use --hooks-only to push hooks without touching the binary (useful for existing 
 				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  dashboard updated: %s\n", res.DashboardDir)
 			} else if strings.TrimSpace(res.DashboardError) != "" {
 				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  dashboard update skipped: %s\n", res.DashboardError)
+			}
+			if res.EnvUpdated {
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  env updated: %s\n", res.EnvFile)
+			} else if strings.TrimSpace(res.EnvError) != "" {
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  env update skipped: %s\n", res.EnvError)
 			}
 			return nil
 		},
@@ -504,4 +531,71 @@ Use --hooks-only to push hooks without touching the binary (useful for existing 
 	cmd.Flags().BoolVar(&noDashboard, "no-dashboard", false, "Skip refreshing standalone dashboard from source checkout")
 	cmd.Flags().StringVar(&dashboardDir, "dashboard-dir", "", "Dashboard install dir (default: $AGENT_MEMORY_DASHBOARD_DIR or ~/.agent-memory/dashboard)")
 	return cmd
+}
+
+func ensureEnvVarIfPresent(key, value string) (string, bool, error) {
+	envPath := filepath.Join(defaultAgentMemoryDataDir(), "agent-memory.env")
+	b, err := os.ReadFile(envPath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return "", false, nil
+		}
+		return envPath, false, err
+	}
+	content := strings.ReplaceAll(string(b), "\r\n", "\n")
+	lines := strings.Split(content, "\n")
+
+	found := false
+	for _, ln := range lines {
+		k, _, ok := parseEnvAssignmentLine(ln)
+		if !ok {
+			continue
+		}
+		if k == key {
+			found = true
+			break
+		}
+	}
+	if found {
+		return envPath, false, nil
+	}
+
+	newLine := formatEnvAssignmentLine(key, value)
+	out := strings.TrimRight(content, "\n")
+	if out != "" {
+		out += "\n"
+	}
+	out += newLine + "\n"
+	return envPath, true, os.WriteFile(envPath, []byte(out), 0o644)
+}
+
+func parseEnvAssignmentLine(line string) (string, string, bool) {
+	ln := strings.TrimSpace(line)
+	if ln == "" || strings.HasPrefix(ln, "#") {
+		return "", "", false
+	}
+	if strings.HasPrefix(ln, "export ") {
+		ln = strings.TrimSpace(strings.TrimPrefix(ln, "export "))
+	}
+	if strings.HasPrefix(strings.ToLower(ln), "set ") {
+		ln = strings.TrimSpace(ln[4:])
+	}
+	parts := strings.SplitN(ln, "=", 2)
+	if len(parts) != 2 {
+		return "", "", false
+	}
+	k := strings.TrimSpace(parts[0])
+	v := strings.TrimSpace(parts[1])
+	if k == "" {
+		return "", "", false
+	}
+	v = strings.Trim(v, `"'`)
+	return k, v, true
+}
+
+func formatEnvAssignmentLine(k, v string) string {
+	if runtime.GOOS == "windows" {
+		return "set " + k + "=" + v
+	}
+	return "export " + k + "=" + fmt.Sprintf("%q", v)
 }

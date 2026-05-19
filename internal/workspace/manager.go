@@ -624,7 +624,7 @@ Always use `+"`"+`agent-memory`+"`"+` as the memory system:
 Commands:
 - `+"`"+`agent-memory init`+"`"+`
 - `+"`"+`agent-memory search --query "<keywords/entities>" --top-k 8`+"`"+`
-- `+"`"+`agent-memory recall --task "<one-line task>" --budget 800 --format raw`+"`"+`
+- `+"`"+`agent-memory recall --task "<one-line task>" --budget 800 --format raw --include-observations`+"`"+`
 - `+"`"+`agent-memory write --type semantic --content "<durable fact + source>"`+"`"+`
 - `+"`"+`agent-memory write --type procedural --content "<repeatable steps/checklist>"`+"`"+`
 - `+"`"+`agent-memory write --type outcome --content "<what you tried>" --outcome-result success|failure|partial --outcome-approach "<how>" --outcome-reason "<why>"`+"`"+`
@@ -729,14 +729,14 @@ func HippocampusHooks() []HookFile {
 			Name: "memory-recall-gate.json",
 			Content: `{
   "name": "Memory Recall Gate",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Hippocampus recall: search and inject relevant memory context before every agent turn. The agent always starts with relevant history — it does not decide whether to look.",
   "when": {
     "type": "promptSubmit"
   },
   "then": {
     "type": "askAgent",
-    "prompt": "Before responding to the user, do the following first:\n1. Extract 3-5 key terms from the user's message.\n2. Run: agent-memory search --query \"<key terms>\" --top-k 8\n3. Run: agent-memory recall --task \"<user message>\" --budget 800 --format raw\n4. If results are found, use them as primary context before answering.\n5. If no results are found, proceed with general knowledge and note the gap.\nDo not skip this step even for simple questions."
+    "prompt": "Before responding to the user, do the following first:\n1. Extract 3-5 key terms from the user's message.\n2. Run: agent-memory search --query \"<key terms>\" --top-k 8\n3. Run: agent-memory recall --task \"<user message>\" --budget 800 --format raw --include-observations\n4. If results are found, use them as primary context before answering.\n5. If no results are found, proceed with general knowledge and note the gap.\nDo not skip this step even for simple questions."
   }
 }
 `,
@@ -745,7 +745,7 @@ func HippocampusHooks() []HookFile {
 			Name: "memory-consolidation-gate.json",
 			Content: `{
   "name": "Memory Consolidation Gate",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Hippocampus consolidation: write durable knowledge and compact the session after every agent turn. The agent always saves what it learned — it does not decide whether to write.",
   "when": {
     "type": "agentStop"

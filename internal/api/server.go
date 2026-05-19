@@ -2,6 +2,8 @@ package api
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -81,6 +83,13 @@ func NewMux(svc *Service) *http.ServeMux {
 			writeErr(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
 			return
 		}
+		if !memoryEnabled() {
+			writeOK(w, http.StatusOK, map[string]any{
+				"skipped": true,
+				"reason":  "disabled",
+			})
+			return
+		}
 		var req struct {
 			Workspace string             `json:"workspace"`
 			Type      core.MemoryType    `json:"type"`
@@ -130,6 +139,13 @@ func NewMux(svc *Service) *http.ServeMux {
 	mux.HandleFunc("/api/v1/memories/search", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			writeErr(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+			return
+		}
+		if !memoryEnabled() {
+			writeOK(w, http.StatusOK, map[string]any{
+				"disabled": true,
+				"results":  []any{},
+			})
 			return
 		}
 		started := time.Now()
@@ -285,7 +301,7 @@ func NewMux(svc *Service) *http.ServeMux {
 		}
 		hits := out.Hits
 		if assets.Store != nil {
-			_ = assets.Store.AddTokenMetric(r.Context(), ws, "search", sumHitTokens(hits), sumHitTokens(hits))
+			_ = assets.Store.AddTokenMetricV2(r.Context(), ws, "search", sumHitTokens(hits), sumHitTokens(hits), engine.RunLabel(), engine.MemoryEnabled())
 		}
 		results := renderSearchResults(hits, req.Explain)
 		writeOK(w, http.StatusOK, map[string]any{
@@ -342,6 +358,31 @@ func NewMux(svc *Service) *http.ServeMux {
 			writeErr(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
 			return
 		}
+		if !memoryEnabled() {
+			var req struct {
+				TaskDescription string `json:"task_description"`
+				Task            string `json:"task"`
+				Format          string `json:"format"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&req)
+			task := strings.TrimSpace(req.TaskDescription)
+			if task == "" {
+				task = strings.TrimSpace(req.Task)
+			}
+			contextBlock := engine.AssembleRecallSections(task, nil)
+			data := map[string]any{
+				"disabled":      true,
+				"context_block": contextBlock,
+				"tokens_used":   0,
+				"tokens_budget": 0,
+				"memories_used": []any{},
+			}
+			if strings.EqualFold(strings.TrimSpace(req.Format), "raw") {
+				data["text"] = contextBlock
+			}
+			writeOK(w, http.StatusOK, data)
+			return
+		}
 		var req struct {
 			Workspace       string `json:"workspace"`
 			TaskDescription string `json:"task_description"`
@@ -352,6 +393,10 @@ func NewMux(svc *Service) *http.ServeMux {
 			Budget  int    `json:"budget"`
 			Format  string `json:"format"`
 			Explain bool   `json:"explain"`
+
+			IncludeObservations bool   `json:"include_observations"`
+			ObservationLimit    int    `json:"observation_limit"`
+			ObservationSession  string `json:"observation_session_id"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
@@ -376,6 +421,22 @@ func NewMux(svc *Service) *http.ServeMux {
 		}
 		if budget <= 0 {
 			budget = 4000
+		}
+		observationBlock := ""
+		observationTokens := 0
+		observationCount := 0
+		observationSessionID := ""
+		if req.IncludeObservations && observeEnabled() {
+			block, sid, count := buildRecentObservationBlock(r.Context(), assets.Store, ws, strings.TrimSpace(req.ObservationSession), req.ObservationLimit)
+			observationBlock = block
+			observationSessionID = sid
+			observationCount = count
+			observationTokens = len(strings.Fields(observationBlock)) + len(strings.Fields("## Recent Observations"))
+			if budget-observationTokens > 0 {
+				budget = budget - observationTokens
+			} else {
+				budget = 0
+			}
 		}
 		topK := req.TopK
 		if topK <= 0 {
@@ -393,16 +454,21 @@ func NewMux(svc *Service) *http.ServeMux {
 		}
 		rebalanced := engine.RebalanceRecallHits(task, retrieved.Hits)
 		included, meta := assets.Clipper.Clip(rebalanced, budget)
-		contextBlock := engine.AssembleRecallSections(task, included)
+		contextBlock := engine.AssembleRecallSectionsWithObservations(task, observationBlock, included)
+		tokensUsedTotal := meta.UsedTokens + observationTokens
 		data := map[string]any{
-			"context_block":    contextBlock,
-			"tokens_used":      meta.UsedTokens,
-			"tokens_budget":    meta.Budget,
-			"memories_used":    included,
-			"clipping":         meta,
-			"workspace":        ws,
-			"requested_top_k":  topK,
-			"requested_budget": budget,
+			"context_block":          contextBlock,
+			"tokens_used":            tokensUsedTotal,
+			"tokens_budget":          meta.Budget + observationTokens,
+			"memories_used":          included,
+			"clipping":               meta,
+			"workspace":              ws,
+			"requested_top_k":        topK,
+			"requested_budget":       meta.Budget + observationTokens,
+			"observations_included":  req.IncludeObservations && observeEnabled(),
+			"observation_session_id": observationSessionID,
+			"observation_count":      observationCount,
+			"observation_tokens":     observationTokens,
 		}
 		if strings.EqualFold(strings.TrimSpace(req.Format), "raw") {
 			data["text"] = contextBlock
@@ -415,6 +481,25 @@ func NewMux(svc *Service) *http.ServeMux {
 			writeErr(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
 			return
 		}
+		if !memoryEnabled() {
+			var req struct {
+				TaskDescription string `json:"task_description"`
+				Task            string `json:"task"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&req)
+			task := strings.TrimSpace(req.TaskDescription)
+			if task == "" {
+				task = strings.TrimSpace(req.Task)
+			}
+			writeOK(w, http.StatusOK, map[string]any{
+				"disabled":      true,
+				"context_block": engine.AssembleRecallSections(task, nil),
+				"tokens_used":   0,
+				"tokens_budget": 0,
+				"workspace":     workspaceFromRequest(r, svc.Workspace),
+			})
+			return
+		}
 		var req struct {
 			Workspace       string `json:"workspace"`
 			TaskDescription string `json:"task_description"`
@@ -425,6 +510,10 @@ func NewMux(svc *Service) *http.ServeMux {
 			Budget          int    `json:"budget"`
 			Explain         bool   `json:"explain"`
 			IncludeMemories bool   `json:"include_memories"`
+
+			IncludeObservations bool   `json:"include_observations"`
+			ObservationLimit    int    `json:"observation_limit"`
+			ObservationSession  string `json:"observation_session_id"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
@@ -449,6 +538,23 @@ func NewMux(svc *Service) *http.ServeMux {
 		}
 		if budget <= 0 {
 			budget = 4000
+		}
+		observationBlock := ""
+		observationTokens := 0
+		observationCount := 0
+		observationSessionID := ""
+		originalBudget := budget
+		if req.IncludeObservations && observeEnabled() {
+			block, sid, count := buildRecentObservationBlock(r.Context(), assets.Store, ws, strings.TrimSpace(req.ObservationSession), req.ObservationLimit)
+			observationBlock = block
+			observationSessionID = sid
+			observationCount = count
+			observationTokens = len(strings.Fields(observationBlock)) + len(strings.Fields("## Recent Observations"))
+			if budget-observationTokens > 0 {
+				budget = budget - observationTokens
+			} else {
+				budget = 0
+			}
 		}
 		topK := req.TopK
 		if topK <= 0 {
@@ -491,21 +597,25 @@ func NewMux(svc *Service) *http.ServeMux {
 			}
 		}
 		out := map[string]any{
-			"context_block":       engine.AssembleRecallSections(task, included),
-			"tokens_used":         meta.UsedTokens,
-			"tokens_budget":       meta.Budget,
-			"memories_included":   mems,
-			"memories_clipped":    renderClipped(meta),
-			"tier_distribution":   tierDist,
-			"clipping":            meta,
-			"workspace":           ws,
-			"requested_task":      task,
-			"requested_explain":   req.Explain,
-			"requested_top_k":     topK,
-			"requested_budget":    budget,
-			"retrieval_mode":      retrieved.Mode,
-			"retrieval_weights":   retrieved.Weights,
-			"retrieved_hit_count": len(retrieved.Hits),
+			"context_block":          engine.AssembleRecallSectionsWithObservations(task, observationBlock, included),
+			"tokens_used":            meta.UsedTokens + observationTokens,
+			"tokens_budget":          meta.Budget + observationTokens,
+			"memories_included":      mems,
+			"memories_clipped":       renderClipped(meta),
+			"tier_distribution":      tierDist,
+			"clipping":               meta,
+			"workspace":              ws,
+			"requested_task":         task,
+			"requested_explain":      req.Explain,
+			"requested_top_k":        topK,
+			"requested_budget":       originalBudget,
+			"observations_included":  req.IncludeObservations && observeEnabled(),
+			"observation_session_id": observationSessionID,
+			"observation_count":      observationCount,
+			"observation_tokens":     observationTokens,
+			"retrieval_mode":         retrieved.Mode,
+			"retrieval_weights":      retrieved.Weights,
+			"retrieved_hit_count":    len(retrieved.Hits),
 		}
 		if req.IncludeMemories {
 			out["memories_included_full"] = fullMems
@@ -776,6 +886,253 @@ func NewMux(svc *Service) *http.ServeMux {
 		}
 		writeOK(w, http.StatusOK, out)
 	})
+
+	mux.HandleFunc("/api/v1/observe", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeErr(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+			return
+		}
+		if !observeEnabled() {
+			writeErr(w, http.StatusNotFound, "not_found", "route not enabled")
+			return
+		}
+		var req ObserveRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
+			return
+		}
+		if err := req.Validate(); err != nil {
+			writeErr(w, http.StatusBadRequest, "validation", err.Error())
+			return
+		}
+		ws := strings.TrimSpace(req.Workspace)
+		if ws == "" {
+			ws = workspaceFromRequest(r, svc.Workspace)
+		}
+		assets, err := svc.resolve(r.Context(), ws)
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
+			return
+		}
+		occurredAt, err := time.Parse(time.RFC3339Nano, strings.TrimSpace(req.OccurredAt))
+		if err != nil {
+			occurredAt, err = time.Parse(time.RFC3339, strings.TrimSpace(req.OccurredAt))
+			if err != nil {
+				writeErr(w, http.StatusBadRequest, "validation", "invalid occurred_at")
+				return
+			}
+		}
+		summary := buildObservationSummary(req)
+		summary = engine.RedactPrivateAndSecrets(summary)
+		summary = engine.ClipString(summary, 1200)
+		if strings.TrimSpace(summary) == "" {
+			writeErr(w, http.StatusBadRequest, "validation", "summary is empty after redaction")
+			return
+		}
+
+		hash := computeObservationHash(ws, req.SessionID, req.Kind, req.ToolName, summary)
+		obs, dedup, err := assets.Store.InsertObservationDedupWindow(r.Context(), sqlite.ObservationInsert{
+			Workspace:   ws,
+			SessionID:   req.SessionID,
+			OccurredAt:  occurredAt,
+			Kind:        strings.TrimSpace(req.Kind),
+			ToolName:    strings.TrimSpace(req.ToolName),
+			Summary:     summary,
+			ContentHash: hash,
+		}, 5*time.Minute)
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
+			return
+		}
+		if !dedup {
+			_ = assets.Store.UpsertSessionFromObservation(r.Context(), sqlite.ObserveUpsertSessionInput{
+				Workspace:   ws,
+				SessionID:   req.SessionID,
+				ProjectRoot: strings.TrimSpace(req.ProjectRoot),
+				CWD:         strings.TrimSpace(req.CWD),
+				OccurredAt:  occurredAt,
+				Kind:        strings.TrimSpace(req.Kind),
+			})
+		}
+
+		writeOK(w, http.StatusOK, map[string]any{
+			"observation_id": obs.ID,
+			"workspace":      ws,
+			"session_id":     req.SessionID,
+			"deduplicated":   dedup,
+			"stored":         !dedup,
+		})
+	})
+
+	mux.HandleFunc("/api/v1/observations", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			writeErr(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+			return
+		}
+		if !observeEnabled() {
+			writeErr(w, http.StatusNotFound, "not_found", "route not enabled")
+			return
+		}
+		ws := strings.TrimSpace(r.URL.Query().Get("workspace"))
+		if ws == "" {
+			ws = workspaceFromRequest(r, svc.Workspace)
+		}
+		assets, err := svc.resolve(r.Context(), ws)
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
+			return
+		}
+		sessionID := strings.TrimSpace(r.URL.Query().Get("session_id"))
+		limit := parseIntOrDefault(r.URL.Query().Get("limit"), 50)
+		var from *time.Time
+		if raw := strings.TrimSpace(r.URL.Query().Get("from")); raw != "" {
+			if t, err := time.Parse(time.RFC3339Nano, raw); err == nil {
+				from = &t
+			} else if t, err := time.Parse(time.RFC3339, raw); err == nil {
+				from = &t
+			} else {
+				writeErr(w, http.StatusBadRequest, "validation", "invalid from")
+				return
+			}
+		}
+		var to *time.Time
+		if raw := strings.TrimSpace(r.URL.Query().Get("to")); raw != "" {
+			if t, err := time.Parse(time.RFC3339Nano, raw); err == nil {
+				to = &t
+			} else if t, err := time.Parse(time.RFC3339, raw); err == nil {
+				to = &t
+			} else {
+				writeErr(w, http.StatusBadRequest, "validation", "invalid to")
+				return
+			}
+		}
+		results, err := assets.Store.ListObservations(r.Context(), ws, sessionID, from, to, limit)
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
+			return
+		}
+		writeOK(w, http.StatusOK, map[string]any{
+			"workspace":    ws,
+			"session_id":   sessionID,
+			"limit":        clamp(limit, 1, 200),
+			"observations": results,
+		})
+	})
+
+	mux.HandleFunc("/api/v1/sessions", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			writeErr(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+			return
+		}
+		if !observeEnabled() {
+			writeErr(w, http.StatusNotFound, "not_found", "route not enabled")
+			return
+		}
+		ws := strings.TrimSpace(r.URL.Query().Get("workspace"))
+		if ws == "" {
+			ws = workspaceFromRequest(r, svc.Workspace)
+		}
+		assets, err := svc.resolve(r.Context(), ws)
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
+			return
+		}
+		limit := parseIntOrDefault(r.URL.Query().Get("limit"), 50)
+		sessions, err := assets.Store.ListSessions(r.Context(), ws, limit)
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
+			return
+		}
+		writeOK(w, http.StatusOK, map[string]any{
+			"workspace": ws,
+			"limit":     clamp(limit, 1, 200),
+			"sessions":  sessions,
+		})
+	})
+
+	mux.HandleFunc("/api/v1/observations/promote", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeErr(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+			return
+		}
+		if !observeEnabled() {
+			writeErr(w, http.StatusNotFound, "not_found", "route not enabled")
+			return
+		}
+		var req struct {
+			Workspace string        `json:"workspace"`
+			SessionID string        `json:"session_id"`
+			From      string        `json:"from,omitempty"`
+			To        string        `json:"to,omitempty"`
+			MaxItems  int           `json:"max_items,omitempty"`
+			Type      string        `json:"type,omitempty"`
+			Outcome   *core.Outcome `json:"outcome,omitempty"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
+			return
+		}
+		ws := strings.TrimSpace(req.Workspace)
+		if ws == "" {
+			ws = workspaceFromRequest(r, svc.Workspace)
+		}
+		if strings.TrimSpace(req.SessionID) == "" {
+			writeErr(w, http.StatusBadRequest, "validation", "session_id is required")
+			return
+		}
+		var from *time.Time
+		if raw := strings.TrimSpace(req.From); raw != "" {
+			if t, err := time.Parse(time.RFC3339Nano, raw); err == nil {
+				from = &t
+			} else if t, err := time.Parse(time.RFC3339, raw); err == nil {
+				from = &t
+			} else {
+				writeErr(w, http.StatusBadRequest, "validation", "invalid from")
+				return
+			}
+		}
+		var to *time.Time
+		if raw := strings.TrimSpace(req.To); raw != "" {
+			if t, err := time.Parse(time.RFC3339Nano, raw); err == nil {
+				to = &t
+			} else if t, err := time.Parse(time.RFC3339, raw); err == nil {
+				to = &t
+			} else {
+				writeErr(w, http.StatusBadRequest, "validation", "invalid to")
+				return
+			}
+		}
+		memType := core.EpisodicMemory
+		if raw := strings.TrimSpace(req.Type); raw != "" {
+			mt := core.MemoryType(strings.ToLower(raw))
+			if !core.IsMemoryType(mt) {
+				writeErr(w, http.StatusBadRequest, "validation", "invalid type")
+				return
+			}
+			memType = mt
+		}
+		assets, err := svc.resolve(r.Context(), ws)
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
+			return
+		}
+		promoter := engine.NewObservationPromoter(assets.Store, assets.Writer)
+		out, err := promoter.Promote(r.Context(), engine.PromoteRequest{
+			Workspace:  ws,
+			SessionID:  req.SessionID,
+			From:       from,
+			To:         to,
+			MaxItems:   req.MaxItems,
+			MemoryType: memType,
+			Outcome:    req.Outcome,
+		})
+		if err != nil {
+			writeErr(w, http.StatusBadRequest, "runtime", err.Error())
+			return
+		}
+		writeOK(w, http.StatusOK, out)
+	})
+
 	mux.HandleFunc("/api/v1/dashboard", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			writeErr(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
@@ -820,6 +1177,11 @@ func NewMux(svc *Service) *http.ServeMux {
 			writeErr(w, http.StatusBadRequest, "runtime", err.Error())
 			return
 		}
+		tokenGroups, err := assets.Store.AggregateTokenMetricsByGroup(r.Context(), workspace)
+		if err != nil {
+			writeErr(w, http.StatusBadRequest, "runtime", err.Error())
+			return
+		}
 		var dbSize int64
 		if svc.BaseDir != "" {
 			dbPath := filepath.Join(svc.BaseDir, workspace+".db")
@@ -828,14 +1190,162 @@ func NewMux(svc *Service) *http.ServeMux {
 			}
 		}
 		writeOK(w, http.StatusOK, map[string]any{
-			"workspace":             workspace,
-			"memory_count":          len(memories),
-			"db_size_bytes":         dbSize,
-			"token_metrics":         tokenTotals,
-			"token_savings_percent": percentSaved(tokenTotals.BaselineTokens, tokenTotals.SavedTokens),
+			"workspace":              workspace,
+			"memory_count":           len(memories),
+			"db_size_bytes":          dbSize,
+			"token_metrics":          tokenTotals,
+			"token_metrics_by_group": tokenGroups,
+			"token_savings_percent":  percentSaved(tokenTotals.BaselineTokens, tokenTotals.SavedTokens),
 		})
 	})
 	return mux
+}
+
+func buildRecentObservationBlock(ctx context.Context, store *sqlite.Store, workspace string, preferredSessionID string, limit int) (string, string, int) {
+	if limit <= 0 {
+		limit = 10
+	}
+	if limit > 50 {
+		limit = 50
+	}
+	sessionID := strings.TrimSpace(preferredSessionID)
+	if sessionID == "" {
+		sessions, err := store.ListSessions(ctx, workspace, 1)
+		if err != nil || len(sessions) == 0 {
+			return "", "", 0
+		}
+		sessionID = sessions[0].SessionID
+	}
+	obs, err := store.ListObservations(ctx, workspace, sessionID, nil, nil, limit)
+	if err != nil || len(obs) == 0 {
+		return "", sessionID, 0
+	}
+	var b strings.Builder
+	b.WriteString("Session: ")
+	b.WriteString(sessionID)
+	b.WriteString("\n")
+	count := 0
+	for _, o := range obs {
+		if count >= limit {
+			break
+		}
+		line := strings.TrimSpace(o.Summary)
+		if line == "" {
+			continue
+		}
+		b.WriteString("- ")
+		b.WriteString(o.OccurredAt.UTC().Format(time.RFC3339))
+		b.WriteString(" ")
+		b.WriteString(engine.ClipString(line, 240))
+		b.WriteString("\n")
+		count++
+	}
+	return strings.TrimSpace(b.String()), sessionID, count
+}
+
+func observeEnabled() bool {
+	v := strings.ToLower(strings.TrimSpace(os.Getenv("AGENT_MEMORY_OBSERVE_ENABLED")))
+	return v == "1" || v == "true" || v == "yes" || v == "on"
+}
+
+func memoryEnabled() bool {
+	return engine.MemoryEnabled()
+}
+
+func buildObservationSummary(req ObserveRequest) string {
+	kind := strings.ToLower(strings.TrimSpace(req.Kind))
+	switch kind {
+	case "session_start":
+		return "session_start"
+	case "session_end":
+		return "session_end"
+	}
+	tool := strings.TrimSpace(req.ToolName)
+	prompt := strings.TrimSpace(req.Prompt)
+
+	var b strings.Builder
+	if kind != "" {
+		b.WriteString(kind)
+	}
+	if tool != "" {
+		if b.Len() > 0 {
+			b.WriteString(" | ")
+		}
+		b.WriteString("tool=")
+		b.WriteString(tool)
+	}
+	if prompt != "" {
+		if b.Len() > 0 {
+			b.WriteString(" | ")
+		}
+		b.WriteString("prompt=")
+		b.WriteString(engine.ClipString(prompt, 240))
+	}
+	if req.ToolInput != nil {
+		if input := stringifyJSON(req.ToolInput); strings.TrimSpace(input) != "" {
+			if b.Len() > 0 {
+				b.WriteString(" | ")
+			}
+			b.WriteString("input=")
+			b.WriteString(engine.ClipString(input, 320))
+		}
+	}
+	if b.Len() == 0 {
+		return kind
+	}
+	return b.String()
+}
+
+func stringifyJSON(v any) string {
+	if v == nil {
+		return ""
+	}
+	switch t := v.(type) {
+	case string:
+		return t
+	default:
+		b, err := json.Marshal(v)
+		if err != nil {
+			return ""
+		}
+		return string(b)
+	}
+}
+
+func computeObservationHash(workspace, sessionID, kind, toolName, summary string) string {
+	h := sha256.New()
+	parts := []string{workspace, sessionID, kind, toolName, summary}
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		_, _ = h.Write([]byte(p))
+		_, _ = h.Write([]byte{0})
+	}
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+func parseIntOrDefault(raw string, def int) int {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return def
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil {
+		return def
+	}
+	return n
+}
+
+func clamp(v, lo, hi int) int {
+	if v < lo {
+		return lo
+	}
+	if v > hi {
+		return hi
+	}
+	return v
 }
 
 func percentSaved(baseline, saved int) float64 {

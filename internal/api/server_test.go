@@ -141,6 +141,9 @@ func TestServerWriteSearchRecall(t *testing.T) {
 	if _, ok := stats["token_metrics"]; !ok {
 		t.Fatalf("expected token metrics payload in stats")
 	}
+	if _, ok := stats["token_metrics_by_group"]; !ok {
+		t.Fatalf("expected grouped token metrics payload in stats")
+	}
 	dashboard := getJSON(t, ts.URL+"/api/v1/dashboard")
 	if _, ok := dashboard["totals"]; !ok {
 		t.Fatalf("expected dashboard payload")
@@ -171,6 +174,42 @@ func TestServerWriteSearchRecall(t *testing.T) {
 	defer func() { _ = res.Body.Close() }()
 	if res.StatusCode == http.StatusOK {
 		t.Fatalf("expected /dashboard/ to not be served by API server in standalone dashboard mode")
+	}
+}
+
+func TestServerDisabledNoops(t *testing.T) {
+	t.Setenv("AGENT_MEMORY_ENABLED", "0")
+
+	baseDir := t.TempDir()
+	modelDir := filepath.Join(t.TempDir(), "model")
+	if err := os.MkdirAll(modelDir, 0o755); err != nil {
+		t.Fatalf("mkdir model: %v", err)
+	}
+	provider, err := embeddings.NewLocalProvider(modelDir)
+	if err != nil {
+		t.Fatalf("provider: %v", err)
+	}
+	svc := &Service{
+		Workspace:         "ws",
+		BaseDir:           baseDir,
+		EmbeddingProvider: provider,
+	}
+	ts := httptest.NewServer(NewMux(svc))
+	defer ts.Close()
+
+	writeResp := postJSON(t, ts.URL+"/api/v1/memories/write", map[string]any{"type": "semantic", "content": "should not be stored"})
+	if skipped, _ := writeResp["skipped"].(bool); !skipped {
+		t.Fatalf("expected skipped=true when disabled, got %+v", writeResp)
+	}
+
+	recallResp := postJSON(t, ts.URL+"/api/v1/memories/recall", map[string]any{"task_description": "hello", "format": "raw"})
+	if disabled, _ := recallResp["disabled"].(bool); !disabled {
+		t.Fatalf("expected disabled=true when disabled, got %+v", recallResp)
+	}
+
+	stats := getJSON(t, ts.URL+"/api/v1/stats")
+	if mc, ok := stats["memory_count"].(float64); !ok || int(mc) != 0 {
+		t.Fatalf("expected memory_count=0 when disabled, got %+v", stats)
 	}
 }
 

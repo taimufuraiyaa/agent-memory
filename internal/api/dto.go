@@ -37,3 +37,20 @@ type SearchRequest struct {
 func (r *SearchRequest) Validate() error {
 	return validate.Struct(r)
 }
+
+type ObserveRequest struct {
+	Workspace   string `json:"workspace,omitempty" validate:"omitempty,min=1"`
+	SessionID   string `json:"session_id" validate:"required,min=1,max=128"`
+	OccurredAt  string `json:"occurred_at" validate:"required,min=1,max=64"`
+	Kind        string `json:"kind" validate:"required,min=1,max=64"`
+	ToolName    string `json:"tool_name,omitempty" validate:"omitempty,max=128"`
+	Prompt      string `json:"prompt,omitempty" validate:"omitempty,max=4000"`
+	ToolInput   any    `json:"tool_input,omitempty"`
+	ProjectRoot string `json:"project_root,omitempty" validate:"omitempty,max=512"`
+	CWD         string `json:"cwd,omitempty" validate:"omitempty,max=512"`
+	Metadata    any    `json:"metadata,omitempty"`
+}
+
+func (r *ObserveRequest) Validate() error {
+	return validate.Struct(r)
+}

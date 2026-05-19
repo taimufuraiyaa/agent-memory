@@ -75,6 +75,12 @@ func newWriteCommand() *cobra.Command {
 		Short: "Write one memory entry",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
+			if !engine.MemoryEnabled() {
+				return writeSuccessEnvelope(cmd.OutOrStdout(), "write", map[string]any{
+					"skipped": true,
+					"reason":  "disabled",
+				})
+			}
 			cfg, err := resolveRuntime(flags)
 			if err != nil {
 				return err
@@ -146,6 +152,19 @@ func newSearchCommand() *cobra.Command {
 			}
 			if err := validateOutputFormat(flags.format, false); err != nil {
 				return err
+			}
+			if !engine.MemoryEnabled() {
+				store, _, err := openDeps(ctx, cfg)
+				if err != nil {
+					return err
+				}
+				defer func() { _ = store.Close() }()
+				_ = store.AddTokenMetricV2(ctx, cfg.workspace, "search", 0, 0, engine.RunLabel(), false)
+				return writeSuccessEnvelope(cmd.OutOrStdout(), "search", map[string]any{
+					"disabled":  true,
+					"workspace": cfg.workspace,
+					"results":   []any{},
+				})
 			}
 			typed := make([]core.MemoryType, 0, len(types))
 			for _, v := range types {
@@ -278,7 +297,7 @@ func newSearchCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			_ = store.AddTokenMetric(ctx, cfg.workspace, "search", sumHitTokens(res.Hits), sumHitTokens(res.Hits))
+			_ = store.AddTokenMetricV2(ctx, cfg.workspace, "search", sumHitTokens(res.Hits), sumHitTokens(res.Hits), engine.RunLabel(), true)
 			return writeSuccessEnvelope(cmd.OutOrStdout(), "search", res)
 		},
 	}
@@ -304,6 +323,9 @@ func newRecallCommand() *cobra.Command {
 	var flags commonFlags
 	var task string
 	var topK, budget int
+	var includeObservations bool
+	var observationLimit int
+	var observationSessionID string
 	cmd := &cobra.Command{
 		Use:   "recall",
 		Short: "Session-start recall block",
@@ -316,14 +338,35 @@ func newRecallCommand() *cobra.Command {
 			if err := validateOutputFormat(flags.format, true); err != nil {
 				return err
 			}
+			if !engine.MemoryEnabled() {
+				store, _, err := openDeps(ctx, cfg)
+				if err != nil {
+					return err
+				}
+				defer func() { _ = store.Close() }()
+				_ = store.AddTokenMetricV2(ctx, cfg.workspace, "recall", 0, 0, engine.RunLabel(), false)
+				contextBlock := engine.AssembleRecallSections(task, nil)
+				if strings.EqualFold(flags.format, formatRaw) {
+					_, err := fmt.Fprint(cmd.OutOrStdout(), contextBlock)
+					return err
+				}
+				return writeSuccessEnvelope(cmd.OutOrStdout(), "recall", map[string]any{
+					"disabled":      true,
+					"workspace":     cfg.workspace,
+					"context_block": contextBlock,
+				})
+			}
 			if cfg.apiURL != "" {
 				var out map[string]any
 				err := postAPI(ctx, cfg.apiURL, "/api/v1/memories/recall", map[string]any{
-					"workspace":        cfg.workspace,
-					"task_description": task,
-					"top_k":            topK,
-					"token_budget":     budget,
-					"format":           flags.format,
+					"workspace":              cfg.workspace,
+					"task_description":       task,
+					"top_k":                  topK,
+					"token_budget":           budget,
+					"format":                 flags.format,
+					"include_observations":   includeObservations,
+					"observation_limit":      observationLimit,
+					"observation_session_id": strings.TrimSpace(observationSessionID),
 				}, &out)
 				if err != nil {
 					return err
@@ -347,6 +390,20 @@ func newRecallCommand() *cobra.Command {
 			}
 			defer func() { _ = store.Close() }()
 
+			observationBlock := ""
+			observationTokens := 0
+			originalBudget := budget
+			if includeObservations {
+				block, _, _ := buildRecentObservationBlockCLI(ctx, store, cfg.workspace, strings.TrimSpace(observationSessionID), observationLimit)
+				observationBlock = block
+				observationTokens = len(strings.Fields(observationBlock)) + len(strings.Fields("## Recent Observations"))
+				if budget-observationTokens > 0 {
+					budget = budget - observationTokens
+				} else {
+					budget = 0
+				}
+			}
+
 			searcher := engine.NewVectorSearcher(store, provider)
 			retrieval := engine.NewRetrievalEngine(searcher)
 			retrieved, err := retrieval.Retrieve(ctx, engine.RetrievalOptions{
@@ -361,16 +418,18 @@ func newRecallCommand() *cobra.Command {
 			clipper := engine.NewTokenClipper(nil)
 			rebalanced := engine.RebalanceRecallHits(task, retrieved.Hits)
 			included, meta := clipper.Clip(rebalanced, budget)
-			_ = store.AddTokenMetric(ctx, cfg.workspace, "recall", meta.UsedTokens, sumHitTokens(rebalanced))
+			_ = store.AddTokenMetricV2(ctx, cfg.workspace, "recall", meta.UsedTokens+observationTokens, sumHitTokens(rebalanced), engine.RunLabel(), true)
 			payload := map[string]any{
-				"mode":      retrieved.Mode,
-				"weights":   retrieved.Weights,
-				"hits":      included,
-				"clipping":  meta,
-				"workspace": cfg.workspace,
+				"mode":               retrieved.Mode,
+				"weights":            retrieved.Weights,
+				"hits":               included,
+				"clipping":           meta,
+				"workspace":          cfg.workspace,
+				"requested_budget":   originalBudget,
+				"observation_tokens": observationTokens,
 			}
 			if strings.EqualFold(flags.format, formatRaw) {
-				_, err := fmt.Fprint(cmd.OutOrStdout(), engine.AssembleRecallSections(task, included))
+				_, err := fmt.Fprint(cmd.OutOrStdout(), engine.AssembleRecallSectionsWithObservations(task, observationBlock, included))
 				return err
 			}
 			return writeSuccessEnvelope(cmd.OutOrStdout(), "recall", payload)
@@ -380,6 +439,9 @@ func newRecallCommand() *cobra.Command {
 	cmd.Flags().StringVar(&task, "task", "", "Task description")
 	cmd.Flags().IntVar(&topK, "top-k", 50, "Candidate count")
 	cmd.Flags().IntVar(&budget, "budget", 4000, "Token budget")
+	cmd.Flags().BoolVar(&includeObservations, "include-observations", false, "Include recent observation summaries (if available)")
+	cmd.Flags().IntVar(&observationLimit, "observation-limit", 10, "Recent observation count to include (max 50)")
+	cmd.Flags().StringVar(&observationSessionID, "observation-session-id", "", "Session ID for observations (default: most recent)")
 	_ = cmd.MarkFlagRequired("task")
 	return cmd
 }
@@ -401,6 +463,48 @@ func parseTimeFlexibleCLI(s string) (time.Time, bool) {
 	return time.Time{}, false
 }
 
+func buildRecentObservationBlockCLI(ctx context.Context, store *sqlite.Store, workspace string, preferredSessionID string, limit int) (string, string, int) {
+	if limit <= 0 {
+		limit = 10
+	}
+	if limit > 50 {
+		limit = 50
+	}
+	sessionID := strings.TrimSpace(preferredSessionID)
+	if sessionID == "" {
+		sessions, err := store.ListSessions(ctx, workspace, 1)
+		if err != nil || len(sessions) == 0 {
+			return "", "", 0
+		}
+		sessionID = sessions[0].SessionID
+	}
+	obs, err := store.ListObservations(ctx, workspace, sessionID, nil, nil, limit)
+	if err != nil || len(obs) == 0 {
+		return "", sessionID, 0
+	}
+	var b strings.Builder
+	b.WriteString("Session: ")
+	b.WriteString(sessionID)
+	b.WriteString("\n")
+	count := 0
+	for _, o := range obs {
+		if count >= limit {
+			break
+		}
+		line := strings.TrimSpace(o.Summary)
+		if line == "" {
+			continue
+		}
+		b.WriteString("- ")
+		b.WriteString(o.OccurredAt.UTC().Format(time.RFC3339))
+		b.WriteString(" ")
+		b.WriteString(engine.ClipString(line, 240))
+		b.WriteString("\n")
+		count++
+	}
+	return strings.TrimSpace(b.String()), sessionID, count
+}
+
 func newSessionEndCommand() *cobra.Command {
 	var flags commonFlags
 	var transcript string
@@ -415,6 +519,12 @@ func newSessionEndCommand() *cobra.Command {
 			}
 			if err := validateOutputFormat(flags.format, false); err != nil {
 				return err
+			}
+			if !engine.MemoryEnabled() {
+				return writeSuccessEnvelope(cmd.OutOrStdout(), "session-end", map[string]any{
+					"skipped": true,
+					"reason":  "disabled",
+				})
 			}
 			if cfg.apiURL != "" {
 				var out any
@@ -1136,11 +1246,16 @@ func newStatsCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			tg, err := store.AggregateTokenMetricsByGroup(ctx, cfg.workspace)
+			if err != nil {
+				return err
+			}
 			return writeSuccessEnvelope(cmd.OutOrStdout(), "stats", map[string]any{
-				"workspace":             cfg.workspace,
-				"memory_count":          len(memories),
-				"token_metrics":         tm,
-				"token_savings_percent": percentSaved(tm.BaselineTokens, tm.SavedTokens),
+				"workspace":              cfg.workspace,
+				"memory_count":           len(memories),
+				"token_metrics":          tm,
+				"token_metrics_by_group": tg,
+				"token_savings_percent":  percentSaved(tm.BaselineTokens, tm.SavedTokens),
 			})
 		},
 	}
@@ -1184,6 +1299,12 @@ become procedural rules, large episodic clusters merge into semantic facts.`,
 			}
 			if err := validateOutputFormat(flags.format, false); err != nil {
 				return err
+			}
+			if !engine.MemoryEnabled() {
+				return writeSuccessEnvelope(cmd.OutOrStdout(), "consolidate", map[string]any{
+					"skipped": true,
+					"reason":  "disabled",
+				})
 			}
 
 			if cfg.apiURL != "" {
