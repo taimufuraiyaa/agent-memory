@@ -1723,6 +1723,25 @@ body.light .emptyStateCard {
   align-items: center;
 }
 
+.asciiChipRowItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.asciiChipIndex {
+  color: var(--text-subtle);
+  font-size: 11px;
+  flex: 0 0 auto;
+}
+
+.asciiChipLead {
+  color: var(--accent-primary);
+  font-size: 12px;
+  flex: 0 0 auto;
+}
+
 .overviewMetaItem {
   padding: 8px 12px;
   border-radius: 999px;
@@ -2335,6 +2354,26 @@ body.light .groupCard {
   gap: 12px;
 }
 
+.sessionRailHeading {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.sessionRailIndex {
+  color: var(--text-subtle);
+  font-size: 11px;
+  flex: 0 0 auto;
+}
+
+.sessionRailLead {
+  color: var(--accent-primary);
+  font-size: 12px;
+  flex: 0 0 auto;
+  line-height: 1.6;
+}
+
 .sessionRailTitle {
   font-family: var(--font-display);
   font-size: 18px;
@@ -2342,6 +2381,7 @@ body.light .groupCard {
   color: var(--text-main);
   letter-spacing: -0.02em;
   word-break: break-word;
+  min-width: 0;
 }
 
 .sessionRailMeta {
@@ -2349,6 +2389,14 @@ body.light .groupCard {
   font-size: 12px;
   line-height: 1.5;
   color: var(--text-muted);
+}
+
+.sessionRailStamp {
+  color: var(--accent-primary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 .sessionDetailPanel {
@@ -3075,6 +3123,11 @@ body.light {
   text-transform: lowercase;
 }
 
+.asciiChipRow .overviewMetaItem,
+.asciiChipRow .statusBadge {
+  padding: 6px 10px;
+}
+
 .statusBadgeGood {
   background: var(--success-bg);
   color: var(--success);
@@ -3423,6 +3476,12 @@ body.light {
 
   .diagnosticValue {
     padding-left: 0;
+  }
+
+  .asciiChipRowItem,
+  .sessionRailTop,
+  .sessionRailHeading {
+    width: 100%;
   }
 }
 
