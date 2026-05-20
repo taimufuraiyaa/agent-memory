@@ -138,11 +138,38 @@ func TestServerWriteSearchRecall(t *testing.T) {
 	if _, ok := stats["memory_count"]; !ok {
 		t.Fatalf("expected stats payload")
 	}
+	if _, ok := stats["memory_type_counts"]; !ok {
+		t.Fatalf("expected memory type distribution in stats")
+	}
+	if _, ok := stats["storage_tier_counts"]; !ok {
+		t.Fatalf("expected storage tier distribution in stats")
+	}
+	if _, ok := stats["last_activity"]; !ok {
+		t.Fatalf("expected last activity in stats")
+	}
 	if _, ok := stats["token_metrics"]; !ok {
 		t.Fatalf("expected token metrics payload in stats")
 	}
 	if _, ok := stats["token_metrics_by_group"]; !ok {
 		t.Fatalf("expected grouped token metrics payload in stats")
+	}
+	if _, ok := stats["raw_token_metrics_by_group"]; !ok {
+		t.Fatalf("expected raw grouped token metrics payload in stats")
+	}
+	if _, ok := stats["token_metrics_by_group_all"]; !ok {
+		t.Fatalf("expected full grouped token metrics payload in stats")
+	}
+	if _, ok := stats["llm_usage_totals"]; !ok {
+		t.Fatalf("expected llm usage totals payload in stats")
+	}
+	if _, ok := stats["llm_usage_by_group"]; !ok {
+		t.Fatalf("expected llm usage grouped payload in stats")
+	}
+	if _, ok := stats["raw_llm_usage_by_group"]; !ok {
+		t.Fatalf("expected raw llm usage grouped payload in stats")
+	}
+	if _, ok := stats["llm_usage_by_group_all"]; !ok {
+		t.Fatalf("expected full llm usage grouped payload in stats")
 	}
 	dashboard := getJSON(t, ts.URL+"/api/v1/dashboard")
 	if _, ok := dashboard["totals"]; !ok {
@@ -210,6 +237,45 @@ func TestServerDisabledNoops(t *testing.T) {
 	stats := getJSON(t, ts.URL+"/api/v1/stats")
 	if mc, ok := stats["memory_count"].(float64); !ok || int(mc) != 0 {
 		t.Fatalf("expected memory_count=0 when disabled, got %+v", stats)
+	}
+}
+
+func TestServerLLMUsageIngest(t *testing.T) {
+	baseDir := t.TempDir()
+	modelDir := filepath.Join(t.TempDir(), "model")
+	if err := os.MkdirAll(modelDir, 0o755); err != nil {
+		t.Fatalf("mkdir model: %v", err)
+	}
+	provider, err := embeddings.NewLocalProvider(modelDir)
+	if err != nil {
+		t.Fatalf("provider: %v", err)
+	}
+	svc := &Service{
+		Workspace:         "ws",
+		BaseDir:           baseDir,
+		EmbeddingProvider: provider,
+	}
+	ts := httptest.NewServer(NewMux(svc))
+	defer ts.Close()
+
+	postJSON(t, ts.URL+"/api/v1/llm-usage", map[string]any{
+		"workspace":         "ws",
+		"provider":          "openai",
+		"model":             "gpt-x",
+		"prompt_tokens":     100,
+		"completion_tokens": 50,
+		"total_tokens":      150,
+		"run_label":         "on",
+		"memory_enabled":    true,
+	})
+
+	stats := getJSON(t, ts.URL+"/api/v1/stats")
+	totals, _ := stats["llm_usage_totals"].(map[string]any)
+	if totals == nil {
+		t.Fatalf("expected llm usage totals map, got %+v", stats["llm_usage_totals"])
+	}
+	if total, ok := totals["total_tokens"].(float64); !ok || int(total) != 150 {
+		t.Fatalf("expected total_tokens=150, got %+v", totals)
 	}
 }
 

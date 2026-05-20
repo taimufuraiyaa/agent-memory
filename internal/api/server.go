@@ -1050,6 +1050,89 @@ func NewMux(svc *Service) *http.ServeMux {
 		})
 	})
 
+	mux.HandleFunc("/api/v1/llm-usage", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeErr(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+			return
+		}
+		var req struct {
+			Workspace        string `json:"workspace"`
+			Provider         string `json:"provider"`
+			Model            string `json:"model"`
+			PromptTokens     int    `json:"prompt_tokens"`
+			CompletionTokens int    `json:"completion_tokens"`
+			TotalTokens      int    `json:"total_tokens"`
+			RunLabel         string `json:"run_label"`
+			MemoryEnabled    *bool  `json:"memory_enabled"`
+			CreatedAt        string `json:"created_at"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
+			return
+		}
+		ws := strings.TrimSpace(req.Workspace)
+		if ws == "" {
+			ws = workspaceFromRequest(r, svc.Workspace)
+		}
+		assets, err := svc.resolve(r.Context(), ws)
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
+			return
+		}
+		if assets.Store == nil {
+			writeErr(w, http.StatusInternalServerError, "runtime", "store is not available")
+			return
+		}
+		if strings.TrimSpace(req.Provider) == "" {
+			writeErr(w, http.StatusBadRequest, "validation", "provider is required")
+			return
+		}
+		if req.PromptTokens < 0 || req.CompletionTokens < 0 || req.TotalTokens < 0 {
+			writeErr(w, http.StatusBadRequest, "validation", "token counts must be non-negative")
+			return
+		}
+		enabled := engine.MemoryEnabled()
+		if req.MemoryEnabled != nil {
+			enabled = *req.MemoryEnabled
+		}
+		label := strings.TrimSpace(req.RunLabel)
+		if label == "" {
+			label = engine.RunLabel()
+		}
+		var at time.Time
+		if strings.TrimSpace(req.CreatedAt) != "" {
+			t, err := time.Parse(time.RFC3339Nano, strings.TrimSpace(req.CreatedAt))
+			if err != nil {
+				t, err = time.Parse(time.RFC3339, strings.TrimSpace(req.CreatedAt))
+				if err != nil {
+					writeErr(w, http.StatusBadRequest, "validation", "invalid created_at")
+					return
+				}
+			}
+			at = t
+		}
+		if err := assets.Store.AddLLMUsageMetric(r.Context(), sqlite.LLMUsageInsert{
+			Workspace:        ws,
+			Provider:         strings.TrimSpace(req.Provider),
+			Model:            strings.TrimSpace(req.Model),
+			PromptTokens:     req.PromptTokens,
+			CompletionTokens: req.CompletionTokens,
+			TotalTokens:      req.TotalTokens,
+			RunLabel:         label,
+			MemoryEnabled:    enabled,
+			CreatedAt:        at,
+		}); err != nil {
+			writeErr(w, http.StatusBadRequest, "runtime", err.Error())
+			return
+		}
+		writeOK(w, http.StatusOK, map[string]any{
+			"stored":         true,
+			"workspace":      ws,
+			"run_label":      label,
+			"memory_enabled": enabled,
+		})
+	})
+
 	mux.HandleFunc("/api/v1/observations/promote", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			writeErr(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
@@ -1172,6 +1255,28 @@ func NewMux(svc *Service) *http.ServeMux {
 			writeErr(w, http.StatusBadRequest, "runtime", err.Error())
 			return
 		}
+		typeCounts := map[string]int{}
+		tierCounts := map[string]int{}
+		diagramCount := 0
+		pinnedCount := 0
+		var lastUpdatedAt time.Time
+		var lastAccessedAt time.Time
+		for _, m := range memories {
+			typeCounts[string(m.Type)]++
+			tierCounts[string(m.StorageTier)]++
+			if m.Diagram != nil && strings.TrimSpace(m.Diagram.Code) != "" {
+				diagramCount++
+			}
+			if m.Pinned {
+				pinnedCount++
+			}
+			if m.UpdatedAt.After(lastUpdatedAt) {
+				lastUpdatedAt = m.UpdatedAt
+			}
+			if m.LastAccessedAt.After(lastAccessedAt) {
+				lastAccessedAt = m.LastAccessedAt
+			}
+		}
 		tokenTotals, err := assets.Store.AggregateTokenMetrics(r.Context(), workspace)
 		if err != nil {
 			writeErr(w, http.StatusBadRequest, "runtime", err.Error())
@@ -1182,6 +1287,34 @@ func NewMux(svc *Service) *http.ServeMux {
 			writeErr(w, http.StatusBadRequest, "runtime", err.Error())
 			return
 		}
+		enabledGroups := make([]sqlite.TokenMetricGroupTotals, 0, len(tokenGroups))
+		disabledGroups := make([]sqlite.TokenMetricGroupTotals, 0, len(tokenGroups))
+		for _, g := range tokenGroups {
+			if g.MemoryEnabled {
+				enabledGroups = append(enabledGroups, g)
+			} else {
+				disabledGroups = append(disabledGroups, g)
+			}
+		}
+		llmTotals, err := assets.Store.AggregateLLMUsageTotals(r.Context(), workspace)
+		if err != nil {
+			writeErr(w, http.StatusBadRequest, "runtime", err.Error())
+			return
+		}
+		llmGroups, err := assets.Store.AggregateLLMUsageByGroup(r.Context(), workspace)
+		if err != nil {
+			writeErr(w, http.StatusBadRequest, "runtime", err.Error())
+			return
+		}
+		llmEnabledGroups := make([]sqlite.LLMUsageGroupTotals, 0, len(llmGroups))
+		llmDisabledGroups := make([]sqlite.LLMUsageGroupTotals, 0, len(llmGroups))
+		for _, g := range llmGroups {
+			if g.MemoryEnabled {
+				llmEnabledGroups = append(llmEnabledGroups, g)
+			} else {
+				llmDisabledGroups = append(llmDisabledGroups, g)
+			}
+		}
 		var dbSize int64
 		if svc.BaseDir != "" {
 			dbPath := filepath.Join(svc.BaseDir, workspace+".db")
@@ -1189,13 +1322,42 @@ func NewMux(svc *Service) *http.ServeMux {
 				dbSize = st.Size()
 			}
 		}
+		lastActivity := lastUpdatedAt
+		if lastAccessedAt.After(lastActivity) {
+			lastActivity = lastAccessedAt
+		}
+		lastUpdated := ""
+		if !lastUpdatedAt.IsZero() {
+			lastUpdated = lastUpdatedAt.UTC().Format(time.RFC3339Nano)
+		}
+		lastAccessed := ""
+		if !lastAccessedAt.IsZero() {
+			lastAccessed = lastAccessedAt.UTC().Format(time.RFC3339Nano)
+		}
+		lastActivityStr := ""
+		if !lastActivity.IsZero() {
+			lastActivityStr = lastActivity.UTC().Format(time.RFC3339Nano)
+		}
 		writeOK(w, http.StatusOK, map[string]any{
-			"workspace":              workspace,
-			"memory_count":           len(memories),
-			"db_size_bytes":          dbSize,
-			"token_metrics":          tokenTotals,
-			"token_metrics_by_group": tokenGroups,
-			"token_savings_percent":  percentSaved(tokenTotals.BaselineTokens, tokenTotals.SavedTokens),
+			"workspace":                  workspace,
+			"memory_count":               len(memories),
+			"db_size_bytes":              dbSize,
+			"memory_type_counts":         typeCounts,
+			"storage_tier_counts":        tierCounts,
+			"diagram_count":              diagramCount,
+			"pinned_count":               pinnedCount,
+			"last_memory_updated_at":     lastUpdated,
+			"last_memory_accessed_at":    lastAccessed,
+			"last_activity":              lastActivityStr,
+			"token_metrics":              tokenTotals,
+			"token_metrics_by_group":     enabledGroups,
+			"raw_token_metrics_by_group": disabledGroups,
+			"token_metrics_by_group_all": tokenGroups,
+			"llm_usage_totals":           llmTotals,
+			"llm_usage_by_group":         llmEnabledGroups,
+			"raw_llm_usage_by_group":     llmDisabledGroups,
+			"llm_usage_by_group_all":     llmGroups,
+			"token_savings_percent":      percentSaved(tokenTotals.BaselineTokens, tokenTotals.SavedTokens),
 		})
 	})
 	return mux

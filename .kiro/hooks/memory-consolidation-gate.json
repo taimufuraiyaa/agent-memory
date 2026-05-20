@@ -1,6 +1,6 @@
 {
   "name": "Memory Consolidation Gate",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Hippocampus consolidation: write durable knowledge and compact the session after every agent turn. The agent always saves what it learned — it does not decide whether to write.",
   "when": {
     "type": "agentStop"

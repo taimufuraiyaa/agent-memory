@@ -75,6 +75,14 @@ func resolveWorkspace(flagWorkspace string) (string, error) {
 }
 
 func defaultDBPath(workspace string) (string, error) {
+	base, err := defaultDBBaseDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(base, workspace+".db"), nil
+}
+
+func defaultDBBaseDir() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
@@ -83,7 +91,7 @@ func defaultDBPath(workspace string) (string, error) {
 	if err := os.MkdirAll(base, 0o755); err != nil {
 		return "", err
 	}
-	return filepath.Join(base, workspace+".db"), nil
+	return base, nil
 }
 
 func resolveAPIURL(flagAPI string) string {

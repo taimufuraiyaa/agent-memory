@@ -1038,6 +1038,10 @@ body.light .diagramSvg {
   z-index: 30;
 }
 
+.composerDockCollapsed {
+  padding-bottom: 14px;
+}
+
 .composer {
   max-width: 860px;
   width: 100%;
@@ -1053,6 +1057,14 @@ body.light .diagramSvg {
   flex-direction: column;
   gap: 12px;
   transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.composerCollapsed {
+  max-width: 760px;
+  padding: 12px 16px;
+  gap: 8px;
+  border-radius: 24px;
+  box-shadow: var(--shadow-md);
 }
 
 .composer:focus-within {
@@ -1073,7 +1085,12 @@ body.light .diagramSvg {
   max-height: 250px;
   resize: none;
   padding: 4px 8px;
-  transition: min-height 0.2s cubic-bezier(0.4, 0, 0.2, 1), height 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: min-height 0.2s cubic-bezier(0.4, 0, 0.2, 1), height 0.2s cubic-bezier(0.4, 0, 0.2, 1), font-size 0.2s ease, padding 0.2s ease;
+}
+
+.composerCollapsed .composerInput {
+  font-size: 15px;
+  padding: 2px 6px;
 }
 
 .composerInput::placeholder {
@@ -1087,6 +1104,7 @@ body.light .diagramSvg {
   justify-content: space-between;
   padding-top: 10px;
   border-top: 1px solid rgba(255,255,255,0.06);
+  transition: opacity 0.2s ease, transform 0.2s ease, max-height 0.2s ease, padding 0.2s ease, margin 0.2s ease, border-color 0.2s ease;
 }
 
 body.light .composerToolbar {
@@ -1097,6 +1115,19 @@ body.light .composerToolbar {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+.composerToolbarCollapsed {
+  padding-top: 0;
+  margin-top: 0;
+  border-top-color: transparent;
+}
+
+.composerToolbarCollapsed .composerToolbarLeft {
+  opacity: 0;
+  max-width: 0;
+  overflow: hidden;
+  pointer-events: none;
 }
 
 .btn {
@@ -1349,6 +1380,16 @@ body.light .modePills {
   margin-top: 12px;
   text-align: center;
   pointer-events: auto;
+  transition: opacity 0.2s ease, max-height 0.2s ease, margin 0.2s ease, transform 0.2s ease;
+}
+
+.composerFootCollapsed {
+  opacity: 0;
+  max-height: 0;
+  margin-top: 0;
+  overflow: hidden;
+  pointer-events: none;
+  transform: translateY(4px);
 }
 
 /* Modals */
@@ -1564,3 +1605,681 @@ body.light .diagramPreviewSnippet {
   background: rgba(0, 0, 0, 0.05);
 }
 
+/* Overview + Diagnostics Surfaces */
+.surfaceStack {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  width: 100%;
+}
+
+.overviewHero,
+.diagnosticsHero,
+.emptyStateCard {
+  background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
+  border: 1px solid var(--border);
+  border-radius: 28px;
+  padding: 28px;
+  box-shadow: var(--shadow-md);
+}
+
+body.light .overviewHero,
+body.light .diagnosticsHero,
+body.light .emptyStateCard {
+  background: linear-gradient(180deg, rgba(255,255,255,0.95), rgba(255,255,255,0.88));
+}
+
+.overviewHero {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  align-items: flex-start;
+  position: relative;
+  overflow: hidden;
+}
+
+.overviewHero::before {
+  content: '';
+  position: absolute;
+  inset: -20% auto auto -10%;
+  width: 240px;
+  height: 240px;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(127, 255, 212, 0.16), rgba(127, 255, 212, 0));
+  pointer-events: none;
+}
+
+.overviewHero::after {
+  content: '';
+  position: absolute;
+  inset: auto -8% -28% auto;
+  width: 280px;
+  height: 280px;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(59, 130, 246, 0.14), rgba(59, 130, 246, 0));
+  pointer-events: none;
+}
+
+.overviewHeroCopy {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  position: relative;
+  z-index: 1;
+}
+
+.overviewEyebrow {
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent-primary);
+}
+
+.overviewTitle,
+.sectionTitle {
+  font-family: var(--font-display);
+  font-size: clamp(28px, 4vw, 42px);
+  line-height: 0.98;
+  letter-spacing: -0.03em;
+  color: var(--text-main);
+}
+
+.sectionTitle {
+  font-size: 28px;
+}
+
+.overviewText,
+.sectionText {
+  max-width: 62ch;
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--text-muted);
+}
+
+.sectionText {
+  max-width: 72ch;
+}
+
+.overviewMetaRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.overviewMetaItem {
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.overviewActions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.statusBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border: 1px solid transparent;
+}
+
+.statusBadgeGood {
+  background: var(--success-bg);
+  color: var(--success);
+  border-color: rgba(16, 185, 129, 0.25);
+}
+
+.statusBadgeWarn {
+  background: var(--warning-bg);
+  color: var(--warning);
+  border-color: rgba(245, 158, 11, 0.25);
+}
+
+.statusBadgeBad {
+  background: var(--danger-bg);
+  color: var(--danger);
+  border-color: rgba(244, 63, 94, 0.25);
+}
+
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.starterStrip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.starterCard {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 220px;
+  padding: 22px;
+  border-radius: 22px;
+  border: 1px solid var(--border);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02)),
+    var(--bg-card);
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.22s ease, box-shadow 0.22s ease;
+}
+
+body.light .starterCard {
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.9), rgba(255,255,255,0.75)),
+    var(--bg-card);
+}
+
+.starterCard:hover {
+  transform: translateY(-3px);
+  border-color: var(--border-glow);
+  box-shadow: var(--shadow-md), 0 0 0 1px rgba(127, 255, 212, 0.14);
+}
+
+.starterCardEyebrow {
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-primary);
+}
+
+.starterCardTitle {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.05;
+  color: var(--text-main);
+}
+
+.starterCardText {
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--text-muted);
+  margin-bottom: auto;
+}
+
+.metricCard,
+.breakdownCard,
+.comparisonSection {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  padding: 22px;
+  box-shadow: var(--shadow-sm);
+}
+
+.metricCard {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 148px;
+}
+
+.metricLabel {
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.metricValue {
+  font-family: var(--font-display);
+  font-size: clamp(24px, 3vw, 34px);
+  line-height: 1;
+  color: var(--text-main);
+  letter-spacing: -0.03em;
+  word-break: break-word;
+}
+
+.metricDetail {
+  margin-top: auto;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.overviewColumns,
+.diagnosticsGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.breakdownHeader,
+.comparisonHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.breakdownTitle {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.breakdownSubtitle {
+  margin-top: 4px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.breakdownList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.breakdownRow {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.breakdownRowTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 14px;
+  color: var(--text-main);
+}
+
+.breakdownBarTrack {
+  width: 100%;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--bg-input);
+  overflow: hidden;
+}
+
+.breakdownBarFill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent-gradient);
+}
+
+.comparisonGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.groupCard {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.03);
+}
+
+body.light .groupCard {
+  background: rgba(0,0,0,0.02);
+}
+
+.groupCardTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.groupTitle {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.groupBadge {
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.groupBadgeOn {
+  background: var(--success-bg);
+  color: var(--success);
+}
+
+.groupBadgeOff {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.groupMetric {
+  font-family: var(--font-display);
+  font-size: 28px;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  color: var(--text-main);
+}
+
+.groupSub {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.groupStats,
+.diagnosticsList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.diagnosticRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.diagnosticRow:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.diagnosticLabel {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.diagnosticValue {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-main);
+  text-align: right;
+}
+
+.diagnosticsHero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.diagnosticsHeroSide {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.emptyInline {
+  padding: 16px;
+  border-radius: 16px;
+  background: var(--bg-input);
+  border: 1px dashed var(--border-hover);
+  color: var(--text-muted);
+}
+
+.sessionList {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.sessionCard {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 22px;
+  border-radius: 22px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+}
+
+.sessionCardTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.sessionCardTitle {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-main);
+  letter-spacing: -0.02em;
+  word-break: break-word;
+}
+
+.sessionCardMeta {
+  margin-top: 6px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.sessionFacts {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sessionExplorerLayout {
+  display: grid;
+  grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+  gap: 18px;
+}
+
+.sessionRail {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sessionRailCard {
+  width: 100%;
+  text-align: left;
+  padding: 18px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: inherit;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: var(--shadow-sm);
+}
+
+.sessionRailCard:hover {
+  transform: translateY(-1px);
+  border-color: var(--border-hover);
+  background: var(--bg-card-hover);
+}
+
+.sessionRailCardOn {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 1px var(--accent-primary), var(--shadow-sm);
+}
+
+.sessionRailTop,
+.sessionDetailHeader,
+.timelineTop,
+.timelineFooter {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.sessionRailTitle {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-main);
+  letter-spacing: -0.02em;
+  word-break: break-word;
+}
+
+.sessionRailMeta {
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.sessionDetailPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.sessionDetailActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.sessionDetailSummary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.timelineSection {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  padding: 22px;
+  box-shadow: var(--shadow-sm);
+}
+
+.timelineList {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.timelineCard {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.03);
+  position: relative;
+  overflow: hidden;
+}
+
+body.light .timelineCard {
+  background: rgba(0,0,0,0.02);
+}
+
+.timelineCard::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--accent-gradient);
+  opacity: 0.85;
+}
+
+.timelineTitle {
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.timelineMeta {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.timelineSummary {
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--text-main);
+  white-space: pre-wrap;
+}
+
+@media (max-width: 1280px) {
+  .statsGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .starterStrip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .comparisonGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .sessionList {
+    grid-template-columns: 1fr;
+  }
+
+  .sessionExplorerLayout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 960px) {
+  .overviewHero,
+  .overviewColumns,
+  .diagnosticsGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .diagnosticsHero {
+    flex-direction: column;
+  }
+
+}
+
+@media (max-width: 720px) {
+  .statsGrid,
+  .starterStrip,
+  .overviewActions {
+    grid-template-columns: 1fr;
+  }
+
+  .overviewHero,
+  .diagnosticsHero,
+  .emptyStateCard {
+    padding: 22px;
+  }
+}

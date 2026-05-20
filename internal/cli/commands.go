@@ -611,7 +611,11 @@ type dashboardPID struct {
 
 func dashboardPIDPath(cfg runtimeConfig) string {
 	base := filepath.Dir(cfg.dbPath)
-	return filepath.Join(base, fmt.Sprintf("dashboard.%s.pid", cfg.workspace))
+	name := "dashboard.pid"
+	if ws := strings.TrimSpace(cfg.workspace); ws != "" {
+		name = fmt.Sprintf("dashboard.%s.pid", ws)
+	}
+	return filepath.Join(base, name)
 }
 
 func readDashboardPID(path string) (dashboardPID, error) {
@@ -689,18 +693,16 @@ func validateDashboardStartAddr(addr string) error {
 	return nil
 }
 
-func startDashboardProcess(cfg runtimeConfig, addr string, dashDirFlag string, pidFile string) (int, error) {
-	exe, err := os.Executable()
-	if err != nil {
-		return 0, err
-	}
+func buildDashboardProcessArgs(cfg runtimeConfig, addr string, dashDirFlag string, pidFile string) []string {
 	args := []string{
 		"dashboard",
 		"--no-open",
 		"--addr", addr,
-		"--workspace", cfg.workspace,
 		"--db", cfg.dbPath,
 		"--model-dir", cfg.modelDir,
+	}
+	if ws := strings.TrimSpace(cfg.workspace); ws != "" {
+		args = append(args, "--workspace", ws)
 	}
 	if strings.TrimSpace(dashDirFlag) != "" {
 		args = append(args, "--dashboard-dir", dashDirFlag)
@@ -708,6 +710,15 @@ func startDashboardProcess(cfg runtimeConfig, addr string, dashDirFlag string, p
 	if strings.TrimSpace(pidFile) != "" {
 		args = append(args, "--pid-file", pidFile)
 	}
+	return args
+}
+
+func startDashboardProcess(cfg runtimeConfig, addr string, dashDirFlag string, pidFile string) (int, error) {
+	exe, err := os.Executable()
+	if err != nil {
+		return 0, err
+	}
+	args := buildDashboardProcessArgs(cfg, addr, dashDirFlag, pidFile)
 	c := exec.Command(exe, args...)
 	c.Stdout = io.Discard
 	c.Stderr = io.Discard
@@ -735,6 +746,44 @@ func pickFreeLocalPort() (int, error) {
 		return 0, errors.New("failed to allocate a free port")
 	}
 	return port, nil
+}
+
+func resolveDashboardRuntime(flags commonFlags) (runtimeConfig, error) {
+	modelDir := strings.TrimSpace(flags.modelDir)
+	if modelDir == "" {
+		home, _ := os.UserHomeDir()
+		modelDir = embeddings.DefaultModelDir(home)
+	}
+	apiURL := resolveAPIURL(flags.apiURL)
+	dbPath := strings.TrimSpace(flags.dbPath)
+	workspace, err := resolveWorkspace(flags.workspace)
+	if err == nil {
+		if dbPath == "" {
+			dbPath, err = defaultDBPath(workspace)
+			if err != nil {
+				return runtimeConfig{}, err
+			}
+		}
+		return runtimeConfig{
+			workspace: workspace,
+			dbPath:    dbPath,
+			modelDir:  modelDir,
+			apiURL:    apiURL,
+		}, nil
+	}
+	if dbPath == "" {
+		baseDir, baseErr := defaultDBBaseDir()
+		if baseErr != nil {
+			return runtimeConfig{}, baseErr
+		}
+		dbPath = filepath.Join(baseDir, ".dashboard-placeholder.db")
+	}
+	return runtimeConfig{
+		workspace: "",
+		dbPath:    dbPath,
+		modelDir:  modelDir,
+		apiURL:    apiURL,
+	}, nil
 }
 
 func dashboardSourceDir(override string) (string, error) {
@@ -784,7 +833,7 @@ func newDashboardCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, cancel := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 			defer cancel()
-			cfg, err := resolveRuntime(flags)
+			cfg, err := resolveDashboardRuntime(flags)
 			if err != nil {
 				return err
 			}
@@ -880,11 +929,16 @@ func newDashboardCommand() *cobra.Command {
 				_ = openInBrowser(url)
 				return nil
 			}
-			store, provider, err := openDeps(ctx, cfg)
+			if err := os.MkdirAll(filepath.Dir(cfg.dbPath), 0o755); err != nil {
+				return err
+			}
+			if err := os.MkdirAll(cfg.modelDir, 0o755); err != nil {
+				return err
+			}
+			provider, err := embeddings.NewLocalProvider(cfg.modelDir)
 			if err != nil {
 				return err
 			}
-			defer func() { _ = store.Close() }()
 
 			svc := &api.Service{
 				Workspace:         cfg.workspace,
@@ -986,6 +1040,7 @@ func newDashboardCommand() *cobra.Command {
 		},
 	}
 	addCommonFlags(cmd, &flags)
+	_ = cmd.Flags().MarkHidden("workspace")
 	cmd.Flags().StringVar(&addr, "addr", ":3210", "HTTP listen address")
 	cmd.Flags().BoolVar(&noOpen, "no-open", false, "Do not open a browser; just print the URL")
 	cmd.Flags().BoolVar(&start, "start", false, "Start dashboard server in the background and exit")
@@ -1250,12 +1305,89 @@ func newStatsCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			typeCounts := map[string]int{}
+			tierCounts := map[string]int{}
+			diagramCount := 0
+			pinnedCount := 0
+			var lastUpdatedAt time.Time
+			var lastAccessedAt time.Time
+			for _, m := range memories {
+				typeCounts[string(m.Type)]++
+				tierCounts[string(m.StorageTier)]++
+				if m.Diagram != nil && strings.TrimSpace(m.Diagram.Code) != "" {
+					diagramCount++
+				}
+				if m.Pinned {
+					pinnedCount++
+				}
+				if m.UpdatedAt.After(lastUpdatedAt) {
+					lastUpdatedAt = m.UpdatedAt
+				}
+				if m.LastAccessedAt.After(lastAccessedAt) {
+					lastAccessedAt = m.LastAccessedAt
+				}
+			}
+			enabledGroups := make([]sqlite.TokenMetricGroupTotals, 0, len(tg))
+			disabledGroups := make([]sqlite.TokenMetricGroupTotals, 0, len(tg))
+			for _, g := range tg {
+				if g.MemoryEnabled {
+					enabledGroups = append(enabledGroups, g)
+				} else {
+					disabledGroups = append(disabledGroups, g)
+				}
+			}
+			llmTotals, err := store.AggregateLLMUsageTotals(ctx, cfg.workspace)
+			if err != nil {
+				return err
+			}
+			llmGroups, err := store.AggregateLLMUsageByGroup(ctx, cfg.workspace)
+			if err != nil {
+				return err
+			}
+			llmEnabledGroups := make([]sqlite.LLMUsageGroupTotals, 0, len(llmGroups))
+			llmDisabledGroups := make([]sqlite.LLMUsageGroupTotals, 0, len(llmGroups))
+			for _, g := range llmGroups {
+				if g.MemoryEnabled {
+					llmEnabledGroups = append(llmEnabledGroups, g)
+				} else {
+					llmDisabledGroups = append(llmDisabledGroups, g)
+				}
+			}
+			lastActivity := lastUpdatedAt
+			if lastAccessedAt.After(lastActivity) {
+				lastActivity = lastAccessedAt
+			}
+			lastUpdated := ""
+			if !lastUpdatedAt.IsZero() {
+				lastUpdated = lastUpdatedAt.UTC().Format(time.RFC3339Nano)
+			}
+			lastAccessed := ""
+			if !lastAccessedAt.IsZero() {
+				lastAccessed = lastAccessedAt.UTC().Format(time.RFC3339Nano)
+			}
+			lastActivityStr := ""
+			if !lastActivity.IsZero() {
+				lastActivityStr = lastActivity.UTC().Format(time.RFC3339Nano)
+			}
 			return writeSuccessEnvelope(cmd.OutOrStdout(), "stats", map[string]any{
-				"workspace":              cfg.workspace,
-				"memory_count":           len(memories),
-				"token_metrics":          tm,
-				"token_metrics_by_group": tg,
-				"token_savings_percent":  percentSaved(tm.BaselineTokens, tm.SavedTokens),
+				"workspace":                  cfg.workspace,
+				"memory_count":               len(memories),
+				"memory_type_counts":         typeCounts,
+				"storage_tier_counts":        tierCounts,
+				"diagram_count":              diagramCount,
+				"pinned_count":               pinnedCount,
+				"last_memory_updated_at":     lastUpdated,
+				"last_memory_accessed_at":    lastAccessed,
+				"last_activity":              lastActivityStr,
+				"token_metrics":              tm,
+				"token_metrics_by_group":     enabledGroups,
+				"raw_token_metrics_by_group": disabledGroups,
+				"token_metrics_by_group_all": tg,
+				"llm_usage_totals":           llmTotals,
+				"llm_usage_by_group":         llmEnabledGroups,
+				"raw_llm_usage_by_group":     llmDisabledGroups,
+				"llm_usage_by_group_all":     llmGroups,
+				"token_savings_percent":      percentSaved(tm.BaselineTokens, tm.SavedTokens),
 			})
 		},
 	}
