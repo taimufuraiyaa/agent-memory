@@ -141,14 +141,6 @@ func NewMux(svc *Service) *http.ServeMux {
 			writeErr(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
 			return
 		}
-		if !memoryEnabled() {
-			writeOK(w, http.StatusOK, map[string]any{
-				"disabled": true,
-				"results":  []any{},
-			})
-			return
-		}
-		started := time.Now()
 		var req struct {
 			Query       string            `json:"query"`
 			Workspace   string            `json:"workspace"`
@@ -175,13 +167,24 @@ func NewMux(svc *Service) *http.ServeMux {
 			writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
 			return
 		}
-		if strings.TrimSpace(req.Query) == "" {
-			writeErr(w, http.StatusBadRequest, "validation", "query is required")
-			return
-		}
 		ws := strings.TrimSpace(req.Workspace)
 		if ws == "" {
 			ws = workspaceFromRequest(r, svc.Workspace)
+		}
+		if !memoryEnabled() {
+			if assets, err := svc.resolve(r.Context(), ws); err == nil && assets.Store != nil {
+				_ = assets.Store.AddTokenMetricV2(r.Context(), ws, "search", 0, 0, engine.RunLabel(), false)
+			}
+			writeOK(w, http.StatusOK, map[string]any{
+				"disabled": true,
+				"results":  []any{},
+			})
+			return
+		}
+		started := time.Now()
+		if strings.TrimSpace(req.Query) == "" {
+			writeErr(w, http.StatusBadRequest, "validation", "query is required")
+			return
 		}
 		assets, err := svc.resolve(r.Context(), ws)
 		if err != nil {
@@ -358,31 +361,6 @@ func NewMux(svc *Service) *http.ServeMux {
 			writeErr(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
 			return
 		}
-		if !memoryEnabled() {
-			var req struct {
-				TaskDescription string `json:"task_description"`
-				Task            string `json:"task"`
-				Format          string `json:"format"`
-			}
-			_ = json.NewDecoder(r.Body).Decode(&req)
-			task := strings.TrimSpace(req.TaskDescription)
-			if task == "" {
-				task = strings.TrimSpace(req.Task)
-			}
-			contextBlock := engine.AssembleRecallSections(task, nil)
-			data := map[string]any{
-				"disabled":      true,
-				"context_block": contextBlock,
-				"tokens_used":   0,
-				"tokens_budget": 0,
-				"memories_used": []any{},
-			}
-			if strings.EqualFold(strings.TrimSpace(req.Format), "raw") {
-				data["text"] = contextBlock
-			}
-			writeOK(w, http.StatusOK, data)
-			return
-		}
 		var req struct {
 			Workspace       string `json:"workspace"`
 			TaskDescription string `json:"task_description"`
@@ -405,6 +383,28 @@ func NewMux(svc *Service) *http.ServeMux {
 		ws := strings.TrimSpace(req.Workspace)
 		if ws == "" {
 			ws = workspaceFromRequest(r, svc.Workspace)
+		}
+		if !memoryEnabled() {
+			task := strings.TrimSpace(req.TaskDescription)
+			if task == "" {
+				task = strings.TrimSpace(req.Task)
+			}
+			if assets, err := svc.resolve(r.Context(), ws); err == nil && assets.Store != nil {
+				_ = assets.Store.AddTokenMetricV2(r.Context(), ws, "recall", 0, 0, engine.RunLabel(), false)
+			}
+			contextBlock := engine.AssembleRecallSections(task, nil)
+			data := map[string]any{
+				"disabled":      true,
+				"context_block": contextBlock,
+				"tokens_used":   0,
+				"tokens_budget": 0,
+				"memories_used": []any{},
+			}
+			if strings.EqualFold(strings.TrimSpace(req.Format), "raw") {
+				data["text"] = contextBlock
+			}
+			writeOK(w, http.StatusOK, data)
+			return
 		}
 		assets, err := svc.resolve(r.Context(), ws)
 		if err != nil {
@@ -456,6 +456,9 @@ func NewMux(svc *Service) *http.ServeMux {
 		included, meta := assets.Clipper.Clip(rebalanced, budget)
 		contextBlock := engine.AssembleRecallSectionsWithObservations(task, observationBlock, included)
 		tokensUsedTotal := meta.UsedTokens + observationTokens
+		if assets.Store != nil {
+			_ = assets.Store.AddTokenMetricV2(r.Context(), ws, "recall", tokensUsedTotal, recallBaselineTokens(rebalanced, observationTokens), engine.RunLabel(), engine.MemoryEnabled())
+		}
 		data := map[string]any{
 			"context_block":          contextBlock,
 			"tokens_used":            tokensUsedTotal,
@@ -481,25 +484,6 @@ func NewMux(svc *Service) *http.ServeMux {
 			writeErr(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
 			return
 		}
-		if !memoryEnabled() {
-			var req struct {
-				TaskDescription string `json:"task_description"`
-				Task            string `json:"task"`
-			}
-			_ = json.NewDecoder(r.Body).Decode(&req)
-			task := strings.TrimSpace(req.TaskDescription)
-			if task == "" {
-				task = strings.TrimSpace(req.Task)
-			}
-			writeOK(w, http.StatusOK, map[string]any{
-				"disabled":      true,
-				"context_block": engine.AssembleRecallSections(task, nil),
-				"tokens_used":   0,
-				"tokens_budget": 0,
-				"workspace":     workspaceFromRequest(r, svc.Workspace),
-			})
-			return
-		}
 		var req struct {
 			Workspace       string `json:"workspace"`
 			TaskDescription string `json:"task_description"`
@@ -522,6 +506,23 @@ func NewMux(svc *Service) *http.ServeMux {
 		ws := strings.TrimSpace(req.Workspace)
 		if ws == "" {
 			ws = workspaceFromRequest(r, svc.Workspace)
+		}
+		if !memoryEnabled() {
+			task := strings.TrimSpace(req.TaskDescription)
+			if task == "" {
+				task = strings.TrimSpace(req.Task)
+			}
+			if assets, err := svc.resolve(r.Context(), ws); err == nil && assets.Store != nil {
+				_ = assets.Store.AddTokenMetricV2(r.Context(), ws, "recall", 0, 0, engine.RunLabel(), false)
+			}
+			writeOK(w, http.StatusOK, map[string]any{
+				"disabled":      true,
+				"context_block": engine.AssembleRecallSections(task, nil),
+				"tokens_used":   0,
+				"tokens_budget": 0,
+				"workspace":     ws,
+			})
+			return
 		}
 		assets, err := svc.resolve(r.Context(), ws)
 		if err != nil {
@@ -616,6 +617,9 @@ func NewMux(svc *Service) *http.ServeMux {
 			"retrieval_mode":         retrieved.Mode,
 			"retrieval_weights":      retrieved.Weights,
 			"retrieved_hit_count":    len(retrieved.Hits),
+		}
+		if assets.Store != nil {
+			_ = assets.Store.AddTokenMetricV2(r.Context(), ws, "recall", meta.UsedTokens+observationTokens, recallBaselineTokens(rebalanced, observationTokens), engine.RunLabel(), engine.MemoryEnabled())
 		}
 		if req.IncludeMemories {
 			out["memories_included_full"] = fullMems
@@ -1287,6 +1291,12 @@ func NewMux(svc *Service) *http.ServeMux {
 			writeErr(w, http.StatusBadRequest, "runtime", err.Error())
 			return
 		}
+		tokenByOperation, err := assets.Store.AggregateTokenMetricsByOperation(r.Context(), workspace)
+		if err != nil {
+			writeErr(w, http.StatusBadRequest, "runtime", err.Error())
+			return
+		}
+		recallTokenTotals := tokenTotalsForOperation(tokenByOperation, "recall")
 		enabledGroups := make([]sqlite.TokenMetricGroupTotals, 0, len(tokenGroups))
 		disabledGroups := make([]sqlite.TokenMetricGroupTotals, 0, len(tokenGroups))
 		for _, g := range tokenGroups {
@@ -1339,25 +1349,29 @@ func NewMux(svc *Service) *http.ServeMux {
 			lastActivityStr = lastActivity.UTC().Format(time.RFC3339Nano)
 		}
 		writeOK(w, http.StatusOK, map[string]any{
-			"workspace":                  workspace,
-			"memory_count":               len(memories),
-			"db_size_bytes":              dbSize,
-			"memory_type_counts":         typeCounts,
-			"storage_tier_counts":        tierCounts,
-			"diagram_count":              diagramCount,
-			"pinned_count":               pinnedCount,
-			"last_memory_updated_at":     lastUpdated,
-			"last_memory_accessed_at":    lastAccessed,
-			"last_activity":              lastActivityStr,
-			"token_metrics":              tokenTotals,
-			"token_metrics_by_group":     enabledGroups,
-			"raw_token_metrics_by_group": disabledGroups,
-			"token_metrics_by_group_all": tokenGroups,
-			"llm_usage_totals":           llmTotals,
-			"llm_usage_by_group":         llmEnabledGroups,
-			"raw_llm_usage_by_group":     llmDisabledGroups,
-			"llm_usage_by_group_all":     llmGroups,
-			"token_savings_percent":      percentSaved(tokenTotals.BaselineTokens, tokenTotals.SavedTokens),
+			"workspace":                     workspace,
+			"memory_count":                  len(memories),
+			"db_size_bytes":                 dbSize,
+			"memory_type_counts":            typeCounts,
+			"storage_tier_counts":           tierCounts,
+			"diagram_count":                 diagramCount,
+			"pinned_count":                  pinnedCount,
+			"last_memory_updated_at":        lastUpdated,
+			"last_memory_accessed_at":       lastAccessed,
+			"last_activity":                 lastActivityStr,
+			"token_metrics":                 tokenTotals,
+			"token_metrics_by_operation":    tokenByOperation,
+			"token_metrics_by_group":        enabledGroups,
+			"raw_token_metrics_by_group":    disabledGroups,
+			"token_metrics_by_group_all":    tokenGroups,
+			"recall_token_metrics":          recallTokenTotals,
+			"llm_usage_totals":              llmTotals,
+			"llm_usage_by_group":            llmEnabledGroups,
+			"raw_llm_usage_by_group":        llmDisabledGroups,
+			"llm_usage_by_group_all":        llmGroups,
+			"overall_token_savings_percent": percentSaved(tokenTotals.BaselineTokens, tokenTotals.SavedTokens),
+			"recall_token_savings_percent":  percentSaved(recallTokenTotals.BaselineTokens, recallTokenTotals.SavedTokens),
+			"token_savings_percent":         percentSaved(recallTokenTotals.BaselineTokens, recallTokenTotals.SavedTokens),
 		})
 	})
 	return mux
@@ -1515,6 +1529,19 @@ func percentSaved(baseline, saved int) float64 {
 		return 0
 	}
 	return (float64(saved) / float64(baseline)) * 100
+}
+
+func tokenTotalsForOperation(items []sqlite.TokenMetricOperationTotals, operation string) sqlite.TokenMetricTotals {
+	for _, item := range items {
+		if strings.EqualFold(strings.TrimSpace(item.Operation), operation) {
+			return item.TokenMetricTotals
+		}
+	}
+	return sqlite.TokenMetricTotals{}
+}
+
+func recallBaselineTokens(hits []engine.RetrievalHit, observationTokens int) int {
+	return sumHitTokens(hits) + observationTokens
 }
 
 func sumHitTokens(hits []engine.RetrievalHit) int {

@@ -150,6 +150,9 @@ func TestServerWriteSearchRecall(t *testing.T) {
 	if _, ok := stats["token_metrics"]; !ok {
 		t.Fatalf("expected token metrics payload in stats")
 	}
+	if _, ok := stats["token_metrics_by_operation"]; !ok {
+		t.Fatalf("expected token metrics by operation in stats")
+	}
 	if _, ok := stats["token_metrics_by_group"]; !ok {
 		t.Fatalf("expected grouped token metrics payload in stats")
 	}
@@ -158,6 +161,15 @@ func TestServerWriteSearchRecall(t *testing.T) {
 	}
 	if _, ok := stats["token_metrics_by_group_all"]; !ok {
 		t.Fatalf("expected full grouped token metrics payload in stats")
+	}
+	if _, ok := stats["recall_token_metrics"]; !ok {
+		t.Fatalf("expected recall token metrics payload in stats")
+	}
+	if _, ok := stats["overall_token_savings_percent"]; !ok {
+		t.Fatalf("expected overall token savings percent in stats")
+	}
+	if _, ok := stats["recall_token_savings_percent"]; !ok {
+		t.Fatalf("expected recall token savings percent in stats")
 	}
 	if _, ok := stats["llm_usage_totals"]; !ok {
 		t.Fatalf("expected llm usage totals payload in stats")
