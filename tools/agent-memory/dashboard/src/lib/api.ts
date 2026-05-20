@@ -50,9 +50,14 @@ export type TokenMetricTotals = {
   saved_tokens: number
 }
 
+export type TokenMetricOperationTotals = TokenMetricTotals & {
+  operation: string
+}
+
 export type TokenMetricGroupTotals = TokenMetricTotals & {
   run_label: string
   memory_enabled: boolean
+  operations?: TokenMetricOperationTotals[]
 }
 
 export type LLMUsageTotals = {
@@ -79,13 +84,17 @@ export type DashboardStats = {
   last_memory_accessed_at?: string
   last_activity?: string
   token_metrics: TokenMetricTotals
+  token_metrics_by_operation?: TokenMetricOperationTotals[]
   token_metrics_by_group: TokenMetricGroupTotals[]
   raw_token_metrics_by_group: TokenMetricGroupTotals[]
   token_metrics_by_group_all?: TokenMetricGroupTotals[]
+  recall_token_metrics?: TokenMetricTotals
   llm_usage_totals: LLMUsageTotals
   llm_usage_by_group: LLMUsageGroupTotals[]
   raw_llm_usage_by_group: LLMUsageGroupTotals[]
   llm_usage_by_group_all?: LLMUsageGroupTotals[]
+  overall_token_savings_percent?: number
+  recall_token_savings_percent?: number
   token_savings_percent: number
 }
 

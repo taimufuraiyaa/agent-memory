@@ -21,6 +21,8 @@ import {
   type SessionEntry,
   type StorageTier,
   type TokenMetricGroupTotals,
+  type TokenMetricOperationTotals,
+  type TokenMetricTotals,
 } from '../lib/api'
 import { DiagramViewer } from './DiagramViewer'
 import { MarkdownView } from './MarkdownView'
@@ -78,6 +80,23 @@ function formatPercent(value?: number): string {
   return `${value.toFixed(1)}%`
 }
 
+function zeroTokenTotals(): TokenMetricTotals {
+  return {
+    records: 0,
+    returned_tokens: 0,
+    baseline_tokens: 0,
+    saved_tokens: 0,
+  }
+}
+
+function getOperationTotals(items: TokenMetricOperationTotals[] | undefined, operation: string): TokenMetricTotals | null {
+  return items?.find((item) => item.operation === operation) ?? null
+}
+
+function getGroupOperationTotals(group: TokenMetricGroupTotals, operation: string): TokenMetricTotals | null {
+  return group.operations?.find((item) => item.operation === operation) ?? null
+}
+
 function formatBytes(bytes?: number): string {
   if (typeof bytes !== 'number' || Number.isNaN(bytes) || bytes <= 0) return '0 B'
   const units = ['B', 'KB', 'MB', 'GB', 'TB']
@@ -105,6 +124,27 @@ function sortCountEntries(counts?: CountMap): Array<[string, number]> {
 
 function sumCounts(counts?: CountMap): number {
   return Object.values(counts ?? {}).reduce((total, value) => total + value, 0)
+}
+
+function chartColor(index: number): string {
+  return `var(--chart-${(index % 6) + 1})`
+}
+
+function formatLegendIndex(index: number): string {
+  return `[${String(index + 1).padStart(2, '0')}]`
+}
+
+function buildPieGradient(entries: Array<[string, number]>): string {
+  const total = sumCounts(Object.fromEntries(entries))
+  if (total <= 0 || entries.length === 0) return 'conic-gradient(var(--bg-input) 0deg 360deg)'
+
+  let current = 0
+  const stops = entries.map(([, value], index) => {
+    const start = current
+    current += (value / total) * 360
+    return `${chartColor(index)} ${start}deg ${current}deg`
+  })
+  return `conic-gradient(${stops.join(', ')})`
 }
 
 function pillList(items: string[]): React.ReactNode {
@@ -718,13 +758,11 @@ export function App() {
         <div className="topbarLeft">
           <div className="brand">
             <div className="brandMark" aria-hidden="true">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#090d16' }}>
-                <path d="M12 2l2 6 6 2-6 2-2 6-2-6-6-2 6-2 2-6z" />
-              </svg>
+              <span className="brandMarkText">[+]</span>
             </div>
             <div className="brandText">
               <div className="brandTitle">
-                Agent Memory <span className="mono" style={{ fontSize: '11px', opacity: 0.6, fontWeight: 500 }}>v1.0.12</span>
+                agent-memory/dashboard <span className="brandVersion">v1.0.12</span>
               </div>
             </div>
           </div>
@@ -748,40 +786,27 @@ export function App() {
 
         <nav className="topbarCenter" aria-label="Mode switcher">
           <button className={surface === 'overview' ? 'navItem navItemOn' : 'navItem'} onClick={() => setSurface('overview')} type="button">
+            <span className="navKey">[01]</span>
             <span className="navLabel">Overview</span>
           </button>
           <button className={surface === 'search' ? 'navItem navItemOn' : 'navItem'} onClick={openSearch} type="button" aria-label="Search mode">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="11" cy="11" r="7" />
-              <path d="M21 21l-4.3-4.3" />
-            </svg>
+            <span className="navKey">[02]</span>
             <span className="navLabel">Search</span>
           </button>
           <button className={surface === 'recall' ? 'navItem navItemOn' : 'navItem'} onClick={openRecall} type="button" aria-label="Recall preview mode">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M3 12a9 9 0 101.8-5.4" />
-              <path d="M3 4v6h6" />
-            </svg>
+            <span className="navKey">[03]</span>
             <span className="navLabel">Recall Preview</span>
           </button>
           <button className="navItem" onClick={showRecentsCapture} type="button" aria-label="Recents capture" disabled={recentsBusy || !workspace} title="Show recently added memories">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="12" cy="12" r="9" />
-              <path d="M12 7v5l3 2" />
-            </svg>
+            <span className="navKey">[04]</span>
             <span className="navLabel">Recents</span>
           </button>
           <button className={surface === 'sessions' ? 'navItem navItemOn' : 'navItem'} onClick={openSessions} type="button" aria-label="Sessions">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <rect x="3" y="4" width="18" height="16" rx="2" />
-              <path d="M8 2v4M16 2v4M3 10h18" />
-            </svg>
+            <span className="navKey">[05]</span>
             <span className="navLabel">Sessions</span>
           </button>
           <button className={surface === 'diagnostics' ? 'navItem navItemOn' : 'navItem'} onClick={() => setSurface('diagnostics')} type="button" aria-label="Diagnostics">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M12 20v-6M6 20V10M18 20V4" />
-            </svg>
+            <span className="navKey">[06]</span>
             <span className="navLabel">Diagnostics</span>
           </button>
         </nav>
@@ -793,10 +818,7 @@ export function App() {
             aria-label="Raw stats payload"
             title="Raw stats payload"
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="12" cy="12" r="10" />
-              <path d="M12 16v-4M12 8h.01" />
-            </svg>
+            <span>raw</span>
           </button>
           <button
             className="iconBtn"
@@ -804,16 +826,7 @@ export function App() {
             title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
             aria-label={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
           >
-            {theme === 'dark' ? (
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="12" cy="12" r="5" />
-                <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
-              </svg>
-            ) : (
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" />
-              </svg>
-            )}
+            <span>{theme === 'dark' ? 'light' : 'dark'}</span>
           </button>
         </div>
       </header>
@@ -834,13 +847,7 @@ export function App() {
                 aria-label="View diagrams"
                 title="Quick access to diagrams"
               >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="10" y="3" width="4" height="4" rx="1" />
-                  <rect x="3" y="17" width="4" height="4" rx="1" />
-                  <rect x="17" y="17" width="4" height="4" rx="1" />
-                  <path d="M12 7v5M12 12H5v5M12 12h7v5" />
-                </svg>
-                <span>Diagrams</span>
+                <span>[diagrams]</span>
                 <span className="floatingDiagramBadge">{diagramMemories.length}</span>
               </button>
             ) : null}
@@ -1054,11 +1061,11 @@ export function App() {
                     </span>
                   </div>
                   <div className="composerToolbarRight">
-                    <button className="btn btnGhost" onClick={() => setAdvancedOpen((v) => !v)}>
-                      {advancedOpen ? 'Hide Advanced' : 'Advanced Settings'} ⌄
+                    <button className="btn btnGhost" type="button" onClick={() => setAdvancedOpen((v) => !v)}>
+                      {advancedOpen ? '[-] filters' : '[+] filters'}
                     </button>
-                    <button className="sendBtn" onClick={submit} disabled={!workspace || busy || !draft.trim()} title="Send query">
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+                    <button className="sendBtn" type="button" onClick={submit} disabled={!workspace || busy || !draft.trim()} title="Send query">
+                      <span className="sendBtnLabel">RUN</span>
                     </button>
                   </div>
                 </div>
@@ -1079,9 +1086,7 @@ export function App() {
                   <div className="mono detailDrawerID">{selectedMemory.id}</div>
                 </div>
                 <button className="btn btnGhost" onClick={() => setSelectedMemory(null)} aria-label="Close details" style={{ padding: '8px 12px' }}>
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M18 6L6 18M6 6l12 12" />
-                  </svg>
+                  [x]
                 </button>
               </div>
 
@@ -1281,6 +1286,8 @@ function OverviewPanel({
   const tierEntries = sortCountEntries(stats?.storage_tier_counts)
   const tokenGroups = stats?.token_metrics_by_group_all ?? []
   const llmGroups = stats?.llm_usage_by_group_all ?? []
+  const recallTokenTotals = stats?.recall_token_metrics ?? getOperationTotals(stats?.token_metrics_by_operation, 'recall') ?? zeroTokenTotals()
+  const recallTokenSavingsPercent = stats?.recall_token_savings_percent ?? stats?.token_savings_percent ?? 0
   const experimentsRef = useRef<HTMLElement>(null)
 
   useEffect(() => {
@@ -1297,9 +1304,17 @@ function OverviewPanel({
           <p className="overviewText">
             See what this workspace remembers, how experiments are trending, and whether the system is healthy before you run another query.
           </p>
-          <div className="overviewMetaRow">
-            <span className={`statusBadge statusBadge${toTitle(healthState.tone)}`}>{healthState.label}</span>
-            <span className="overviewMetaItem">Last activity {formatTS(stats?.last_activity || project?.last_activity) || 'n/a'}</span>
+          <div className="overviewMetaRow asciiChipRow">
+            <span className="asciiChipRowItem">
+              <span className="asciiChipIndex">[01]</span>
+              <span className="asciiChipLead">.-</span>
+              <span className={`statusBadge statusBadge${toTitle(healthState.tone)}`}>{healthState.label}</span>
+            </span>
+            <span className="asciiChipRowItem">
+              <span className="asciiChipIndex">[02]</span>
+              <span className="asciiChipLead">.-</span>
+              <span className="overviewMetaItem">Last activity {formatTS(stats?.last_activity || project?.last_activity) || 'n/a'}</span>
+            </span>
           </div>
         </div>
       </div>
@@ -1351,7 +1366,7 @@ function OverviewPanel({
       <div className="statsGrid">
         <MetricCard title="Memories" value={formatNumber(stats?.memory_count ?? project?.memory_count ?? 0)} detail="Current workspace volume" />
         <MetricCard title="Storage" value={formatBytes(stats?.db_size_bytes ?? project?.size_bytes)} detail="SQLite footprint on disk" />
-        <MetricCard title="Token Savings" value={formatPercent(stats?.token_savings_percent)} detail={`${formatNumber(stats?.token_metrics.records)} measured operations`} />
+        <MetricCard title="Recall Savings" value={formatPercent(recallTokenSavingsPercent)} detail={`${formatNumber(recallTokenTotals.records)} recall operations`} />
         <MetricCard title="LLM Usage" value={formatNumber(stats?.llm_usage_totals.total_tokens)} detail={`${formatNumber(stats?.llm_usage_totals.records)} provider reports`} />
         <MetricCard title="Pinned" value={formatNumber(stats?.pinned_count)} detail="Pinned memories retained" />
         <MetricCard title="Diagrams" value={formatNumber(stats?.diagram_count)} detail="Memories with visual payloads" />
@@ -1359,24 +1374,24 @@ function OverviewPanel({
 
       <div className="overviewColumns">
         <BreakdownCard title="Memory Types" subtitle={`${formatNumber(sumCounts(stats?.memory_type_counts))} total`}>
-          <BreakdownList entries={typeEntries} emptyLabel="No type distribution yet." />
+          <PieChartBreakdown entries={typeEntries} emptyLabel="No type distribution yet." />
         </BreakdownCard>
 
         <BreakdownCard title="Storage Tiers" subtitle={`${formatNumber(sumCounts(stats?.storage_tier_counts))} classified`}>
-          <BreakdownList entries={tierEntries} emptyLabel="No tier distribution yet." />
+          <PieChartBreakdown entries={tierEntries} emptyLabel="No tier distribution yet." />
         </BreakdownCard>
       </div>
 
       <section ref={experimentsRef}>
-        <ComparisonSection title="Token Experiment Comparison" description="Grouped by run label and memory enabled state." emptyLabel="No grouped token metrics yet. Run labeled ON/OFF experiments to populate this view.">
-          {tokenGroups.map((group) => (
-            <TokenGroupCard key={`token-${group.run_label}-${group.memory_enabled ? 'on' : 'off'}`} group={group} />
+        <ComparisonSection title="Recall Savings Comparison" description="Recall-only token savings grouped by run label and memory enabled state." emptyLabel="No grouped recall metrics yet. Run labeled ON/OFF recall experiments to populate this view.">
+          {tokenGroups.map((group, index) => (
+            <TokenGroupCard key={`token-${group.run_label}-${group.memory_enabled ? 'on' : 'off'}`} group={group} index={index} />
           ))}
         </ComparisonSection>
 
         <ComparisonSection title="LLM Usage Comparison" description="Provider-reported usage grouped by run label and memory enabled state." emptyLabel="No grouped LLM usage yet. Ingest provider usage metrics to populate this view.">
-          {llmGroups.map((group) => (
-            <LLMGroupCard key={`llm-${group.run_label}-${group.memory_enabled ? 'on' : 'off'}`} group={group} />
+          {llmGroups.map((group, index) => (
+            <LLMGroupCard key={`llm-${group.run_label}-${group.memory_enabled ? 'on' : 'off'}`} group={group} index={index} />
           ))}
         </ComparisonSection>
       </section>
@@ -1399,6 +1414,9 @@ function DiagnosticsPanel({
   healthState: { tone: 'good' | 'warn' | 'bad'; label: string; detail: string }
   onOpenRaw: () => void
 }) {
+  const recallTokenTotals = stats?.recall_token_metrics ?? getOperationTotals(stats?.token_metrics_by_operation, 'recall') ?? zeroTokenTotals()
+  const recallTokenSavingsPercent = stats?.recall_token_savings_percent ?? stats?.token_savings_percent ?? 0
+  const searchTokenTotals = getOperationTotals(stats?.token_metrics_by_operation, 'search') ?? zeroTokenTotals()
   return (
     <section className="surfaceStack">
       <div className="diagnosticsHero">
@@ -1435,9 +1453,10 @@ function DiagnosticsPanel({
 
         <BreakdownCard title="Experiment Signals" subtitle="Quick operational summary">
           <div className="diagnosticsList">
-            <DiagnosticRow label="Token Records" value={formatNumber(stats?.token_metrics.records)} />
-            <DiagnosticRow label="Tokens Saved" value={formatNumber(stats?.token_metrics.saved_tokens)} />
-            <DiagnosticRow label="Savings Rate" value={formatPercent(stats?.token_savings_percent)} />
+            <DiagnosticRow label="Recall Records" value={formatNumber(recallTokenTotals.records)} />
+            <DiagnosticRow label="Recall Tokens Saved" value={formatNumber(recallTokenTotals.saved_tokens)} />
+            <DiagnosticRow label="Recall Savings Rate" value={formatPercent(recallTokenSavingsPercent)} />
+            <DiagnosticRow label="Search Records" value={formatNumber(searchTokenTotals.records)} />
             <DiagnosticRow label="LLM Records" value={formatNumber(stats?.llm_usage_totals.records)} />
           </div>
         </BreakdownCard>
@@ -1520,7 +1539,7 @@ function SessionsPanel({
 
           <div className="sessionExplorerLayout">
             <div className="sessionRail">
-              {sessions.map((session) => {
+              {sessions.map((session, index) => {
                 const isSelected = session.session_id === selectedSession?.session_id
                 const promoted = promotionResult && session.session_id === promotionResult.session_id
                 return (
@@ -1531,12 +1550,19 @@ function SessionsPanel({
                     onClick={() => onSelectSession(session.session_id)}
                   >
                     <div className="sessionRailTop">
-                      <div className="sessionRailTitle">{session.session_id}</div>
+                      <div className="sessionRailHeading">
+                        <span className="sessionRailIndex">{formatLegendIndex(index)}</span>
+                        <span className="sessionRailLead">.-</span>
+                        <div className="sessionRailTitle">{session.session_id}</div>
+                      </div>
                       <span className="groupBadge groupBadgeOn">{formatNumber(session.observation_count)} obs</span>
                     </div>
-                    <div className="sessionRailMeta">Last seen {formatTS(session.last_seen_at) || 'n/a'}</div>
+                    <div className="sessionRailMeta">
+                      <span className="sessionRailStamp">last_seen:</span> {formatTS(session.last_seen_at) || 'n/a'}
+                    </div>
                     {promoted ? (
                       <div className="sessionRailMeta">
+                        <span className="sessionRailStamp">promotion:</span>{' '}
                         {promotionResult.deduplicated ? 'Already promoted' : promotionResult.rejected ? 'Promotion rejected' : 'Promotion recorded'}
                       </div>
                     ) : null}
@@ -1552,9 +1578,17 @@ function SessionsPanel({
                     <div>
                       <div className="sessionCardTitle">{selectedSession.session_id}</div>
                       <div className="sessionCardMeta">Observation timeline for the selected session</div>
-                      <div className="sessionDetailSummary">
-                        <span className="overviewMetaItem">{formatNumber(selectedSession.observation_count)} observations</span>
-                        <span className="overviewMetaItem">last seen {formatTS(selectedSession.last_seen_at) || 'n/a'}</span>
+                      <div className="sessionDetailSummary asciiChipRow">
+                        <span className="asciiChipRowItem">
+                          <span className="asciiChipIndex">[01]</span>
+                          <span className="asciiChipLead">.-</span>
+                          <span className="overviewMetaItem">{formatNumber(selectedSession.observation_count)} observations</span>
+                        </span>
+                        <span className="asciiChipRowItem">
+                          <span className="asciiChipIndex">[02]</span>
+                          <span className="asciiChipLead">.-</span>
+                          <span className="overviewMetaItem">last seen {formatTS(selectedSession.last_seen_at) || 'n/a'}</span>
+                        </span>
                       </div>
                     </div>
                     <div className="sessionDetailActions">
@@ -1625,17 +1659,26 @@ function SessionsPanel({
                       <div className="timelineList">
                         {observations.map((observation) => (
                           <article key={observation.id} className="timelineCard">
-                            <div className="timelineTop">
-                              <div>
-                                <div className="timelineTitle">{toTitle(observation.kind)}</div>
-                                <div className="timelineMeta">{formatTS(observation.occurred_at) || 'n/a'}</div>
-                              </div>
-                              <span className="memPill">{observation.tool_name || 'system'}</span>
+                            <div className="timelineRail" aria-hidden="true">
+                              <span className="timelineRailDot" />
+                              <span className="timelineRailLine" />
                             </div>
-                            <div className="timelineSummary">{observation.summary}</div>
-                            <div className="timelineFooter">
-                              <span className="mono">{observation.id.slice(0, 16)}...</span>
-                              <span className="muted small">Created {formatTS(observation.created_at) || 'n/a'}</span>
+                            <div className="timelineCardBody">
+                              <div className="timelineTop">
+                                <div>
+                                  <div className="timelineTitle">
+                                    <span className="timelinePrefix">.-</span>
+                                    <span>{toTitle(observation.kind)}</span>
+                                  </div>
+                                  <div className="timelineMeta">{formatTS(observation.occurred_at) || 'n/a'}</div>
+                                </div>
+                                <span className="memPill timelineToolPill">{observation.tool_name || 'system'}</span>
+                              </div>
+                              <div className="timelineSummary">{observation.summary}</div>
+                              <div className="timelineFooter">
+                                <span className="mono timelineStamp">id:{observation.id.slice(0, 16)}...</span>
+                                <span className="muted small timelineStamp">created:{formatTS(observation.created_at) || 'n/a'}</span>
+                              </div>
                             </div>
                           </article>
                         ))}
@@ -1689,22 +1732,40 @@ function BreakdownCard({ title, subtitle, children }: { title: string; subtitle:
   )
 }
 
-function BreakdownList({ entries, emptyLabel }: { entries: Array<[string, number]>; emptyLabel: string }) {
-  const max = entries[0]?.[1] ?? 0
+function PieChartBreakdown({ entries, emptyLabel }: { entries: Array<[string, number]>; emptyLabel: string }) {
+  const total = entries.reduce((sum, [, value]) => sum + value, 0)
   if (entries.length === 0) return <div className="muted">{emptyLabel}</div>
   return (
-    <div className="breakdownList">
-      {entries.map(([label, value]) => (
-        <div key={label} className="breakdownRow">
-          <div className="breakdownRowTop">
-            <span>{toTitle(label)}</span>
-            <span className="mono">{formatNumber(value)}</span>
-          </div>
-          <div className="breakdownBarTrack">
-            <div className="breakdownBarFill" style={{ width: `${max > 0 ? (value / max) * 100 : 0}%` }} />
+    <div className="pieChartBlock">
+      <div className="pieChartWrap" aria-hidden="true">
+        <div className="pieChartVisual" style={{ background: buildPieGradient(entries) }}>
+          <div className="pieChartCenter">
+            <span className="pieChartTotal">{formatNumber(total)}</span>
+            <span className="pieChartCaption">total</span>
           </div>
         </div>
-      ))}
+      </div>
+      <div className="breakdownList">
+        {entries.map(([label, value], index) => {
+          const percent = total > 0 ? (value / total) * 100 : 0
+          return (
+            <div key={label} className="breakdownRow">
+              <div className="breakdownRowTop">
+                <span className="breakdownLabelGroup">
+                  <span className="breakdownIndex">{formatLegendIndex(index)}</span>
+                  <span className="breakdownSwatch" style={{ background: chartColor(index) }} />
+                  <span className="breakdownLead">.-</span>
+                  <span className="breakdownLabelText">{toTitle(label)}</span>
+                  <span className="breakdownLeader" aria-hidden="true" />
+                </span>
+                <span className="mono breakdownValue">
+                  {formatNumber(value)} / {formatPercent(percent)}
+                </span>
+              </div>
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }
@@ -1734,28 +1795,40 @@ function ComparisonSection({
   )
 }
 
-function TokenGroupCard({ group }: { group: TokenMetricGroupTotals }) {
+function TokenGroupCard({ group, index }: { group: TokenMetricGroupTotals; index: number }) {
+  const recall = getGroupOperationTotals(group, 'recall')
+  const totals = recall ?? group
+  const savingsLabel = recall ? 'of recall baseline' : 'of baseline'
+  const recordsLabel = recall ? 'recall records' : 'records'
   return (
     <article className="groupCard">
       <div className="groupCardTop">
-        <span className="groupTitle">{group.run_label || 'default'}</span>
+        <div className="groupHeading">
+          <span className="groupIndex">{formatLegendIndex(index)}</span>
+          <span className="groupLead">.-</span>
+          <span className="groupTitle">{group.run_label || 'default'}</span>
+        </div>
         <span className={group.memory_enabled ? 'groupBadge groupBadgeOn' : 'groupBadge groupBadgeOff'}>{group.memory_enabled ? 'memory on' : 'memory off'}</span>
       </div>
-      <div className="groupMetric">{formatNumber(group.saved_tokens)} saved</div>
-      <div className="groupSub">{formatPercent(group.baseline_tokens > 0 ? (group.saved_tokens / group.baseline_tokens) * 100 : 0)} of baseline across {formatNumber(group.records)} records</div>
+      <div className="groupMetric">{formatNumber(totals.saved_tokens)} saved</div>
+      <div className="groupSub">{formatPercent(totals.baseline_tokens > 0 ? (totals.saved_tokens / totals.baseline_tokens) * 100 : 0)} {savingsLabel} across {formatNumber(totals.records)} {recordsLabel}</div>
       <div className="groupStats">
-        <DiagnosticRow label="Returned" value={formatNumber(group.returned_tokens)} />
-        <DiagnosticRow label="Baseline" value={formatNumber(group.baseline_tokens)} />
+        <DiagnosticRow label="Returned" value={formatNumber(totals.returned_tokens)} />
+        <DiagnosticRow label="Baseline" value={formatNumber(totals.baseline_tokens)} />
       </div>
     </article>
   )
 }
 
-function LLMGroupCard({ group }: { group: LLMUsageGroupTotals }) {
+function LLMGroupCard({ group, index }: { group: LLMUsageGroupTotals; index: number }) {
   return (
     <article className="groupCard">
       <div className="groupCardTop">
-        <span className="groupTitle">{group.run_label || 'default'}</span>
+        <div className="groupHeading">
+          <span className="groupIndex">{formatLegendIndex(index)}</span>
+          <span className="groupLead">.-</span>
+          <span className="groupTitle">{group.run_label || 'default'}</span>
+        </div>
         <span className={group.memory_enabled ? 'groupBadge groupBadgeOn' : 'groupBadge groupBadgeOff'}>{group.memory_enabled ? 'memory on' : 'memory off'}</span>
       </div>
       <div className="groupMetric">{formatNumber(group.total_tokens)} total</div>
@@ -1771,7 +1844,12 @@ function LLMGroupCard({ group }: { group: LLMUsageGroupTotals }) {
 function DiagnosticRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="diagnosticRow">
-      <span className="diagnosticLabel">{label}</span>
+      <span className="diagnosticLabelGroup">
+        <span className="diagnosticIndex" aria-hidden="true" />
+        <span className="diagnosticLead">.-</span>
+        <span className="diagnosticLabel">{label}</span>
+        <span className="diagnosticLeader" aria-hidden="true" />
+      </span>
       <span className="diagnosticValue">{value}</span>
     </div>
   )

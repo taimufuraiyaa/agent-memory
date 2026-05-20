@@ -418,7 +418,7 @@ func newRecallCommand() *cobra.Command {
 			clipper := engine.NewTokenClipper(nil)
 			rebalanced := engine.RebalanceRecallHits(task, retrieved.Hits)
 			included, meta := clipper.Clip(rebalanced, budget)
-			_ = store.AddTokenMetricV2(ctx, cfg.workspace, "recall", meta.UsedTokens+observationTokens, sumHitTokens(rebalanced), engine.RunLabel(), true)
+			_ = store.AddTokenMetricV2(ctx, cfg.workspace, "recall", meta.UsedTokens+observationTokens, recallBaselineTokens(rebalanced, observationTokens), engine.RunLabel(), true)
 			payload := map[string]any{
 				"mode":               retrieved.Mode,
 				"weights":            retrieved.Weights,
@@ -1305,6 +1305,11 @@ func newStatsCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			tokenByOperation, err := store.AggregateTokenMetricsByOperation(ctx, cfg.workspace)
+			if err != nil {
+				return err
+			}
+			recallTokenTotals := tokenTotalsForOperation(tokenByOperation, "recall")
 			typeCounts := map[string]int{}
 			tierCounts := map[string]int{}
 			diagramCount := 0
@@ -1370,24 +1375,28 @@ func newStatsCommand() *cobra.Command {
 				lastActivityStr = lastActivity.UTC().Format(time.RFC3339Nano)
 			}
 			return writeSuccessEnvelope(cmd.OutOrStdout(), "stats", map[string]any{
-				"workspace":                  cfg.workspace,
-				"memory_count":               len(memories),
-				"memory_type_counts":         typeCounts,
-				"storage_tier_counts":        tierCounts,
-				"diagram_count":              diagramCount,
-				"pinned_count":               pinnedCount,
-				"last_memory_updated_at":     lastUpdated,
-				"last_memory_accessed_at":    lastAccessed,
-				"last_activity":              lastActivityStr,
-				"token_metrics":              tm,
-				"token_metrics_by_group":     enabledGroups,
-				"raw_token_metrics_by_group": disabledGroups,
-				"token_metrics_by_group_all": tg,
-				"llm_usage_totals":           llmTotals,
-				"llm_usage_by_group":         llmEnabledGroups,
-				"raw_llm_usage_by_group":     llmDisabledGroups,
-				"llm_usage_by_group_all":     llmGroups,
-				"token_savings_percent":      percentSaved(tm.BaselineTokens, tm.SavedTokens),
+				"workspace":                     cfg.workspace,
+				"memory_count":                  len(memories),
+				"memory_type_counts":            typeCounts,
+				"storage_tier_counts":           tierCounts,
+				"diagram_count":                 diagramCount,
+				"pinned_count":                  pinnedCount,
+				"last_memory_updated_at":        lastUpdated,
+				"last_memory_accessed_at":       lastAccessed,
+				"last_activity":                 lastActivityStr,
+				"token_metrics":                 tm,
+				"token_metrics_by_operation":    tokenByOperation,
+				"token_metrics_by_group":        enabledGroups,
+				"raw_token_metrics_by_group":    disabledGroups,
+				"token_metrics_by_group_all":    tg,
+				"recall_token_metrics":          recallTokenTotals,
+				"llm_usage_totals":              llmTotals,
+				"llm_usage_by_group":            llmEnabledGroups,
+				"raw_llm_usage_by_group":        llmDisabledGroups,
+				"llm_usage_by_group_all":        llmGroups,
+				"overall_token_savings_percent": percentSaved(tm.BaselineTokens, tm.SavedTokens),
+				"recall_token_savings_percent":  percentSaved(recallTokenTotals.BaselineTokens, recallTokenTotals.SavedTokens),
+				"token_savings_percent":         percentSaved(recallTokenTotals.BaselineTokens, recallTokenTotals.SavedTokens),
 			})
 		},
 	}
@@ -1403,11 +1412,24 @@ func sumHitTokens(hits []engine.RetrievalHit) int {
 	return total
 }
 
+func recallBaselineTokens(hits []engine.RetrievalHit, observationTokens int) int {
+	return sumHitTokens(hits) + observationTokens
+}
+
 func percentSaved(baseline, saved int) float64 {
 	if baseline <= 0 || saved <= 0 {
 		return 0
 	}
 	return (float64(saved) / float64(baseline)) * 100
+}
+
+func tokenTotalsForOperation(items []sqlite.TokenMetricOperationTotals, operation string) sqlite.TokenMetricTotals {
+	for _, item := range items {
+		if strings.EqualFold(strings.TrimSpace(item.Operation), operation) {
+			return item.TokenMetricTotals
+		}
+	}
+	return sqlite.TokenMetricTotals{}
 }
 
 func newConsolidateCommand() *cobra.Command {

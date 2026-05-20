@@ -56,4 +56,48 @@ func TestTokenMetricsAggregateByGroup(t *testing.T) {
 	if len(groups) != 2 {
 		t.Fatalf("expected 2 groups, got %+v", groups)
 	}
+	onGroup := groups[0]
+	if !onGroup.MemoryEnabled {
+		onGroup = groups[1]
+	}
+	if onGroup.RunLabel != "on" {
+		t.Fatalf("expected enabled on group, got %+v", onGroup)
+	}
+	if onGroup.Records != 2 || onGroup.BaselineTokens != 105 || onGroup.SavedTokens != 90 {
+		t.Fatalf("unexpected enabled group totals: %+v", onGroup)
+	}
+	if len(onGroup.Operations) != 2 {
+		t.Fatalf("expected per-operation breakdown in group, got %+v", onGroup)
+	}
+}
+
+func TestTokenMetricsAggregateByOperation(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "metrics-ops.db")
+	store, err := Open(context.Background(), dbPath)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer func() { _ = store.Close() }()
+	ctx := context.Background()
+
+	if err := store.AddTokenMetricV2(ctx, "ws", "recall", 25, 100, "on", true); err != nil {
+		t.Fatalf("add recall metric: %v", err)
+	}
+	if err := store.AddTokenMetricV2(ctx, "ws", "search", 50, 50, "on", true); err != nil {
+		t.Fatalf("add search metric: %v", err)
+	}
+
+	ops, err := store.AggregateTokenMetricsByOperation(ctx, "ws")
+	if err != nil {
+		t.Fatalf("aggregate by operation: %v", err)
+	}
+	if len(ops) != 2 {
+		t.Fatalf("expected 2 operation groups, got %+v", ops)
+	}
+	if ops[0].Operation != "recall" || ops[0].SavedTokens != 75 {
+		t.Fatalf("unexpected recall totals: %+v", ops[0])
+	}
+	if ops[1].Operation != "search" || ops[1].SavedTokens != 0 {
+		t.Fatalf("unexpected search totals: %+v", ops[1])
+	}
 }
