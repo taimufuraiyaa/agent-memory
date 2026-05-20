@@ -208,6 +208,20 @@ func (s *Store) Migrate(ctx context.Context) error {
 		`CREATE INDEX IF NOT EXISTS idx_observations_workspace_occurred ON observations(workspace, occurred_at DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_observations_workspace_session_occurred ON observations(workspace, session_id, occurred_at DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_observations_dedup ON observations(workspace, content_hash, occurred_at DESC) WHERE content_hash != ''`,
+		`CREATE TABLE IF NOT EXISTS llm_usage_metrics (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			workspace TEXT NOT NULL,
+			provider TEXT NOT NULL,
+			model TEXT NOT NULL DEFAULT '',
+			prompt_tokens INTEGER NOT NULL,
+			completion_tokens INTEGER NOT NULL,
+			total_tokens INTEGER NOT NULL,
+			run_label TEXT NOT NULL DEFAULT '',
+			memory_enabled INTEGER NOT NULL DEFAULT 1,
+			created_at TEXT NOT NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_llm_usage_workspace_created ON llm_usage_metrics(workspace, created_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_llm_usage_workspace_group ON llm_usage_metrics(workspace, run_label, memory_enabled)`,
 	}
 	for _, stmt := range stmts {
 		if _, err := s.db.ExecContext(ctx, stmt); err != nil {

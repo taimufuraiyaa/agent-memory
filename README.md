@@ -178,6 +178,7 @@ What you can do in the dashboard:
 Notes:
 - The dashboard is local-only and served by the same Go binary; there is no separate Node/React dev server required.
 - The dashboard uses the same in-process retrieval engine path as the CLI (parity-tested).
+- You do not need `--workspace` just to open the dashboard; start it normally and switch projects from the dropdown when needed.
 
 ### Managing multiple projects
 

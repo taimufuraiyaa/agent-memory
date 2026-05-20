@@ -55,7 +55,8 @@ func BuildMarkdownExport(workspace string, memories []core.MemoryEntry) string {
 			return items[i].UpdatedAt.After(items[j].UpdatedAt)
 		})
 		b.WriteString("## ")
-		b.WriteString(strings.ToUpper(string(t[:1])) + string(t[1:]))
+		b.WriteString(strings.ToUpper(string(t[:1])))
+		b.WriteString(string(t[1:]))
 		b.WriteString("\n\n")
 		for _, m := range items {
 			b.WriteString("- ")

@@ -41,6 +41,93 @@ export type ProjectListItem = {
   last_activity: string
 }
 
+export type CountMap = Record<string, number>
+
+export type TokenMetricTotals = {
+  records: number
+  returned_tokens: number
+  baseline_tokens: number
+  saved_tokens: number
+}
+
+export type TokenMetricGroupTotals = TokenMetricTotals & {
+  run_label: string
+  memory_enabled: boolean
+}
+
+export type LLMUsageTotals = {
+  records: number
+  prompt_tokens: number
+  completion_tokens: number
+  total_tokens: number
+}
+
+export type LLMUsageGroupTotals = LLMUsageTotals & {
+  run_label: string
+  memory_enabled: boolean
+}
+
+export type DashboardStats = {
+  workspace: string
+  memory_count: number
+  db_size_bytes: number
+  memory_type_counts?: CountMap
+  storage_tier_counts?: CountMap
+  diagram_count?: number
+  pinned_count?: number
+  last_memory_updated_at?: string
+  last_memory_accessed_at?: string
+  last_activity?: string
+  token_metrics: TokenMetricTotals
+  token_metrics_by_group: TokenMetricGroupTotals[]
+  raw_token_metrics_by_group: TokenMetricGroupTotals[]
+  token_metrics_by_group_all?: TokenMetricGroupTotals[]
+  llm_usage_totals: LLMUsageTotals
+  llm_usage_by_group: LLMUsageGroupTotals[]
+  raw_llm_usage_by_group: LLMUsageGroupTotals[]
+  llm_usage_by_group_all?: LLMUsageGroupTotals[]
+  token_savings_percent: number
+}
+
+export type SessionEntry = {
+  workspace: string
+  session_id: string
+  project_root?: string
+  cwd?: string
+  started_at?: string
+  ended_at?: string
+  observation_count: number
+  last_seen_at: string
+}
+
+export type ObservationEntry = {
+  id: string
+  workspace: string
+  session_id: string
+  occurred_at: string
+  kind: string
+  tool_name?: string
+  summary: string
+  created_at: string
+}
+
+export type ObservationPromotionResult = {
+  workspace: string
+  session_id: string
+  requested_type: MemoryType
+  observations: number
+  created_id: string
+  deduplicated: boolean
+  rejected: boolean
+  reject_reason?: string
+  storage_tier?: StorageTier
+  route_rule?: string
+  route_reason?: string
+  content_hash?: string
+  confidence?: number
+  promotion_chars?: number
+}
+
 export type SearchResponse = {
   results: MemoryEntry[]
   total_tokens: number
@@ -99,9 +186,44 @@ export function listProjects(): Promise<{ projects: ProjectListItem[] }> {
   return api('/api/v1/projects/list', { method: 'GET' })
 }
 
-export function getStats(workspace?: string): Promise<Record<string, unknown>> {
+export function getStats(workspace?: string): Promise<DashboardStats> {
   const qs = workspace ? `?workspace=${encodeURIComponent(workspace)}` : ''
   return api(`/api/v1/stats${qs}`, { method: 'GET' })
+}
+
+export function listSessions(input: { workspace: string; limit?: number }): Promise<{ workspace: string; limit: number; sessions: SessionEntry[] }> {
+  const qs = new URLSearchParams()
+  qs.set('workspace', input.workspace)
+  if (typeof input.limit === 'number') qs.set('limit', String(input.limit))
+  return api(`/api/v1/sessions?${qs.toString()}`, { method: 'GET' })
+}
+
+export function listObservations(input: {
+  workspace: string
+  session_id?: string
+  limit?: number
+  from?: string
+  to?: string
+}): Promise<{ workspace: string; session_id: string; limit: number; observations: ObservationEntry[] }> {
+  const qs = new URLSearchParams()
+  qs.set('workspace', input.workspace)
+  if (input.session_id) qs.set('session_id', input.session_id)
+  if (typeof input.limit === 'number') qs.set('limit', String(input.limit))
+  if (input.from) qs.set('from', input.from)
+  if (input.to) qs.set('to', input.to)
+  return api(`/api/v1/observations?${qs.toString()}`, { method: 'GET' })
+}
+
+export function promoteObservations(input: {
+  workspace: string
+  session_id: string
+  max_items?: number
+  type?: MemoryType
+}): Promise<ObservationPromotionResult> {
+  return api('/api/v1/observations/promote', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
 }
 
 export type RecentMemoriesResponse = {
