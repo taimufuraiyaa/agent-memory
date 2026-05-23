@@ -617,7 +617,7 @@ func genericRulesSection(workspace string) string {
 workspace: %s
 
 Always use `+"`"+`agent-memory`+"`"+` as the memory system:
-- Before doing any self-research: run memory `+"`"+`search`+"`"+`, then task `+"`"+`recall`+"`"+`.
+- Before doing any self-research: run memory `+"`"+`search`+"`"+` first. Run task `+"`"+`recall`+"`"+` only when the task is about continuing previous work, or when search returns no useful / weak / insufficient results.
 - After learning durable new knowledge: write it to memory immediately.
 - At the end of a session: store a short session summary via `+"`"+`session-end`+"`"+`.
 
@@ -729,14 +729,14 @@ func HippocampusHooks() []HookFile {
 			Name: "memory-recall-gate.json",
 			Content: `{
   "name": "Memory Recall Gate",
-  "version": "2.1.0",
-  "description": "Hippocampus recall: search and inject relevant memory context before every agent turn. The agent always starts with relevant history — it does not decide whether to look.",
+  "version": "2.2.0",
+  "description": "Hippocampus recall: use staged retrieval before every agent turn. Search first, then escalate to recall only when continuity or weak search results justify the extra context load.",
   "when": {
     "type": "promptSubmit"
   },
   "then": {
     "type": "askAgent",
-    "prompt": "Before responding to the user, do the following first:\n1. Extract 3-5 key terms from the user's message.\n2. Run: agent-memory search --query \"<key terms>\" --top-k 8\n3. Run: agent-memory recall --task \"<user message>\" --budget 800 --format raw --include-observations\n4. If results are found, use them as primary context before answering.\n5. If no results are found, proceed with general knowledge and note the gap.\nDo not skip this step even for simple questions."
+    "prompt": "Before responding to the user, do the following first:\n1. Extract 3-5 key terms from the user's message.\n2. Run: agent-memory search --query \"<key terms>\" --top-k 8\n3. Inspect the search result.\n4. Run: agent-memory recall --task \"<user message>\" --budget 800 --format raw --include-observations only if one of these is true:\n   - the user is asking to continue, resume, or recall previous work\n   - search returns no useful results\n   - search returns weak, ambiguous, or insufficiently actionable results\n   - the task needs an assembled task context, not just candidate memories\n5. Use the search hits or recall output as primary context before answering.\n6. If retrieval still finds nothing useful, proceed with general knowledge and note the gap.\nDo not skip memory lookup even for simple questions, but avoid unnecessary recall when search is already enough."
   }
 }
 `,
@@ -1052,7 +1052,8 @@ You MUST use the `+"`"+`agent-memory`+"`"+` CLI for memory retrieval and persist
 ### Before doing any self-research
 
 - Run a focused memory search for the key terms and entities you're about to research.
-- Then run a recall for the current task and use it as primary context before searching the web/docs/code.
+- Run a recall for the current task only when the task is about continuing previous work, or when search returns no useful / weak / insufficient results.
+- Directly escalate to recall for prompts like `+"`"+`continue`+"`"+`, `+"`"+`resume`+"`"+`, or `+"`"+`what were we doing`+"`"+`.
 
 Commands:
 - `+"`"+`agent-memory search --query "<keywords/entities>" --top-k 8`+"`"+`

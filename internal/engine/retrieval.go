@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/time/timebooks/agent-memory/internal/config"
 	"github.com/time/timebooks/agent-memory/internal/core"
 )
 
@@ -27,6 +28,7 @@ type RetrievalOptions struct {
 	TopK      int
 	Mode      RetrievalMode
 	Filters   RetrievalFilters
+	Policy    RetrievalPolicy
 }
 
 type RetrievalFilters struct {
@@ -42,26 +44,72 @@ type RetrievalFilters struct {
 
 // SignalBreakdown holds explainable component scores.
 type SignalBreakdown struct {
-	Semantic float64 `json:"semantic"`
-	Recency  float64 `json:"recency"`
-	Outcome  float64 `json:"outcome"`
-	Decay    float64 `json:"decay"`
-	TierBias float64 `json:"tier_bias"`
-	Total    float64 `json:"total"`
+	Semantic       float64 `json:"semantic"`
+	Recency        float64 `json:"recency"`
+	Outcome        float64 `json:"outcome"`
+	Decay          float64 `json:"decay"`
+	TierBias       float64 `json:"tier_bias"`
+	Salience       float64 `json:"salience"`
+	Suppression    float64 `json:"suppression"`
+	RelativeToBest float64 `json:"relative_to_best"`
+	Activation     float64 `json:"activation"`
+	Total          float64 `json:"total"`
+}
+
+type FamiliarityBand string
+
+const (
+	BandStrongRecall    FamiliarityBand = "strong_recall"
+	BandWeakFamiliarity FamiliarityBand = "weak_familiarity"
+	BandSuppressed      FamiliarityBand = "suppressed"
+)
+
+type ExclusionReason string
+
+const (
+	ReasonMinSemantic      ExclusionReason = "min_semantic_score"
+	ReasonMinTotal         ExclusionReason = "min_total_score"
+	ReasonRelativeCutoff   ExclusionReason = "relative_cutoff"
+	ReasonSuppression      ExclusionReason = "suppression"
+	ReasonSuppressionUntil ExclusionReason = "suppression_until"
+)
+
+type RetrievalPolicy struct {
+	MinSemanticScore    *float64 `json:"min_semantic_score,omitempty"`
+	MinTotalScore       *float64 `json:"min_total_score,omitempty"`
+	RelativeScoreCutoff *float64 `json:"relative_score_cutoff,omitempty"`
+	WeakSemanticScore   *float64 `json:"weak_semantic_score,omitempty"`
+	WeakTotalScore      *float64 `json:"weak_total_score,omitempty"`
+	WeakRelativeCutoff  *float64 `json:"weak_relative_cutoff,omitempty"`
+}
+
+type RetrievalPolicySnapshot struct {
+	MinSemanticScore    float64 `json:"min_semantic_score"`
+	MinTotalScore       float64 `json:"min_total_score"`
+	RelativeScoreCutoff float64 `json:"relative_score_cutoff"`
+	WeakSemanticScore   float64 `json:"weak_semantic_score"`
+	WeakTotalScore      float64 `json:"weak_total_score"`
+	WeakRelativeCutoff  float64 `json:"weak_relative_cutoff"`
 }
 
 // RetrievalHit extends SearchHit with explain details.
 type RetrievalHit struct {
-	Memory    core.MemoryEntry `json:"memory"`
-	Score     float64          `json:"score"`
-	Breakdown SignalBreakdown  `json:"breakdown"`
+	Memory           core.MemoryEntry  `json:"memory"`
+	Score            float64           `json:"score"`
+	Breakdown        SignalBreakdown   `json:"breakdown"`
+	Band             FamiliarityBand   `json:"band"`
+	ExclusionReasons []ExclusionReason `json:"exclusion_reasons,omitempty"`
 }
 
 // RetrievalResult is a ranked response with explainability.
 type RetrievalResult struct {
-	Mode    RetrievalMode  `json:"mode"`
-	Weights SignalWeights  `json:"weights"`
-	Hits    []RetrievalHit `json:"hits"`
+	Mode           RetrievalMode           `json:"mode"`
+	Weights        SignalWeights           `json:"weights"`
+	Policy         RetrievalPolicySnapshot `json:"policy"`
+	Hits           []RetrievalHit          `json:"hits"`
+	StrongHits     []RetrievalHit          `json:"strong_hits,omitempty"`
+	WeakHits       []RetrievalHit          `json:"weak_hits,omitempty"`
+	SuppressedHits []RetrievalHit          `json:"suppressed_hits,omitempty"`
 }
 
 // SignalWeights configures weighted rerank.
@@ -106,6 +154,7 @@ func (e *RetrievalEngine) Retrieve(ctx context.Context, opt RetrievalOptions) (*
 		return nil, err
 	}
 	weights := modeWeights(opt.Mode)
+	policy := policyForMode(opt.Mode, opt.Policy)
 	now := e.clock()
 
 	ranked := make([]RetrievalHit, 0, len(baseHits))
@@ -117,33 +166,77 @@ func (e *RetrievalEngine) Retrieve(ctx context.Context, opt RetrievalOptions) (*
 		outcome := outcomeScore(opt.Mode, h.Memory)
 		decay := decayScore(h.Memory)
 		tierBias := tierBiasScore(h.Memory.StorageTier)
-		total := weights.Semantic*h.Score + weights.Recency*recency + weights.Outcome*outcome + weights.Decay*decay + weights.TierBias*tierBias
+		salience := salienceSignal(now, h.Memory)
+		suppression := suppressionSignal(now, h.Memory)
+		activation := weights.Semantic*h.Score + weights.Recency*recency + weights.Outcome*outcome + weights.Decay*decay + weights.TierBias*tierBias + salience
+		total := activation - suppression
 		ranked = append(ranked, RetrievalHit{
 			Memory: h.Memory,
 			Score:  total,
 			Breakdown: SignalBreakdown{
-				Semantic: h.Score,
-				Recency:  recency,
-				Outcome:  outcome,
-				Decay:    decay,
-				TierBias: tierBias,
-				Total:    total,
+				Semantic:    h.Score,
+				Recency:     recency,
+				Outcome:     outcome,
+				Decay:       decay,
+				TierBias:    tierBias,
+				Salience:    salience,
+				Suppression: suppression,
+				Activation:  activation,
+				Total:       total,
 			},
 		})
 	}
 	sort.Slice(ranked, func(i, j int) bool { return ranked[i].Score > ranked[j].Score })
-	if len(ranked) > opt.TopK {
-		ranked = ranked[:opt.TopK]
+	bestScore := 0.0
+	if len(ranked) > 0 {
+		bestScore = ranked[0].Score
 	}
-	ids := make([]string, 0, len(ranked))
-	for _, h := range ranked {
+	strong := make([]RetrievalHit, 0, len(ranked))
+	weak := make([]RetrievalHit, 0, len(ranked))
+	suppressed := make([]RetrievalHit, 0, len(ranked))
+	for _, hit := range ranked {
+		hit.Breakdown.RelativeToBest = relativeToBest(bestScore, hit.Score)
+		band, reasons := classifyHit(opt.Mode, policy, now, hit)
+		hit.Band = band
+		hit.ExclusionReasons = reasons
+		switch band {
+		case BandStrongRecall:
+			strong = append(strong, hit)
+		case BandWeakFamiliarity:
+			weak = append(weak, hit)
+		default:
+			suppressed = append(suppressed, hit)
+		}
+	}
+	if len(strong) > opt.TopK {
+		strong = strong[:opt.TopK]
+	}
+	if len(weak) > opt.TopK {
+		weak = weak[:opt.TopK]
+	}
+	if len(suppressed) > opt.TopK {
+		suppressed = suppressed[:opt.TopK]
+	}
+	ids := make([]string, 0, len(strong)+len(weak))
+	for _, h := range strong {
+		ids = append(ids, h.Memory.ID)
+	}
+	for _, h := range weak {
 		ids = append(ids, h.Memory.ID)
 	}
 	_ = e.vector.MarkAccessed(ctx, ids)
+	visible := strong
+	if opt.Mode != ModeRecall {
+		visible = append(append([]RetrievalHit{}, strong...), weak...)
+	}
 	return &RetrievalResult{
-		Mode:    opt.Mode,
-		Weights: weights,
-		Hits:    ranked,
+		Mode:           opt.Mode,
+		Weights:        weights,
+		Policy:         policy,
+		Hits:           visible,
+		StrongHits:     strong,
+		WeakHits:       weak,
+		SuppressedHits: suppressed,
 	}, nil
 }
 
@@ -211,6 +304,145 @@ func modeWeights(mode RetrievalMode) SignalWeights {
 	default:
 		return SignalWeights{Semantic: 0.55, Recency: 0.20, Outcome: 0.10, Decay: 0.05, TierBias: 0.10}
 	}
+}
+
+func policyForMode(mode RetrievalMode, override RetrievalPolicy) RetrievalPolicySnapshot {
+	defaults := config.ResolveAdaptivePolicy(string(mode))
+	base := RetrievalPolicySnapshot{
+		MinSemanticScore:    defaults.MinSemanticScore,
+		MinTotalScore:       defaults.MinTotalScore,
+		RelativeScoreCutoff: defaults.RelativeScoreCutoff,
+		WeakSemanticScore:   defaults.WeakSemanticScore,
+		WeakTotalScore:      defaults.WeakTotalScore,
+		WeakRelativeCutoff:  defaults.WeakRelativeCutoff,
+	}
+	if override.MinSemanticScore != nil {
+		base.MinSemanticScore = *override.MinSemanticScore
+	}
+	if override.MinTotalScore != nil {
+		base.MinTotalScore = *override.MinTotalScore
+	}
+	if override.RelativeScoreCutoff != nil {
+		base.RelativeScoreCutoff = *override.RelativeScoreCutoff
+	}
+	if override.WeakSemanticScore != nil {
+		base.WeakSemanticScore = *override.WeakSemanticScore
+	}
+	if override.WeakTotalScore != nil {
+		base.WeakTotalScore = *override.WeakTotalScore
+	}
+	if override.WeakRelativeCutoff != nil {
+		base.WeakRelativeCutoff = *override.WeakRelativeCutoff
+	}
+	return base
+}
+
+func salienceSignal(now time.Time, m core.MemoryEntry) float64 {
+	tuning := core.DefaultAdaptiveSignalTuning()
+	signal := clampFloat(m.SalienceScore, 0, 1) * tuning.SalienceScoreFactor
+	if m.UsefulCount > 0 {
+		signal += math.Min(float64(m.UsefulCount), tuning.UsefulCountCap) * tuning.UsefulCountStep
+	}
+	if !m.LastHelpfulAt.IsZero() {
+		signal += recencyScore(now, m.LastHelpfulAt) * tuning.LastHelpfulRecencyWeight
+	}
+	return signal
+}
+
+func suppressionSignal(now time.Time, m core.MemoryEntry) float64 {
+	tuning := core.DefaultAdaptiveSignalTuning()
+	signal := clampFloat(m.SuppressionScore, 0, 1) * tuning.SuppressionScoreFactor
+	if m.RejectedCount > 0 {
+		signal += math.Min(float64(m.RejectedCount), tuning.RejectedCountCap) * tuning.RejectedCountStep
+	}
+	if m.HarmfulCount > 0 {
+		signal += math.Min(float64(m.HarmfulCount), tuning.HarmfulCountCap) * tuning.HarmfulCountStep
+	}
+	if !m.LastRejectedAt.IsZero() {
+		signal += recencyScore(now, m.LastRejectedAt) * tuning.LastRejectedRecencyWeight
+	}
+	if m.SuppressionUntil != nil && m.SuppressionUntil.After(now) {
+		signal += tuning.ActiveSuppressionBoost
+	}
+	if m.Pinned {
+		signal *= tuning.PinnedSuppressionFactor
+	}
+	return signal
+}
+
+func classifyHit(mode RetrievalMode, policy RetrievalPolicySnapshot, now time.Time, hit RetrievalHit) (FamiliarityBand, []ExclusionReason) {
+	tuning := core.DefaultAdaptiveSignalTuning()
+	reasons := make([]ExclusionReason, 0, 4)
+	relative := hit.Breakdown.RelativeToBest
+	if hit.Memory.SuppressionUntil != nil && hit.Memory.SuppressionUntil.After(now) && !hit.Memory.Pinned {
+		reasons = append(reasons, ReasonSuppressionUntil)
+	}
+	if hit.Breakdown.Suppression >= tuning.SuppressionBandThreshold && !hit.Memory.Pinned {
+		reasons = append(reasons, ReasonSuppression)
+	}
+	if hit.Breakdown.Semantic < policy.MinSemanticScore {
+		reasons = append(reasons, ReasonMinSemantic)
+	}
+	if hit.Score < policy.MinTotalScore {
+		reasons = append(reasons, ReasonMinTotal)
+	}
+	if relative < policy.RelativeScoreCutoff {
+		reasons = append(reasons, ReasonRelativeCutoff)
+	}
+	if len(reasons) == 0 {
+		return BandStrongRecall, nil
+	}
+
+	weakReasons := make([]ExclusionReason, 0, len(reasons))
+	if hit.Breakdown.Semantic < policy.WeakSemanticScore {
+		weakReasons = append(weakReasons, ReasonMinSemantic)
+	}
+	if hit.Score < policy.WeakTotalScore {
+		weakReasons = append(weakReasons, ReasonMinTotal)
+	}
+	if relative < policy.WeakRelativeCutoff {
+		weakReasons = append(weakReasons, ReasonRelativeCutoff)
+	}
+	if containsReason(reasons, ReasonSuppression) || containsReason(reasons, ReasonSuppressionUntil) {
+		return BandSuppressed, reasons
+	}
+	if len(weakReasons) == 0 {
+		if mode == ModeRecall {
+			return BandWeakFamiliarity, reasons
+		}
+		return BandWeakFamiliarity, reasons
+	}
+	return BandSuppressed, reasons
+}
+
+func relativeToBest(best, score float64) float64 {
+	if best <= 0 {
+		if score <= 0 {
+			return 0
+		}
+		return 1
+	}
+	r := score / best
+	return clampFloat(r, 0, 1)
+}
+
+func containsReason(items []ExclusionReason, target ExclusionReason) bool {
+	for _, item := range items {
+		if item == target {
+			return true
+		}
+	}
+	return false
+}
+
+func clampFloat(v, lo, hi float64) float64 {
+	if v < lo {
+		return lo
+	}
+	if v > hi {
+		return hi
+	}
+	return v
 }
 
 func tierBiasScore(tier core.StorageTier) float64 {

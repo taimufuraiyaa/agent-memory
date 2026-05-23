@@ -201,6 +201,9 @@ func TestManagerReinstallKeepsDBAndProjectName(t *testing.T) {
 	if !strings.Contains(string(hook), "agent-memory search") {
 		t.Fatalf("expected hook to be rewritten")
 	}
+	if !strings.Contains(string(hook), "only if one of these is true") {
+		t.Fatalf("expected staged recall guidance in hook")
+	}
 
 	rules, err := os.ReadFile(filepath.Join(cwd, ".aierules"))
 	if err != nil {
@@ -208,6 +211,163 @@ func TestManagerReinstallKeepsDBAndProjectName(t *testing.T) {
 	}
 	if !strings.Contains(string(rules), "workspace: proj-r") {
 		t.Fatalf("expected workspace in .aierules")
+	}
+}
+
+func TestManagerInitAndReinstallWriteStagedRetrievalPolicyAcrossFiles(t *testing.T) {
+	base := t.TempDir()
+	cwd := t.TempDir()
+	mgr, err := NewManager(base)
+	if err != nil {
+		t.Fatalf("new manager: %v", err)
+	}
+
+	out, err := mgr.Init(context.Background(), InitOptions{
+		CWD:         cwd,
+		ProjectName: "proj-stage",
+		IDEs:        []string{"all"},
+	})
+	if err != nil {
+		t.Fatalf("init: %v", err)
+	}
+	if len(out.RuleFiles) == 0 {
+		t.Fatalf("expected rule files to be written")
+	}
+
+	stagedChecks := map[string][]string{
+		filepath.Join(cwd, ".cursor", "rules", "agent-memory.mdc"): {
+			"Run a focused memory search for the key terms and entities you're about to research.",
+			"Run a recall for the current task only when",
+			"`continue`",
+		},
+		filepath.Join(cwd, ".agents", "rules", "agent-memory.md"): {
+			"run memory `search` first",
+			"Run task `recall` only when the task is about continuing previous work",
+		},
+		filepath.Join(cwd, ".aierules"): {
+			"run memory `search` first",
+			"Run task `recall` only when the task is about continuing previous work",
+		},
+		filepath.Join(cwd, ".cursorrules"): {
+			"run memory `search` first",
+			"Run task `recall` only when the task is about continuing previous work",
+		},
+		filepath.Join(cwd, ".windsurfrules"): {
+			"run memory `search` first",
+			"Run task `recall` only when the task is about continuing previous work",
+		},
+		filepath.Join(cwd, "CLAUDE.md"): {
+			"run memory `search` first",
+			"Run task `recall` only when the task is about continuing previous work",
+		},
+	}
+
+	for path, wants := range stagedChecks {
+		b, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read generated file %s: %v", path, err)
+		}
+		content := string(b)
+		for _, want := range wants {
+			if !strings.Contains(content, want) {
+				t.Fatalf("expected %q in %s, got %q", want, path, content)
+			}
+		}
+	}
+
+	if err := os.MkdirAll(filepath.Join(cwd, ".kiro", "hooks"), 0o755); err != nil {
+		t.Fatalf("mkdir .kiro/hooks: %v", err)
+	}
+
+	corrupted := map[string]string{
+		filepath.Join(cwd, ".aierules"):                                 "# AI Agent Rules\n",
+		filepath.Join(cwd, ".cursor", "rules", "agent-memory.mdc"):      "broken",
+		filepath.Join(cwd, ".kiro", "hooks", "memory-recall-gate.json"): `{"bad":true}`,
+	}
+	for path, content := range corrupted {
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatalf("corrupt %s: %v", path, err)
+		}
+	}
+
+	sub := filepath.Join(cwd, "pkg", "nested")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatalf("mkdir nested dir: %v", err)
+	}
+	reinstalled, err := mgr.Reinstall(context.Background(), ReinstallOptions{
+		CWD:   sub,
+		Force: true,
+	})
+	if err != nil {
+		t.Fatalf("reinstall: %v", err)
+	}
+	if reinstalled.Project != "proj-stage" {
+		t.Fatalf("unexpected reinstall project: %s", reinstalled.Project)
+	}
+
+	for path, wants := range map[string][]string{
+		filepath.Join(cwd, ".aierules"): {
+			"workspace: proj-stage",
+			"run memory `search` first",
+		},
+		filepath.Join(cwd, ".cursor", "rules", "agent-memory.mdc"): {
+			"workspace: proj-stage",
+			"Run a recall for the current task only when",
+		},
+		filepath.Join(cwd, ".kiro", "hooks", "memory-recall-gate.json"): {
+			"only if one of these is true",
+			"avoid unnecessary recall when search is already enough",
+		},
+	} {
+		b, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read repaired file %s: %v", path, err)
+		}
+		content := string(b)
+		for _, want := range wants {
+			if !strings.Contains(content, want) {
+				t.Fatalf("expected %q in repaired file %s, got %q", want, path, content)
+			}
+		}
+	}
+}
+
+func TestHippocampusRecallHookUsesStagedRetrieval(t *testing.T) {
+	hooks := HippocampusHooks()
+	found := false
+	for _, hook := range hooks {
+		if hook.Name != "memory-recall-gate.json" {
+			continue
+		}
+		found = true
+		for _, want := range []string{
+			"agent-memory search",
+			"only if one of these is true",
+			"continue, resume, or recall previous work",
+			"avoid unnecessary recall when search is already enough",
+		} {
+			if !strings.Contains(hook.Content, want) {
+				t.Fatalf("expected %q in recall hook, got %q", want, hook.Content)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("expected memory-recall-gate hook")
+	}
+}
+
+func TestCursorRuleContentUsesStagedRetrieval(t *testing.T) {
+	content := cursorRuleContent("ws-demo")
+	for _, want := range []string{
+		"Run a focused memory search for the key terms and entities you're about to research.",
+		"Run a recall for the current task only when",
+		"`continue`",
+		"`resume`",
+		"`what were we doing`",
+	} {
+		if !strings.Contains(content, want) {
+			t.Fatalf("expected %q in cursor rule content, got %q", want, content)
+		}
 	}
 }
 

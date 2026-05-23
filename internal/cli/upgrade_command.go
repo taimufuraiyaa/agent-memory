@@ -35,6 +35,7 @@ type upgradeResult struct {
 	EnvFile          string                           `json:"env_file,omitempty"`
 	EnvUpdated       bool                             `json:"env_updated,omitempty"`
 	EnvError         string                           `json:"env_error,omitempty"`
+	TuningCommand    string                           `json:"tuning_command,omitempty"`
 }
 
 func validateTextOrJSONFormat(s string) (string, error) {
@@ -423,6 +424,7 @@ Use --hooks-only to push hooks without touching the binary (useful for existing 
 				SourceDir:     srcDir,
 				TargetPath:    target,
 				InstalledFrom: installedFrom,
+				TuningCommand: "agent-memory tuning",
 			}
 
 			if dryRun {
@@ -496,6 +498,19 @@ Use --hooks-only to push hooks without touching the binary (useful for existing 
 			} else if envPath != "" {
 				res.EnvFile = envPath
 			}
+			if envPath := filepath.Join(defaultAgentMemoryDataDir(), "agent-memory.env"); strings.TrimSpace(envPath) != "" {
+				if updated, err := ensureAdaptiveTuningGuidance(envPath); err != nil {
+					if res.EnvFile == "" {
+						res.EnvFile = envPath
+					}
+					res.EnvError = err.Error()
+				} else if updated {
+					res.EnvFile = envPath
+					res.EnvUpdated = true
+				} else if res.EnvFile == "" && fileExists(envPath) {
+					res.EnvFile = envPath
+				}
+			}
 
 			if f == "json" {
 				return writeSuccessEnvelope(cmd.OutOrStdout(), "upgrade", res)
@@ -514,6 +529,7 @@ Use --hooks-only to push hooks without touching the binary (useful for existing 
 			} else if strings.TrimSpace(res.EnvError) != "" {
 				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  env update skipped: %s\n", res.EnvError)
 			}
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  inspect tuning: %s\n", res.TuningCommand)
 			return nil
 		},
 	}

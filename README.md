@@ -150,6 +150,11 @@ agent-memory recall --task "debug order event regression" --budget 400 --format 
 agent-memory session-end --transcript "we found the root cause..." --format json
 ```
 
+Recommended retrieval policy:
+- Start with `agent-memory search` for focused discovery.
+- Run `agent-memory recall` only when you are continuing previous work, or when search returns no useful / weak / insufficient results.
+- For prompts like `continue`, `resume`, or `what were we doing`, escalate directly to `recall`.
+
 ### Dashboard (optional)
 
 ```bash

@@ -117,6 +117,38 @@ func TestServerWriteSearchRecall(t *testing.T) {
 	if _, ok := previewFull["memories_included_full"]; !ok {
 		t.Fatalf("expected recall preview full included memories when include_memories is true")
 	}
+	searchBandResp := postJSON(t, ts.URL+"/api/v1/memories/search", map[string]any{
+		"query":     "order event",
+		"workspace": "ws",
+		"top_k":     2,
+		"mode":      "search",
+		"explain":   true,
+		"filters": map[string]any{
+			"min_semantic_score": 0.01,
+			"min_total_score":    0.01,
+			"relative_cutoff":    0.01,
+		},
+	})
+	if _, ok := searchBandResp["weak_results"]; !ok {
+		t.Fatalf("expected weak_results in search response")
+	}
+	if _, ok := searchBandResp["retrieval_policy"]; !ok {
+		t.Fatalf("expected retrieval_policy in search response")
+	}
+	recentResults = getJSON(t, ts.URL+"/api/v1/memories/recent?workspace=ws&limit=1")["results"].([]any)
+	firstRecent, _ := recentResults[0].(map[string]any)
+	memoryID, _ := firstRecent["id"].(string)
+	feedbackResp := postJSON(t, ts.URL+"/api/v1/memories/feedback", map[string]any{
+		"workspace":   "ws",
+		"memory_id":   memoryID,
+		"outcome":     "helpful",
+		"validator":   "ai-agent",
+		"occurred_at": "2026-05-21T15:00:00Z",
+	})
+	updatedMemory, _ := feedbackResp["updated_memory"].(map[string]any)
+	if useful, _ := updatedMemory["useful_count"].(float64); useful < 1 {
+		t.Fatalf("expected helpful feedback to increment useful_count, got %+v", updatedMemory)
+	}
 	sessionResp := postJSON(t, ts.URL+"/api/v1/memories/session-end", map[string]any{"transcript": "we should always run migrations\nresult was success"})
 	if _, ok := sessionResp["total_extracted"]; !ok {
 		t.Fatalf("expected session-end extraction response")
@@ -146,6 +178,33 @@ func TestServerWriteSearchRecall(t *testing.T) {
 	}
 	if _, ok := stats["last_activity"]; !ok {
 		t.Fatalf("expected last activity in stats")
+	}
+	if _, ok := stats["retrieve_count_total"]; !ok {
+		t.Fatalf("expected retrieve_count_total in stats")
+	}
+	if _, ok := stats["retrieved_memory_count"]; !ok {
+		t.Fatalf("expected retrieved_memory_count in stats")
+	}
+	if _, ok := stats["never_reached_memory_count"]; !ok {
+		t.Fatalf("expected never_reached_memory_count in stats")
+	}
+	if _, ok := stats["retrieval_coverage_percent"]; !ok {
+		t.Fatalf("expected retrieval_coverage_percent in stats")
+	}
+	if _, ok := stats["never_reached_percent"]; !ok {
+		t.Fatalf("expected never_reached_percent in stats")
+	}
+	if _, ok := stats["low_reach_percentile"]; !ok {
+		t.Fatalf("expected low_reach_percentile in stats")
+	}
+	if _, ok := stats["low_reach_threshold"]; !ok {
+		t.Fatalf("expected low_reach_threshold in stats")
+	}
+	if _, ok := stats["low_reach_memory_count"]; !ok {
+		t.Fatalf("expected low_reach_memory_count in stats")
+	}
+	if _, ok := stats["top_retrieved_memories"]; !ok {
+		t.Fatalf("expected top_retrieved_memories in stats")
 	}
 	if _, ok := stats["token_metrics"]; !ok {
 		t.Fatalf("expected token metrics payload in stats")
@@ -249,6 +308,12 @@ func TestServerDisabledNoops(t *testing.T) {
 	stats := getJSON(t, ts.URL+"/api/v1/stats")
 	if mc, ok := stats["memory_count"].(float64); !ok || int(mc) != 0 {
 		t.Fatalf("expected memory_count=0 when disabled, got %+v", stats)
+	}
+	if rc, ok := stats["retrieve_count_total"].(float64); !ok || int(rc) != 0 {
+		t.Fatalf("expected retrieve_count_total=0 when disabled, got %+v", stats)
+	}
+	if lr, ok := stats["low_reach_memory_count"].(float64); !ok || int(lr) != 0 {
+		t.Fatalf("expected low_reach_memory_count=0 when disabled, got %+v", stats)
 	}
 }
 

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"net/http"
 	"os"
@@ -13,6 +14,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"syscall"
@@ -138,6 +140,9 @@ func newSearchCommand() *cobra.Command {
 	var outcomeResult string
 	var minConfidence float64
 	var minDecayScore float64
+	var minSemanticScore float64
+	var minTotalScore float64
+	var relativeCutoff float64
 	var entities []string
 	var from, to string
 	var tokenBudget int
@@ -246,6 +251,15 @@ func newSearchCommand() *cobra.Command {
 				if minD != nil {
 					filters["min_decay_score"] = *minD
 				}
+				if minSemanticScore > 0 {
+					filters["min_semantic_score"] = minSemanticScore
+				}
+				if minTotalScore > 0 {
+					filters["min_total_score"] = minTotalScore
+				}
+				if relativeCutoff > 0 {
+					filters["relative_cutoff"] = relativeCutoff
+				}
 				if len(entities) > 0 {
 					filters["entities"] = entities
 				}
@@ -293,6 +307,11 @@ func newSearchCommand() *cobra.Command {
 					DateFrom:      dateFrom,
 					DateTo:        dateTo,
 				},
+				Policy: engine.RetrievalPolicy{
+					MinSemanticScore:    floatPtrIfPositive(minSemanticScore),
+					MinTotalScore:       floatPtrIfPositive(minTotalScore),
+					RelativeScoreCutoff: floatPtrIfPositive(relativeCutoff),
+				},
 			})
 			if err != nil {
 				return err
@@ -311,6 +330,9 @@ func newSearchCommand() *cobra.Command {
 	cmd.Flags().StringVar(&outcomeResult, "outcome-result", "", "Filter by outcome result: success|failure|partial")
 	cmd.Flags().Float64Var(&minConfidence, "min-confidence", 0, "Filter by minimum confidence (0..1)")
 	cmd.Flags().Float64Var(&minDecayScore, "min-decay-score", 0, "Filter by minimum decay score (0..1)")
+	cmd.Flags().Float64Var(&minSemanticScore, "min-semantic-score", 0, "Retrieval floor for semantic similarity (0..1)")
+	cmd.Flags().Float64Var(&minTotalScore, "min-total-score", 0, "Retrieval floor for total score (0..1)")
+	cmd.Flags().Float64Var(&relativeCutoff, "relative-cutoff", 0, "Relative cutoff against the strongest hit (0..1)")
 	cmd.Flags().StringSliceVar(&entities, "entity", nil, "Filter by entity (repeatable)")
 	cmd.Flags().StringVar(&from, "from", "", "Filter by updated_at from (RFC3339 or YYYY-MM-DD)")
 	cmd.Flags().StringVar(&to, "to", "", "Filter by updated_at to (RFC3339 or YYYY-MM-DD)")
@@ -446,6 +468,104 @@ func newRecallCommand() *cobra.Command {
 	return cmd
 }
 
+func newFeedbackCommand() *cobra.Command {
+	var flags commonFlags
+	var memoryID, outcome, validator, reasonCategory, occurredAt, reconsolidationAction, successorMemoryID string
+	cmd := &cobra.Command{
+		Use:   "feedback",
+		Short: "Record retrieval feedback for a memory",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+			cfg, err := resolveRuntime(flags)
+			if err != nil {
+				return err
+			}
+			if err := validateOutputFormat(flags.format, false); err != nil {
+				return err
+			}
+			if strings.TrimSpace(memoryID) == "" {
+				return errors.New("memory-id is required")
+			}
+			feedback := core.RetrievalFeedback(strings.ToLower(strings.TrimSpace(outcome)))
+			switch feedback {
+			case core.FeedbackHelpful, core.FeedbackIgnored, core.FeedbackRejected, core.FeedbackHarmful:
+			default:
+				return errors.New("outcome must be one of: helpful|ignored|rejected|harmful")
+			}
+			recon := core.ReconsolidationAction(strings.ToLower(strings.TrimSpace(reconsolidationAction)))
+			switch recon {
+			case "", core.ReconsolidateConfirmed, core.ReconsolidateClarified, core.ReconsolidateContradicted, core.ReconsolidateSuperseded:
+			default:
+				return errors.New("reconsolidation-action must be one of: confirmed|clarified|contradicted|superseded")
+			}
+			body := map[string]any{
+				"workspace":       cfg.workspace,
+				"memory_id":       strings.TrimSpace(memoryID),
+				"outcome":         feedback,
+				"validator":       strings.TrimSpace(validator),
+				"reason_category": strings.TrimSpace(reasonCategory),
+			}
+			if strings.TrimSpace(occurredAt) != "" {
+				body["occurred_at"] = strings.TrimSpace(occurredAt)
+			}
+			if recon != "" {
+				body["reconsolidation_action"] = recon
+			}
+			if strings.TrimSpace(successorMemoryID) != "" {
+				body["successor_memory_id"] = strings.TrimSpace(successorMemoryID)
+			}
+			if cfg.apiURL != "" {
+				var out any
+				if err := postAPI(ctx, cfg.apiURL, "/api/v1/memories/feedback", body, &out); err != nil {
+					return err
+				}
+				return writeSuccessEnvelope(cmd.OutOrStdout(), "feedback", out)
+			}
+			store, _, err := openDeps(ctx, cfg)
+			if err != nil {
+				return err
+			}
+			defer func() { _ = store.Close() }()
+			at := time.Now().UTC()
+			if strings.TrimSpace(occurredAt) != "" {
+				parsed, ok := parseTimeFlexibleCLI(occurredAt)
+				if !ok {
+					return errors.New("invalid occurred-at")
+				}
+				at = parsed
+			}
+			updated, err := store.ApplyRetrievalFeedback(ctx, strings.TrimSpace(memoryID), feedback, at)
+			if err != nil {
+				return err
+			}
+			if recon != "" {
+				updated, err = store.ApplyReconsolidation(ctx, strings.TrimSpace(memoryID), recon, strings.TrimSpace(successorMemoryID), at)
+				if err != nil {
+					return err
+				}
+			}
+			return writeSuccessEnvelope(cmd.OutOrStdout(), "feedback", map[string]any{
+				"workspace":              cfg.workspace,
+				"memory_id":              strings.TrimSpace(memoryID),
+				"outcome":                feedback,
+				"validator":              strings.TrimSpace(validator),
+				"reason_category":        strings.TrimSpace(reasonCategory),
+				"reconsolidation_action": recon,
+				"updated_memory":         updated,
+			})
+		},
+	}
+	addCommonFlags(cmd, &flags)
+	cmd.Flags().StringVar(&memoryID, "memory-id", "", "Memory ID to update")
+	cmd.Flags().StringVar(&outcome, "outcome", "", "Feedback outcome: helpful|ignored|rejected|harmful")
+	cmd.Flags().StringVar(&validator, "validator", "", "Validator name (for example: ai-agent)")
+	cmd.Flags().StringVar(&reasonCategory, "reason-category", "", "Optional reason category")
+	cmd.Flags().StringVar(&occurredAt, "occurred-at", "", "Optional feedback timestamp (RFC3339 or YYYY-MM-DD)")
+	cmd.Flags().StringVar(&reconsolidationAction, "reconsolidation-action", "", "Optional reconsolidation: confirmed|clarified|contradicted|superseded")
+	cmd.Flags().StringVar(&successorMemoryID, "successor-memory-id", "", "Optional successor memory ID for contradicted/superseded flows")
+	return cmd
+}
+
 func parseTimeFlexibleCLI(s string) (time.Time, bool) {
 	v := strings.TrimSpace(s)
 	if v == "" {
@@ -461,6 +581,13 @@ func parseTimeFlexibleCLI(s string) (time.Time, bool) {
 		return t, true
 	}
 	return time.Time{}, false
+}
+
+func floatPtrIfPositive(v float64) *float64 {
+	if v <= 0 {
+		return nil
+	}
+	return &v
 }
 
 func buildRecentObservationBlockCLI(ctx context.Context, store *sqlite.Store, workspace string, preferredSessionID string, limit int) (string, string, int) {
@@ -1314,6 +1441,8 @@ func newStatsCommand() *cobra.Command {
 			tierCounts := map[string]int{}
 			diagramCount := 0
 			pinnedCount := 0
+			totalRetrieveCount := 0
+			retrievedMemoryCount := 0
 			var lastUpdatedAt time.Time
 			var lastAccessedAt time.Time
 			for _, m := range memories {
@@ -1324,6 +1453,10 @@ func newStatsCommand() *cobra.Command {
 				}
 				if m.Pinned {
 					pinnedCount++
+				}
+				totalRetrieveCount += m.AccessCount
+				if m.AccessCount > 0 {
+					retrievedMemoryCount++
 				}
 				if m.UpdatedAt.After(lastUpdatedAt) {
 					lastUpdatedAt = m.UpdatedAt
@@ -1374,6 +1507,15 @@ func newStatsCommand() *cobra.Command {
 			if !lastActivity.IsZero() {
 				lastActivityStr = lastActivity.UTC().Format(time.RFC3339Nano)
 			}
+			neverReachedMemoryCount := len(memories) - retrievedMemoryCount
+			retrievalCoveragePercent := 0.0
+			neverReachedPercent := 0.0
+			if len(memories) > 0 {
+				retrievalCoveragePercent = (float64(retrievedMemoryCount) / float64(len(memories))) * 100
+				neverReachedPercent = (float64(neverReachedMemoryCount) / float64(len(memories))) * 100
+			}
+			lowReachPercentile := 25
+			lowReachThreshold, lowReachMemoryCount := computeLowReachStats(memories, lowReachPercentile)
 			return writeSuccessEnvelope(cmd.OutOrStdout(), "stats", map[string]any{
 				"workspace":                     cfg.workspace,
 				"memory_count":                  len(memories),
@@ -1381,6 +1523,15 @@ func newStatsCommand() *cobra.Command {
 				"storage_tier_counts":           tierCounts,
 				"diagram_count":                 diagramCount,
 				"pinned_count":                  pinnedCount,
+				"retrieve_count_total":          totalRetrieveCount,
+				"retrieved_memory_count":        retrievedMemoryCount,
+				"never_reached_memory_count":    neverReachedMemoryCount,
+				"retrieval_coverage_percent":    retrievalCoveragePercent,
+				"never_reached_percent":         neverReachedPercent,
+				"low_reach_percentile":          lowReachPercentile,
+				"low_reach_threshold":           lowReachThreshold,
+				"low_reach_memory_count":        lowReachMemoryCount,
+				"top_retrieved_memories":        buildTopRetrievedMemories(memories, 5),
 				"last_memory_updated_at":        lastUpdated,
 				"last_memory_accessed_at":       lastAccessed,
 				"last_activity":                 lastActivityStr,
@@ -1430,6 +1581,99 @@ func tokenTotalsForOperation(items []sqlite.TokenMetricOperationTotals, operatio
 		}
 	}
 	return sqlite.TokenMetricTotals{}
+}
+
+type topRetrievedMemory struct {
+	ID             string `json:"id"`
+	Type           string `json:"type"`
+	StorageTier    string `json:"storage_tier"`
+	AccessCount    int    `json:"access_count"`
+	LastAccessedAt string `json:"last_accessed_at,omitempty"`
+	Pinned         bool   `json:"pinned"`
+	Preview        string `json:"preview"`
+}
+
+func buildTopRetrievedMemories(memories []core.MemoryEntry, limit int) []topRetrievedMemory {
+	if limit <= 0 {
+		limit = 5
+	}
+	items := make([]core.MemoryEntry, 0, len(memories))
+	for _, m := range memories {
+		if m.AccessCount <= 0 {
+			continue
+		}
+		items = append(items, m)
+	}
+	sort.SliceStable(items, func(i, j int) bool {
+		if items[i].AccessCount != items[j].AccessCount {
+			return items[i].AccessCount > items[j].AccessCount
+		}
+		if !items[i].LastAccessedAt.Equal(items[j].LastAccessedAt) {
+			return items[i].LastAccessedAt.After(items[j].LastAccessedAt)
+		}
+		if !items[i].UpdatedAt.Equal(items[j].UpdatedAt) {
+			return items[i].UpdatedAt.After(items[j].UpdatedAt)
+		}
+		return items[i].ID < items[j].ID
+	})
+	if len(items) > limit {
+		items = items[:limit]
+	}
+	out := make([]topRetrievedMemory, 0, len(items))
+	for _, m := range items {
+		lastAccessed := ""
+		if !m.LastAccessedAt.IsZero() {
+			lastAccessed = m.LastAccessedAt.UTC().Format(time.RFC3339Nano)
+		}
+		out = append(out, topRetrievedMemory{
+			ID:             m.ID,
+			Type:           string(m.Type),
+			StorageTier:    string(m.StorageTier),
+			AccessCount:    m.AccessCount,
+			LastAccessedAt: lastAccessed,
+			Pinned:         m.Pinned,
+			Preview:        memoryPreview(m.Content, 96),
+		})
+	}
+	return out
+}
+
+func computeLowReachStats(memories []core.MemoryEntry, percentile int) (threshold int, count int) {
+	if percentile <= 0 {
+		percentile = 25
+	}
+	reached := make([]int, 0, len(memories))
+	for _, m := range memories {
+		if m.AccessCount > 0 {
+			reached = append(reached, m.AccessCount)
+		}
+	}
+	if len(reached) == 0 {
+		return 0, 0
+	}
+	sort.Ints(reached)
+	rank := int(math.Ceil((float64(percentile) / 100) * float64(len(reached))))
+	if rank < 1 {
+		rank = 1
+	}
+	if rank > len(reached) {
+		rank = len(reached)
+	}
+	threshold = reached[rank-1]
+	for _, hits := range reached {
+		if hits <= threshold {
+			count++
+		}
+	}
+	return threshold, count
+}
+
+func memoryPreview(content string, limit int) string {
+	clean := strings.Join(strings.Fields(strings.TrimSpace(content)), " ")
+	if clean == "" {
+		return "-"
+	}
+	return engine.ClipString(clean, limit)
 }
 
 func newConsolidateCommand() *cobra.Command {

@@ -4,6 +4,8 @@ import (
 	"errors"
 	"os"
 	"strings"
+
+	amconfig "github.com/time/timebooks/agent-memory/internal/config"
 )
 
 func upsertEnvFile(path string, vars map[string]string) (bool, error) {
@@ -58,6 +60,25 @@ func upsertEnvFile(path string, vars map[string]string) (bool, error) {
 		return false, nil
 	}
 	if err := os.WriteFile(path, []byte(out), 0o644); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func ensureAdaptiveTuningGuidance(path string) (bool, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return false, nil
+		}
+		return false, err
+	}
+	existing := strings.ReplaceAll(string(b), "\r\n", "\n")
+	updated := amconfig.EnsureAdaptiveTuningEnvGuidance(existing)
+	if updated == existing {
+		return false, nil
+	}
+	if err := os.WriteFile(path, []byte(updated), 0o644); err != nil {
 		return false, err
 	}
 	return true, nil
