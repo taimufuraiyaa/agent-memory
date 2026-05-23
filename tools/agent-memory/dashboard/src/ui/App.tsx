@@ -18,6 +18,7 @@ import {
   type OutcomeResult,
   type ProjectListItem,
   type RecallPreviewResponse,
+  type SearchResponse,
   type SessionEntry,
   type StorageTier,
   type TokenMetricGroupTotals,
@@ -38,6 +39,7 @@ type ChatMessage = {
   createdAt: number
   payload?: {
     results?: MemoryEntry[]
+    search?: SearchResponse
     recall?: RecallPreviewResponse
   }
   pending?: boolean
@@ -238,6 +240,9 @@ export function App() {
   const [outcome, setOutcome] = useState<OutcomeResult | ''>('')
   const [minConfidence, setMinConfidence] = useState<string>('')
   const [minDecay, setMinDecay] = useState<string>('')
+  const [minSemantic, setMinSemantic] = useState<string>('')
+  const [minTotal, setMinTotal] = useState<string>('')
+  const [relativeCutoff, setRelativeCutoff] = useState<string>('')
   const [entities, setEntities] = useState<string>('')
   const [fromDate, setFromDate] = useState<string>('')
   const [toDate, setToDate] = useState<string>('')
@@ -436,11 +441,14 @@ export function App() {
       outcome_result: outcome || undefined,
       min_confidence: minConfidence.trim() ? Number(minConfidence) : undefined,
       min_decay_score: minDecay.trim() ? Number(minDecay) : undefined,
+      min_semantic_score: minSemantic.trim() ? Number(minSemantic) : undefined,
+      min_total_score: minTotal.trim() ? Number(minTotal) : undefined,
+      relative_cutoff: relativeCutoff.trim() ? Number(relativeCutoff) : undefined,
       entities: parsedEntities.length ? parsedEntities : undefined,
       date_from: fromDate || undefined,
       date_to: toDate || undefined,
     }
-  }, [entities, fromDate, minConfidence, minDecay, outcome, tiers, toDate, types])
+  }, [entities, fromDate, minConfidence, minDecay, minSemantic, minTotal, outcome, relativeCutoff, tiers, toDate, types])
 
   function openSearch() {
     setMode('search')
@@ -1010,6 +1018,21 @@ export function App() {
                           </div>
                         </div>
 
+                        <div className="row row3">
+                          <div>
+                            <label className="label">Min semantic</label>
+                            <input className="input" inputMode="decimal" value={minSemantic} onChange={(e) => setMinSemantic(e.target.value)} placeholder="0.00 - 1.00" />
+                          </div>
+                          <div>
+                            <label className="label">Min total</label>
+                            <input className="input" inputMode="decimal" value={minTotal} onChange={(e) => setMinTotal(e.target.value)} placeholder="0.00 - 1.00" />
+                          </div>
+                          <div>
+                            <label className="label">Relative cutoff</label>
+                            <input className="input" inputMode="decimal" value={relativeCutoff} onChange={(e) => setRelativeCutoff(e.target.value)} placeholder="0.00 - 1.00" />
+                          </div>
+                        </div>
+
                         <label className="label">Entities (comma-separated)</label>
                         <input className="input" value={entities} onChange={(e) => setEntities(e.target.value)} placeholder="orders, kafka, schema" />
 
@@ -1094,6 +1117,7 @@ export function App() {
                 <div className="detailPills">
                   <span className="memPill">{selectedMemory.type}</span>
                   <span className="memPill">{selectedMemory.storage_tier}</span>
+                  {selectedMemory.band ? <span className="memPill memPillAccent">{selectedMemory.band}</span> : null}
                 </div>
 
                 <div className="detailSection">
@@ -1127,6 +1151,30 @@ export function App() {
                       <div className="memMeta">
                         <div className="memMetaLabel">Score</div>
                         <div className="memMetaValue">{selectedMemory.score.toFixed(3)}</div>
+                      </div>
+                    ) : null}
+                    {typeof selectedMemory.salience_score === 'number' ? (
+                      <div className="memMeta">
+                        <div className="memMetaLabel">Salience</div>
+                        <div className="memMetaValue">{selectedMemory.salience_score.toFixed(2)}</div>
+                      </div>
+                    ) : null}
+                    {typeof selectedMemory.suppression_score === 'number' ? (
+                      <div className="memMeta">
+                        <div className="memMetaLabel">Suppression</div>
+                        <div className="memMetaValue">{selectedMemory.suppression_score.toFixed(2)}</div>
+                      </div>
+                    ) : null}
+                    {typeof selectedMemory.access_count === 'number' ? (
+                      <div className="memMeta">
+                        <div className="memMetaLabel">Retrieved</div>
+                        <div className="memMetaValue">{formatNumber(selectedMemory.access_count)} times</div>
+                      </div>
+                    ) : null}
+                    {selectedMemory.exclusion_reasons?.length ? (
+                      <div className="memMeta">
+                        <div className="memMetaLabel">Excluded By</div>
+                        <div className="memMetaValue">{pillList(selectedMemory.exclusion_reasons)}</div>
                       </div>
                     ) : null}
                     <div className="memMeta">
@@ -1288,6 +1336,15 @@ function OverviewPanel({
   const llmGroups = stats?.llm_usage_by_group_all ?? []
   const recallTokenTotals = stats?.recall_token_metrics ?? getOperationTotals(stats?.token_metrics_by_operation, 'recall') ?? zeroTokenTotals()
   const recallTokenSavingsPercent = stats?.recall_token_savings_percent ?? stats?.token_savings_percent ?? 0
+  const totalMemories = stats?.memory_count ?? project?.memory_count ?? 0
+  const retrievedMemoryCount = stats?.retrieved_memory_count ?? 0
+  const neverReachedMemoryCount = stats?.never_reached_memory_count ?? Math.max(0, totalMemories - retrievedMemoryCount)
+  const retrieveCountTotal = stats?.retrieve_count_total ?? 0
+  const retrievalCoveragePercent = stats?.retrieval_coverage_percent ?? (totalMemories > 0 ? (retrievedMemoryCount / totalMemories) * 100 : 0)
+  const lowReachPercentile = stats?.low_reach_percentile ?? 25
+  const lowReachThreshold = stats?.low_reach_threshold ?? 0
+  const lowReachMemoryCount = stats?.low_reach_memory_count ?? 0
+  const topRetrievedMemories = stats?.top_retrieved_memories ?? []
   const experimentsRef = useRef<HTMLElement>(null)
 
   useEffect(() => {
@@ -1364,10 +1421,13 @@ function OverviewPanel({
       </section>
 
       <div className="statsGrid">
-        <MetricCard title="Memories" value={formatNumber(stats?.memory_count ?? project?.memory_count ?? 0)} detail="Current workspace volume" />
+        <MetricCard title="Memories" value={formatNumber(totalMemories)} detail="Current workspace volume" />
         <MetricCard title="Storage" value={formatBytes(stats?.db_size_bytes ?? project?.size_bytes)} detail="SQLite footprint on disk" />
         <MetricCard title="Recall Savings" value={formatPercent(recallTokenSavingsPercent)} detail={`${formatNumber(recallTokenTotals.records)} recall operations`} />
         <MetricCard title="LLM Usage" value={formatNumber(stats?.llm_usage_totals.total_tokens)} detail={`${formatNumber(stats?.llm_usage_totals.records)} provider reports`} />
+        <MetricCard title="Retrieved" value={formatNumber(retrievedMemoryCount)} detail={`${formatPercent(retrievalCoveragePercent)} ever surfaced`} />
+        <MetricCard title="Never Reached" value={formatNumber(neverReachedMemoryCount)} detail={`${formatNumber(retrieveCountTotal)} total retrieval events`} />
+        <MetricCard title="Low Reach" value={formatNumber(lowReachMemoryCount)} detail={`Bottom ${formatNumber(lowReachPercentile)}% of reached memories`} />
         <MetricCard title="Pinned" value={formatNumber(stats?.pinned_count)} detail="Pinned memories retained" />
         <MetricCard title="Diagrams" value={formatNumber(stats?.diagram_count)} detail="Memories with visual payloads" />
       </div>
@@ -1380,7 +1440,40 @@ function OverviewPanel({
         <BreakdownCard title="Storage Tiers" subtitle={`${formatNumber(sumCounts(stats?.storage_tier_counts))} classified`}>
           <PieChartBreakdown entries={tierEntries} emptyLabel="No tier distribution yet." />
         </BreakdownCard>
+
+        <BreakdownCard title="Retrieval Reach" subtitle={`${formatPercent(retrievalCoveragePercent)} coverage`}>
+          <div className="diagnosticsList">
+            <DiagnosticRow label="Retrieved Memories" value={formatNumber(retrievedMemoryCount)} />
+            <DiagnosticRow label="Never Reached" value={formatNumber(neverReachedMemoryCount)} />
+            <DiagnosticRow label={`Low Reach (P${formatNumber(lowReachPercentile)})`} value={formatNumber(lowReachMemoryCount)} />
+            <DiagnosticRow label="Total Retrieval Events" value={formatNumber(retrieveCountTotal)} />
+            <DiagnosticRow label="Low-Reach Threshold" value={`<= ${formatNumber(lowReachThreshold)} hits`} />
+            <DiagnosticRow label="Last Accessed" value={formatTS(stats?.last_memory_accessed_at) || 'n/a'} />
+          </div>
+        </BreakdownCard>
       </div>
+
+      <section className="comparisonSection">
+        <div className="comparisonHeader">
+          <div>
+            <div className="breakdownTitle">Most Reached Memories</div>
+            <div className="breakdownSubtitle">Top memories by retrieval count. Use this to spot hot memories and dead zones.</div>
+          </div>
+        </div>
+        {topRetrievedMemories.length === 0 ? (
+          <div className="emptyInline">No retrieval activity yet. Once memories are surfaced by search or recall, they will appear here.</div>
+        ) : (
+          <div className="diagnosticsList">
+            {topRetrievedMemories.map((memory) => (
+              <DiagnosticRow
+                key={memory.id}
+                label={`${memory.preview} (${toTitle(memory.type)} / ${toTitle(memory.storage_tier)}${memory.pinned ? ' / pinned' : ''})`}
+                value={`${formatNumber(memory.access_count)} hits`}
+              />
+            ))}
+          </div>
+        )}
+      </section>
 
       <section ref={experimentsRef}>
         <ComparisonSection title="Recall Savings Comparison" description="Recall-only token savings grouped by run label and memory enabled state." emptyLabel="No grouped recall metrics yet. Run labeled ON/OFF recall experiments to populate this view.">
@@ -1417,6 +1510,15 @@ function DiagnosticsPanel({
   const recallTokenTotals = stats?.recall_token_metrics ?? getOperationTotals(stats?.token_metrics_by_operation, 'recall') ?? zeroTokenTotals()
   const recallTokenSavingsPercent = stats?.recall_token_savings_percent ?? stats?.token_savings_percent ?? 0
   const searchTokenTotals = getOperationTotals(stats?.token_metrics_by_operation, 'search') ?? zeroTokenTotals()
+  const totalMemories = stats?.memory_count ?? project?.memory_count ?? 0
+  const retrievedMemoryCount = stats?.retrieved_memory_count ?? 0
+  const neverReachedMemoryCount = stats?.never_reached_memory_count ?? Math.max(0, totalMemories - retrievedMemoryCount)
+  const retrieveCountTotal = stats?.retrieve_count_total ?? 0
+  const retrievalCoveragePercent = stats?.retrieval_coverage_percent ?? (totalMemories > 0 ? (retrievedMemoryCount / totalMemories) * 100 : 0)
+  const lowReachPercentile = stats?.low_reach_percentile ?? 25
+  const lowReachThreshold = stats?.low_reach_threshold ?? 0
+  const lowReachMemoryCount = stats?.low_reach_memory_count ?? 0
+  const topRetrievedMemories = stats?.top_retrieved_memories ?? []
   return (
     <section className="surfaceStack">
       <div className="diagnosticsHero">
@@ -1439,7 +1541,10 @@ function DiagnosticsPanel({
         <MetricCard title="DB Size" value={formatBytes(stats?.db_size_bytes ?? project?.size_bytes)} detail="Local store footprint" />
         <MetricCard title="Last Activity" value={formatTS(stats?.last_activity || project?.last_activity) || 'n/a'} detail="Most recent update or access" />
         <MetricCard title="Last Memory Update" value={formatTS(stats?.last_memory_updated_at) || 'n/a'} detail="Latest memory write timestamp" />
-        <MetricCard title="Memories" value={formatNumber(stats?.memory_count ?? project?.memory_count ?? 0)} detail="Current workspace volume" />
+        <MetricCard title="Memories" value={formatNumber(totalMemories)} detail="Current workspace volume" />
+        <MetricCard title="Retrieved" value={formatNumber(retrievedMemoryCount)} detail={`${formatPercent(retrievalCoveragePercent)} ever surfaced`} />
+        <MetricCard title="Never Reached" value={formatNumber(neverReachedMemoryCount)} detail="Memories with zero retrieval count" />
+        <MetricCard title="Low Reach" value={formatNumber(lowReachMemoryCount)} detail={`Bottom ${formatNumber(lowReachPercentile)}% of reached memories`} />
       </div>
 
       <div className="diagnosticsGrid">
@@ -1459,6 +1564,31 @@ function DiagnosticsPanel({
             <DiagnosticRow label="Search Records" value={formatNumber(searchTokenTotals.records)} />
             <DiagnosticRow label="LLM Records" value={formatNumber(stats?.llm_usage_totals.records)} />
           </div>
+        </BreakdownCard>
+
+        <BreakdownCard title="Retrieval Reachability" subtitle="Which memories are reached and which remain untouched">
+          <div className="diagnosticsList">
+            <DiagnosticRow label="Total Retrieval Events" value={formatNumber(retrieveCountTotal)} />
+            <DiagnosticRow label="Retrieved Memories" value={formatNumber(retrievedMemoryCount)} />
+            <DiagnosticRow label="Never Reached Memories" value={formatNumber(neverReachedMemoryCount)} />
+            <DiagnosticRow label={`Low Reach Memories (P${formatNumber(lowReachPercentile)})`} value={formatNumber(lowReachMemoryCount)} />
+            <DiagnosticRow label="Low-Reach Threshold" value={`<= ${formatNumber(lowReachThreshold)} hits`} />
+            <DiagnosticRow label="Coverage Rate" value={formatPercent(retrievalCoveragePercent)} />
+            <DiagnosticRow label="Last Accessed Memory" value={formatTS(stats?.last_memory_accessed_at) || 'n/a'} />
+          </div>
+          {topRetrievedMemories.length > 0 ? (
+            <div className="diagnosticsList" style={{ marginTop: 16 }}>
+              {topRetrievedMemories.map((memory) => (
+                <DiagnosticRow
+                  key={memory.id}
+                  label={`${memory.preview} (${toTitle(memory.type)} / ${toTitle(memory.storage_tier)}${memory.pinned ? ' / pinned' : ''})`}
+                  value={`${formatNumber(memory.access_count)} hits`}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="muted">No memories have been retrieved yet for this workspace.</div>
+          )}
         </BreakdownCard>
       </div>
     </section>
@@ -1885,11 +2015,40 @@ function Message({
                 <div className="assistantTitle">Results</div>
                 <div className="muted small">{m.payload.results.length}</div>
               </div>
+              {m.payload.search?.retrieval_policy ? (
+                <details className="detailsFold">
+                  <summary className="detailsSum">Retrieval policy</summary>
+                  <pre className="pre">{JSON.stringify(m.payload.search.retrieval_policy, null, 2)}</pre>
+                </details>
+              ) : null}
               <div className="assistantList">
                 {m.payload.results.map((r) => (
                   <ResultCard key={r.id} m={r} theme={theme} isSelected={r.id === selectedId} onSelect={onSelectMemory} />
                 ))}
               </div>
+              {m.payload.search?.weak_results?.length ? (
+                <>
+                  <div className="assistantHdr">
+                    <div className="assistantTitle">Weak familiarity</div>
+                    <div className="muted small">{m.payload.search.weak_results.length}</div>
+                  </div>
+                  <div className="assistantList">
+                    {m.payload.search.weak_results.map((r) => (
+                      <ResultCard key={r.id} m={r} theme={theme} isSelected={r.id === selectedId} onSelect={onSelectMemory} />
+                    ))}
+                  </div>
+                </>
+              ) : null}
+              {m.payload.search?.suppressed_results?.length ? (
+                <details className="detailsFold">
+                  <summary className="detailsSum">Suppressed ({m.payload.search.suppressed_results.length})</summary>
+                  <div className="assistantList">
+                    {m.payload.search.suppressed_results.map((r) => (
+                      <ResultCard key={r.id} m={r} theme={theme} isSelected={r.id === selectedId} onSelect={onSelectMemory} />
+                    ))}
+                  </div>
+                </details>
+              ) : null}
             </div>
           ) : null}
 
@@ -1920,6 +2079,38 @@ function Message({
                   <ResultCard key={r.id} m={r} theme={theme} isSelected={r.id === selectedId} onSelect={onSelectMemory} />
                 ))}
               </div>
+
+              {m.payload.recall.retrieval_policy ? (
+                <details className="detailsFold">
+                  <summary className="detailsSum">Retrieval policy</summary>
+                  <pre className="pre">{JSON.stringify(m.payload.recall.retrieval_policy, null, 2)}</pre>
+                </details>
+              ) : null}
+
+              {m.payload.recall.weak_memories?.length ? (
+                <>
+                  <div className="assistantHdr">
+                    <div className="assistantTitle">Weak familiarity</div>
+                    <div className="muted small">{m.payload.recall.weak_memories.length}</div>
+                  </div>
+                  <div className="assistantList">
+                    {m.payload.recall.weak_memories.map((r) => (
+                      <ResultCard key={r.id} m={r} theme={theme} isSelected={r.id === selectedId} onSelect={onSelectMemory} />
+                    ))}
+                  </div>
+                </>
+              ) : null}
+
+              {m.payload.recall.suppressed_memories?.length ? (
+                <details className="detailsFold">
+                  <summary className="detailsSum">Suppressed ({m.payload.recall.suppressed_memories.length})</summary>
+                  <div className="assistantList">
+                    {m.payload.recall.suppressed_memories.map((r) => (
+                      <ResultCard key={r.id} m={r} theme={theme} isSelected={r.id === selectedId} onSelect={onSelectMemory} />
+                    ))}
+                  </div>
+                </details>
+              ) : null}
 
               {m.payload.recall.memories_clipped?.length ? (
                 <details className="detailsFold">

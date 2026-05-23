@@ -54,3 +54,18 @@ type ObserveRequest struct {
 func (r *ObserveRequest) Validate() error {
 	return validate.Struct(r)
 }
+
+type FeedbackRequest struct {
+	Workspace             string                     `json:"workspace,omitempty" validate:"omitempty,min=1"`
+	MemoryID              string                     `json:"memory_id" validate:"required,min=1"`
+	Outcome               core.RetrievalFeedback     `json:"outcome" validate:"required,oneof=helpful ignored rejected harmful"`
+	Validator             string                     `json:"validator,omitempty" validate:"omitempty,max=128"`
+	ReasonCategory        string                     `json:"reason_category,omitempty" validate:"omitempty,max=128"`
+	OccurredAt            string                     `json:"occurred_at,omitempty" validate:"omitempty,max=64"`
+	ReconsolidationAction core.ReconsolidationAction `json:"reconsolidation_action,omitempty" validate:"omitempty,oneof=confirmed clarified contradicted superseded"`
+	SuccessorMemoryID     string                     `json:"successor_memory_id,omitempty" validate:"omitempty,min=1"`
+}
+
+func (r *FeedbackRequest) Validate() error {
+	return validate.Struct(r)
+}

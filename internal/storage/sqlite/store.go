@@ -104,6 +104,16 @@ func (s *Store) Migrate(ctx context.Context) error {
 			access_count INTEGER NOT NULL DEFAULT 0,
 			last_accessed TEXT NOT NULL DEFAULT '',
 			decay_score REAL NOT NULL DEFAULT 0,
+			salience_score REAL NOT NULL DEFAULT 0,
+			suppression_score REAL NOT NULL DEFAULT 0,
+			useful_count INTEGER NOT NULL DEFAULT 0,
+			ignored_count INTEGER NOT NULL DEFAULT 0,
+			rejected_count INTEGER NOT NULL DEFAULT 0,
+			harmful_count INTEGER NOT NULL DEFAULT 0,
+			last_helpful_at TEXT NOT NULL DEFAULT '',
+			last_rejected_at TEXT NOT NULL DEFAULT '',
+			suppression_until TEXT NOT NULL DEFAULT '',
+			familiarity_band_last TEXT NOT NULL DEFAULT '',
 			outcome_json TEXT,
 			created_at TEXT NOT NULL,
 			updated_at TEXT NOT NULL
@@ -246,6 +256,36 @@ func (s *Store) Migrate(ctx context.Context) error {
 	if err := s.ensureColumn(ctx, "memories", "decay_score", `ALTER TABLE memories ADD COLUMN decay_score REAL NOT NULL DEFAULT 0`); err != nil {
 		return err
 	}
+	if err := s.ensureColumn(ctx, "memories", "salience_score", `ALTER TABLE memories ADD COLUMN salience_score REAL NOT NULL DEFAULT 0`); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "memories", "suppression_score", `ALTER TABLE memories ADD COLUMN suppression_score REAL NOT NULL DEFAULT 0`); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "memories", "useful_count", `ALTER TABLE memories ADD COLUMN useful_count INTEGER NOT NULL DEFAULT 0`); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "memories", "ignored_count", `ALTER TABLE memories ADD COLUMN ignored_count INTEGER NOT NULL DEFAULT 0`); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "memories", "rejected_count", `ALTER TABLE memories ADD COLUMN rejected_count INTEGER NOT NULL DEFAULT 0`); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "memories", "harmful_count", `ALTER TABLE memories ADD COLUMN harmful_count INTEGER NOT NULL DEFAULT 0`); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "memories", "last_helpful_at", `ALTER TABLE memories ADD COLUMN last_helpful_at TEXT NOT NULL DEFAULT ''`); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "memories", "last_rejected_at", `ALTER TABLE memories ADD COLUMN last_rejected_at TEXT NOT NULL DEFAULT ''`); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "memories", "suppression_until", `ALTER TABLE memories ADD COLUMN suppression_until TEXT NOT NULL DEFAULT ''`); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "memories", "familiarity_band_last", `ALTER TABLE memories ADD COLUMN familiarity_band_last TEXT NOT NULL DEFAULT ''`); err != nil {
+		return err
+	}
 	if err := s.ensureColumn(ctx, "memories", "superseded_by", `ALTER TABLE memories ADD COLUMN superseded_by TEXT`); err != nil {
 		return err
 	}
@@ -308,8 +348,8 @@ func (s *Store) InsertMemoryByHash(ctx context.Context, m *core.MemoryEntry, con
 	m.UpdatedAt = time.Now().UTC()
 
 	query := `
-INSERT OR IGNORE INTO memories (id, type, content, diagram_lang, diagram_code, workspace, content_hash, source_json, entities_json, tags_json, confidence, storage_tier, pinned, superseded_by, access_count, last_accessed, decay_score, outcome_json, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+INSERT OR IGNORE INTO memories (id, type, content, diagram_lang, diagram_code, workspace, content_hash, source_json, entities_json, tags_json, confidence, storage_tier, pinned, superseded_by, access_count, last_accessed, decay_score, salience_score, suppression_score, useful_count, ignored_count, rejected_count, harmful_count, last_helpful_at, last_rejected_at, suppression_until, familiarity_band_last, outcome_json, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	res, err := s.db.ExecContext(
 		ctx,
@@ -331,6 +371,16 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 		m.AccessCount,
 		m.LastAccessedAt.Format(time.RFC3339Nano),
 		m.DecayScore,
+		m.SalienceScore,
+		m.SuppressionScore,
+		m.UsefulCount,
+		m.IgnoredCount,
+		m.RejectedCount,
+		m.HarmfulCount,
+		timeStringOrEmpty(m.LastHelpfulAt),
+		timeStringOrEmpty(m.LastRejectedAt),
+		nullTimeString(m.SuppressionUntil),
+		strings.TrimSpace(m.FamiliarityBandLast),
 		nullIfEmpty(outcomeJSON),
 		m.CreatedAt.Format(time.RFC3339Nano),
 		m.UpdatedAt.Format(time.RFC3339Nano),
@@ -375,8 +425,8 @@ func (s *Store) upsertMemory(ctx context.Context, m *core.MemoryEntry, contentHa
 	m.UpdatedAt = time.Now().UTC()
 
 	query := `
-INSERT INTO memories (id, type, content, diagram_lang, diagram_code, workspace, content_hash, source_json, entities_json, tags_json, confidence, storage_tier, pinned, superseded_by, access_count, last_accessed, decay_score, outcome_json, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO memories (id, type, content, diagram_lang, diagram_code, workspace, content_hash, source_json, entities_json, tags_json, confidence, storage_tier, pinned, superseded_by, access_count, last_accessed, decay_score, salience_score, suppression_score, useful_count, ignored_count, rejected_count, harmful_count, last_helpful_at, last_rejected_at, suppression_until, familiarity_band_last, outcome_json, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(id) DO UPDATE SET
 	type=excluded.type,
 	content=excluded.content,
@@ -394,6 +444,16 @@ ON CONFLICT(id) DO UPDATE SET
 	access_count=excluded.access_count,
 	last_accessed=excluded.last_accessed,
 	decay_score=excluded.decay_score,
+	salience_score=excluded.salience_score,
+	suppression_score=excluded.suppression_score,
+	useful_count=excluded.useful_count,
+	ignored_count=excluded.ignored_count,
+	rejected_count=excluded.rejected_count,
+	harmful_count=excluded.harmful_count,
+	last_helpful_at=excluded.last_helpful_at,
+	last_rejected_at=excluded.last_rejected_at,
+	suppression_until=excluded.suppression_until,
+	familiarity_band_last=excluded.familiarity_band_last,
 	outcome_json=excluded.outcome_json,
 	updated_at=excluded.updated_at`
 
@@ -417,6 +477,16 @@ ON CONFLICT(id) DO UPDATE SET
 		m.AccessCount,
 		m.LastAccessedAt.Format(time.RFC3339Nano),
 		m.DecayScore,
+		m.SalienceScore,
+		m.SuppressionScore,
+		m.UsefulCount,
+		m.IgnoredCount,
+		m.RejectedCount,
+		m.HarmfulCount,
+		timeStringOrEmpty(m.LastHelpfulAt),
+		timeStringOrEmpty(m.LastRejectedAt),
+		nullTimeString(m.SuppressionUntil),
+		strings.TrimSpace(m.FamiliarityBandLast),
 		nullIfEmpty(outcomeJSON),
 		m.CreatedAt.Format(time.RFC3339Nano),
 		m.UpdatedAt.Format(time.RFC3339Nano),
@@ -430,7 +500,7 @@ ON CONFLICT(id) DO UPDATE SET
 // GetMemory loads one memory entry by ID.
 func (s *Store) GetMemory(ctx context.Context, id string) (*core.MemoryEntry, error) {
 	row := s.db.QueryRowContext(ctx, `
-SELECT id, type, content, diagram_lang, diagram_code, workspace, source_json, entities_json, tags_json, confidence, storage_tier, pinned, superseded_by, access_count, last_accessed, decay_score, outcome_json, created_at, updated_at
+SELECT id, type, content, diagram_lang, diagram_code, workspace, source_json, entities_json, tags_json, confidence, storage_tier, pinned, superseded_by, access_count, last_accessed, decay_score, salience_score, suppression_score, useful_count, ignored_count, rejected_count, harmful_count, last_helpful_at, last_rejected_at, suppression_until, familiarity_band_last, outcome_json, created_at, updated_at
 FROM memories WHERE id = ?`, id)
 
 	var m core.MemoryEntry
@@ -439,7 +509,7 @@ FROM memories WHERE id = ?`, id)
 	var diagramLang, diagramCode string
 	var pinned int
 	var supersededBy sql.NullString
-	var createdAt, updatedAt, lastAccessed string
+	var createdAt, updatedAt, lastAccessed, lastHelpfulAt, lastRejectedAt, suppressionUntil string
 	if err := row.Scan(
 		&m.ID,
 		&m.Type,
@@ -457,6 +527,16 @@ FROM memories WHERE id = ?`, id)
 		&m.AccessCount,
 		&lastAccessed,
 		&m.DecayScore,
+		&m.SalienceScore,
+		&m.SuppressionScore,
+		&m.UsefulCount,
+		&m.IgnoredCount,
+		&m.RejectedCount,
+		&m.HarmfulCount,
+		&lastHelpfulAt,
+		&lastRejectedAt,
+		&suppressionUntil,
+		&m.FamiliarityBandLast,
 		&outcomeJSON,
 		&createdAt,
 		&updatedAt,
@@ -489,6 +569,15 @@ FROM memories WHERE id = ?`, id)
 	if t, err := time.Parse(time.RFC3339Nano, lastAccessed); err == nil {
 		m.LastAccessedAt = t
 	}
+	if t, err := time.Parse(time.RFC3339Nano, lastHelpfulAt); err == nil {
+		m.LastHelpfulAt = t
+	}
+	if t, err := time.Parse(time.RFC3339Nano, lastRejectedAt); err == nil {
+		m.LastRejectedAt = t
+	}
+	if t, err := time.Parse(time.RFC3339Nano, suppressionUntil); err == nil {
+		m.SuppressionUntil = &t
+	}
 	if supersededBy.Valid && supersededBy.String != "" {
 		m.SupersededBy = &supersededBy.String
 	}
@@ -510,7 +599,7 @@ func (s *Store) GetMemoryByHash(ctx context.Context, workspace, contentHash stri
 // ListMemoriesByWorkspace returns all memories in a workspace ordered by recency.
 func (s *Store) ListMemoriesByWorkspace(ctx context.Context, workspace string) ([]core.MemoryEntry, error) {
 	rows, err := s.db.QueryContext(ctx, `
-SELECT id, type, content, diagram_lang, diagram_code, workspace, source_json, entities_json, tags_json, confidence, storage_tier, pinned, superseded_by, access_count, last_accessed, decay_score, outcome_json, created_at, updated_at
+SELECT id, type, content, diagram_lang, diagram_code, workspace, source_json, entities_json, tags_json, confidence, storage_tier, pinned, superseded_by, access_count, last_accessed, decay_score, salience_score, suppression_score, useful_count, ignored_count, rejected_count, harmful_count, last_helpful_at, last_rejected_at, suppression_until, familiarity_band_last, outcome_json, created_at, updated_at
 FROM memories
 WHERE workspace = ?
 ORDER BY updated_at DESC`, workspace)
@@ -527,10 +616,10 @@ ORDER BY updated_at DESC`, workspace)
 		var diagramLang, diagramCode string
 		var pinned int
 		var supersededBy sql.NullString
-		var createdAt, updatedAt, lastAccessed string
+		var createdAt, updatedAt, lastAccessed, lastHelpfulAt, lastRejectedAt, suppressionUntil string
 		if err := rows.Scan(
 			&m.ID, &m.Type, &m.Content, &diagramLang, &diagramCode, &m.Workspace, &sourceJSON, &entitiesJSON, &tagsJSON,
-			&m.Confidence, &m.StorageTier, &pinned, &supersededBy, &m.AccessCount, &lastAccessed, &m.DecayScore, &outcomeJSON, &createdAt, &updatedAt,
+			&m.Confidence, &m.StorageTier, &pinned, &supersededBy, &m.AccessCount, &lastAccessed, &m.DecayScore, &m.SalienceScore, &m.SuppressionScore, &m.UsefulCount, &m.IgnoredCount, &m.RejectedCount, &m.HarmfulCount, &lastHelpfulAt, &lastRejectedAt, &suppressionUntil, &m.FamiliarityBandLast, &outcomeJSON, &createdAt, &updatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -558,6 +647,15 @@ ORDER BY updated_at DESC`, workspace)
 		}
 		if t, err := time.Parse(time.RFC3339Nano, lastAccessed); err == nil {
 			m.LastAccessedAt = t
+		}
+		if t, err := time.Parse(time.RFC3339Nano, lastHelpfulAt); err == nil {
+			m.LastHelpfulAt = t
+		}
+		if t, err := time.Parse(time.RFC3339Nano, lastRejectedAt); err == nil {
+			m.LastRejectedAt = t
+		}
+		if t, err := time.Parse(time.RFC3339Nano, suppressionUntil); err == nil {
+			m.SuppressionUntil = &t
 		}
 		if supersededBy.Valid && supersededBy.String != "" {
 			m.SupersededBy = &supersededBy.String
@@ -577,7 +675,7 @@ func (s *Store) ListRecentMemoriesByWorkspace(ctx context.Context, workspace str
 		limit = 200
 	}
 	rows, err := s.db.QueryContext(ctx, `
-SELECT id, type, content, diagram_lang, diagram_code, workspace, source_json, entities_json, tags_json, confidence, storage_tier, pinned, superseded_by, access_count, last_accessed, decay_score, outcome_json, created_at, updated_at
+SELECT id, type, content, diagram_lang, diagram_code, workspace, source_json, entities_json, tags_json, confidence, storage_tier, pinned, superseded_by, access_count, last_accessed, decay_score, salience_score, suppression_score, useful_count, ignored_count, rejected_count, harmful_count, last_helpful_at, last_rejected_at, suppression_until, familiarity_band_last, outcome_json, created_at, updated_at
 FROM memories
 WHERE workspace = ?
 ORDER BY created_at DESC
@@ -595,10 +693,10 @@ LIMIT ?`, workspace, limit)
 		var diagramLang, diagramCode string
 		var pinned int
 		var supersededBy sql.NullString
-		var createdAt, updatedAt, lastAccessed string
+		var createdAt, updatedAt, lastAccessed, lastHelpfulAt, lastRejectedAt, suppressionUntil string
 		if err := rows.Scan(
 			&m.ID, &m.Type, &m.Content, &diagramLang, &diagramCode, &m.Workspace, &sourceJSON, &entitiesJSON, &tagsJSON,
-			&m.Confidence, &m.StorageTier, &pinned, &supersededBy, &m.AccessCount, &lastAccessed, &m.DecayScore, &outcomeJSON, &createdAt, &updatedAt,
+			&m.Confidence, &m.StorageTier, &pinned, &supersededBy, &m.AccessCount, &lastAccessed, &m.DecayScore, &m.SalienceScore, &m.SuppressionScore, &m.UsefulCount, &m.IgnoredCount, &m.RejectedCount, &m.HarmfulCount, &lastHelpfulAt, &lastRejectedAt, &suppressionUntil, &m.FamiliarityBandLast, &outcomeJSON, &createdAt, &updatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -626,6 +724,15 @@ LIMIT ?`, workspace, limit)
 		}
 		if t, err := time.Parse(time.RFC3339Nano, lastAccessed); err == nil {
 			m.LastAccessedAt = t
+		}
+		if t, err := time.Parse(time.RFC3339Nano, lastHelpfulAt); err == nil {
+			m.LastHelpfulAt = t
+		}
+		if t, err := time.Parse(time.RFC3339Nano, lastRejectedAt); err == nil {
+			m.LastRejectedAt = t
+		}
+		if t, err := time.Parse(time.RFC3339Nano, suppressionUntil); err == nil {
+			m.SuppressionUntil = &t
 		}
 		if supersededBy.Valid && supersededBy.String != "" {
 			m.SupersededBy = &supersededBy.String
@@ -656,7 +763,7 @@ func (s *Store) MarkAccessed(ctx context.Context, ids []string, at time.Time) er
 	if err != nil {
 		return err
 	}
-	stmt, err := tx.PrepareContext(ctx, `UPDATE memories SET access_count = access_count + 1, last_accessed = ?, updated_at = ? WHERE id = ?`)
+	stmt, err := tx.PrepareContext(ctx, `UPDATE memories SET access_count = access_count + 1, last_accessed = ? WHERE id = ?`)
 	if err != nil {
 		_ = tx.Rollback()
 		return err
@@ -664,7 +771,7 @@ func (s *Store) MarkAccessed(ctx context.Context, ids []string, at time.Time) er
 	defer func() { _ = stmt.Close() }()
 	now := at.Format(time.RFC3339Nano)
 	for _, id := range ids {
-		if _, err := stmt.ExecContext(ctx, now, now, id); err != nil {
+		if _, err := stmt.ExecContext(ctx, now, id); err != nil {
 			_ = tx.Rollback()
 			return err
 		}
@@ -734,6 +841,20 @@ func nullIfEmptyString(s *string) any {
 		return nil
 	}
 	return *s
+}
+
+func nullTimeString(t *time.Time) string {
+	if t == nil || t.IsZero() {
+		return ""
+	}
+	return t.UTC().Format(time.RFC3339Nano)
+}
+
+func timeStringOrEmpty(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.UTC().Format(time.RFC3339Nano)
 }
 
 func boolToInt(v bool) int {

@@ -61,6 +61,24 @@ const (
 	OutcomePartial OutcomeResult = "partial"
 )
 
+type RetrievalFeedback string
+
+const (
+	FeedbackHelpful  RetrievalFeedback = "helpful"
+	FeedbackIgnored  RetrievalFeedback = "ignored"
+	FeedbackRejected RetrievalFeedback = "rejected"
+	FeedbackHarmful  RetrievalFeedback = "harmful"
+)
+
+type ReconsolidationAction string
+
+const (
+	ReconsolidateConfirmed    ReconsolidationAction = "confirmed"
+	ReconsolidateClarified    ReconsolidationAction = "clarified"
+	ReconsolidateContradicted ReconsolidationAction = "contradicted"
+	ReconsolidateSuperseded   ReconsolidationAction = "superseded"
+)
+
 // MemoryEntry is the canonical memory record.
 type MemoryEntry struct {
 	ID        string     `json:"id" db:"id"`
@@ -79,12 +97,22 @@ type MemoryEntry struct {
 	Tags       []string     `json:"tags" db:"tags"`
 	Confidence float64      `json:"confidence" db:"confidence"`
 
-	CreatedAt      time.Time `json:"created_at" db:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at" db:"updated_at"`
-	LastAccessedAt time.Time `json:"last_accessed_at" db:"last_accessed"`
-	AccessCount    int       `json:"access_count" db:"access_count"`
-	DecayScore     float64   `json:"decay_score" db:"decay_score"`
-	SupersededBy   *string   `json:"superseded_by,omitempty" db:"superseded_by"`
+	CreatedAt           time.Time  `json:"created_at" db:"created_at"`
+	UpdatedAt           time.Time  `json:"updated_at" db:"updated_at"`
+	LastAccessedAt      time.Time  `json:"last_accessed_at" db:"last_accessed"`
+	AccessCount         int        `json:"access_count" db:"access_count"`
+	DecayScore          float64    `json:"decay_score" db:"decay_score"`
+	SalienceScore       float64    `json:"salience_score" db:"salience_score"`
+	SuppressionScore    float64    `json:"suppression_score" db:"suppression_score"`
+	UsefulCount         int        `json:"useful_count" db:"useful_count"`
+	IgnoredCount        int        `json:"ignored_count" db:"ignored_count"`
+	RejectedCount       int        `json:"rejected_count" db:"rejected_count"`
+	HarmfulCount        int        `json:"harmful_count" db:"harmful_count"`
+	LastHelpfulAt       time.Time  `json:"last_helpful_at" db:"last_helpful_at"`
+	LastRejectedAt      time.Time  `json:"last_rejected_at" db:"last_rejected_at"`
+	SuppressionUntil    *time.Time `json:"suppression_until,omitempty" db:"suppression_until"`
+	FamiliarityBandLast string     `json:"familiarity_band_last,omitempty" db:"familiarity_band_last"`
+	SupersededBy        *string    `json:"superseded_by,omitempty" db:"superseded_by"`
 
 	StorageTier StorageTier `json:"storage_tier" db:"storage_tier"`
 	Importance  float64     `json:"importance" db:"importance"`
@@ -171,14 +199,14 @@ type Observation struct {
 }
 
 type Session struct {
-	Workspace         string     `json:"workspace"`
-	SessionID         string     `json:"session_id"`
-	ProjectRoot       string     `json:"project_root,omitempty"`
-	CWD               string     `json:"cwd,omitempty"`
-	StartedAt         *time.Time `json:"started_at,omitempty"`
-	EndedAt           *time.Time `json:"ended_at,omitempty"`
-	ObservationCount  int        `json:"observation_count"`
-	LastSeenAt        time.Time  `json:"last_seen_at"`
+	Workspace        string     `json:"workspace"`
+	SessionID        string     `json:"session_id"`
+	ProjectRoot      string     `json:"project_root,omitempty"`
+	CWD              string     `json:"cwd,omitempty"`
+	StartedAt        *time.Time `json:"started_at,omitempty"`
+	EndedAt          *time.Time `json:"ended_at,omitempty"`
+	ObservationCount int        `json:"observation_count"`
+	LastSeenAt       time.Time  `json:"last_seen_at"`
 }
 
 // MemoryTombstone is a compact breadcrumb for evicted/superseded memory.

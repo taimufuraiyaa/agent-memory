@@ -64,5 +64,189 @@ func TestRetrievalEngineExplainAndModes(t *testing.T) {
 	if outcomesRes.Weights.Outcome <= outcomesRes.Weights.Recency {
 		t.Fatalf("expected outcome mode to prioritize outcome weight")
 	}
+	if outcomesRes.Policy.MinSemanticScore <= 0 {
+		t.Fatalf("expected retrieval policy snapshot")
+	}
 }
 
+func TestRetrievalEngineBandsAndCutoffs(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "banded.db")
+	store, err := sqlite.Open(context.Background(), dbPath)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	now := time.Date(2026, 5, 21, 12, 0, 0, 0, time.UTC)
+	strong := &core.MemoryEntry{
+		ID:            "strong",
+		Type:          core.ProceduralMemory,
+		Content:       "run migrations before deploying the orders API",
+		Workspace:     "ws",
+		Source:        core.MemorySource{Type: core.SourceCodeAnalysis},
+		StorageTier:   core.TierMarkdown,
+		Confidence:    0.95,
+		CreatedAt:     now.Add(-2 * time.Hour),
+		UpdatedAt:     now.Add(-2 * time.Hour),
+		SalienceScore: 0.9,
+		UsefulCount:   3,
+	}
+	weak := &core.MemoryEntry{
+		ID:                  "weak",
+		Type:                core.SemanticMemory,
+		Content:             "deployment checklist mentions smoke tests and rollback plans",
+		Workspace:           "ws",
+		Source:              core.MemorySource{Type: core.SourceCodeAnalysis},
+		StorageTier:         core.TierVector,
+		Confidence:          0.7,
+		CreatedAt:           now.Add(-24 * time.Hour),
+		UpdatedAt:           now.Add(-24 * time.Hour),
+		FamiliarityBandLast: "weak_familiarity",
+	}
+	suppressedUntil := now.Add(12 * time.Hour)
+	suppressed := &core.MemoryEntry{
+		ID:               "suppressed",
+		Type:             core.SemanticMemory,
+		Content:          "rollback notes with wrong deploy order",
+		Workspace:        "ws",
+		Source:           core.MemorySource{Type: core.SourceAgentObservation},
+		StorageTier:      core.TierVector,
+		Confidence:       0.8,
+		CreatedAt:        now.Add(-6 * time.Hour),
+		UpdatedAt:        now.Add(-6 * time.Hour),
+		SuppressionScore: 0.9,
+		RejectedCount:    3,
+		LastRejectedAt:   now.Add(-1 * time.Hour),
+		SuppressionUntil: &suppressedUntil,
+	}
+	for _, m := range []*core.MemoryEntry{strong, weak, suppressed} {
+		if err := store.UpsertMemory(context.Background(), m); err != nil {
+			t.Fatalf("upsert %s: %v", m.ID, err)
+		}
+	}
+
+	modelDir := filepath.Join(t.TempDir(), "model")
+	if err := ensureEmbeddingsDir(modelDir); err != nil {
+		t.Fatalf("mkdir model: %v", err)
+	}
+	provider, err := embeddings.NewLocalProvider(modelDir)
+	if err != nil {
+		t.Fatalf("provider: %v", err)
+	}
+	searcher := NewVectorSearcher(store, provider)
+	engine := NewRetrievalEngine(searcher)
+	engine.clock = func() time.Time { return now }
+
+	res, err := engine.Retrieve(context.Background(), RetrievalOptions{
+		Workspace: "ws",
+		Query:     "how should I deploy the orders API safely",
+		TopK:      5,
+		Mode:      ModeRecall,
+		Policy: RetrievalPolicy{
+			MinSemanticScore:    floatPtr(0.2),
+			MinTotalScore:       floatPtr(0.18),
+			RelativeScoreCutoff: floatPtr(0.2),
+			WeakSemanticScore:   floatPtr(0.01),
+			WeakTotalScore:      floatPtr(0.01),
+			WeakRelativeCutoff:  floatPtr(0.01),
+		},
+	})
+	if err != nil {
+		t.Fatalf("retrieve: %v", err)
+	}
+	if len(res.Hits) == 0 {
+		t.Fatalf("expected strong recall hits")
+	}
+	if res.Hits[0].Band != BandStrongRecall {
+		t.Fatalf("expected strong recall band, got %s", res.Hits[0].Band)
+	}
+	if len(res.WeakHits) == 0 {
+		t.Fatalf("expected weak familiarity hits")
+	}
+	if res.WeakHits[0].Band != BandWeakFamiliarity {
+		t.Fatalf("expected weak familiarity band, got %s", res.WeakHits[0].Band)
+	}
+	if len(res.SuppressedHits) == 0 {
+		t.Fatalf("expected suppressed hits")
+	}
+	if res.SuppressedHits[0].Band != BandSuppressed {
+		t.Fatalf("expected suppressed band, got %s", res.SuppressedHits[0].Band)
+	}
+	if len(res.SuppressedHits[0].ExclusionReasons) == 0 {
+		t.Fatalf("expected suppression reasons")
+	}
+}
+
+func TestRetrievalEngineRecallCanReturnEmptyWithStrictFloors(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "strict.db")
+	store, err := sqlite.Open(context.Background(), dbPath)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	pipe := NewWritePipeline(store)
+	_, _ = pipe.Write(context.Background(), WriteInput{
+		Workspace: "ws",
+		Type:      core.SemanticMemory,
+		Content:   "frontend uses react query for caching",
+		Source:    core.MemorySource{Type: core.SourceCodeAnalysis},
+	})
+
+	modelDir := filepath.Join(t.TempDir(), "model")
+	if err := ensureEmbeddingsDir(modelDir); err != nil {
+		t.Fatalf("mkdir model: %v", err)
+	}
+	provider, err := embeddings.NewLocalProvider(modelDir)
+	if err != nil {
+		t.Fatalf("provider: %v", err)
+	}
+	searcher := NewVectorSearcher(store, provider)
+	engine := NewRetrievalEngine(searcher)
+	res, err := engine.Retrieve(context.Background(), RetrievalOptions{
+		Workspace: "ws",
+		Query:     "investigate payment rollback playbook",
+		TopK:      5,
+		Mode:      ModeRecall,
+		Policy: RetrievalPolicy{
+			MinSemanticScore:    floatPtr(0.9),
+			MinTotalScore:       floatPtr(0.9),
+			RelativeScoreCutoff: floatPtr(0.95),
+			WeakSemanticScore:   floatPtr(0.95),
+			WeakTotalScore:      floatPtr(0.95),
+			WeakRelativeCutoff:  floatPtr(0.95),
+		},
+	})
+	if err != nil {
+		t.Fatalf("retrieve: %v", err)
+	}
+	if len(res.Hits) != 0 {
+		t.Fatalf("expected strict recall to return no strong hits, got %d", len(res.Hits))
+	}
+}
+
+func TestPolicyForModeRuntimeAndRequestOverridePrecedence(t *testing.T) {
+	t.Setenv("AGENT_MEMORY_ADAPTIVE_POLICY_RECALL", `{"min_semantic_score":0.44,"min_total_score":0.33}`)
+
+	runtimePolicy := policyForMode(ModeRecall, RetrievalPolicy{})
+	if runtimePolicy.MinSemanticScore != 0.44 {
+		t.Fatalf("expected runtime min semantic override, got %f", runtimePolicy.MinSemanticScore)
+	}
+	if runtimePolicy.MinTotalScore != 0.33 {
+		t.Fatalf("expected runtime min total override, got %f", runtimePolicy.MinTotalScore)
+	}
+
+	explicit := policyForMode(ModeRecall, RetrievalPolicy{
+		MinSemanticScore: floatPtr(0.9),
+	})
+	if explicit.MinSemanticScore != 0.9 {
+		t.Fatalf("expected explicit request override to win, got %f", explicit.MinSemanticScore)
+	}
+	if explicit.MinTotalScore != 0.33 {
+		t.Fatalf("expected untouched runtime field to remain, got %f", explicit.MinTotalScore)
+	}
+}
+
+func floatPtr(v float64) *float64 {
+	return &v
+}

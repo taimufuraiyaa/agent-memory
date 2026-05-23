@@ -6,9 +6,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -135,6 +137,64 @@ func NewMux(svc *Service) *http.ServeMux {
 
 	mux.HandleFunc("/api/v1/memories", writeMemoryHandler)
 	mux.HandleFunc("/api/v1/memories/write", writeMemoryHandler)
+	mux.HandleFunc("/api/v1/memories/feedback", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeErr(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+			return
+		}
+		var req FeedbackRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
+			return
+		}
+		if err := req.Validate(); err != nil {
+			writeErr(w, http.StatusBadRequest, "validation", err.Error())
+			return
+		}
+		ws := strings.TrimSpace(req.Workspace)
+		if ws == "" {
+			ws = workspaceFromRequest(r, svc.Workspace)
+		}
+		assets, err := svc.resolve(r.Context(), ws)
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
+			return
+		}
+		if assets.Store == nil {
+			writeErr(w, http.StatusInternalServerError, "runtime", "store is not available")
+			return
+		}
+		at := time.Now().UTC()
+		if raw := strings.TrimSpace(req.OccurredAt); raw != "" {
+			if parsed, ok := parseTimeFlexible(raw); ok {
+				at = parsed
+			} else {
+				writeErr(w, http.StatusBadRequest, "validation", "invalid occurred_at")
+				return
+			}
+		}
+		updated, err := assets.Store.ApplyRetrievalFeedback(r.Context(), req.MemoryID, req.Outcome, at)
+		if err != nil {
+			writeErr(w, http.StatusBadRequest, "runtime", err.Error())
+			return
+		}
+		if strings.TrimSpace(string(req.ReconsolidationAction)) != "" {
+			updated, err = assets.Store.ApplyReconsolidation(r.Context(), req.MemoryID, req.ReconsolidationAction, strings.TrimSpace(req.SuccessorMemoryID), at)
+			if err != nil {
+				writeErr(w, http.StatusBadRequest, "runtime", err.Error())
+				return
+			}
+		}
+		writeOK(w, http.StatusOK, map[string]any{
+			"workspace":              ws,
+			"memory_id":              req.MemoryID,
+			"outcome":                req.Outcome,
+			"validator":              strings.TrimSpace(req.Validator),
+			"reason_category":        strings.TrimSpace(req.ReasonCategory),
+			"reconsolidation_action": req.ReconsolidationAction,
+			"updated_memory":         updated,
+		})
+	})
 
 	mux.HandleFunc("/api/v1/memories/search", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -151,13 +211,16 @@ func NewMux(svc *Service) *http.ServeMux {
 			Tiers       []string          `json:"tiers"`
 			Types       []core.MemoryType `json:"types"`
 			Filters     *struct {
-				Type          []core.MemoryType `json:"type"`
-				Tiers         []string          `json:"tiers"`
-				OutcomeResult string            `json:"outcome_result"`
-				MinConfidence *float64          `json:"min_confidence"`
-				MinDecayScore *float64          `json:"min_decay_score"`
-				Entities      []string          `json:"entities"`
-				DateRange     *struct {
+				Type             []core.MemoryType `json:"type"`
+				Tiers            []string          `json:"tiers"`
+				OutcomeResult    string            `json:"outcome_result"`
+				MinConfidence    *float64          `json:"min_confidence"`
+				MinDecayScore    *float64          `json:"min_decay_score"`
+				MinSemanticScore *float64          `json:"min_semantic_score"`
+				MinTotalScore    *float64          `json:"min_total_score"`
+				RelativeCutoff   *float64          `json:"relative_cutoff"`
+				Entities         []string          `json:"entities"`
+				DateRange        *struct {
 					From string `json:"from"`
 					To   string `json:"to"`
 				} `json:"date_range"`
@@ -210,6 +273,9 @@ func NewMux(svc *Service) *http.ServeMux {
 		var outcomeResult *core.OutcomeResult
 		var minConfidence *float64
 		var minDecayScore *float64
+		var minSemanticScore *float64
+		var minTotalScore *float64
+		var relativeCutoff *float64
 		var entities []string
 		var dateFrom, dateTo *time.Time
 		if req.Filters != nil {
@@ -231,6 +297,9 @@ func NewMux(svc *Service) *http.ServeMux {
 			}
 			minConfidence = req.Filters.MinConfidence
 			minDecayScore = req.Filters.MinDecayScore
+			minSemanticScore = req.Filters.MinSemanticScore
+			minTotalScore = req.Filters.MinTotalScore
+			relativeCutoff = req.Filters.RelativeCutoff
 			entities = req.Filters.Entities
 			if req.Filters.DateRange != nil {
 				fromRaw := strings.TrimSpace(req.Filters.DateRange.From)
@@ -275,6 +344,18 @@ func NewMux(svc *Service) *http.ServeMux {
 			writeErr(w, http.StatusBadRequest, "validation", "min_decay_score must be between 0 and 1")
 			return
 		}
+		if minSemanticScore != nil && (*minSemanticScore < 0 || *minSemanticScore > 1) {
+			writeErr(w, http.StatusBadRequest, "validation", "min_semantic_score must be between 0 and 1")
+			return
+		}
+		if minTotalScore != nil && (*minTotalScore < 0 || *minTotalScore > 1) {
+			writeErr(w, http.StatusBadRequest, "validation", "min_total_score must be between 0 and 1")
+			return
+		}
+		if relativeCutoff != nil && (*relativeCutoff < 0 || *relativeCutoff > 1) {
+			writeErr(w, http.StatusBadRequest, "validation", "relative_cutoff must be between 0 and 1")
+			return
+		}
 		opt := engine.RetrievalOptions{
 			Workspace: ws,
 			Query:     req.Query,
@@ -289,6 +370,11 @@ func NewMux(svc *Service) *http.ServeMux {
 				Entities:      entities,
 				DateFrom:      dateFrom,
 				DateTo:        dateTo,
+			},
+			Policy: engine.RetrievalPolicy{
+				MinSemanticScore:    minSemanticScore,
+				MinTotalScore:       minTotalScore,
+				RelativeScoreCutoff: relativeCutoff,
 			},
 		}
 		out, err := assets.Retrieval.Retrieve(r.Context(), engine.RetrievalOptions{
@@ -307,12 +393,24 @@ func NewMux(svc *Service) *http.ServeMux {
 			_ = assets.Store.AddTokenMetricV2(r.Context(), ws, "search", sumHitTokens(hits), sumHitTokens(hits), engine.RunLabel(), engine.MemoryEnabled())
 		}
 		results := renderSearchResults(hits, req.Explain)
+		strongResults := renderSearchResults(out.StrongHits, req.Explain)
+		weakResults := renderSearchResults(out.WeakHits, req.Explain)
+		suppressedResults := renderSearchResults(out.SuppressedHits, req.Explain)
 		writeOK(w, http.StatusOK, map[string]any{
-			"results":         results,
-			"total_tokens":    sumResultTokens(results),
-			"search_time_ms":  time.Since(started).Milliseconds(),
-			"workspace":       ws,
-			"requested_query": req.Query,
+			"results":            results,
+			"strong_results":     strongResults,
+			"weak_results":       weakResults,
+			"suppressed_results": suppressedResults,
+			"result_bands": map[string]int{
+				string(engine.BandStrongRecall):    len(strongResults),
+				string(engine.BandWeakFamiliarity): len(weakResults),
+				string(engine.BandSuppressed):      len(suppressedResults),
+			},
+			"retrieval_policy": out.Policy,
+			"total_tokens":     sumResultTokens(results),
+			"search_time_ms":   time.Since(started).Milliseconds(),
+			"workspace":        ws,
+			"requested_query":  req.Query,
 		})
 	})
 	mux.HandleFunc("/api/v1/memories/recent", func(w http.ResponseWriter, r *http.Request) {
@@ -464,10 +562,13 @@ func NewMux(svc *Service) *http.ServeMux {
 			"tokens_used":            tokensUsedTotal,
 			"tokens_budget":          meta.Budget + observationTokens,
 			"memories_used":          included,
+			"weak_memories":          retrieved.WeakHits,
+			"suppressed_memories":    retrieved.SuppressedHits,
 			"clipping":               meta,
 			"workspace":              ws,
 			"requested_top_k":        topK,
 			"requested_budget":       meta.Budget + observationTokens,
+			"retrieval_policy":       retrieved.Policy,
 			"observations_included":  req.IncludeObservations && observeEnabled(),
 			"observation_session_id": observationSessionID,
 			"observation_count":      observationCount,
@@ -602,6 +703,8 @@ func NewMux(svc *Service) *http.ServeMux {
 			"tokens_used":            meta.UsedTokens + observationTokens,
 			"tokens_budget":          meta.Budget + observationTokens,
 			"memories_included":      mems,
+			"weak_memories":          renderSearchResults(retrieved.WeakHits, req.Explain),
+			"suppressed_memories":    renderSearchResults(retrieved.SuppressedHits, req.Explain),
 			"memories_clipped":       renderClipped(meta),
 			"tier_distribution":      tierDist,
 			"clipping":               meta,
@@ -616,6 +719,7 @@ func NewMux(svc *Service) *http.ServeMux {
 			"observation_tokens":     observationTokens,
 			"retrieval_mode":         retrieved.Mode,
 			"retrieval_weights":      retrieved.Weights,
+			"retrieval_policy":       retrieved.Policy,
 			"retrieved_hit_count":    len(retrieved.Hits),
 		}
 		if assets.Store != nil {
@@ -1263,6 +1367,8 @@ func NewMux(svc *Service) *http.ServeMux {
 		tierCounts := map[string]int{}
 		diagramCount := 0
 		pinnedCount := 0
+		totalRetrieveCount := 0
+		retrievedMemoryCount := 0
 		var lastUpdatedAt time.Time
 		var lastAccessedAt time.Time
 		for _, m := range memories {
@@ -1273,6 +1379,10 @@ func NewMux(svc *Service) *http.ServeMux {
 			}
 			if m.Pinned {
 				pinnedCount++
+			}
+			totalRetrieveCount += m.AccessCount
+			if m.AccessCount > 0 {
+				retrievedMemoryCount++
 			}
 			if m.UpdatedAt.After(lastUpdatedAt) {
 				lastUpdatedAt = m.UpdatedAt
@@ -1348,6 +1458,16 @@ func NewMux(svc *Service) *http.ServeMux {
 		if !lastActivity.IsZero() {
 			lastActivityStr = lastActivity.UTC().Format(time.RFC3339Nano)
 		}
+		neverReachedMemoryCount := len(memories) - retrievedMemoryCount
+		retrievalCoveragePercent := 0.0
+		neverReachedPercent := 0.0
+		if len(memories) > 0 {
+			retrievalCoveragePercent = (float64(retrievedMemoryCount) / float64(len(memories))) * 100
+			neverReachedPercent = (float64(neverReachedMemoryCount) / float64(len(memories))) * 100
+		}
+		lowReachPercentile := 25
+		lowReachThreshold, lowReachMemoryCount := computeLowReachStats(memories, lowReachPercentile)
+		topRetrievedMemories := buildTopRetrievedMemories(memories, 5)
 		writeOK(w, http.StatusOK, map[string]any{
 			"workspace":                     workspace,
 			"memory_count":                  len(memories),
@@ -1356,6 +1476,15 @@ func NewMux(svc *Service) *http.ServeMux {
 			"storage_tier_counts":           tierCounts,
 			"diagram_count":                 diagramCount,
 			"pinned_count":                  pinnedCount,
+			"retrieve_count_total":          totalRetrieveCount,
+			"retrieved_memory_count":        retrievedMemoryCount,
+			"never_reached_memory_count":    neverReachedMemoryCount,
+			"retrieval_coverage_percent":    retrievalCoveragePercent,
+			"never_reached_percent":         neverReachedPercent,
+			"low_reach_percentile":          lowReachPercentile,
+			"low_reach_threshold":           lowReachThreshold,
+			"low_reach_memory_count":        lowReachMemoryCount,
+			"top_retrieved_memories":        topRetrievedMemories,
 			"last_memory_updated_at":        lastUpdated,
 			"last_memory_accessed_at":       lastAccessed,
 			"last_activity":                 lastActivityStr,
@@ -1540,6 +1669,99 @@ func tokenTotalsForOperation(items []sqlite.TokenMetricOperationTotals, operatio
 	return sqlite.TokenMetricTotals{}
 }
 
+type topRetrievedMemory struct {
+	ID             string `json:"id"`
+	Type           string `json:"type"`
+	StorageTier    string `json:"storage_tier"`
+	AccessCount    int    `json:"access_count"`
+	LastAccessedAt string `json:"last_accessed_at,omitempty"`
+	Pinned         bool   `json:"pinned"`
+	Preview        string `json:"preview"`
+}
+
+func buildTopRetrievedMemories(memories []core.MemoryEntry, limit int) []topRetrievedMemory {
+	if limit <= 0 {
+		limit = 5
+	}
+	items := make([]core.MemoryEntry, 0, len(memories))
+	for _, m := range memories {
+		if m.AccessCount <= 0 {
+			continue
+		}
+		items = append(items, m)
+	}
+	sort.SliceStable(items, func(i, j int) bool {
+		if items[i].AccessCount != items[j].AccessCount {
+			return items[i].AccessCount > items[j].AccessCount
+		}
+		if !items[i].LastAccessedAt.Equal(items[j].LastAccessedAt) {
+			return items[i].LastAccessedAt.After(items[j].LastAccessedAt)
+		}
+		if !items[i].UpdatedAt.Equal(items[j].UpdatedAt) {
+			return items[i].UpdatedAt.After(items[j].UpdatedAt)
+		}
+		return items[i].ID < items[j].ID
+	})
+	if len(items) > limit {
+		items = items[:limit]
+	}
+	out := make([]topRetrievedMemory, 0, len(items))
+	for _, m := range items {
+		lastAccessed := ""
+		if !m.LastAccessedAt.IsZero() {
+			lastAccessed = m.LastAccessedAt.UTC().Format(time.RFC3339Nano)
+		}
+		out = append(out, topRetrievedMemory{
+			ID:             m.ID,
+			Type:           string(m.Type),
+			StorageTier:    string(m.StorageTier),
+			AccessCount:    m.AccessCount,
+			LastAccessedAt: lastAccessed,
+			Pinned:         m.Pinned,
+			Preview:        memoryPreview(m.Content, 96),
+		})
+	}
+	return out
+}
+
+func computeLowReachStats(memories []core.MemoryEntry, percentile int) (threshold int, count int) {
+	if percentile <= 0 {
+		percentile = 25
+	}
+	reached := make([]int, 0, len(memories))
+	for _, m := range memories {
+		if m.AccessCount > 0 {
+			reached = append(reached, m.AccessCount)
+		}
+	}
+	if len(reached) == 0 {
+		return 0, 0
+	}
+	sort.Ints(reached)
+	rank := int(math.Ceil((float64(percentile) / 100) * float64(len(reached))))
+	if rank < 1 {
+		rank = 1
+	}
+	if rank > len(reached) {
+		rank = len(reached)
+	}
+	threshold = reached[rank-1]
+	for _, hits := range reached {
+		if hits <= threshold {
+			count++
+		}
+	}
+	return threshold, count
+}
+
+func memoryPreview(content string, limit int) string {
+	clean := strings.Join(strings.Fields(strings.TrimSpace(content)), " ")
+	if clean == "" {
+		return "-"
+	}
+	return engine.ClipString(clean, limit)
+}
+
 func recallBaselineTokens(hits []engine.RetrievalHit, observationTokens int) int {
 	return sumHitTokens(hits) + observationTokens
 }
@@ -1562,11 +1784,13 @@ func workspaceFromRequest(r *http.Request, fallback string) string {
 
 type searchResult struct {
 	core.MemoryEntry
-	Tier           string             `json:"tier,omitempty"`
-	Score          float64            `json:"score,omitempty"`
-	ScoreBreakdown map[string]float64 `json:"score_breakdown,omitempty"`
-	MatchReason    string             `json:"match_reason,omitempty"`
-	TombstoneHint  any                `json:"tombstone_hint,omitempty"`
+	Tier             string                   `json:"tier,omitempty"`
+	Score            float64                  `json:"score,omitempty"`
+	ScoreBreakdown   map[string]float64       `json:"score_breakdown,omitempty"`
+	MatchReason      string                   `json:"match_reason,omitempty"`
+	TombstoneHint    any                      `json:"tombstone_hint,omitempty"`
+	Band             string                   `json:"band,omitempty"`
+	ExclusionReasons []engine.ExclusionReason `json:"exclusion_reasons,omitempty"`
 }
 
 func renderSearchResults(hits []engine.RetrievalHit, explain bool) []searchResult {
@@ -1581,6 +1805,8 @@ func renderSearchResults(hits []engine.RetrievalHit, explain bool) []searchResul
 			item.ScoreBreakdown = scoreBreakdownForHit(h)
 			item.MatchReason = matchReasonForHit(h)
 			item.TombstoneHint = nil
+			item.Band = string(h.Band)
+			item.ExclusionReasons = h.ExclusionReasons
 		}
 		out = append(out, item)
 	}
@@ -1594,6 +1820,11 @@ func scoreBreakdownForHit(h engine.RetrievalHit) map[string]float64 {
 		"outcome_boost":       h.Breakdown.Outcome,
 		"decay_weight":        h.Breakdown.Decay,
 		"tier_bias":           h.Breakdown.TierBias,
+		"salience":            h.Breakdown.Salience,
+		"suppression":         h.Breakdown.Suppression,
+		"activation":          h.Breakdown.Activation,
+		"relative_to_best":    h.Breakdown.RelativeToBest,
+		"total":               h.Breakdown.Total,
 	}
 }
 

@@ -14,6 +14,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	amconfig "github.com/time/timebooks/agent-memory/internal/config"
 )
 
 type config struct {
@@ -390,6 +392,7 @@ func mergeEnvFile(path string, vars map[string]string) (string, error) {
 	}
 
 	out := strings.TrimRight(strings.Join(lines, "\n"), "\n") + "\n"
+	out = amconfig.EnsureAdaptiveTuningEnvGuidance(out)
 	return out, nil
 }
 
@@ -731,4 +734,7 @@ func printNextSteps(cfg config, binPath string) {
 			fmt.Fprintf(os.Stderr, "     Auto-added to shell rc (restart terminal if needed): %q\n", filepath.Join(cfg.dataDir, "agent-memory.env"))
 		}
 	}
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "  4) Inspect adaptive runtime tuning:")
+	fmt.Fprintln(os.Stderr, "       agent-memory tuning")
 }

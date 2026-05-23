@@ -21,6 +21,16 @@ export type MemoryEntry = {
   last_accessed_at: string
   access_count: number
   decay_score: number
+  salience_score?: number
+  suppression_score?: number
+  useful_count?: number
+  ignored_count?: number
+  rejected_count?: number
+  harmful_count?: number
+  last_helpful_at?: string
+  last_rejected_at?: string
+  suppression_until?: string
+  familiarity_band_last?: string
   superseded_by?: string
   storage_tier: StorageTier
   importance: number
@@ -31,6 +41,17 @@ export type MemoryEntry = {
   score?: number
   score_breakdown?: Record<string, number>
   match_reason?: string
+  band?: string
+  exclusion_reasons?: string[]
+}
+
+export type RetrievalPolicy = {
+  min_semantic_score: number
+  min_total_score: number
+  relative_score_cutoff: number
+  weak_semantic_score: number
+  weak_total_score: number
+  weak_relative_cutoff: number
 }
 
 export type ProjectListItem = {
@@ -72,6 +93,16 @@ export type LLMUsageGroupTotals = LLMUsageTotals & {
   memory_enabled: boolean
 }
 
+export type RetrievalReachMemory = {
+  id: string
+  type: MemoryType
+  storage_tier: StorageTier
+  access_count: number
+  last_accessed_at?: string
+  pinned: boolean
+  preview: string
+}
+
 export type DashboardStats = {
   workspace: string
   memory_count: number
@@ -80,6 +111,15 @@ export type DashboardStats = {
   storage_tier_counts?: CountMap
   diagram_count?: number
   pinned_count?: number
+  retrieve_count_total?: number
+  retrieved_memory_count?: number
+  never_reached_memory_count?: number
+  retrieval_coverage_percent?: number
+  never_reached_percent?: number
+  low_reach_percentile?: number
+  low_reach_threshold?: number
+  low_reach_memory_count?: number
+  top_retrieved_memories?: RetrievalReachMemory[]
   last_memory_updated_at?: string
   last_memory_accessed_at?: string
   last_activity?: string
@@ -139,6 +179,11 @@ export type ObservationPromotionResult = {
 
 export type SearchResponse = {
   results: MemoryEntry[]
+  strong_results?: MemoryEntry[]
+  weak_results?: MemoryEntry[]
+  suppressed_results?: MemoryEntry[]
+  result_bands?: Record<string, number>
+  retrieval_policy?: RetrievalPolicy
   total_tokens: number
   search_time_ms: number
   workspace: string
@@ -159,6 +204,8 @@ export type RecallPreviewResponse = {
   tokens_used: number
   tokens_budget: number
   memories_included: RecallPreviewIncluded[]
+  weak_memories?: MemoryEntry[]
+  suppressed_memories?: MemoryEntry[]
   memories_included_full?: MemoryEntry[]
   memories_clipped: Array<{ id: string; reason: string; would_add_tokens: number }>
   tier_distribution: Record<string, number>
@@ -168,6 +215,7 @@ export type RecallPreviewResponse = {
   requested_explain: boolean
   requested_top_k: number
   requested_budget: number
+  retrieval_policy?: RetrievalPolicy
 }
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
@@ -259,6 +307,9 @@ export function searchMemories(input: {
     outcome_result?: OutcomeResult
     min_confidence?: number
     min_decay_score?: number
+    min_semantic_score?: number
+    min_total_score?: number
+    relative_cutoff?: number
     entities?: string[]
     date_from?: string
     date_to?: string
