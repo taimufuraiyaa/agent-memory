@@ -1,13 +1,65 @@
-import React, { useEffect, useId, useMemo, useState } from 'react'
-import DOMPurify from 'dompurify'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import mermaid from 'mermaid'
 import type { Diagram } from '../lib/api'
+
+function getMermaidThemeVariables(theme: 'light' | 'dark') {
+  if (theme === 'dark') {
+    return {
+      darkMode: true,
+      background: '#090d16',
+      mainBkg: '#0f172a',
+      nodeBkg: '#0f172a',
+      primaryColor: '#0f172a',
+      secondaryColor: '#111827',
+      tertiaryColor: '#0b1220',
+      primaryBorderColor: '#64748b',
+      secondaryBorderColor: '#64748b',
+      tertiaryBorderColor: '#475569',
+      nodeBorder: '#64748b',
+      clusterBkg: '#0b1220',
+      clusterBorder: '#475569',
+      lineColor: '#94a3b8',
+      defaultLinkColor: '#94a3b8',
+      edgeLabelBackground: '#111827',
+      labelTextColor: '#f8fafc',
+      textColor: '#f8fafc',
+      primaryTextColor: '#f8fafc',
+      secondaryTextColor: '#e2e8f0',
+      tertiaryTextColor: '#e2e8f0',
+    }
+  }
+
+  return {
+    darkMode: false,
+    background: '#f8fafc',
+    mainBkg: '#ffffff',
+    nodeBkg: '#ffffff',
+    primaryColor: '#ffffff',
+    secondaryColor: '#f8fafc',
+    tertiaryColor: '#e2e8f0',
+    primaryBorderColor: '#475569',
+    secondaryBorderColor: '#64748b',
+    tertiaryBorderColor: '#94a3b8',
+    nodeBorder: '#475569',
+    clusterBkg: '#e2e8f0',
+    clusterBorder: '#94a3b8',
+    lineColor: '#334155',
+    defaultLinkColor: '#334155',
+    edgeLabelBackground: '#f8fafc',
+    labelTextColor: '#172033',
+    textColor: '#172033',
+    primaryTextColor: '#172033',
+    secondaryTextColor: '#172033',
+    tertiaryTextColor: '#172033',
+  }
+}
 
 function ensureMermaid(theme: 'light' | 'dark') {
   mermaid.initialize({
     startOnLoad: false,
-    securityLevel: 'loose',
-    theme: theme === 'dark' ? 'dark' : 'default',
+    securityLevel: 'strict',
+    theme: 'base',
+    htmlLabels: false,
     fontFamily: 'Inter, system-ui, sans-serif',
     flowchart: {
       htmlLabels: false,
@@ -16,13 +68,39 @@ function ensureMermaid(theme: 'light' | 'dark') {
     sequence: {
       useMaxWidth: true,
     },
-    themeVariables: {
-      nodeTextColor: theme === 'dark' ? '#f8fafc' : '#1a1b1e',
-      primaryTextColor: theme === 'dark' ? '#f8fafc' : '#1a1b1e',
-      textColor: theme === 'dark' ? '#f8fafc' : '#1a1b1e',
-      mainBkg: theme === 'dark' ? '#0f172a' : '#ffffff',
-    },
+    themeVariables: getMermaidThemeVariables(theme),
   })
+}
+
+let mermaidRenderQueue: Promise<void> = Promise.resolve()
+
+function renderMermaidSvg(id: string, code: string, theme: 'light' | 'dark'): Promise<string> {
+  const task = async () => {
+    ensureMermaid(theme)
+
+    // Mermaid render uses shared global state and temporary DOM work.
+    // Serialize renders so theme switches across multiple viewers do not race.
+    const container = document.createElement('div')
+    container.style.visibility = 'hidden'
+    container.style.position = 'absolute'
+    document.body.appendChild(container)
+
+    try {
+      const result = await mermaid.render(id, code, container)
+      return result.svg
+    } finally {
+      if (container.parentNode === document.body) {
+        document.body.removeChild(container)
+      }
+    }
+  }
+
+  const run = mermaidRenderQueue.then(task, task)
+  mermaidRenderQueue = run.then(
+    () => undefined,
+    () => undefined,
+  )
+  return run
 }
 
 export function DiagramViewer({ diagram, theme }: { diagram: Diagram; theme: 'light' | 'dark' }) {
@@ -31,35 +109,25 @@ export function DiagramViewer({ diagram, theme }: { diagram: Diagram; theme: 'li
   const [err, setErr] = useState<string>('')
   const [fullScreen, setFullScreen] = useState<boolean>(false)
   const rid = useId()
+  const renderNonceRef = useRef(0)
 
   const isMermaid = useMemo(() => diagram.lang.trim().toLowerCase() === 'mermaid', [diagram.lang])
+  const diagramSvgClassName = useMemo(() => `diagramSvg ${theme === 'dark' ? 'diagramSvgDark' : 'diagramSvgLight'}`, [theme])
 
   useEffect(() => {
     if (!isMermaid || mode !== 'render') return
-    ensureMermaid(theme)
     let cancelled = false
     setErr('')
-    setSvg('')
-    const id = `m-${rid.replace(/[:]/g, '')}`
-    
-    // Use a temporary container to help Mermaid calculate dimensions/styles
-    const container = document.createElement('div')
-    container.style.visibility = 'hidden'
-    container.style.position = 'absolute'
-    document.body.appendChild(container)
+    const id = `m-${rid.replace(/[:]/g, '')}-${theme}-${renderNonceRef.current++}`
 
-    mermaid
-      .render(id, diagram.code, container)
-      .then((r: { svg: string }) => {
+    renderMermaidSvg(id, diagram.code, theme)
+      .then((nextSvg) => {
         if (cancelled) return
-        setSvg(r.svg)
+        setSvg(nextSvg)
       })
       .catch((e: unknown) => {
         if (cancelled) return
         setErr(e instanceof Error ? e.message : String(e))
-      })
-      .finally(() => {
-        document.body.removeChild(container)
       })
     return () => {
       cancelled = true
@@ -95,7 +163,7 @@ export function DiagramViewer({ diagram, theme }: { diagram: Diagram; theme: 'li
       {mode === 'render' && isMermaid ? (
         <>
           {err ? <div className="callout calloutBad">{err}</div> : null}
-          {svg ? <div className="diagramSvg" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(svg) }} /> : <div className="muted">Rendering…</div>}
+          {svg ? <div className={diagramSvgClassName} dangerouslySetInnerHTML={{ __html: svg }} /> : <div className="muted">Rendering…</div>}
         </>
       ) : (
         <pre className="pre preCode">{diagram.code}</pre>
@@ -136,7 +204,7 @@ export function DiagramViewer({ diagram, theme }: { diagram: Diagram; theme: 'li
               {mode === 'render' && isMermaid ? (
                 <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   {err ? <div className="callout calloutBad">{err}</div> : null}
-                  {svg ? <div className="diagramSvg diagramSvgFullscreen" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(svg) }} style={{ width: '100%', height: '100%', background: 'transparent', padding: 0 }} /> : <div className="muted">Rendering…</div>}
+                  {svg ? <div className={`${diagramSvgClassName} diagramSvgFullscreen`} dangerouslySetInnerHTML={{ __html: svg }} style={{ width: '100%', height: '100%', background: 'transparent', padding: 0 }} /> : <div className="muted">Rendering…</div>}
                 </div>
               ) : (
                 <pre className="pre preCode" style={{ width: '100%', height: '100%', margin: 0 }}>{diagram.code}</pre>
