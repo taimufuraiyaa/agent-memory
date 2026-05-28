@@ -2,6 +2,15 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import mermaid from 'mermaid'
 import type { Diagram } from '../lib/api'
 
+function escapeHTML(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;')
+}
+
 function getMermaidThemeVariables(theme: 'light' | 'dark') {
   if (theme === 'dark') {
     return {
@@ -101,6 +110,20 @@ function renderMermaidSvg(id: string, code: string, theme: 'light' | 'dark'): Pr
     () => undefined,
   )
   return run
+}
+
+export async function renderDiagramMarkupForExport(diagram: Diagram, theme: 'light' | 'dark'): Promise<string> {
+  const lang = diagram.lang.trim().toLowerCase()
+  if (lang === 'mermaid') {
+    try {
+      const svg = await renderMermaidSvg(`export-${Math.random().toString(36).slice(2)}`, diagram.code, theme)
+      return `<div class="export-diagram export-diagram-svg">${svg}</div>`
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      return `<div class="export-diagram export-diagram-fallback"><pre>${escapeHTML(diagram.code)}</pre><div class="export-diagram-note">Render error: ${escapeHTML(message)}</div></div>`
+    }
+  }
+  return `<div class="export-diagram export-diagram-fallback"><pre>${escapeHTML(diagram.code)}</pre></div>`
 }
 
 export function DiagramViewer({ diagram, theme }: { diagram: Diagram; theme: 'light' | 'dark' }) {

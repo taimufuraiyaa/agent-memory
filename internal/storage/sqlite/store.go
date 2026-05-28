@@ -233,6 +233,47 @@ func (s *Store) Migrate(ctx context.Context) error {
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_llm_usage_workspace_created ON llm_usage_metrics(workspace, created_at DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_llm_usage_workspace_group ON llm_usage_metrics(workspace, run_label, memory_enabled)`,
+		`CREATE TABLE IF NOT EXISTS benchmark_runs (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			workspace TEXT NOT NULL,
+			run_id TEXT NOT NULL,
+			seed_count INTEGER NOT NULL DEFAULT 0,
+			case_count INTEGER NOT NULL DEFAULT 0,
+			case_limit INTEGER NOT NULL DEFAULT 0,
+			top_k INTEGER NOT NULL DEFAULT 0,
+			budget INTEGER NOT NULL DEFAULT 0,
+			seed_duration_ms INTEGER NOT NULL DEFAULT 0,
+			on_duration_ms INTEGER NOT NULL DEFAULT 0,
+			off_duration_ms INTEGER NOT NULL DEFAULT 0,
+			precision REAL NOT NULL DEFAULT 0,
+			recall REAL NOT NULL DEFAULT 0,
+			gold_recall REAL NOT NULL DEFAULT 0,
+			keyword_coverage REAL NOT NULL DEFAULT 0,
+			ndcg REAL NOT NULL DEFAULT 0,
+			f1 REAL NOT NULL DEFAULT 0,
+			token_efficiency REAL NOT NULL DEFAULT 0,
+			baseline_tokens INTEGER NOT NULL DEFAULT 0,
+			returned_tokens INTEGER NOT NULL DEFAULT 0,
+			saved_tokens INTEGER NOT NULL DEFAULT 0,
+			cost_with_memory REAL NOT NULL DEFAULT 0,
+			cost_without_memory REAL NOT NULL DEFAULT 0,
+			cost_saved REAL NOT NULL DEFAULT 0,
+			cost_saved_pct REAL NOT NULL DEFAULT 0,
+			combined_score REAL NOT NULL DEFAULT 0,
+			verdict TEXT NOT NULL DEFAULT '',
+			off_cases INTEGER NOT NULL DEFAULT 0,
+			off_disabled_count INTEGER NOT NULL DEFAULT 0,
+			off_all_disabled INTEGER NOT NULL DEFAULT 0,
+			off_returned_tokens INTEGER NOT NULL DEFAULT 0,
+			off_baseline_tokens INTEGER NOT NULL DEFAULT 0,
+			off_saved_tokens INTEGER NOT NULL DEFAULT 0,
+			generator_manifest_json TEXT NOT NULL DEFAULT '{}',
+			run_manifest_json TEXT NOT NULL DEFAULT '{}',
+			clusters_json TEXT NOT NULL DEFAULT '[]',
+			created_at TEXT NOT NULL,
+			UNIQUE(workspace, run_id)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_benchmark_runs_workspace_created ON benchmark_runs(workspace, created_at DESC)`,
 	}
 	for _, stmt := range stmts {
 		if _, err := s.db.ExecContext(ctx, stmt); err != nil {
@@ -781,6 +822,26 @@ func (s *Store) MarkAccessed(ctx context.Context, ids []string, at time.Time) er
 		}
 	}
 	return tx.Commit()
+}
+
+// SetPinned updates the pin state for a single memory entry and returns the fresh row.
+func (s *Store) SetPinned(ctx context.Context, id string, pinned bool) (*core.MemoryEntry, error) {
+	if strings.TrimSpace(id) == "" {
+		return nil, fmt.Errorf("memory id is required")
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	res, err := s.db.ExecContext(ctx, `UPDATE memories SET pinned = ?, updated_at = ? WHERE id = ?`, boolToInt(pinned), now, id)
+	if err != nil {
+		return nil, fmt.Errorf("set pinned: %w", err)
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return nil, fmt.Errorf("set pinned rows: %w", err)
+	}
+	if affected == 0 {
+		return nil, sql.ErrNoRows
+	}
+	return s.GetMemory(ctx, id)
 }
 
 // SetDecayScores applies decay scores in one transaction.

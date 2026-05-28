@@ -84,6 +84,117 @@ exit 1
 	}
 }
 
+func TestRunInitHereFallsBackToReinstallForExistingProject(t *testing.T) {
+	cwd := t.TempDir()
+	oldWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	defer func() {
+		_ = os.Chdir(oldWD)
+	}()
+	if err := os.Chdir(cwd); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+
+	binPath := filepath.Join(t.TempDir(), "agent-memory")
+	markerPath := filepath.Join(cwd, "reinstall-ran")
+	script := `#!/bin/sh
+set -eu
+cmd="$1"
+shift
+case "$cmd" in
+  init)
+    echo "project already exists" >&2
+    exit 1
+    ;;
+  reinstall)
+    : > "` + markerPath + `"
+    exit 0
+    ;;
+  *)
+    echo "unexpected command: $cmd" >&2
+    exit 2
+    ;;
+esac
+`
+	if err := os.WriteFile(binPath, []byte(script), 0o755); err != nil {
+		t.Fatalf("write fake agent-memory: %v", err)
+	}
+
+	cfg := config{
+		dataDir:     t.TempDir(),
+		projectName: "existing-proj",
+		quiet:       true,
+	}
+	if err := runInitHere(cfg, binPath); err != nil {
+		t.Fatalf("runInitHere: %v", err)
+	}
+	if _, err := os.Stat(markerPath); err != nil {
+		t.Fatalf("expected reinstall fallback marker: %v", err)
+	}
+}
+
+func TestRunInitHerePassesIDEFlagsToReinstallFallback(t *testing.T) {
+	cwd := t.TempDir()
+	oldWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	defer func() {
+		_ = os.Chdir(oldWD)
+	}()
+	if err := os.Chdir(cwd); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+
+	binPath := filepath.Join(t.TempDir(), "agent-memory")
+	markerPath := filepath.Join(cwd, "trae-flag-ran")
+	script := `#!/bin/sh
+set -eu
+cmd="$1"
+shift
+case "$cmd" in
+  init)
+    echo "project already exists" >&2
+    exit 1
+    ;;
+  reinstall)
+    found="0"
+    prev=""
+    for arg in "$@"; do
+      if [ "$prev" = "--ide" ] && [ "$arg" = "trae" ]; then
+        found="1"
+      fi
+      prev="$arg"
+    done
+    if [ "$found" != "1" ]; then
+      echo "missing --ide trae" >&2
+      exit 3
+    fi
+    : > "` + markerPath + `"
+    exit 0
+    ;;
+esac
+`
+	if err := os.WriteFile(binPath, []byte(script), 0o755); err != nil {
+		t.Fatalf("write fake agent-memory: %v", err)
+	}
+
+	cfg := config{
+		dataDir:     t.TempDir(),
+		projectName: "existing-proj",
+		quiet:       true,
+		ideTargets:  stringSliceFlag{"trae"},
+	}
+	if err := runInitHere(cfg, binPath); err != nil {
+		t.Fatalf("runInitHere: %v", err)
+	}
+	if _, err := os.Stat(markerPath); err != nil {
+		t.Fatalf("expected ide flag marker: %v", err)
+	}
+}
+
 func fakeInstallNPMScriptDir(t *testing.T, script string) string {
 	t.Helper()
 	dir := t.TempDir()

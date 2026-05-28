@@ -1,0 +1,9 @@
+{
+  "cluster_count": 25,
+  "question_count_per_cluster": 10,
+  "scaled_target_formula": "25 x 10 x 40",
+  "seed_count": 200,
+  "seed_count_per_cluster": 8,
+  "test_case_count": 10000,
+  "variants_per_question": 40
+}

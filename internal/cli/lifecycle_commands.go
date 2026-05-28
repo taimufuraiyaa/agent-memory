@@ -67,13 +67,14 @@ func newInitCommand() *cobra.Command {
 	cmd.Flags().BoolVar(&force, "force", false, "Archive and recreate project if it already exists")
 	cmd.Flags().BoolVar(&noRule, "no-rule", false, "Do not write IDE rule files")
 	cmd.Flags().StringVar(&rulePath, "rule-path", "", "Override Cursor rule output path (cursor only)")
-	cmd.Flags().StringSliceVar(&ides, "ide", []string{"cursor"}, "IDE rule targets (repeatable): cursor|antigravity|claude|aierules|cursorrules|windsurfrules|generic|all")
+	cmd.Flags().StringSliceVar(&ides, "ide", nil, "IDE rule targets (repeatable, default: auto-detect present IDE files, else cursor): cursor|antigravity|claude|aierules|cursorrules|trae|windsurfrules|generic|all")
 	return cmd
 }
 
 func newReinstallCommand() *cobra.Command {
 	var f lifecycleFlags
 	var projectName string
+	var ides []string
 	var force bool
 	cmd := &cobra.Command{
 		Use:   "reinstall",
@@ -94,6 +95,7 @@ func newReinstallCommand() *cobra.Command {
 				CWD:         cwd,
 				ProjectName: projectName,
 				Force:       force,
+				IDEs:        ides,
 			})
 			if err != nil {
 				return err
@@ -103,6 +105,7 @@ func newReinstallCommand() *cobra.Command {
 	}
 	addLifecycleFlags(cmd, &f)
 	cmd.Flags().StringVarP(&projectName, "project-name", "n", "", "Project name (optional: auto-detect from cwd rule)")
+	cmd.Flags().StringSliceVar(&ides, "ide", nil, "IDE rule targets to write during reinstall (repeatable): cursor|antigravity|claude|aierules|cursorrules|trae|windsurfrules|generic|all")
 	cmd.Flags().BoolVar(&force, "force", true, "Overwrite IDE hook/rule files even if already present")
 	return cmd
 }

@@ -149,6 +149,38 @@ func TestServerWriteSearchRecall(t *testing.T) {
 	if useful, _ := updatedMemory["useful_count"].(float64); useful < 1 {
 		t.Fatalf("expected helpful feedback to increment useful_count, got %+v", updatedMemory)
 	}
+	pinResp := postJSON(t, ts.URL+"/api/v1/memories/pin", map[string]any{
+		"workspace": "ws",
+		"memory_id": memoryID,
+		"pinned":    true,
+	})
+	pinnedMemory, _ := pinResp["updated_memory"].(map[string]any)
+	if pinned, _ := pinnedMemory["pinned"].(bool); !pinned {
+		t.Fatalf("expected memory to be pinned, got %+v", pinnedMemory)
+	}
+	unpinResp := postJSON(t, ts.URL+"/api/v1/memories/pin", map[string]any{
+		"workspace": "ws",
+		"memory_id": memoryID,
+		"pinned":    false,
+	})
+	unpinnedMemory, _ := unpinResp["updated_memory"].(map[string]any)
+	if pinned, _ := unpinnedMemory["pinned"].(bool); pinned {
+		t.Fatalf("expected memory to be unpinned, got %+v", unpinnedMemory)
+	}
+	deleteResp := postJSON(t, ts.URL+"/api/v1/memories/delete", map[string]any{
+		"workspace":  "ws",
+		"memory_ids": []string{memoryID},
+	})
+	if deletedCount, _ := deleteResp["deleted_count"].(float64); deletedCount != 1 {
+		t.Fatalf("expected one deleted memory, got %+v", deleteResp)
+	}
+	postDeleteResults := getJSON(t, ts.URL+"/api/v1/memories/recent?workspace=ws&limit=5")["results"].([]any)
+	for _, raw := range postDeleteResults {
+		entry, _ := raw.(map[string]any)
+		if entryID, _ := entry["id"].(string); entryID == memoryID {
+			t.Fatalf("expected deleted memory %q to be removed from recent results", memoryID)
+		}
+	}
 	sessionResp := postJSON(t, ts.URL+"/api/v1/memories/session-end", map[string]any{"transcript": "we should always run migrations\nresult was success"})
 	if _, ok := sessionResp["total_extracted"]; !ok {
 		t.Fatalf("expected session-end extraction response")
@@ -272,6 +304,84 @@ func TestServerWriteSearchRecall(t *testing.T) {
 	defer func() { _ = res.Body.Close() }()
 	if res.StatusCode == http.StatusOK {
 		t.Fatalf("expected /dashboard/ to not be served by API server in standalone dashboard mode")
+	}
+}
+
+func TestServerBenchmarkRunsAPI(t *testing.T) {
+	baseDir := t.TempDir()
+	modelDir := filepath.Join(t.TempDir(), "model")
+	if err := os.MkdirAll(modelDir, 0o755); err != nil {
+		t.Fatalf("mkdir model: %v", err)
+	}
+	provider, err := embeddings.NewLocalProvider(modelDir)
+	if err != nil {
+		t.Fatalf("provider: %v", err)
+	}
+	svc := &Service{
+		Workspace:         "ws",
+		BaseDir:           baseDir,
+		EmbeddingProvider: provider,
+	}
+	ts := httptest.NewServer(NewMux(svc))
+	defer ts.Close()
+
+	ingest := postJSON(t, ts.URL+"/api/v1/benchmark/ingest", map[string]any{
+		"workspace":           "ws",
+		"run_id":              "benchmark-001",
+		"seed_count":          200,
+		"case_count":          10000,
+		"top_k":               20,
+		"budget":              400,
+		"precision":           0.61,
+		"recall":              0.58,
+		"gold_recall":         0.52,
+		"keyword_coverage":    0.67,
+		"ndcg":                0.72,
+		"f1":                  0.59,
+		"token_efficiency":    0.44,
+		"baseline_tokens":     9000,
+		"returned_tokens":     5000,
+		"saved_tokens":        4000,
+		"cost_with_memory":    0.15,
+		"cost_without_memory": 0.27,
+		"cost_saved":          0.12,
+		"cost_saved_pct":      0.4444,
+		"combined_score":      0.63,
+		"verdict":             "GOOD BENEFIT",
+		"off_cases":           10000,
+		"off_disabled_count":  10000,
+		"off_all_disabled":    true,
+		"clusters": []map[string]any{
+			{
+				"cluster_id":     "retrieval-engine",
+				"cluster_title":  "Retrieval Engine",
+				"cases":          400,
+				"precision":      0.7,
+				"combined_score": 0.68,
+				"verdict":        "GOOD BENEFIT",
+			},
+		},
+		"generator_manifest": map[string]any{"test_case_count": 10000},
+		"run_manifest":       map[string]any{"run_id": "benchmark-001"},
+		"created_at":         "2026-05-28T17:00:00Z",
+	})
+	run, _ := ingest["run"].(map[string]any)
+	if runID, _ := run["run_id"].(string); runID != "benchmark-001" {
+		t.Fatalf("expected run id to round-trip, got %+v", ingest)
+	}
+
+	listed := getJSON(t, ts.URL+"/api/v1/benchmark/runs?workspace=ws&limit=5")
+	runs, _ := listed["runs"].([]any)
+	if len(runs) != 1 {
+		t.Fatalf("expected 1 benchmark run, got %+v", listed)
+	}
+	first, _ := runs[0].(map[string]any)
+	if combined, _ := first["combined_score"].(float64); combined <= 0 {
+		t.Fatalf("expected combined score in response, got %+v", first)
+	}
+	clusters, _ := first["clusters"].([]any)
+	if len(clusters) != 1 {
+		t.Fatalf("expected cluster breakdown in response, got %+v", first)
 	}
 }
 
@@ -453,6 +563,62 @@ func TestServerProjectLifecycleRoutes(t *testing.T) {
 	})
 	if _, ok := deleteResp["archived_path"]; !ok {
 		t.Fatalf("expected archived path on keep_data delete")
+	}
+}
+
+func TestServerSearchAllProjects(t *testing.T) {
+	baseDir := t.TempDir()
+	modelDir := filepath.Join(t.TempDir(), "model")
+	if err := os.MkdirAll(modelDir, 0o755); err != nil {
+		t.Fatalf("mkdir model: %v", err)
+	}
+	provider, err := embeddings.NewLocalProvider(modelDir)
+	if err != nil {
+		t.Fatalf("provider: %v", err)
+	}
+	svc := &Service{
+		Workspace:         "ws",
+		BaseDir:           baseDir,
+		EmbeddingProvider: provider,
+	}
+	ts := httptest.NewServer(NewMux(svc))
+	defer ts.Close()
+
+	cwdA := filepath.Join(t.TempDir(), "proj-a")
+	cwdB := filepath.Join(t.TempDir(), "proj-b")
+	if err := os.MkdirAll(cwdA, 0o755); err != nil {
+		t.Fatalf("mkdir proj-a: %v", err)
+	}
+	if err := os.MkdirAll(cwdB, 0o755); err != nil {
+		t.Fatalf("mkdir proj-b: %v", err)
+	}
+	postJSON(t, ts.URL+"/api/v1/projects/init", map[string]any{"cwd": cwdA, "project_name": "proj-a"})
+	postJSON(t, ts.URL+"/api/v1/projects/init", map[string]any{"cwd": cwdB, "project_name": "proj-b"})
+	postJSON(t, ts.URL+"/api/v1/memories/write", map[string]any{"workspace": "proj-a", "type": "semantic", "content": "redis fallback policy for ranking"})
+	postJSON(t, ts.URL+"/api/v1/memories/write", map[string]any{"workspace": "proj-b", "type": "semantic", "content": "redis fallback policy for dashboard search"})
+
+	searchResp := postJSON(t, ts.URL+"/api/v1/memories/search", map[string]any{
+		"workspace": allProjectsScope,
+		"query":     "redis fallback ranking",
+		"top_k":     10,
+		"mode":      "search",
+	})
+	results, _ := searchResp["results"].([]any)
+	if len(results) < 2 {
+		t.Fatalf("expected aggregated results across projects, got %+v", results)
+	}
+	workspaces := map[string]bool{}
+	for _, item := range results {
+		row, _ := item.(map[string]any)
+		if ws, _ := row["workspace"].(string); ws != "" {
+			workspaces[ws] = true
+		}
+	}
+	if !workspaces["proj-a"] || !workspaces["proj-b"] {
+		t.Fatalf("expected all-projects search to include both workspaces, got %+v", workspaces)
+	}
+	if workspaceValue, _ := searchResp["workspace"].(string); workspaceValue != allProjectsScope {
+		t.Fatalf("expected aggregated workspace marker, got %+v", searchResp)
 	}
 }
 

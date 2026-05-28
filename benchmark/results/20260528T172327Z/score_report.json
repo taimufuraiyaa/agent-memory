@@ -1,0 +1,106 @@
+{
+  "clusters": [
+    {
+      "baseline_tokens": 420,
+      "cases": 2,
+      "cluster_id": "retrieval-engine",
+      "cluster_title": "Retrieval Engine",
+      "combined_score": 0.6058420875143604,
+      "cost_saved": 0.0,
+      "cost_saved_pct": 0.0,
+      "cost_with_memory": 0.012599999999999998,
+      "cost_without_memory": 0.012599999999999998,
+      "f1": 0.1739130434782609,
+      "gold_recall": 1.0,
+      "keyword_coverage": 1.0,
+      "ndcg": 0.8938031326661373,
+      "precision": 0.1,
+      "recall": 0.6666666666666666,
+      "returned_tokens": 420,
+      "saved_tokens": 0,
+      "token_efficiency": 0.0,
+      "verdict": "GOOD BENEFIT"
+    }
+  ],
+  "db_path": "benchmark/results/20260528T172327Z/benchmark.db",
+  "generator_manifest": {
+    "cluster_count": 25,
+    "question_count_per_cluster": 10,
+    "scaled_target_formula": "25 x 10 x 40",
+    "seed_count": 200,
+    "seed_count_per_cluster": 8,
+    "test_case_count": 10000,
+    "variants_per_question": 40
+  },
+  "off_phase": {
+    "all_disabled": true,
+    "baseline_tokens": 0,
+    "cases": 2,
+    "disabled_count": 2,
+    "returned_tokens": 0,
+    "saved_tokens": 0
+  },
+  "per_case_report_path": "benchmark/results/20260528T172327Z/score_cases.jsonl",
+  "run_id": "20260528T172327Z",
+  "run_manifest": {
+    "artifacts": {
+      "id_mapping": "/Users/time/timebooks/agent-memory/benchmark/results/20260528T172327Z/id_mapping.json",
+      "quality_off": "/Users/time/timebooks/agent-memory/benchmark/results/20260528T172327Z/quality-off.jsonl",
+      "quality_on": "/Users/time/timebooks/agent-memory/benchmark/results/20260528T172327Z/quality-on.jsonl",
+      "seed_results": "/Users/time/timebooks/agent-memory/benchmark/results/20260528T172327Z/seed_results.jsonl"
+    },
+    "binary_path": "/Users/time/timebooks/agent-memory/benchmark/bin/agent-memory-benchmark",
+    "budget": 400,
+    "case_limit": 2,
+    "cases_file": "/Users/time/timebooks/agent-memory/benchmark/testdata/testcases.jsonl",
+    "db_path": "/Users/time/timebooks/agent-memory/benchmark/results/20260528T172327Z/benchmark.db",
+    "executed_case_count_per_phase": 2,
+    "generated_at": "2026-05-28T17:23:54.290532Z",
+    "generator_manifest": {
+      "cluster_count": 25,
+      "question_count_per_cluster": 10,
+      "scaled_target_formula": "25 x 10 x 40",
+      "seed_count": 200,
+      "seed_count_per_cluster": 8,
+      "test_case_count": 10000,
+      "variants_per_question": 40
+    },
+    "model_dir": "",
+    "off_duration_ms": 190,
+    "on_duration_ms": 5780,
+    "run_id": "20260528T172327Z",
+    "seed_count": 200,
+    "seed_duration_ms": 17281,
+    "seed_file": "/Users/time/timebooks/agent-memory/benchmark/testdata/seed_memories.jsonl",
+    "top_k": 20,
+    "workspace": "benchmark-toggle-comparison"
+  },
+  "summary": {
+    "baseline_tokens": 420,
+    "cases": 2,
+    "combined_score": 0.6058420875143604,
+    "cost_saved": 0.0,
+    "cost_saved_pct": 0.0,
+    "cost_with_memory": 0.012599999999999998,
+    "cost_without_memory": 0.012599999999999998,
+    "f1": 0.1739130434782609,
+    "gold_recall": 1.0,
+    "keyword_coverage": 1.0,
+    "ndcg": 0.8938031326661373,
+    "precision": 0.1,
+    "recall": 0.6666666666666666,
+    "returned_tokens": 420,
+    "saved_tokens": 0,
+    "token_efficiency": 0.0,
+    "verdict": "GOOD BENEFIT"
+  },
+  "weights": {
+    "f1": 0.1,
+    "gold_recall": 0.15,
+    "keyword_coverage": 0.2,
+    "ndcg": 0.25,
+    "precision": 0.15,
+    "token_efficiency": 0.15
+  },
+  "workspace": "benchmark-toggle-comparison"
+}
