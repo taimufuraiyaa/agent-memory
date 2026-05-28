@@ -763,6 +763,49 @@ body.light .memFooter {
   flex-wrap: wrap;
 }
 
+.memSignal {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 20px;
+  background: rgba(56, 189, 248, 0.08);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+body.light .memSignal {
+  background: rgba(2, 132, 199, 0.08);
+}
+
+.memSignalTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.memSignalLabel {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.memSignalValue {
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--accent-primary);
+}
+
+.memSignalHint {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
 .memMetric {
   color: var(--text-subtle);
   font-family: var(--font-mono);
@@ -808,6 +851,23 @@ body.light .memMeta {
   font-size: 13px;
   font-weight: 500;
   color: var(--text-main);
+}
+
+.memMetaSemantic {
+  background: rgba(56, 189, 248, 0.08);
+  border-color: var(--border-glow);
+}
+
+body.light .memMetaSemantic {
+  background: rgba(2, 132, 199, 0.08);
+}
+
+.memMetaPrimaryValue {
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--accent-primary);
+  line-height: 1;
 }
 
 .pills {
@@ -1349,6 +1409,138 @@ body.light .modePills {
 .input:focus {
   border-color: var(--border-glow);
   box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+.semanticFilterCard {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--bg-card);
+}
+
+.semanticFilterHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.semanticFilterHint {
+  margin-top: 6px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+  max-width: 60ch;
+}
+
+.semanticSlider {
+  width: 100%;
+  accent-color: var(--accent-primary);
+  cursor: pointer;
+}
+
+.semanticFilterSummary {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.semanticThresholdValue {
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--accent-primary);
+  min-width: 56px;
+}
+
+.semanticThresholdCopy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.semanticThresholdLabel {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.semanticThresholdHint {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.semanticPresetRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.semanticPreset {
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  color: var(--text-muted);
+  padding: 6px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  transition: all 0.2s ease;
+}
+
+.semanticPreset:hover {
+  border-color: var(--border-hover);
+  color: var(--text-main);
+}
+
+.semanticPresetOn {
+  background: var(--accent-primary);
+  color: #090d16;
+  border-color: var(--accent-primary);
+  font-weight: 700;
+}
+
+.semanticPresetReset {
+  white-space: nowrap;
+}
+
+.semanticFilterScale {
+  color: var(--text-subtle);
+  font-size: 11px;
+  font-family: var(--font-mono);
+}
+
+.relevancePill {
+  font-weight: 700;
+}
+
+.relevancePillHigh {
+  background: var(--success-bg);
+  border-color: rgba(16, 185, 129, 0.35);
+  color: var(--success);
+}
+
+.relevancePillMedium {
+  background: var(--info-bg);
+  border-color: rgba(6, 182, 212, 0.35);
+  color: var(--info);
+}
+
+.relevancePillLow {
+  background: var(--warning-bg);
+  border-color: rgba(245, 158, 11, 0.35);
+  color: var(--warning);
+}
+
+.relevancePillWeak {
+  background: var(--danger-bg);
+  border-color: rgba(244, 63, 94, 0.35);
+  color: var(--danger);
 }
 
 .chips {
@@ -3323,6 +3515,64 @@ body.light {
 
 .memMetric strong {
   color: var(--text-main);
+}
+
+.memSignal {
+  background: var(--bg-input);
+}
+
+.memSignalValue,
+.semanticThresholdValue,
+.memMetaPrimaryValue {
+  font-family: var(--font-mono);
+}
+
+.semanticFilterCard,
+.semanticPreset {
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.semanticFilterCard {
+  border-style: dotted;
+  background: var(--bg-input);
+}
+
+.semanticPreset {
+  border-style: dotted;
+  background: var(--bg-card);
+}
+
+.semanticPresetOn {
+  color: var(--bg0);
+}
+
+.relevancePillHigh {
+  background: var(--success-bg);
+  border-color: var(--success);
+  color: var(--success);
+  border-style: dashed;
+}
+
+.relevancePillMedium {
+  background: var(--info-bg);
+  border-color: var(--info);
+  color: var(--info);
+  border-style: dashed;
+}
+
+.relevancePillLow {
+  background: var(--warning-bg);
+  border-color: var(--warning);
+  color: var(--warning);
+  border-style: dashed;
+}
+
+.relevancePillWeak {
+  background: var(--danger-bg);
+  border-color: var(--danger);
+  color: var(--danger);
+  border-style: dashed;
 }
 
 .detailsFold[open] {

@@ -26,7 +26,7 @@ func TestUpsertAndListMemoryVectorsByWorkspace(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("upsert memory: %v", err)
 	}
-	if err := store.UpsertMemoryVector(context.Background(), "m1", "ws", []float32{0.1, 0.2, 0.3}); err != nil {
+	if err := store.UpsertMemoryVector(context.Background(), "m1", "ws", "test-provider", []float32{0.1, 0.2, 0.3}); err != nil {
 		t.Fatalf("upsert memory vector: %v", err)
 	}
 	vecs, err := store.ListMemoryVectorsByWorkspace(context.Background(), "ws")
@@ -39,6 +39,20 @@ func TestUpsertAndListMemoryVectorsByWorkspace(t *testing.T) {
 	}
 	if len(got) != 3 {
 		t.Fatalf("expected vector len 3, got %d", len(got))
+	}
+	rows, err := store.ListMemoryVectorRowsByWorkspace(context.Background(), "ws")
+	if err != nil {
+		t.Fatalf("list vector rows: %v", err)
+	}
+	if len(rows) != 1 || rows[0].EmbeddingProvider != "test-provider" {
+		t.Fatalf("expected vector provenance to round-trip, got %+v", rows)
+	}
+	counts, err := store.CountMemoryVectorsByProvider(context.Background(), "ws")
+	if err != nil {
+		t.Fatalf("count by provider: %v", err)
+	}
+	if counts["test-provider"] != 1 {
+		t.Fatalf("expected provider count for test-provider, got %+v", counts)
 	}
 }
 
@@ -72,10 +86,10 @@ func TestSearchMemoryVectorsSQL(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("upsert m2: %v", err)
 	}
-	if err := store.UpsertMemoryVector(ctx, "m1", "ws", []float32{1, 0, 0}); err != nil {
+	if err := store.UpsertMemoryVector(ctx, "m1", "ws", "test-provider", []float32{1, 0, 0}); err != nil {
 		t.Fatalf("vector m1: %v", err)
 	}
-	if err := store.UpsertMemoryVector(ctx, "m2", "ws", []float32{0, 1, 0}); err != nil {
+	if err := store.UpsertMemoryVector(ctx, "m2", "ws", "test-provider", []float32{0, 1, 0}); err != nil {
 		t.Fatalf("vector m2: %v", err)
 	}
 	scores, err := store.SearchMemoryVectorsSQL(ctx, "ws", []float32{1, 0, 0}, 5, nil, nil)

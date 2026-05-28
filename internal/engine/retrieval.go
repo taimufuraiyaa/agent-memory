@@ -162,6 +162,11 @@ func (e *RetrievalEngine) Retrieve(ctx context.Context, opt RetrievalOptions) (*
 		if !matchRetrievalFilters(h.Memory, opt.Filters) {
 			continue
 		}
+		// Enforce the semantic floor before weighted reranking so recency and
+		// other secondary signals cannot rescue low-semantic candidates.
+		if h.Score < policy.MinSemanticScore {
+			continue
+		}
 		recency := recencyScore(now, h.Memory.UpdatedAt)
 		outcome := outcomeScore(opt.Mode, h.Memory)
 		decay := decayScore(h.Memory)

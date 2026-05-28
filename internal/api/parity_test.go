@@ -47,6 +47,9 @@ func TestSearchParityHTTPVsEngine(t *testing.T) {
 		Query:     "order events",
 		TopK:      2,
 		Mode:      engine.ModeSearch,
+		Policy: engine.RetrievalPolicy{
+			MinSemanticScore: float64Ptr(0),
+		},
 	})
 	if err != nil {
 		t.Fatalf("direct retrieval: %v", err)
@@ -56,7 +59,16 @@ func TestSearchParityHTTPVsEngine(t *testing.T) {
 	ts := httptest.NewServer(apipkg.NewMux(svc))
 	defer ts.Close()
 
-	body, _ := json.Marshal(map[string]any{"query": "order events", "workspace": "ws", "top_k": 2, "mode": "search", "explain": true})
+	body, _ := json.Marshal(map[string]any{
+		"query":     "order events",
+		"workspace": "ws",
+		"top_k":     2,
+		"mode":      "search",
+		"explain":   true,
+		"filters": map[string]any{
+			"min_semantic_score": 0.0,
+		},
+	})
 	resp, err := http.Post(ts.URL+"/api/v1/memories/search", "application/json", bytes.NewReader(body))
 	if err != nil {
 		t.Fatalf("http post: %v", err)
@@ -196,6 +208,7 @@ func TestSearchParityHTTPVsCLI(t *testing.T) {
 		"--query", "order events",
 		"--top-k", "2",
 		"--mode", "search",
+		"--min-semantic-score", "0",
 		"--explain",
 		"--format", "json",
 	})
@@ -215,7 +228,16 @@ func TestSearchParityHTTPVsCLI(t *testing.T) {
 		t.Fatalf("expected 2 cli hits, got %d", len(cliHits))
 	}
 
-	body, _ := json.Marshal(map[string]any{"query": "order events", "workspace": "ws", "top_k": 2, "mode": "search", "explain": true})
+	body, _ := json.Marshal(map[string]any{
+		"query":     "order events",
+		"workspace": "ws",
+		"top_k":     2,
+		"mode":      "search",
+		"explain":   true,
+		"filters": map[string]any{
+			"min_semantic_score": 0.0,
+		},
+	})
 	resp, err := http.Post(ts.URL+"/api/v1/memories/search", "application/json", bytes.NewReader(body))
 	if err != nil {
 		t.Fatalf("http post: %v", err)
@@ -288,7 +310,7 @@ func TestSearchParityHTTPVsCLIWithTierFilter(t *testing.T) {
 		if err != nil {
 			t.Fatalf("embed %s: %v", id, err)
 		}
-		if err := store.UpsertMemoryVector(ctx, id, "ws", vec); err != nil {
+		if err := store.UpsertMemoryVector(ctx, id, "ws", provider.Name(), vec); err != nil {
 			t.Fatalf("vector %s: %v", id, err)
 		}
 	}
@@ -314,6 +336,7 @@ func TestSearchParityHTTPVsCLIWithTierFilter(t *testing.T) {
 		"--top-k", "10",
 		"--mode", "search",
 		"--tier", "vector",
+		"--min-semantic-score", "0",
 		"--explain",
 		"--format", "json",
 	})
@@ -343,7 +366,8 @@ func TestSearchParityHTTPVsCLIWithTierFilter(t *testing.T) {
 		"mode":      "search",
 		"explain":   true,
 		"filters": map[string]any{
-			"tiers": []string{"vector"},
+			"tiers":              []string{"vector"},
+			"min_semantic_score": 0.0,
 		},
 	})
 	resp, err := http.Post(ts.URL+"/api/v1/memories/search", "application/json", bytes.NewReader(body))
@@ -439,4 +463,8 @@ func TestRecallPreviewParityHTTPVsCLIRaw(t *testing.T) {
 	if contextBlock != cliText {
 		t.Fatalf("context parity mismatch between cli raw recall and recall preview")
 	}
+}
+
+func float64Ptr(v float64) *float64 {
+	return &v
 }

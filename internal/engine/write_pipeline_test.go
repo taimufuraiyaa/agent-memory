@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -268,6 +269,96 @@ func TestWritePipelineMarkdownTierIntegration(t *testing.T) {
 	}
 }
 
+func TestWritePipelinePersistsEagerVectorImmediately(t *testing.T) {
+	store := mustOpenStore(t)
+	t.Cleanup(func() { _ = store.Close() })
+
+	provider := &stubProvider{
+		name:   "test-provider",
+		vector: []float32{1, 0, 0},
+	}
+	p := NewWritePipelineWithEmbedder(store, provider)
+
+	out, err := p.Write(context.Background(), WriteInput{
+		Workspace: "ws",
+		Type:      core.SemanticMemory,
+		Content:   "OPS consumes orders.events",
+		Source:    core.MemorySource{Type: core.SourceCodeAnalysis},
+	})
+	if err != nil {
+		t.Fatalf("write failed: %v", err)
+	}
+
+	rows, err := store.ListMemoryVectorRowsByWorkspace(context.Background(), "ws")
+	if err != nil {
+		t.Fatalf("list vectors: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 eager vector row, got %d", len(rows))
+	}
+	if rows[0].MemoryID != out.ID {
+		t.Fatalf("expected vector row for %s, got %s", out.ID, rows[0].MemoryID)
+	}
+	if rows[0].EmbeddingProvider != provider.Name() {
+		t.Fatalf("expected provider %q, got %q", provider.Name(), rows[0].EmbeddingProvider)
+	}
+
+	retrieval := NewRetrievalEngine(NewVectorSearcher(store, provider))
+	res, err := retrieval.Retrieve(context.Background(), RetrievalOptions{
+		Workspace: "ws",
+		Query:     "OPS consumes orders.events",
+		TopK:      5,
+		Mode:      ModeSearch,
+	})
+	if err != nil {
+		t.Fatalf("retrieve failed: %v", err)
+	}
+	if len(res.Hits) == 0 {
+		t.Fatalf("expected fresh write to be immediately searchable")
+	}
+	if res.Hits[0].Memory.ID != out.ID {
+		t.Fatalf("expected first hit %s, got %s", out.ID, res.Hits[0].Memory.ID)
+	}
+	if provider.calls != 2 {
+		t.Fatalf("expected eager write + query embed only, got %d calls", provider.calls)
+	}
+}
+
+func TestWritePipelineRollsBackOnEagerEmbedFailure(t *testing.T) {
+	store := mustOpenStore(t)
+	t.Cleanup(func() { _ = store.Close() })
+
+	p := NewWritePipelineWithEmbedder(store, &stubProvider{
+		name: "test-provider",
+		err:  errors.New("embed failed"),
+	})
+
+	if _, err := p.Write(context.Background(), WriteInput{
+		Workspace: "ws",
+		Type:      core.SemanticMemory,
+		Content:   "OPS consumes orders.events",
+		Source:    core.MemorySource{Type: core.SourceCodeAnalysis},
+	}); err == nil {
+		t.Fatal("expected eager embed failure")
+	}
+
+	memories, err := store.ListMemoriesByWorkspace(context.Background(), "ws")
+	if err != nil {
+		t.Fatalf("list memories: %v", err)
+	}
+	if len(memories) != 0 {
+		t.Fatalf("expected rollback to remove memory row, got %d rows", len(memories))
+	}
+
+	rows, err := store.ListMemoryVectorRowsByWorkspace(context.Background(), "ws")
+	if err != nil {
+		t.Fatalf("list vectors: %v", err)
+	}
+	if len(rows) != 0 {
+		t.Fatalf("expected rollback to remove vector rows, got %d", len(rows))
+	}
+}
+
 func mustOpenStore(t *testing.T) *sqlite.Store {
 	t.Helper()
 	dbPath := filepath.Join(t.TempDir(), "memory.db")
@@ -276,4 +367,41 @@ func mustOpenStore(t *testing.T) *sqlite.Store {
 		t.Fatalf("open store: %v", err)
 	}
 	return store
+}
+
+type stubProvider struct {
+	name   string
+	vector []float32
+	err    error
+	calls  int
+}
+
+func (p *stubProvider) Name() string {
+	return p.name
+}
+
+func (p *stubProvider) Dimension() int {
+	return len(p.vector)
+}
+
+func (p *stubProvider) Embed(_ context.Context, _ string) ([]float32, error) {
+	p.calls++
+	if p.err != nil {
+		return nil, p.err
+	}
+	out := make([]float32, len(p.vector))
+	copy(out, p.vector)
+	return out, nil
+}
+
+func (p *stubProvider) EmbedBatch(ctx context.Context, texts []string) ([][]float32, error) {
+	out := make([][]float32, 0, len(texts))
+	for _, text := range texts {
+		vec, err := p.Embed(ctx, text)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, vec)
+	}
+	return out, nil
 }

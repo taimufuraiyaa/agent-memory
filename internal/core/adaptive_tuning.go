@@ -28,28 +28,28 @@ type AdaptiveSignalTuning struct {
 }
 
 type AdaptiveFeedbackTuning struct {
-	HelpfulSalienceDelta             float64
-	HelpfulSuppressionDelta          float64
-	IgnoredSalienceDelta             float64
-	IgnoredSuppressionDelta          float64
-	RejectedSalienceDelta            float64
-	RejectedSuppressionDelta         float64
-	HarmfulSalienceDelta             float64
-	HarmfulSuppressionDelta          float64
-	ConfirmedSalienceDelta           float64
-	ClarifiedSalienceDelta           float64
-	ContradictedSalienceDelta        float64
-	ContradictedSuppressionDelta     float64
-	SupersededSalienceDelta          float64
-	SupersededSuppressionDelta       float64
-	RejectedCooldown                 time.Duration
-	HarmfulCooldown                  time.Duration
-	ContradictedCooldown             time.Duration
+	HelpfulSalienceDelta         float64
+	HelpfulSuppressionDelta      float64
+	IgnoredSalienceDelta         float64
+	IgnoredSuppressionDelta      float64
+	RejectedSalienceDelta        float64
+	RejectedSuppressionDelta     float64
+	HarmfulSalienceDelta         float64
+	HarmfulSuppressionDelta      float64
+	ConfirmedSalienceDelta       float64
+	ClarifiedSalienceDelta       float64
+	ContradictedSalienceDelta    float64
+	ContradictedSuppressionDelta float64
+	SupersededSalienceDelta      float64
+	SupersededSuppressionDelta   float64
+	RejectedCooldown             time.Duration
+	HarmfulCooldown              time.Duration
+	ContradictedCooldown         time.Duration
 }
 
 func DefaultAdaptivePolicy(mode string) AdaptivePolicyDefaults {
 	base := AdaptivePolicyDefaults{
-		MinSemanticScore:    0.02,
+		MinSemanticScore:    0.30,
 		MinTotalScore:       0.02,
 		RelativeScoreCutoff: 0.01,
 		WeakSemanticScore:   0,
@@ -58,18 +58,18 @@ func DefaultAdaptivePolicy(mode string) AdaptivePolicyDefaults {
 	}
 	switch mode {
 	case "recall":
-		base.MinSemanticScore = 0.03
+		base.MinSemanticScore = 0.25
 		base.MinTotalScore = 0.03
 		base.RelativeScoreCutoff = 0.02
 		base.WeakSemanticScore = 0.01
 		base.WeakTotalScore = 0.01
 		base.WeakRelativeCutoff = 0.01
 	case "relate":
-		base.MinSemanticScore = 0.2
+		base.MinSemanticScore = 0.35
 		base.MinTotalScore = 0.17
 		base.RelativeScoreCutoff = 0.3
 	case "outcomes":
-		base.MinSemanticScore = 0.14
+		base.MinSemanticScore = 0.15
 		base.MinTotalScore = 0.18
 		base.RelativeScoreCutoff = 0.3
 	}

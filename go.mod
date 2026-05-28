@@ -8,6 +8,8 @@ require (
 	modernc.org/sqlite v1.50.0
 )
 
+require github.com/yalue/onnxruntime_go v1.30.1 // indirect
+
 require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.13 // indirect

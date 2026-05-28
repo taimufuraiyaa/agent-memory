@@ -82,6 +82,49 @@ function formatPercent(value?: number): string {
   return `${value.toFixed(1)}%`
 }
 
+const SEARCH_DEFAULT_MIN_SEMANTIC_SCORE = 0.3
+
+const semanticFloorPresets = [
+  { label: 'diagnose 0.00', value: 0 },
+  { label: 'default 0.30', value: 0.3 },
+  { label: 'medium 0.40', value: 0.4 },
+  { label: 'high 0.55', value: 0.55 },
+] as const
+
+type RelevanceTone = 'high' | 'medium' | 'low' | 'weak'
+
+function formatScore(value?: number, digits = 3): string {
+  if (typeof value !== 'number' || Number.isNaN(value)) return 'n/a'
+  return value.toFixed(digits)
+}
+
+function clampUnitScore(value: number): number {
+  if (!Number.isFinite(value)) return SEARCH_DEFAULT_MIN_SEMANTIC_SCORE
+  return Math.min(1, Math.max(0, value))
+}
+
+function parseUnitScore(value: string): number | undefined {
+  const trimmed = value.trim()
+  if (!trimmed) return undefined
+  const parsed = Number(trimmed)
+  if (Number.isNaN(parsed)) return undefined
+  return clampUnitScore(parsed)
+}
+
+function getSemanticSimilarity(memory: MemoryEntry): number | undefined {
+  const value = memory.score_breakdown?.semantic_similarity
+  if (typeof value !== 'number' || Number.isNaN(value)) return undefined
+  return clampUnitScore(value)
+}
+
+function getSemanticRelevance(value?: number): { label: string; tone: RelevanceTone } {
+  if (typeof value !== 'number' || Number.isNaN(value)) return { label: 'Weak', tone: 'weak' }
+  if (value >= 0.55) return { label: 'High', tone: 'high' }
+  if (value >= 0.4) return { label: 'Medium', tone: 'medium' }
+  if (value >= 0.3) return { label: 'Low', tone: 'low' }
+  return { label: 'Weak', tone: 'weak' }
+}
+
 function zeroTokenTotals(): TokenMetricTotals {
   return {
     records: 0,
@@ -240,7 +283,7 @@ export function App() {
   const [outcome, setOutcome] = useState<OutcomeResult | ''>('')
   const [minConfidence, setMinConfidence] = useState<string>('')
   const [minDecay, setMinDecay] = useState<string>('')
-  const [minSemantic, setMinSemantic] = useState<string>('')
+  const [minSemantic, setMinSemantic] = useState<string>(SEARCH_DEFAULT_MIN_SEMANTIC_SCORE.toFixed(2))
   const [minTotal, setMinTotal] = useState<string>('')
   const [relativeCutoff, setRelativeCutoff] = useState<string>('')
   const [entities, setEntities] = useState<string>('')
@@ -305,6 +348,16 @@ export function App() {
     [selectedSessionID, sessions],
   )
   const composerExpanded = composerFocused || advancedOpen || draft.trim().length > 0
+  const semanticThreshold = useMemo(() => parseUnitScore(minSemantic) ?? SEARCH_DEFAULT_MIN_SEMANTIC_SCORE, [minSemantic])
+  const semanticThresholdRelevance = useMemo(() => getSemanticRelevance(semanticThreshold), [semanticThreshold])
+  const selectedSemanticSimilarity = useMemo(
+    () => (selectedMemory ? getSemanticSimilarity(selectedMemory) : undefined),
+    [selectedMemory],
+  )
+  const selectedSemanticRelevance = useMemo(
+    () => getSemanticRelevance(selectedSemanticSimilarity),
+    [selectedSemanticSimilarity],
+  )
 
   const diagramMemories = useMemo(() => {
     const map = new Map<string, MemoryEntry>()
@@ -441,14 +494,14 @@ export function App() {
       outcome_result: outcome || undefined,
       min_confidence: minConfidence.trim() ? Number(minConfidence) : undefined,
       min_decay_score: minDecay.trim() ? Number(minDecay) : undefined,
-      min_semantic_score: minSemantic.trim() ? Number(minSemantic) : undefined,
+      min_semantic_score: semanticThreshold,
       min_total_score: minTotal.trim() ? Number(minTotal) : undefined,
       relative_cutoff: relativeCutoff.trim() ? Number(relativeCutoff) : undefined,
       entities: parsedEntities.length ? parsedEntities : undefined,
       date_from: fromDate || undefined,
       date_to: toDate || undefined,
     }
-  }, [entities, fromDate, minConfidence, minDecay, minSemantic, minTotal, outcome, relativeCutoff, tiers, toDate, types])
+  }, [entities, fromDate, minConfidence, minDecay, minTotal, outcome, relativeCutoff, semanticThreshold, tiers, toDate, types])
 
   function openSearch() {
     setMode('search')
@@ -588,7 +641,7 @@ export function App() {
                 ...x,
                 pending: false,
                 text: hitCount > 0 ? `Found ${hitCount} memories.` : 'No results found.',
-                payload: { results: r.results ?? [] },
+                payload: { results: r.results ?? [], search: r },
               }
             : x,
         ),
@@ -770,7 +823,7 @@ export function App() {
             </div>
             <div className="brandText">
               <div className="brandTitle">
-                agent-memory/dashboard <span className="brandVersion">v1.0.12</span>
+                agent-memory/dashboard <span className="brandVersion">v0.7</span>
               </div>
             </div>
           </div>
@@ -1018,11 +1071,62 @@ export function App() {
                           </div>
                         </div>
 
-                        <div className="row row3">
-                          <div>
-                            <label className="label">Min semantic</label>
-                            <input className="input" inputMode="decimal" value={minSemantic} onChange={(e) => setMinSemantic(e.target.value)} placeholder="0.00 - 1.00" />
+                        <div className="semanticFilterCard">
+                          <div className="semanticFilterHeader">
+                            <div>
+                              <label className="label" htmlFor="min-semantic-score">
+                                Min semantic score
+                              </label>
+                              <div className="semanticFilterHint">
+                                Search defaults to `0.30`. Raise it for stricter relevance or lower it only when diagnosing weak matches.
+                              </div>
+                            </div>
+                            <button
+                              className="btn btnGhost semanticPresetReset"
+                              type="button"
+                              onClick={() => setMinSemantic(SEARCH_DEFAULT_MIN_SEMANTIC_SCORE.toFixed(2))}
+                            >
+                              reset 0.30
+                            </button>
                           </div>
+                          <input
+                            id="min-semantic-score"
+                            className="semanticSlider"
+                            type="range"
+                            min={0}
+                            max={1}
+                            step={0.05}
+                            value={semanticThreshold}
+                            onChange={(e) => setMinSemantic(Number(e.target.value).toFixed(2))}
+                          />
+                          <div className="semanticFilterSummary">
+                            <div className="semanticThresholdValue">{semanticThreshold.toFixed(2)}</div>
+                            <div className="semanticThresholdCopy">
+                              <div className="semanticThresholdLabel">Active search floor</div>
+                              <div className="semanticThresholdHint">Sent to backend as `min_semantic_score`.</div>
+                            </div>
+                            <span className={`memPill relevancePill relevancePill${toTitle(semanticThresholdRelevance.tone)}`}>
+                              {semanticThresholdRelevance.label}
+                            </span>
+                          </div>
+                          <div className="semanticPresetRow">
+                            {semanticFloorPresets.map((preset) => (
+                              <button
+                                key={preset.label}
+                                className={semanticThreshold === preset.value ? 'semanticPreset semanticPresetOn' : 'semanticPreset'}
+                                type="button"
+                                onClick={() => setMinSemantic(preset.value.toFixed(2))}
+                              >
+                                {preset.label}
+                              </button>
+                            ))}
+                          </div>
+                          <div className="semanticFilterScale">
+                            Weak &lt; 0.30 | Low 0.30+ | Medium 0.40+ | High 0.55+
+                          </div>
+                        </div>
+
+                        <div className="row row2">
                           <div>
                             <label className="label">Min total</label>
                             <input className="input" inputMode="decimal" value={minTotal} onChange={(e) => setMinTotal(e.target.value)} placeholder="0.00 - 1.00" />
@@ -1118,6 +1222,11 @@ export function App() {
                   <span className="memPill">{selectedMemory.type}</span>
                   <span className="memPill">{selectedMemory.storage_tier}</span>
                   {selectedMemory.band ? <span className="memPill memPillAccent">{selectedMemory.band}</span> : null}
+                  {typeof selectedSemanticSimilarity === 'number' ? (
+                    <span className={`memPill relevancePill relevancePill${toTitle(selectedSemanticRelevance.tone)}`}>
+                      {selectedSemanticRelevance.label} semantic {formatScore(selectedSemanticSimilarity, 2)}
+                    </span>
+                  ) : null}
                 </div>
 
                 <div className="detailSection">
@@ -1135,6 +1244,20 @@ export function App() {
                 <div className="detailSection">
                   <div className="detailSectionTitle">Memory Facts</div>
                   <div className="memMetaGrid">
+                    {typeof selectedSemanticSimilarity === 'number' ? (
+                      <div className="memMeta memMetaSemantic">
+                        <div className="memMetaLabel">Semantic Similarity</div>
+                        <div className="memMetaValue memMetaPrimaryValue">{formatScore(selectedSemanticSimilarity, 3)}</div>
+                      </div>
+                    ) : null}
+                    {typeof selectedSemanticSimilarity === 'number' ? (
+                      <div className="memMeta">
+                        <div className="memMetaLabel">Relevance</div>
+                        <div className="memMetaValue">
+                          <span className={`memPill relevancePill relevancePill${toTitle(selectedSemanticRelevance.tone)}`}>{selectedSemanticRelevance.label}</span>
+                        </div>
+                      </div>
+                    ) : null}
                     <div className="memMeta">
                       <div className="memMetaLabel">Updated</div>
                       <div className="memMetaValue">{formatTS(selectedMemory.updated_at)}</div>
@@ -1149,8 +1272,8 @@ export function App() {
                     </div>
                     {typeof selectedMemory.score === 'number' ? (
                       <div className="memMeta">
-                        <div className="memMetaLabel">Score</div>
-                        <div className="memMetaValue">{selectedMemory.score.toFixed(3)}</div>
+                        <div className="memMetaLabel">Blended Score</div>
+                        <div className="memMetaValue">{formatScore(selectedMemory.score, 3)}</div>
                       </div>
                     ) : null}
                     {typeof selectedMemory.salience_score === 'number' ? (
@@ -2138,6 +2261,8 @@ function ResultCard({
   onSelect: (m: MemoryEntry) => void
 }) {
   const timeStr = formatTS(m.created_at || m.updated_at)
+  const semanticSimilarity = getSemanticSimilarity(m)
+  const semanticRelevance = getSemanticRelevance(semanticSimilarity)
   return (
     <article className={isSelected ? 'memCard memCardOn' : 'memCard'} onClick={() => onSelect(m)}>
       <div className="memHdr">
@@ -2152,6 +2277,16 @@ function ResultCard({
       <div className="memBody memBodyCompact">
         <MarkdownView markdown={m.content} clamp={true} theme={theme} />
       </div>
+      {typeof semanticSimilarity === 'number' ? (
+        <div className="memSignal">
+          <div className="memSignalTop">
+            <span className="memSignalLabel">semantic similarity</span>
+            <span className={`memPill relevancePill relevancePill${toTitle(semanticRelevance.tone)}`}>{semanticRelevance.label}</span>
+          </div>
+          <div className="memSignalValue">{formatScore(semanticSimilarity, 3)}</div>
+          <div className="memSignalHint">Primary relevance signal from `score_breakdown.semantic_similarity`.</div>
+        </div>
+      ) : null}
       <div className="memFooter">
         <div className="memFooterLeft">
           <span className="memPill memPillAccent">{m.type}</span>
@@ -2160,7 +2295,7 @@ function ResultCard({
         </div>
         <div className="memFooterRight">
           {typeof m.score === 'number' ? (
-            <span className="memMetric">Score: <strong>{m.score.toFixed(3)}</strong></span>
+            <span className="memMetric">Blended: <strong>{formatScore(m.score, 3)}</strong></span>
           ) : null}
           <span className="memMetric">Conf: <strong>{Math.round(m.confidence * 100)}%</strong></span>
         </div>

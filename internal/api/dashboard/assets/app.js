@@ -7086,6 +7086,27 @@ function getStats(workspace) {
   const qs = workspace ? `?workspace=${encodeURIComponent(workspace)}` : "";
   return api(`/api/v1/stats${qs}`, { method: "GET" });
 }
+function listSessions(input) {
+  const qs = new URLSearchParams();
+  qs.set("workspace", input.workspace);
+  qs.set("limit", String(input.limit));
+  return api(`/api/v1/sessions?${qs.toString()}`, { method: "GET" });
+}
+function listObservations(input) {
+  const qs = new URLSearchParams();
+  qs.set("workspace", input.workspace);
+  if (input.session_id) qs.set("session_id", input.session_id);
+  qs.set("limit", String(input.limit));
+  if (input.from) qs.set("from", input.from);
+  if (input.to) qs.set("to", input.to);
+  return api(`/api/v1/observations?${qs.toString()}`, { method: "GET" });
+}
+function promoteObservations(input) {
+  return api("/api/v1/observations/promote", {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
 function listRecentMemories(input) {
   const qs = new URLSearchParams();
   qs.set("workspace", input.workspace);
@@ -7111,9 +7132,1089 @@ function recallPreview(input) {
     body: JSON.stringify(input)
   });
 }
+/*! @license DOMPurify 3.4.3 | (c) Cure53 and other contributors | Released under the Apache license 2.0 and Mozilla Public License 2.0 | github.com/cure53/DOMPurify/blob/3.4.3/LICENSE */
+function _arrayLikeToArray(r2, a2) {
+  (null == a2 || a2 > r2.length) && (a2 = r2.length);
+  for (var e2 = 0, n2 = Array(a2); e2 < a2; e2++) n2[e2] = r2[e2];
+  return n2;
+}
+function _arrayWithHoles(r2) {
+  if (Array.isArray(r2)) return r2;
+}
+function _iterableToArrayLimit(r2, l4) {
+  var t2 = null == r2 ? null : "undefined" != typeof Symbol && r2[Symbol.iterator] || r2["@@iterator"];
+  if (null != t2) {
+    var e2, n2, i2, u2, a2 = [], f2 = true, o2 = false;
+    try {
+      if (i2 = (t2 = t2.call(r2)).next, 0 === l4) ;
+      else for (; !(f2 = (e2 = i2.call(t2)).done) && (a2.push(e2.value), a2.length !== l4); f2 = true) ;
+    } catch (r3) {
+      o2 = true, n2 = r3;
+    } finally {
+      try {
+        if (!f2 && null != t2.return && (u2 = t2.return(), Object(u2) !== u2)) return;
+      } finally {
+        if (o2) throw n2;
+      }
+    }
+    return a2;
+  }
+}
+function _nonIterableRest() {
+  throw new TypeError("Invalid attempt to destructure non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method.");
+}
+function _slicedToArray(r2, e2) {
+  return _arrayWithHoles(r2) || _iterableToArrayLimit(r2, e2) || _unsupportedIterableToArray(r2, e2) || _nonIterableRest();
+}
+function _unsupportedIterableToArray(r2, a2) {
+  if (r2) {
+    if ("string" == typeof r2) return _arrayLikeToArray(r2, a2);
+    var t2 = {}.toString.call(r2).slice(8, -1);
+    return "Object" === t2 && r2.constructor && (t2 = r2.constructor.name), "Map" === t2 || "Set" === t2 ? Array.from(r2) : "Arguments" === t2 || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(t2) ? _arrayLikeToArray(r2, a2) : void 0;
+  }
+}
+const entries = Object.entries, setPrototypeOf = Object.setPrototypeOf, isFrozen = Object.isFrozen, getPrototypeOf = Object.getPrototypeOf, getOwnPropertyDescriptor = Object.getOwnPropertyDescriptor;
+let freeze = Object.freeze, seal = Object.seal, create$1 = Object.create;
+let _ref = typeof Reflect !== "undefined" && Reflect, apply = _ref.apply, construct = _ref.construct;
+if (!freeze) {
+  freeze = function freeze2(x2) {
+    return x2;
+  };
+}
+if (!seal) {
+  seal = function seal2(x2) {
+    return x2;
+  };
+}
+if (!apply) {
+  apply = function apply2(func, thisArg) {
+    for (var _len = arguments.length, args = new Array(_len > 2 ? _len - 2 : 0), _key = 2; _key < _len; _key++) {
+      args[_key - 2] = arguments[_key];
+    }
+    return func.apply(thisArg, args);
+  };
+}
+if (!construct) {
+  construct = function construct2(Func) {
+    for (var _len2 = arguments.length, args = new Array(_len2 > 1 ? _len2 - 1 : 0), _key2 = 1; _key2 < _len2; _key2++) {
+      args[_key2 - 1] = arguments[_key2];
+    }
+    return new Func(...args);
+  };
+}
+const arrayForEach = unapply(Array.prototype.forEach);
+const arrayLastIndexOf = unapply(Array.prototype.lastIndexOf);
+const arrayPop = unapply(Array.prototype.pop);
+const arrayPush = unapply(Array.prototype.push);
+const arraySplice = unapply(Array.prototype.splice);
+const arrayIsArray = Array.isArray;
+const stringToLowerCase = unapply(String.prototype.toLowerCase);
+const stringToString = unapply(String.prototype.toString);
+const stringMatch = unapply(String.prototype.match);
+const stringReplace = unapply(String.prototype.replace);
+const stringIndexOf = unapply(String.prototype.indexOf);
+const stringTrim = unapply(String.prototype.trim);
+const numberToString = unapply(Number.prototype.toString);
+const booleanToString = unapply(Boolean.prototype.toString);
+const bigintToString = typeof BigInt === "undefined" ? null : unapply(BigInt.prototype.toString);
+const symbolToString = typeof Symbol === "undefined" ? null : unapply(Symbol.prototype.toString);
+const objectHasOwnProperty = unapply(Object.prototype.hasOwnProperty);
+const objectToString = unapply(Object.prototype.toString);
+const regExpTest = unapply(RegExp.prototype.test);
+const typeErrorCreate = unconstruct(TypeError);
+function unapply(func) {
+  return function(thisArg) {
+    if (thisArg instanceof RegExp) {
+      thisArg.lastIndex = 0;
+    }
+    for (var _len3 = arguments.length, args = new Array(_len3 > 1 ? _len3 - 1 : 0), _key3 = 1; _key3 < _len3; _key3++) {
+      args[_key3 - 1] = arguments[_key3];
+    }
+    return apply(func, thisArg, args);
+  };
+}
+function unconstruct(Func) {
+  return function() {
+    for (var _len4 = arguments.length, args = new Array(_len4), _key4 = 0; _key4 < _len4; _key4++) {
+      args[_key4] = arguments[_key4];
+    }
+    return construct(Func, args);
+  };
+}
+function addToSet(set2, array2) {
+  let transformCaseFunc = arguments.length > 2 && arguments[2] !== void 0 ? arguments[2] : stringToLowerCase;
+  if (setPrototypeOf) {
+    setPrototypeOf(set2, null);
+  }
+  if (!arrayIsArray(array2)) {
+    return set2;
+  }
+  let l4 = array2.length;
+  while (l4--) {
+    let element = array2[l4];
+    if (typeof element === "string") {
+      const lcElement = transformCaseFunc(element);
+      if (lcElement !== element) {
+        if (!isFrozen(array2)) {
+          array2[l4] = lcElement;
+        }
+        element = lcElement;
+      }
+    }
+    set2[element] = true;
+  }
+  return set2;
+}
+function cleanArray(array2) {
+  for (let index = 0; index < array2.length; index++) {
+    const isPropertyExist = objectHasOwnProperty(array2, index);
+    if (!isPropertyExist) {
+      array2[index] = null;
+    }
+  }
+  return array2;
+}
+function clone$1(object) {
+  const newObject = create$1(null);
+  for (const _ref2 of entries(object)) {
+    var _ref3 = _slicedToArray(_ref2, 2);
+    const property = _ref3[0];
+    const value = _ref3[1];
+    const isPropertyExist = objectHasOwnProperty(object, property);
+    if (isPropertyExist) {
+      if (arrayIsArray(value)) {
+        newObject[property] = cleanArray(value);
+      } else if (value && typeof value === "object" && value.constructor === Object) {
+        newObject[property] = clone$1(value);
+      } else {
+        newObject[property] = value;
+      }
+    }
+  }
+  return newObject;
+}
+function stringifyValue(value) {
+  switch (typeof value) {
+    case "string": {
+      return value;
+    }
+    case "number": {
+      return numberToString(value);
+    }
+    case "boolean": {
+      return booleanToString(value);
+    }
+    case "bigint": {
+      return bigintToString ? bigintToString(value) : "0";
+    }
+    case "symbol": {
+      return symbolToString ? symbolToString(value) : "Symbol()";
+    }
+    case "undefined": {
+      return objectToString(value);
+    }
+    case "function":
+    case "object": {
+      if (value === null) {
+        return objectToString(value);
+      }
+      const valueAsRecord = value;
+      const valueToString = lookupGetter(valueAsRecord, "toString");
+      if (typeof valueToString === "function") {
+        const stringified = valueToString(valueAsRecord);
+        return typeof stringified === "string" ? stringified : objectToString(stringified);
+      }
+      return objectToString(value);
+    }
+    default: {
+      return objectToString(value);
+    }
+  }
+}
+function lookupGetter(object, prop) {
+  while (object !== null) {
+    const desc = getOwnPropertyDescriptor(object, prop);
+    if (desc) {
+      if (desc.get) {
+        return unapply(desc.get);
+      }
+      if (typeof desc.value === "function") {
+        return unapply(desc.value);
+      }
+    }
+    object = getPrototypeOf(object);
+  }
+  function fallbackValue() {
+    return null;
+  }
+  return fallbackValue;
+}
+function isRegex(value) {
+  try {
+    regExpTest(value, "");
+    return true;
+  } catch (_unused) {
+    return false;
+  }
+}
+const html$1 = freeze(["a", "abbr", "acronym", "address", "area", "article", "aside", "audio", "b", "bdi", "bdo", "big", "blink", "blockquote", "body", "br", "button", "canvas", "caption", "center", "cite", "code", "col", "colgroup", "content", "data", "datalist", "dd", "decorator", "del", "details", "dfn", "dialog", "dir", "div", "dl", "dt", "element", "em", "fieldset", "figcaption", "figure", "font", "footer", "form", "h1", "h2", "h3", "h4", "h5", "h6", "head", "header", "hgroup", "hr", "html", "i", "img", "input", "ins", "kbd", "label", "legend", "li", "main", "map", "mark", "marquee", "menu", "menuitem", "meter", "nav", "nobr", "ol", "optgroup", "option", "output", "p", "picture", "pre", "progress", "q", "rp", "rt", "ruby", "s", "samp", "search", "section", "select", "shadow", "slot", "small", "source", "spacer", "span", "strike", "strong", "style", "sub", "summary", "sup", "table", "tbody", "td", "template", "textarea", "tfoot", "th", "thead", "time", "tr", "track", "tt", "u", "ul", "var", "video", "wbr"]);
+const svg$1 = freeze(["svg", "a", "altglyph", "altglyphdef", "altglyphitem", "animatecolor", "animatemotion", "animatetransform", "circle", "clippath", "defs", "desc", "ellipse", "enterkeyhint", "exportparts", "filter", "font", "g", "glyph", "glyphref", "hkern", "image", "inputmode", "line", "lineargradient", "marker", "mask", "metadata", "mpath", "part", "path", "pattern", "polygon", "polyline", "radialgradient", "rect", "stop", "style", "switch", "symbol", "text", "textpath", "title", "tref", "tspan", "view", "vkern"]);
+const svgFilters = freeze(["feBlend", "feColorMatrix", "feComponentTransfer", "feComposite", "feConvolveMatrix", "feDiffuseLighting", "feDisplacementMap", "feDistantLight", "feDropShadow", "feFlood", "feFuncA", "feFuncB", "feFuncG", "feFuncR", "feGaussianBlur", "feImage", "feMerge", "feMergeNode", "feMorphology", "feOffset", "fePointLight", "feSpecularLighting", "feSpotLight", "feTile", "feTurbulence"]);
+const svgDisallowed = freeze(["animate", "color-profile", "cursor", "discard", "font-face", "font-face-format", "font-face-name", "font-face-src", "font-face-uri", "foreignobject", "hatch", "hatchpath", "mesh", "meshgradient", "meshpatch", "meshrow", "missing-glyph", "script", "set", "solidcolor", "unknown", "use"]);
+const mathMl$1 = freeze(["math", "menclose", "merror", "mfenced", "mfrac", "mglyph", "mi", "mlabeledtr", "mmultiscripts", "mn", "mo", "mover", "mpadded", "mphantom", "mroot", "mrow", "ms", "mspace", "msqrt", "mstyle", "msub", "msup", "msubsup", "mtable", "mtd", "mtext", "mtr", "munder", "munderover", "mprescripts"]);
+const mathMlDisallowed = freeze(["maction", "maligngroup", "malignmark", "mlongdiv", "mscarries", "mscarry", "msgroup", "mstack", "msline", "msrow", "semantics", "annotation", "annotation-xml", "mprescripts", "none"]);
+const text$1 = freeze(["#text"]);
+const html$2 = freeze(["accept", "action", "align", "alt", "autocapitalize", "autocomplete", "autopictureinpicture", "autoplay", "background", "bgcolor", "border", "capture", "cellpadding", "cellspacing", "checked", "cite", "class", "clear", "color", "cols", "colspan", "controls", "controlslist", "coords", "crossorigin", "datetime", "decoding", "default", "dir", "disabled", "disablepictureinpicture", "disableremoteplayback", "download", "draggable", "enctype", "enterkeyhint", "exportparts", "face", "for", "headers", "height", "hidden", "high", "href", "hreflang", "id", "inert", "inputmode", "integrity", "ismap", "kind", "label", "lang", "list", "loading", "loop", "low", "max", "maxlength", "media", "method", "min", "minlength", "multiple", "muted", "name", "nonce", "noshade", "novalidate", "nowrap", "open", "optimum", "part", "pattern", "placeholder", "playsinline", "popover", "popovertarget", "popovertargetaction", "poster", "preload", "pubdate", "radiogroup", "readonly", "rel", "required", "rev", "reversed", "role", "rows", "rowspan", "spellcheck", "scope", "selected", "shape", "size", "sizes", "slot", "span", "srclang", "start", "src", "srcset", "step", "style", "summary", "tabindex", "title", "translate", "type", "usemap", "valign", "value", "width", "wrap", "xmlns"]);
+const svg = freeze(["accent-height", "accumulate", "additive", "alignment-baseline", "amplitude", "ascent", "attributename", "attributetype", "azimuth", "basefrequency", "baseline-shift", "begin", "bias", "by", "class", "clip", "clippathunits", "clip-path", "clip-rule", "color", "color-interpolation", "color-interpolation-filters", "color-profile", "color-rendering", "cx", "cy", "d", "dx", "dy", "diffuseconstant", "direction", "display", "divisor", "dur", "edgemode", "elevation", "end", "exponent", "fill", "fill-opacity", "fill-rule", "filter", "filterunits", "flood-color", "flood-opacity", "font-family", "font-size", "font-size-adjust", "font-stretch", "font-style", "font-variant", "font-weight", "fx", "fy", "g1", "g2", "glyph-name", "glyphref", "gradientunits", "gradienttransform", "height", "href", "id", "image-rendering", "in", "in2", "intercept", "k", "k1", "k2", "k3", "k4", "kerning", "keypoints", "keysplines", "keytimes", "lang", "lengthadjust", "letter-spacing", "kernelmatrix", "kernelunitlength", "lighting-color", "local", "marker-end", "marker-mid", "marker-start", "markerheight", "markerunits", "markerwidth", "maskcontentunits", "maskunits", "max", "mask", "mask-type", "media", "method", "mode", "min", "name", "numoctaves", "offset", "operator", "opacity", "order", "orient", "orientation", "origin", "overflow", "paint-order", "path", "pathlength", "patterncontentunits", "patterntransform", "patternunits", "points", "preservealpha", "preserveaspectratio", "primitiveunits", "r", "rx", "ry", "radius", "refx", "refy", "repeatcount", "repeatdur", "restart", "result", "rotate", "scale", "seed", "shape-rendering", "slope", "specularconstant", "specularexponent", "spreadmethod", "startoffset", "stddeviation", "stitchtiles", "stop-color", "stop-opacity", "stroke-dasharray", "stroke-dashoffset", "stroke-linecap", "stroke-linejoin", "stroke-miterlimit", "stroke-opacity", "stroke", "stroke-width", "style", "surfacescale", "systemlanguage", "tabindex", "tablevalues", "targetx", "targety", "transform", "transform-origin", "text-anchor", "text-decoration", "text-rendering", "textlength", "type", "u1", "u2", "unicode", "values", "viewbox", "visibility", "version", "vert-adv-y", "vert-origin-x", "vert-origin-y", "width", "word-spacing", "wrap", "writing-mode", "xchannelselector", "ychannelselector", "x", "x1", "x2", "xmlns", "y", "y1", "y2", "z", "zoomandpan"]);
+const mathMl = freeze(["accent", "accentunder", "align", "bevelled", "close", "columnalign", "columnlines", "columnspacing", "columnspan", "denomalign", "depth", "dir", "display", "displaystyle", "encoding", "fence", "frame", "height", "href", "id", "largeop", "length", "linethickness", "lquote", "lspace", "mathbackground", "mathcolor", "mathsize", "mathvariant", "maxsize", "minsize", "movablelimits", "notation", "numalign", "open", "rowalign", "rowlines", "rowspacing", "rowspan", "rspace", "rquote", "scriptlevel", "scriptminsize", "scriptsizemultiplier", "selection", "separator", "separators", "stretchy", "subscriptshift", "supscriptshift", "symmetric", "voffset", "width", "xmlns"]);
+const xml = freeze(["xlink:href", "xml:id", "xlink:title", "xml:space", "xmlns:xlink"]);
+const MUSTACHE_EXPR = seal(/{{[\w\W]*|^[\w\W]*}}/g);
+const ERB_EXPR = seal(/<%[\w\W]*|^[\w\W]*%>/g);
+const TMPLIT_EXPR = seal(/\${[\w\W]*/g);
+const DATA_ATTR = seal(/^data-[\-\w.\u00B7-\uFFFF]+$/);
+const ARIA_ATTR = seal(/^aria-[\-\w]+$/);
+const IS_ALLOWED_URI = seal(
+  /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|sms|cid|xmpp|matrix):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i
+  // eslint-disable-line no-useless-escape
+);
+const IS_SCRIPT_OR_DATA = seal(/^(?:\w+script|data):/i);
+const ATTR_WHITESPACE = seal(
+  /[\u0000-\u0020\u00A0\u1680\u180E\u2000-\u2029\u205F\u3000]/g
+  // eslint-disable-line no-control-regex
+);
+const DOCTYPE_NAME = seal(/^html$/i);
+const CUSTOM_ELEMENT = seal(/^[a-z][.\w]*(-[.\w]+)+$/i);
+const NODE_TYPE = {
+  element: 1,
+  text: 3,
+  // Deprecated
+  progressingInstruction: 7,
+  comment: 8,
+  document: 9
+};
+const getGlobal = function getGlobal2() {
+  return typeof window === "undefined" ? null : window;
+};
+const _createTrustedTypesPolicy = function _createTrustedTypesPolicy2(trustedTypes, purifyHostElement) {
+  if (typeof trustedTypes !== "object" || typeof trustedTypes.createPolicy !== "function") {
+    return null;
+  }
+  let suffix = null;
+  const ATTR_NAME = "data-tt-policy-suffix";
+  if (purifyHostElement && purifyHostElement.hasAttribute(ATTR_NAME)) {
+    suffix = purifyHostElement.getAttribute(ATTR_NAME);
+  }
+  const policyName = "dompurify" + (suffix ? "#" + suffix : "");
+  try {
+    return trustedTypes.createPolicy(policyName, {
+      createHTML(html2) {
+        return html2;
+      },
+      createScriptURL(scriptUrl) {
+        return scriptUrl;
+      }
+    });
+  } catch (_2) {
+    console.warn("TrustedTypes policy " + policyName + " could not be created.");
+    return null;
+  }
+};
+const _createHooksMap = function _createHooksMap2() {
+  return {
+    afterSanitizeAttributes: [],
+    afterSanitizeElements: [],
+    afterSanitizeShadowDOM: [],
+    beforeSanitizeAttributes: [],
+    beforeSanitizeElements: [],
+    beforeSanitizeShadowDOM: [],
+    uponSanitizeAttribute: [],
+    uponSanitizeElement: [],
+    uponSanitizeShadowNode: []
+  };
+};
+function createDOMPurify() {
+  let window2 = arguments.length > 0 && arguments[0] !== void 0 ? arguments[0] : getGlobal();
+  const DOMPurify = (root2) => createDOMPurify(root2);
+  DOMPurify.version = "3.4.3";
+  DOMPurify.removed = [];
+  if (!window2 || !window2.document || window2.document.nodeType !== NODE_TYPE.document || !window2.Element) {
+    DOMPurify.isSupported = false;
+    return DOMPurify;
+  }
+  let document2 = window2.document;
+  const originalDocument = document2;
+  const currentScript = originalDocument.currentScript;
+  const DocumentFragment = window2.DocumentFragment, HTMLTemplateElement = window2.HTMLTemplateElement, Node2 = window2.Node, Element = window2.Element, NodeFilter = window2.NodeFilter, _window$NamedNodeMap = window2.NamedNodeMap, NamedNodeMap = _window$NamedNodeMap === void 0 ? window2.NamedNodeMap || window2.MozNamedAttrMap : _window$NamedNodeMap, HTMLFormElement = window2.HTMLFormElement, DOMParser = window2.DOMParser, trustedTypes = window2.trustedTypes;
+  const ElementPrototype = Element.prototype;
+  const cloneNode = lookupGetter(ElementPrototype, "cloneNode");
+  const remove2 = lookupGetter(ElementPrototype, "remove");
+  const getNextSibling = lookupGetter(ElementPrototype, "nextSibling");
+  const getChildNodes = lookupGetter(ElementPrototype, "childNodes");
+  const getParentNode = lookupGetter(ElementPrototype, "parentNode");
+  if (typeof HTMLTemplateElement === "function") {
+    const template = document2.createElement("template");
+    if (template.content && template.content.ownerDocument) {
+      document2 = template.content.ownerDocument;
+    }
+  }
+  let trustedTypesPolicy;
+  let emptyHTML = "";
+  const _document = document2, implementation = _document.implementation, createNodeIterator = _document.createNodeIterator, createDocumentFragment = _document.createDocumentFragment, getElementsByTagName = _document.getElementsByTagName;
+  const importNode = originalDocument.importNode;
+  let hooks = _createHooksMap();
+  DOMPurify.isSupported = typeof entries === "function" && typeof getParentNode === "function" && implementation && implementation.createHTMLDocument !== void 0;
+  const MUSTACHE_EXPR$1 = MUSTACHE_EXPR, ERB_EXPR$1 = ERB_EXPR, TMPLIT_EXPR$1 = TMPLIT_EXPR, DATA_ATTR$1 = DATA_ATTR, ARIA_ATTR$1 = ARIA_ATTR, IS_SCRIPT_OR_DATA$1 = IS_SCRIPT_OR_DATA, ATTR_WHITESPACE$1 = ATTR_WHITESPACE, CUSTOM_ELEMENT$1 = CUSTOM_ELEMENT;
+  let IS_ALLOWED_URI$1 = IS_ALLOWED_URI;
+  let ALLOWED_TAGS = null;
+  const DEFAULT_ALLOWED_TAGS = addToSet({}, [...html$1, ...svg$1, ...svgFilters, ...mathMl$1, ...text$1]);
+  let ALLOWED_ATTR = null;
+  const DEFAULT_ALLOWED_ATTR = addToSet({}, [...html$2, ...svg, ...mathMl, ...xml]);
+  let CUSTOM_ELEMENT_HANDLING = Object.seal(create$1(null, {
+    tagNameCheck: {
+      writable: true,
+      configurable: false,
+      enumerable: true,
+      value: null
+    },
+    attributeNameCheck: {
+      writable: true,
+      configurable: false,
+      enumerable: true,
+      value: null
+    },
+    allowCustomizedBuiltInElements: {
+      writable: true,
+      configurable: false,
+      enumerable: true,
+      value: false
+    }
+  }));
+  let FORBID_TAGS = null;
+  let FORBID_ATTR = null;
+  const EXTRA_ELEMENT_HANDLING = Object.seal(create$1(null, {
+    tagCheck: {
+      writable: true,
+      configurable: false,
+      enumerable: true,
+      value: null
+    },
+    attributeCheck: {
+      writable: true,
+      configurable: false,
+      enumerable: true,
+      value: null
+    }
+  }));
+  let ALLOW_ARIA_ATTR = true;
+  let ALLOW_DATA_ATTR = true;
+  let ALLOW_UNKNOWN_PROTOCOLS = false;
+  let ALLOW_SELF_CLOSE_IN_ATTR = true;
+  let SAFE_FOR_TEMPLATES = false;
+  let SAFE_FOR_XML = true;
+  let WHOLE_DOCUMENT = false;
+  let SET_CONFIG = false;
+  let FORCE_BODY = false;
+  let RETURN_DOM = false;
+  let RETURN_DOM_FRAGMENT = false;
+  let RETURN_TRUSTED_TYPE = false;
+  let SANITIZE_DOM = true;
+  let SANITIZE_NAMED_PROPS = false;
+  const SANITIZE_NAMED_PROPS_PREFIX = "user-content-";
+  let KEEP_CONTENT = true;
+  let IN_PLACE = false;
+  let USE_PROFILES = {};
+  let FORBID_CONTENTS = null;
+  const DEFAULT_FORBID_CONTENTS = addToSet({}, ["annotation-xml", "audio", "colgroup", "desc", "foreignobject", "head", "iframe", "math", "mi", "mn", "mo", "ms", "mtext", "noembed", "noframes", "noscript", "plaintext", "script", "style", "svg", "template", "thead", "title", "video", "xmp"]);
+  let DATA_URI_TAGS = null;
+  const DEFAULT_DATA_URI_TAGS = addToSet({}, ["audio", "video", "img", "source", "image", "track"]);
+  let URI_SAFE_ATTRIBUTES = null;
+  const DEFAULT_URI_SAFE_ATTRIBUTES = addToSet({}, ["alt", "class", "for", "id", "label", "name", "pattern", "placeholder", "role", "summary", "title", "value", "style", "xmlns"]);
+  const MATHML_NAMESPACE = "http://www.w3.org/1998/Math/MathML";
+  const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
+  const HTML_NAMESPACE = "http://www.w3.org/1999/xhtml";
+  let NAMESPACE2 = HTML_NAMESPACE;
+  let IS_EMPTY_INPUT = false;
+  let ALLOWED_NAMESPACES = null;
+  const DEFAULT_ALLOWED_NAMESPACES = addToSet({}, [MATHML_NAMESPACE, SVG_NAMESPACE, HTML_NAMESPACE], stringToString);
+  let MATHML_TEXT_INTEGRATION_POINTS = addToSet({}, ["mi", "mo", "mn", "ms", "mtext"]);
+  let HTML_INTEGRATION_POINTS = addToSet({}, ["annotation-xml"]);
+  const COMMON_SVG_AND_HTML_ELEMENTS = addToSet({}, ["title", "style", "font", "a", "script"]);
+  let PARSER_MEDIA_TYPE = null;
+  const SUPPORTED_PARSER_MEDIA_TYPES = ["application/xhtml+xml", "text/html"];
+  const DEFAULT_PARSER_MEDIA_TYPE = "text/html";
+  let transformCaseFunc = null;
+  let CONFIG = null;
+  const formElement = document2.createElement("form");
+  const isRegexOrFunction = function isRegexOrFunction2(testValue) {
+    return testValue instanceof RegExp || testValue instanceof Function;
+  };
+  const _parseConfig = function _parseConfig2() {
+    let cfg = arguments.length > 0 && arguments[0] !== void 0 ? arguments[0] : {};
+    if (CONFIG && CONFIG === cfg) {
+      return;
+    }
+    if (!cfg || typeof cfg !== "object") {
+      cfg = {};
+    }
+    cfg = clone$1(cfg);
+    PARSER_MEDIA_TYPE = // eslint-disable-next-line unicorn/prefer-includes
+    SUPPORTED_PARSER_MEDIA_TYPES.indexOf(cfg.PARSER_MEDIA_TYPE) === -1 ? DEFAULT_PARSER_MEDIA_TYPE : cfg.PARSER_MEDIA_TYPE;
+    transformCaseFunc = PARSER_MEDIA_TYPE === "application/xhtml+xml" ? stringToString : stringToLowerCase;
+    ALLOWED_TAGS = objectHasOwnProperty(cfg, "ALLOWED_TAGS") && arrayIsArray(cfg.ALLOWED_TAGS) ? addToSet({}, cfg.ALLOWED_TAGS, transformCaseFunc) : DEFAULT_ALLOWED_TAGS;
+    ALLOWED_ATTR = objectHasOwnProperty(cfg, "ALLOWED_ATTR") && arrayIsArray(cfg.ALLOWED_ATTR) ? addToSet({}, cfg.ALLOWED_ATTR, transformCaseFunc) : DEFAULT_ALLOWED_ATTR;
+    ALLOWED_NAMESPACES = objectHasOwnProperty(cfg, "ALLOWED_NAMESPACES") && arrayIsArray(cfg.ALLOWED_NAMESPACES) ? addToSet({}, cfg.ALLOWED_NAMESPACES, stringToString) : DEFAULT_ALLOWED_NAMESPACES;
+    URI_SAFE_ATTRIBUTES = objectHasOwnProperty(cfg, "ADD_URI_SAFE_ATTR") && arrayIsArray(cfg.ADD_URI_SAFE_ATTR) ? addToSet(clone$1(DEFAULT_URI_SAFE_ATTRIBUTES), cfg.ADD_URI_SAFE_ATTR, transformCaseFunc) : DEFAULT_URI_SAFE_ATTRIBUTES;
+    DATA_URI_TAGS = objectHasOwnProperty(cfg, "ADD_DATA_URI_TAGS") && arrayIsArray(cfg.ADD_DATA_URI_TAGS) ? addToSet(clone$1(DEFAULT_DATA_URI_TAGS), cfg.ADD_DATA_URI_TAGS, transformCaseFunc) : DEFAULT_DATA_URI_TAGS;
+    FORBID_CONTENTS = objectHasOwnProperty(cfg, "FORBID_CONTENTS") && arrayIsArray(cfg.FORBID_CONTENTS) ? addToSet({}, cfg.FORBID_CONTENTS, transformCaseFunc) : DEFAULT_FORBID_CONTENTS;
+    FORBID_TAGS = objectHasOwnProperty(cfg, "FORBID_TAGS") && arrayIsArray(cfg.FORBID_TAGS) ? addToSet({}, cfg.FORBID_TAGS, transformCaseFunc) : clone$1({});
+    FORBID_ATTR = objectHasOwnProperty(cfg, "FORBID_ATTR") && arrayIsArray(cfg.FORBID_ATTR) ? addToSet({}, cfg.FORBID_ATTR, transformCaseFunc) : clone$1({});
+    USE_PROFILES = objectHasOwnProperty(cfg, "USE_PROFILES") ? cfg.USE_PROFILES && typeof cfg.USE_PROFILES === "object" ? clone$1(cfg.USE_PROFILES) : cfg.USE_PROFILES : false;
+    ALLOW_ARIA_ATTR = cfg.ALLOW_ARIA_ATTR !== false;
+    ALLOW_DATA_ATTR = cfg.ALLOW_DATA_ATTR !== false;
+    ALLOW_UNKNOWN_PROTOCOLS = cfg.ALLOW_UNKNOWN_PROTOCOLS || false;
+    ALLOW_SELF_CLOSE_IN_ATTR = cfg.ALLOW_SELF_CLOSE_IN_ATTR !== false;
+    SAFE_FOR_TEMPLATES = cfg.SAFE_FOR_TEMPLATES || false;
+    SAFE_FOR_XML = cfg.SAFE_FOR_XML !== false;
+    WHOLE_DOCUMENT = cfg.WHOLE_DOCUMENT || false;
+    RETURN_DOM = cfg.RETURN_DOM || false;
+    RETURN_DOM_FRAGMENT = cfg.RETURN_DOM_FRAGMENT || false;
+    RETURN_TRUSTED_TYPE = cfg.RETURN_TRUSTED_TYPE || false;
+    FORCE_BODY = cfg.FORCE_BODY || false;
+    SANITIZE_DOM = cfg.SANITIZE_DOM !== false;
+    SANITIZE_NAMED_PROPS = cfg.SANITIZE_NAMED_PROPS || false;
+    KEEP_CONTENT = cfg.KEEP_CONTENT !== false;
+    IN_PLACE = cfg.IN_PLACE || false;
+    IS_ALLOWED_URI$1 = isRegex(cfg.ALLOWED_URI_REGEXP) ? cfg.ALLOWED_URI_REGEXP : IS_ALLOWED_URI;
+    NAMESPACE2 = typeof cfg.NAMESPACE === "string" ? cfg.NAMESPACE : HTML_NAMESPACE;
+    MATHML_TEXT_INTEGRATION_POINTS = objectHasOwnProperty(cfg, "MATHML_TEXT_INTEGRATION_POINTS") && cfg.MATHML_TEXT_INTEGRATION_POINTS && typeof cfg.MATHML_TEXT_INTEGRATION_POINTS === "object" ? clone$1(cfg.MATHML_TEXT_INTEGRATION_POINTS) : addToSet({}, ["mi", "mo", "mn", "ms", "mtext"]);
+    HTML_INTEGRATION_POINTS = objectHasOwnProperty(cfg, "HTML_INTEGRATION_POINTS") && cfg.HTML_INTEGRATION_POINTS && typeof cfg.HTML_INTEGRATION_POINTS === "object" ? clone$1(cfg.HTML_INTEGRATION_POINTS) : addToSet({}, ["annotation-xml"]);
+    const customElementHandling = objectHasOwnProperty(cfg, "CUSTOM_ELEMENT_HANDLING") && cfg.CUSTOM_ELEMENT_HANDLING && typeof cfg.CUSTOM_ELEMENT_HANDLING === "object" ? clone$1(cfg.CUSTOM_ELEMENT_HANDLING) : create$1(null);
+    CUSTOM_ELEMENT_HANDLING = create$1(null);
+    if (objectHasOwnProperty(customElementHandling, "tagNameCheck") && isRegexOrFunction(customElementHandling.tagNameCheck)) {
+      CUSTOM_ELEMENT_HANDLING.tagNameCheck = customElementHandling.tagNameCheck;
+    }
+    if (objectHasOwnProperty(customElementHandling, "attributeNameCheck") && isRegexOrFunction(customElementHandling.attributeNameCheck)) {
+      CUSTOM_ELEMENT_HANDLING.attributeNameCheck = customElementHandling.attributeNameCheck;
+    }
+    if (objectHasOwnProperty(customElementHandling, "allowCustomizedBuiltInElements") && typeof customElementHandling.allowCustomizedBuiltInElements === "boolean") {
+      CUSTOM_ELEMENT_HANDLING.allowCustomizedBuiltInElements = customElementHandling.allowCustomizedBuiltInElements;
+    }
+    if (SAFE_FOR_TEMPLATES) {
+      ALLOW_DATA_ATTR = false;
+    }
+    if (RETURN_DOM_FRAGMENT) {
+      RETURN_DOM = true;
+    }
+    if (USE_PROFILES) {
+      ALLOWED_TAGS = addToSet({}, text$1);
+      ALLOWED_ATTR = create$1(null);
+      if (USE_PROFILES.html === true) {
+        addToSet(ALLOWED_TAGS, html$1);
+        addToSet(ALLOWED_ATTR, html$2);
+      }
+      if (USE_PROFILES.svg === true) {
+        addToSet(ALLOWED_TAGS, svg$1);
+        addToSet(ALLOWED_ATTR, svg);
+        addToSet(ALLOWED_ATTR, xml);
+      }
+      if (USE_PROFILES.svgFilters === true) {
+        addToSet(ALLOWED_TAGS, svgFilters);
+        addToSet(ALLOWED_ATTR, svg);
+        addToSet(ALLOWED_ATTR, xml);
+      }
+      if (USE_PROFILES.mathMl === true) {
+        addToSet(ALLOWED_TAGS, mathMl$1);
+        addToSet(ALLOWED_ATTR, mathMl);
+        addToSet(ALLOWED_ATTR, xml);
+      }
+    }
+    EXTRA_ELEMENT_HANDLING.tagCheck = null;
+    EXTRA_ELEMENT_HANDLING.attributeCheck = null;
+    if (objectHasOwnProperty(cfg, "ADD_TAGS")) {
+      if (typeof cfg.ADD_TAGS === "function") {
+        EXTRA_ELEMENT_HANDLING.tagCheck = cfg.ADD_TAGS;
+      } else if (arrayIsArray(cfg.ADD_TAGS)) {
+        if (ALLOWED_TAGS === DEFAULT_ALLOWED_TAGS) {
+          ALLOWED_TAGS = clone$1(ALLOWED_TAGS);
+        }
+        addToSet(ALLOWED_TAGS, cfg.ADD_TAGS, transformCaseFunc);
+      }
+    }
+    if (objectHasOwnProperty(cfg, "ADD_ATTR")) {
+      if (typeof cfg.ADD_ATTR === "function") {
+        EXTRA_ELEMENT_HANDLING.attributeCheck = cfg.ADD_ATTR;
+      } else if (arrayIsArray(cfg.ADD_ATTR)) {
+        if (ALLOWED_ATTR === DEFAULT_ALLOWED_ATTR) {
+          ALLOWED_ATTR = clone$1(ALLOWED_ATTR);
+        }
+        addToSet(ALLOWED_ATTR, cfg.ADD_ATTR, transformCaseFunc);
+      }
+    }
+    if (objectHasOwnProperty(cfg, "ADD_URI_SAFE_ATTR") && arrayIsArray(cfg.ADD_URI_SAFE_ATTR)) {
+      addToSet(URI_SAFE_ATTRIBUTES, cfg.ADD_URI_SAFE_ATTR, transformCaseFunc);
+    }
+    if (objectHasOwnProperty(cfg, "FORBID_CONTENTS") && arrayIsArray(cfg.FORBID_CONTENTS)) {
+      if (FORBID_CONTENTS === DEFAULT_FORBID_CONTENTS) {
+        FORBID_CONTENTS = clone$1(FORBID_CONTENTS);
+      }
+      addToSet(FORBID_CONTENTS, cfg.FORBID_CONTENTS, transformCaseFunc);
+    }
+    if (objectHasOwnProperty(cfg, "ADD_FORBID_CONTENTS") && arrayIsArray(cfg.ADD_FORBID_CONTENTS)) {
+      if (FORBID_CONTENTS === DEFAULT_FORBID_CONTENTS) {
+        FORBID_CONTENTS = clone$1(FORBID_CONTENTS);
+      }
+      addToSet(FORBID_CONTENTS, cfg.ADD_FORBID_CONTENTS, transformCaseFunc);
+    }
+    if (KEEP_CONTENT) {
+      ALLOWED_TAGS["#text"] = true;
+    }
+    if (WHOLE_DOCUMENT) {
+      addToSet(ALLOWED_TAGS, ["html", "head", "body"]);
+    }
+    if (ALLOWED_TAGS.table) {
+      addToSet(ALLOWED_TAGS, ["tbody"]);
+      delete FORBID_TAGS.tbody;
+    }
+    if (cfg.TRUSTED_TYPES_POLICY) {
+      if (typeof cfg.TRUSTED_TYPES_POLICY.createHTML !== "function") {
+        throw typeErrorCreate('TRUSTED_TYPES_POLICY configuration option must provide a "createHTML" hook.');
+      }
+      if (typeof cfg.TRUSTED_TYPES_POLICY.createScriptURL !== "function") {
+        throw typeErrorCreate('TRUSTED_TYPES_POLICY configuration option must provide a "createScriptURL" hook.');
+      }
+      trustedTypesPolicy = cfg.TRUSTED_TYPES_POLICY;
+      emptyHTML = trustedTypesPolicy.createHTML("");
+    } else {
+      if (trustedTypesPolicy === void 0) {
+        trustedTypesPolicy = _createTrustedTypesPolicy(trustedTypes, currentScript);
+      }
+      if (trustedTypesPolicy !== null && typeof emptyHTML === "string") {
+        emptyHTML = trustedTypesPolicy.createHTML("");
+      }
+    }
+    if (freeze) {
+      freeze(cfg);
+    }
+    CONFIG = cfg;
+  };
+  const ALL_SVG_TAGS = addToSet({}, [...svg$1, ...svgFilters, ...svgDisallowed]);
+  const ALL_MATHML_TAGS = addToSet({}, [...mathMl$1, ...mathMlDisallowed]);
+  const _checkValidNamespace = function _checkValidNamespace2(element) {
+    let parent = getParentNode(element);
+    if (!parent || !parent.tagName) {
+      parent = {
+        namespaceURI: NAMESPACE2,
+        tagName: "template"
+      };
+    }
+    const tagName = stringToLowerCase(element.tagName);
+    const parentTagName = stringToLowerCase(parent.tagName);
+    if (!ALLOWED_NAMESPACES[element.namespaceURI]) {
+      return false;
+    }
+    if (element.namespaceURI === SVG_NAMESPACE) {
+      if (parent.namespaceURI === HTML_NAMESPACE) {
+        return tagName === "svg";
+      }
+      if (parent.namespaceURI === MATHML_NAMESPACE) {
+        return tagName === "svg" && (parentTagName === "annotation-xml" || MATHML_TEXT_INTEGRATION_POINTS[parentTagName]);
+      }
+      return Boolean(ALL_SVG_TAGS[tagName]);
+    }
+    if (element.namespaceURI === MATHML_NAMESPACE) {
+      if (parent.namespaceURI === HTML_NAMESPACE) {
+        return tagName === "math";
+      }
+      if (parent.namespaceURI === SVG_NAMESPACE) {
+        return tagName === "math" && HTML_INTEGRATION_POINTS[parentTagName];
+      }
+      return Boolean(ALL_MATHML_TAGS[tagName]);
+    }
+    if (element.namespaceURI === HTML_NAMESPACE) {
+      if (parent.namespaceURI === SVG_NAMESPACE && !HTML_INTEGRATION_POINTS[parentTagName]) {
+        return false;
+      }
+      if (parent.namespaceURI === MATHML_NAMESPACE && !MATHML_TEXT_INTEGRATION_POINTS[parentTagName]) {
+        return false;
+      }
+      return !ALL_MATHML_TAGS[tagName] && (COMMON_SVG_AND_HTML_ELEMENTS[tagName] || !ALL_SVG_TAGS[tagName]);
+    }
+    if (PARSER_MEDIA_TYPE === "application/xhtml+xml" && ALLOWED_NAMESPACES[element.namespaceURI]) {
+      return true;
+    }
+    return false;
+  };
+  const _forceRemove = function _forceRemove2(node2) {
+    arrayPush(DOMPurify.removed, {
+      element: node2
+    });
+    try {
+      getParentNode(node2).removeChild(node2);
+    } catch (_2) {
+      remove2(node2);
+    }
+  };
+  const _removeAttribute = function _removeAttribute2(name, element) {
+    try {
+      arrayPush(DOMPurify.removed, {
+        attribute: element.getAttributeNode(name),
+        from: element
+      });
+    } catch (_2) {
+      arrayPush(DOMPurify.removed, {
+        attribute: null,
+        from: element
+      });
+    }
+    element.removeAttribute(name);
+    if (name === "is") {
+      if (RETURN_DOM || RETURN_DOM_FRAGMENT) {
+        try {
+          _forceRemove(element);
+        } catch (_2) {
+        }
+      } else {
+        try {
+          element.setAttribute(name, "");
+        } catch (_2) {
+        }
+      }
+    }
+  };
+  const _initDocument = function _initDocument2(dirty) {
+    let doc = null;
+    let leadingWhitespace = null;
+    if (FORCE_BODY) {
+      dirty = "<remove></remove>" + dirty;
+    } else {
+      const matches = stringMatch(dirty, /^[\r\n\t ]+/);
+      leadingWhitespace = matches && matches[0];
+    }
+    if (PARSER_MEDIA_TYPE === "application/xhtml+xml" && NAMESPACE2 === HTML_NAMESPACE) {
+      dirty = '<html xmlns="http://www.w3.org/1999/xhtml"><head></head><body>' + dirty + "</body></html>";
+    }
+    const dirtyPayload = trustedTypesPolicy ? trustedTypesPolicy.createHTML(dirty) : dirty;
+    if (NAMESPACE2 === HTML_NAMESPACE) {
+      try {
+        doc = new DOMParser().parseFromString(dirtyPayload, PARSER_MEDIA_TYPE);
+      } catch (_2) {
+      }
+    }
+    if (!doc || !doc.documentElement) {
+      doc = implementation.createDocument(NAMESPACE2, "template", null);
+      try {
+        doc.documentElement.innerHTML = IS_EMPTY_INPUT ? emptyHTML : dirtyPayload;
+      } catch (_2) {
+      }
+    }
+    const body = doc.body || doc.documentElement;
+    if (dirty && leadingWhitespace) {
+      body.insertBefore(document2.createTextNode(leadingWhitespace), body.childNodes[0] || null);
+    }
+    if (NAMESPACE2 === HTML_NAMESPACE) {
+      return getElementsByTagName.call(doc, WHOLE_DOCUMENT ? "html" : "body")[0];
+    }
+    return WHOLE_DOCUMENT ? doc.documentElement : body;
+  };
+  const _createNodeIterator = function _createNodeIterator2(root2) {
+    return createNodeIterator.call(
+      root2.ownerDocument || root2,
+      root2,
+      // eslint-disable-next-line no-bitwise
+      NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_COMMENT | NodeFilter.SHOW_TEXT | NodeFilter.SHOW_PROCESSING_INSTRUCTION | NodeFilter.SHOW_CDATA_SECTION,
+      null
+    );
+  };
+  const _isClobbered = function _isClobbered2(element) {
+    return element instanceof HTMLFormElement && (typeof element.nodeName !== "string" || typeof element.textContent !== "string" || typeof element.removeChild !== "function" || !(element.attributes instanceof NamedNodeMap) || typeof element.removeAttribute !== "function" || typeof element.setAttribute !== "function" || typeof element.namespaceURI !== "string" || typeof element.insertBefore !== "function" || typeof element.hasChildNodes !== "function");
+  };
+  const _isNode = function _isNode2(value) {
+    return typeof Node2 === "function" && value instanceof Node2;
+  };
+  function _executeHooks(hooks2, currentNode, data) {
+    arrayForEach(hooks2, (hook) => {
+      hook.call(DOMPurify, currentNode, data, CONFIG);
+    });
+  }
+  const _sanitizeElements = function _sanitizeElements2(currentNode) {
+    let content = null;
+    _executeHooks(hooks.beforeSanitizeElements, currentNode, null);
+    if (_isClobbered(currentNode)) {
+      _forceRemove(currentNode);
+      return true;
+    }
+    const tagName = transformCaseFunc(currentNode.nodeName);
+    _executeHooks(hooks.uponSanitizeElement, currentNode, {
+      tagName,
+      allowedTags: ALLOWED_TAGS
+    });
+    if (SAFE_FOR_XML && currentNode.hasChildNodes() && !_isNode(currentNode.firstElementChild) && regExpTest(/<[/\w!]/g, currentNode.innerHTML) && regExpTest(/<[/\w!]/g, currentNode.textContent)) {
+      _forceRemove(currentNode);
+      return true;
+    }
+    if (SAFE_FOR_XML && currentNode.namespaceURI === HTML_NAMESPACE && tagName === "style" && _isNode(currentNode.firstElementChild)) {
+      _forceRemove(currentNode);
+      return true;
+    }
+    if (currentNode.nodeType === NODE_TYPE.progressingInstruction) {
+      _forceRemove(currentNode);
+      return true;
+    }
+    if (SAFE_FOR_XML && currentNode.nodeType === NODE_TYPE.comment && regExpTest(/<[/\w]/g, currentNode.data)) {
+      _forceRemove(currentNode);
+      return true;
+    }
+    if (FORBID_TAGS[tagName] || !(EXTRA_ELEMENT_HANDLING.tagCheck instanceof Function && EXTRA_ELEMENT_HANDLING.tagCheck(tagName)) && !ALLOWED_TAGS[tagName]) {
+      if (!FORBID_TAGS[tagName] && _isBasicCustomElement(tagName)) {
+        if (CUSTOM_ELEMENT_HANDLING.tagNameCheck instanceof RegExp && regExpTest(CUSTOM_ELEMENT_HANDLING.tagNameCheck, tagName)) {
+          return false;
+        }
+        if (CUSTOM_ELEMENT_HANDLING.tagNameCheck instanceof Function && CUSTOM_ELEMENT_HANDLING.tagNameCheck(tagName)) {
+          return false;
+        }
+      }
+      if (KEEP_CONTENT && !FORBID_CONTENTS[tagName]) {
+        const parentNode = getParentNode(currentNode) || currentNode.parentNode;
+        const childNodes = getChildNodes(currentNode) || currentNode.childNodes;
+        if (childNodes && parentNode) {
+          const childCount = childNodes.length;
+          for (let i2 = childCount - 1; i2 >= 0; --i2) {
+            const childClone = cloneNode(childNodes[i2], true);
+            parentNode.insertBefore(childClone, getNextSibling(currentNode));
+          }
+        }
+      }
+      _forceRemove(currentNode);
+      return true;
+    }
+    if (currentNode instanceof Element && !_checkValidNamespace(currentNode)) {
+      _forceRemove(currentNode);
+      return true;
+    }
+    if ((tagName === "noscript" || tagName === "noembed" || tagName === "noframes") && regExpTest(/<\/no(script|embed|frames)/i, currentNode.innerHTML)) {
+      _forceRemove(currentNode);
+      return true;
+    }
+    if (SAFE_FOR_TEMPLATES && currentNode.nodeType === NODE_TYPE.text) {
+      content = currentNode.textContent;
+      arrayForEach([MUSTACHE_EXPR$1, ERB_EXPR$1, TMPLIT_EXPR$1], (expr) => {
+        content = stringReplace(content, expr, " ");
+      });
+      if (currentNode.textContent !== content) {
+        arrayPush(DOMPurify.removed, {
+          element: currentNode.cloneNode()
+        });
+        currentNode.textContent = content;
+      }
+    }
+    _executeHooks(hooks.afterSanitizeElements, currentNode, null);
+    return false;
+  };
+  const _isValidAttribute = function _isValidAttribute2(lcTag, lcName, value) {
+    if (FORBID_ATTR[lcName]) {
+      return false;
+    }
+    if (SANITIZE_DOM && (lcName === "id" || lcName === "name") && (value in document2 || value in formElement)) {
+      return false;
+    }
+    const nameIsPermitted = ALLOWED_ATTR[lcName] || EXTRA_ELEMENT_HANDLING.attributeCheck instanceof Function && EXTRA_ELEMENT_HANDLING.attributeCheck(lcName, lcTag);
+    if (ALLOW_DATA_ATTR && !FORBID_ATTR[lcName] && regExpTest(DATA_ATTR$1, lcName)) ;
+    else if (ALLOW_ARIA_ATTR && regExpTest(ARIA_ATTR$1, lcName)) ;
+    else if (!nameIsPermitted || FORBID_ATTR[lcName]) {
+      if (
+        // First condition does a very basic check if a) it's basically a valid custom element tagname AND
+        // b) if the tagName passes whatever the user has configured for CUSTOM_ELEMENT_HANDLING.tagNameCheck
+        // and c) if the attribute name passes whatever the user has configured for CUSTOM_ELEMENT_HANDLING.attributeNameCheck
+        _isBasicCustomElement(lcTag) && (CUSTOM_ELEMENT_HANDLING.tagNameCheck instanceof RegExp && regExpTest(CUSTOM_ELEMENT_HANDLING.tagNameCheck, lcTag) || CUSTOM_ELEMENT_HANDLING.tagNameCheck instanceof Function && CUSTOM_ELEMENT_HANDLING.tagNameCheck(lcTag)) && (CUSTOM_ELEMENT_HANDLING.attributeNameCheck instanceof RegExp && regExpTest(CUSTOM_ELEMENT_HANDLING.attributeNameCheck, lcName) || CUSTOM_ELEMENT_HANDLING.attributeNameCheck instanceof Function && CUSTOM_ELEMENT_HANDLING.attributeNameCheck(lcName, lcTag)) || // Alternative, second condition checks if it's an `is`-attribute, AND
+        // the value passes whatever the user has configured for CUSTOM_ELEMENT_HANDLING.tagNameCheck
+        lcName === "is" && CUSTOM_ELEMENT_HANDLING.allowCustomizedBuiltInElements && (CUSTOM_ELEMENT_HANDLING.tagNameCheck instanceof RegExp && regExpTest(CUSTOM_ELEMENT_HANDLING.tagNameCheck, value) || CUSTOM_ELEMENT_HANDLING.tagNameCheck instanceof Function && CUSTOM_ELEMENT_HANDLING.tagNameCheck(value))
+      ) ;
+      else {
+        return false;
+      }
+    } else if (URI_SAFE_ATTRIBUTES[lcName]) ;
+    else if (regExpTest(IS_ALLOWED_URI$1, stringReplace(value, ATTR_WHITESPACE$1, ""))) ;
+    else if ((lcName === "src" || lcName === "xlink:href" || lcName === "href") && lcTag !== "script" && stringIndexOf(value, "data:") === 0 && DATA_URI_TAGS[lcTag]) ;
+    else if (ALLOW_UNKNOWN_PROTOCOLS && !regExpTest(IS_SCRIPT_OR_DATA$1, stringReplace(value, ATTR_WHITESPACE$1, ""))) ;
+    else if (value) {
+      return false;
+    } else ;
+    return true;
+  };
+  const RESERVED_CUSTOM_ELEMENT_NAMES = addToSet({}, ["annotation-xml", "color-profile", "font-face", "font-face-format", "font-face-name", "font-face-src", "font-face-uri", "missing-glyph"]);
+  const _isBasicCustomElement = function _isBasicCustomElement2(tagName) {
+    return !RESERVED_CUSTOM_ELEMENT_NAMES[stringToLowerCase(tagName)] && regExpTest(CUSTOM_ELEMENT$1, tagName);
+  };
+  const _sanitizeAttributes = function _sanitizeAttributes2(currentNode) {
+    _executeHooks(hooks.beforeSanitizeAttributes, currentNode, null);
+    const attributes = currentNode.attributes;
+    if (!attributes || _isClobbered(currentNode)) {
+      return;
+    }
+    const hookEvent = {
+      attrName: "",
+      attrValue: "",
+      keepAttr: true,
+      allowedAttributes: ALLOWED_ATTR,
+      forceKeepAttr: void 0
+    };
+    let l4 = attributes.length;
+    while (l4--) {
+      const attr = attributes[l4];
+      const name = attr.name, namespaceURI = attr.namespaceURI, attrValue = attr.value;
+      const lcName = transformCaseFunc(name);
+      const initValue = attrValue;
+      let value = name === "value" ? initValue : stringTrim(initValue);
+      hookEvent.attrName = lcName;
+      hookEvent.attrValue = value;
+      hookEvent.keepAttr = true;
+      hookEvent.forceKeepAttr = void 0;
+      _executeHooks(hooks.uponSanitizeAttribute, currentNode, hookEvent);
+      value = hookEvent.attrValue;
+      if (SANITIZE_NAMED_PROPS && (lcName === "id" || lcName === "name") && stringIndexOf(value, SANITIZE_NAMED_PROPS_PREFIX) !== 0) {
+        _removeAttribute(name, currentNode);
+        value = SANITIZE_NAMED_PROPS_PREFIX + value;
+      }
+      if (SAFE_FOR_XML && regExpTest(/((--!?|])>)|<\/(style|script|title|xmp|textarea|noscript|iframe|noembed|noframes)/i, value)) {
+        _removeAttribute(name, currentNode);
+        continue;
+      }
+      if (lcName === "attributename" && stringMatch(value, "href")) {
+        _removeAttribute(name, currentNode);
+        continue;
+      }
+      if (hookEvent.forceKeepAttr) {
+        continue;
+      }
+      if (!hookEvent.keepAttr) {
+        _removeAttribute(name, currentNode);
+        continue;
+      }
+      if (!ALLOW_SELF_CLOSE_IN_ATTR && regExpTest(/\/>/i, value)) {
+        _removeAttribute(name, currentNode);
+        continue;
+      }
+      if (SAFE_FOR_TEMPLATES) {
+        arrayForEach([MUSTACHE_EXPR$1, ERB_EXPR$1, TMPLIT_EXPR$1], (expr) => {
+          value = stringReplace(value, expr, " ");
+        });
+      }
+      const lcTag = transformCaseFunc(currentNode.nodeName);
+      if (!_isValidAttribute(lcTag, lcName, value)) {
+        _removeAttribute(name, currentNode);
+        continue;
+      }
+      if (trustedTypesPolicy && typeof trustedTypes === "object" && typeof trustedTypes.getAttributeType === "function") {
+        if (namespaceURI) ;
+        else {
+          switch (trustedTypes.getAttributeType(lcTag, lcName)) {
+            case "TrustedHTML": {
+              value = trustedTypesPolicy.createHTML(value);
+              break;
+            }
+            case "TrustedScriptURL": {
+              value = trustedTypesPolicy.createScriptURL(value);
+              break;
+            }
+          }
+        }
+      }
+      if (value !== initValue) {
+        try {
+          if (namespaceURI) {
+            currentNode.setAttributeNS(namespaceURI, name, value);
+          } else {
+            currentNode.setAttribute(name, value);
+          }
+          if (_isClobbered(currentNode)) {
+            _forceRemove(currentNode);
+          } else {
+            arrayPop(DOMPurify.removed);
+          }
+        } catch (_2) {
+          _removeAttribute(name, currentNode);
+        }
+      }
+    }
+    _executeHooks(hooks.afterSanitizeAttributes, currentNode, null);
+  };
+  const _sanitizeShadowDOM2 = function _sanitizeShadowDOM(fragment) {
+    let shadowNode = null;
+    const shadowIterator = _createNodeIterator(fragment);
+    _executeHooks(hooks.beforeSanitizeShadowDOM, fragment, null);
+    while (shadowNode = shadowIterator.nextNode()) {
+      _executeHooks(hooks.uponSanitizeShadowNode, shadowNode, null);
+      _sanitizeElements(shadowNode);
+      _sanitizeAttributes(shadowNode);
+      if (shadowNode.content instanceof DocumentFragment) {
+        _sanitizeShadowDOM2(shadowNode.content);
+      }
+    }
+    _executeHooks(hooks.afterSanitizeShadowDOM, fragment, null);
+  };
+  const _sanitizeAttachedShadowRoots2 = function _sanitizeAttachedShadowRoots(root2) {
+    if (root2.nodeType === NODE_TYPE.element && root2.shadowRoot instanceof DocumentFragment) {
+      const sr = root2.shadowRoot;
+      _sanitizeAttachedShadowRoots2(sr);
+      _sanitizeShadowDOM2(sr);
+    }
+    const childNodes = root2.childNodes;
+    if (!childNodes) {
+      return;
+    }
+    const snapshot = [];
+    arrayForEach(childNodes, (child) => {
+      arrayPush(snapshot, child);
+    });
+    for (const child of snapshot) {
+      _sanitizeAttachedShadowRoots2(child);
+    }
+  };
+  DOMPurify.sanitize = function(dirty) {
+    let cfg = arguments.length > 1 && arguments[1] !== void 0 ? arguments[1] : {};
+    let body = null;
+    let importedNode = null;
+    let currentNode = null;
+    let returnNode = null;
+    IS_EMPTY_INPUT = !dirty;
+    if (IS_EMPTY_INPUT) {
+      dirty = "<!-->";
+    }
+    if (typeof dirty !== "string" && !_isNode(dirty)) {
+      dirty = stringifyValue(dirty);
+      if (typeof dirty !== "string") {
+        throw typeErrorCreate("dirty is not a string, aborting");
+      }
+    }
+    if (!DOMPurify.isSupported) {
+      return dirty;
+    }
+    if (!SET_CONFIG) {
+      _parseConfig(cfg);
+    }
+    DOMPurify.removed = [];
+    if (typeof dirty === "string") {
+      IN_PLACE = false;
+    }
+    if (IN_PLACE) {
+      const nn = dirty.nodeName;
+      if (typeof nn === "string") {
+        const tagName = transformCaseFunc(nn);
+        if (!ALLOWED_TAGS[tagName] || FORBID_TAGS[tagName]) {
+          throw typeErrorCreate("root node is forbidden and cannot be sanitized in-place");
+        }
+      }
+      _sanitizeAttachedShadowRoots2(dirty);
+    } else if (dirty instanceof Node2) {
+      body = _initDocument("<!---->");
+      importedNode = body.ownerDocument.importNode(dirty, true);
+      if (importedNode.nodeType === NODE_TYPE.element && importedNode.nodeName === "BODY") {
+        body = importedNode;
+      } else if (importedNode.nodeName === "HTML") {
+        body = importedNode;
+      } else {
+        body.appendChild(importedNode);
+      }
+      _sanitizeAttachedShadowRoots2(importedNode);
+    } else {
+      if (!RETURN_DOM && !SAFE_FOR_TEMPLATES && !WHOLE_DOCUMENT && // eslint-disable-next-line unicorn/prefer-includes
+      dirty.indexOf("<") === -1) {
+        return trustedTypesPolicy && RETURN_TRUSTED_TYPE ? trustedTypesPolicy.createHTML(dirty) : dirty;
+      }
+      body = _initDocument(dirty);
+      if (!body) {
+        return RETURN_DOM ? null : RETURN_TRUSTED_TYPE ? emptyHTML : "";
+      }
+    }
+    if (body && FORCE_BODY) {
+      _forceRemove(body.firstChild);
+    }
+    const nodeIterator = _createNodeIterator(IN_PLACE ? dirty : body);
+    while (currentNode = nodeIterator.nextNode()) {
+      _sanitizeElements(currentNode);
+      _sanitizeAttributes(currentNode);
+      if (currentNode.content instanceof DocumentFragment) {
+        _sanitizeShadowDOM2(currentNode.content);
+      }
+    }
+    if (IN_PLACE) {
+      return dirty;
+    }
+    if (RETURN_DOM) {
+      if (SAFE_FOR_TEMPLATES) {
+        body.normalize();
+        let html2 = body.innerHTML;
+        arrayForEach([MUSTACHE_EXPR$1, ERB_EXPR$1, TMPLIT_EXPR$1], (expr) => {
+          html2 = stringReplace(html2, expr, " ");
+        });
+        body.innerHTML = html2;
+      }
+      if (RETURN_DOM_FRAGMENT) {
+        returnNode = createDocumentFragment.call(body.ownerDocument);
+        while (body.firstChild) {
+          returnNode.appendChild(body.firstChild);
+        }
+      } else {
+        returnNode = body;
+      }
+      if (ALLOWED_ATTR.shadowroot || ALLOWED_ATTR.shadowrootmode) {
+        returnNode = importNode.call(originalDocument, returnNode, true);
+      }
+      return returnNode;
+    }
+    let serializedHTML = WHOLE_DOCUMENT ? body.outerHTML : body.innerHTML;
+    if (WHOLE_DOCUMENT && ALLOWED_TAGS["!doctype"] && body.ownerDocument && body.ownerDocument.doctype && body.ownerDocument.doctype.name && regExpTest(DOCTYPE_NAME, body.ownerDocument.doctype.name)) {
+      serializedHTML = "<!DOCTYPE " + body.ownerDocument.doctype.name + ">\n" + serializedHTML;
+    }
+    if (SAFE_FOR_TEMPLATES) {
+      arrayForEach([MUSTACHE_EXPR$1, ERB_EXPR$1, TMPLIT_EXPR$1], (expr) => {
+        serializedHTML = stringReplace(serializedHTML, expr, " ");
+      });
+    }
+    return trustedTypesPolicy && RETURN_TRUSTED_TYPE ? trustedTypesPolicy.createHTML(serializedHTML) : serializedHTML;
+  };
+  DOMPurify.setConfig = function() {
+    let cfg = arguments.length > 0 && arguments[0] !== void 0 ? arguments[0] : {};
+    _parseConfig(cfg);
+    SET_CONFIG = true;
+  };
+  DOMPurify.clearConfig = function() {
+    CONFIG = null;
+    SET_CONFIG = false;
+  };
+  DOMPurify.isValidAttribute = function(tag2, attr, value) {
+    if (!CONFIG) {
+      _parseConfig({});
+    }
+    const lcTag = transformCaseFunc(tag2);
+    const lcName = transformCaseFunc(attr);
+    return _isValidAttribute(lcTag, lcName, value);
+  };
+  DOMPurify.addHook = function(entryPoint, hookFunction) {
+    if (typeof hookFunction !== "function") {
+      return;
+    }
+    arrayPush(hooks[entryPoint], hookFunction);
+  };
+  DOMPurify.removeHook = function(entryPoint, hookFunction) {
+    if (hookFunction !== void 0) {
+      const index = arrayLastIndexOf(hooks[entryPoint], hookFunction);
+      return index === -1 ? void 0 : arraySplice(hooks[entryPoint], index, 1)[0];
+    }
+    return arrayPop(hooks[entryPoint]);
+  };
+  DOMPurify.removeHooks = function(entryPoint) {
+    hooks[entryPoint] = [];
+  };
+  DOMPurify.removeAllHooks = function() {
+    hooks = _createHooksMap();
+  };
+  return DOMPurify;
+}
+var purify = createDOMPurify();
 const scriptRel = "modulepreload";
 const assetsURL = function(dep) {
-  return "/dashboard/" + dep;
+  return "/" + dep;
 };
 const seen = {};
 const __vitePreload = function preload(baseModule, deps, importerUrl) {
@@ -8193,1086 +9294,6 @@ const invert = (color2, weight = 100) => {
   inverse.b = 255 - inverse.b;
   return mix(inverse, color2, weight);
 };
-/*! @license DOMPurify 3.4.3 | (c) Cure53 and other contributors | Released under the Apache license 2.0 and Mozilla Public License 2.0 | github.com/cure53/DOMPurify/blob/3.4.3/LICENSE */
-function _arrayLikeToArray(r2, a2) {
-  (null == a2 || a2 > r2.length) && (a2 = r2.length);
-  for (var e2 = 0, n2 = Array(a2); e2 < a2; e2++) n2[e2] = r2[e2];
-  return n2;
-}
-function _arrayWithHoles(r2) {
-  if (Array.isArray(r2)) return r2;
-}
-function _iterableToArrayLimit(r2, l4) {
-  var t2 = null == r2 ? null : "undefined" != typeof Symbol && r2[Symbol.iterator] || r2["@@iterator"];
-  if (null != t2) {
-    var e2, n2, i2, u2, a2 = [], f2 = true, o2 = false;
-    try {
-      if (i2 = (t2 = t2.call(r2)).next, 0 === l4) ;
-      else for (; !(f2 = (e2 = i2.call(t2)).done) && (a2.push(e2.value), a2.length !== l4); f2 = true) ;
-    } catch (r3) {
-      o2 = true, n2 = r3;
-    } finally {
-      try {
-        if (!f2 && null != t2.return && (u2 = t2.return(), Object(u2) !== u2)) return;
-      } finally {
-        if (o2) throw n2;
-      }
-    }
-    return a2;
-  }
-}
-function _nonIterableRest() {
-  throw new TypeError("Invalid attempt to destructure non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method.");
-}
-function _slicedToArray(r2, e2) {
-  return _arrayWithHoles(r2) || _iterableToArrayLimit(r2, e2) || _unsupportedIterableToArray(r2, e2) || _nonIterableRest();
-}
-function _unsupportedIterableToArray(r2, a2) {
-  if (r2) {
-    if ("string" == typeof r2) return _arrayLikeToArray(r2, a2);
-    var t2 = {}.toString.call(r2).slice(8, -1);
-    return "Object" === t2 && r2.constructor && (t2 = r2.constructor.name), "Map" === t2 || "Set" === t2 ? Array.from(r2) : "Arguments" === t2 || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(t2) ? _arrayLikeToArray(r2, a2) : void 0;
-  }
-}
-const entries = Object.entries, setPrototypeOf = Object.setPrototypeOf, isFrozen = Object.isFrozen, getPrototypeOf = Object.getPrototypeOf, getOwnPropertyDescriptor = Object.getOwnPropertyDescriptor;
-let freeze = Object.freeze, seal = Object.seal, create$1 = Object.create;
-let _ref = typeof Reflect !== "undefined" && Reflect, apply = _ref.apply, construct = _ref.construct;
-if (!freeze) {
-  freeze = function freeze2(x2) {
-    return x2;
-  };
-}
-if (!seal) {
-  seal = function seal2(x2) {
-    return x2;
-  };
-}
-if (!apply) {
-  apply = function apply2(func, thisArg) {
-    for (var _len = arguments.length, args = new Array(_len > 2 ? _len - 2 : 0), _key = 2; _key < _len; _key++) {
-      args[_key - 2] = arguments[_key];
-    }
-    return func.apply(thisArg, args);
-  };
-}
-if (!construct) {
-  construct = function construct2(Func) {
-    for (var _len2 = arguments.length, args = new Array(_len2 > 1 ? _len2 - 1 : 0), _key2 = 1; _key2 < _len2; _key2++) {
-      args[_key2 - 1] = arguments[_key2];
-    }
-    return new Func(...args);
-  };
-}
-const arrayForEach = unapply(Array.prototype.forEach);
-const arrayLastIndexOf = unapply(Array.prototype.lastIndexOf);
-const arrayPop = unapply(Array.prototype.pop);
-const arrayPush = unapply(Array.prototype.push);
-const arraySplice = unapply(Array.prototype.splice);
-const arrayIsArray = Array.isArray;
-const stringToLowerCase = unapply(String.prototype.toLowerCase);
-const stringToString = unapply(String.prototype.toString);
-const stringMatch = unapply(String.prototype.match);
-const stringReplace = unapply(String.prototype.replace);
-const stringIndexOf = unapply(String.prototype.indexOf);
-const stringTrim = unapply(String.prototype.trim);
-const numberToString = unapply(Number.prototype.toString);
-const booleanToString = unapply(Boolean.prototype.toString);
-const bigintToString = typeof BigInt === "undefined" ? null : unapply(BigInt.prototype.toString);
-const symbolToString = typeof Symbol === "undefined" ? null : unapply(Symbol.prototype.toString);
-const objectHasOwnProperty = unapply(Object.prototype.hasOwnProperty);
-const objectToString = unapply(Object.prototype.toString);
-const regExpTest = unapply(RegExp.prototype.test);
-const typeErrorCreate = unconstruct(TypeError);
-function unapply(func) {
-  return function(thisArg) {
-    if (thisArg instanceof RegExp) {
-      thisArg.lastIndex = 0;
-    }
-    for (var _len3 = arguments.length, args = new Array(_len3 > 1 ? _len3 - 1 : 0), _key3 = 1; _key3 < _len3; _key3++) {
-      args[_key3 - 1] = arguments[_key3];
-    }
-    return apply(func, thisArg, args);
-  };
-}
-function unconstruct(Func) {
-  return function() {
-    for (var _len4 = arguments.length, args = new Array(_len4), _key4 = 0; _key4 < _len4; _key4++) {
-      args[_key4] = arguments[_key4];
-    }
-    return construct(Func, args);
-  };
-}
-function addToSet(set2, array2) {
-  let transformCaseFunc = arguments.length > 2 && arguments[2] !== void 0 ? arguments[2] : stringToLowerCase;
-  if (setPrototypeOf) {
-    setPrototypeOf(set2, null);
-  }
-  if (!arrayIsArray(array2)) {
-    return set2;
-  }
-  let l4 = array2.length;
-  while (l4--) {
-    let element = array2[l4];
-    if (typeof element === "string") {
-      const lcElement = transformCaseFunc(element);
-      if (lcElement !== element) {
-        if (!isFrozen(array2)) {
-          array2[l4] = lcElement;
-        }
-        element = lcElement;
-      }
-    }
-    set2[element] = true;
-  }
-  return set2;
-}
-function cleanArray(array2) {
-  for (let index = 0; index < array2.length; index++) {
-    const isPropertyExist = objectHasOwnProperty(array2, index);
-    if (!isPropertyExist) {
-      array2[index] = null;
-    }
-  }
-  return array2;
-}
-function clone$1(object) {
-  const newObject = create$1(null);
-  for (const _ref2 of entries(object)) {
-    var _ref3 = _slicedToArray(_ref2, 2);
-    const property = _ref3[0];
-    const value = _ref3[1];
-    const isPropertyExist = objectHasOwnProperty(object, property);
-    if (isPropertyExist) {
-      if (arrayIsArray(value)) {
-        newObject[property] = cleanArray(value);
-      } else if (value && typeof value === "object" && value.constructor === Object) {
-        newObject[property] = clone$1(value);
-      } else {
-        newObject[property] = value;
-      }
-    }
-  }
-  return newObject;
-}
-function stringifyValue(value) {
-  switch (typeof value) {
-    case "string": {
-      return value;
-    }
-    case "number": {
-      return numberToString(value);
-    }
-    case "boolean": {
-      return booleanToString(value);
-    }
-    case "bigint": {
-      return bigintToString ? bigintToString(value) : "0";
-    }
-    case "symbol": {
-      return symbolToString ? symbolToString(value) : "Symbol()";
-    }
-    case "undefined": {
-      return objectToString(value);
-    }
-    case "function":
-    case "object": {
-      if (value === null) {
-        return objectToString(value);
-      }
-      const valueAsRecord = value;
-      const valueToString = lookupGetter(valueAsRecord, "toString");
-      if (typeof valueToString === "function") {
-        const stringified = valueToString(valueAsRecord);
-        return typeof stringified === "string" ? stringified : objectToString(stringified);
-      }
-      return objectToString(value);
-    }
-    default: {
-      return objectToString(value);
-    }
-  }
-}
-function lookupGetter(object, prop) {
-  while (object !== null) {
-    const desc = getOwnPropertyDescriptor(object, prop);
-    if (desc) {
-      if (desc.get) {
-        return unapply(desc.get);
-      }
-      if (typeof desc.value === "function") {
-        return unapply(desc.value);
-      }
-    }
-    object = getPrototypeOf(object);
-  }
-  function fallbackValue() {
-    return null;
-  }
-  return fallbackValue;
-}
-function isRegex(value) {
-  try {
-    regExpTest(value, "");
-    return true;
-  } catch (_unused) {
-    return false;
-  }
-}
-const html$1 = freeze(["a", "abbr", "acronym", "address", "area", "article", "aside", "audio", "b", "bdi", "bdo", "big", "blink", "blockquote", "body", "br", "button", "canvas", "caption", "center", "cite", "code", "col", "colgroup", "content", "data", "datalist", "dd", "decorator", "del", "details", "dfn", "dialog", "dir", "div", "dl", "dt", "element", "em", "fieldset", "figcaption", "figure", "font", "footer", "form", "h1", "h2", "h3", "h4", "h5", "h6", "head", "header", "hgroup", "hr", "html", "i", "img", "input", "ins", "kbd", "label", "legend", "li", "main", "map", "mark", "marquee", "menu", "menuitem", "meter", "nav", "nobr", "ol", "optgroup", "option", "output", "p", "picture", "pre", "progress", "q", "rp", "rt", "ruby", "s", "samp", "search", "section", "select", "shadow", "slot", "small", "source", "spacer", "span", "strike", "strong", "style", "sub", "summary", "sup", "table", "tbody", "td", "template", "textarea", "tfoot", "th", "thead", "time", "tr", "track", "tt", "u", "ul", "var", "video", "wbr"]);
-const svg$1 = freeze(["svg", "a", "altglyph", "altglyphdef", "altglyphitem", "animatecolor", "animatemotion", "animatetransform", "circle", "clippath", "defs", "desc", "ellipse", "enterkeyhint", "exportparts", "filter", "font", "g", "glyph", "glyphref", "hkern", "image", "inputmode", "line", "lineargradient", "marker", "mask", "metadata", "mpath", "part", "path", "pattern", "polygon", "polyline", "radialgradient", "rect", "stop", "style", "switch", "symbol", "text", "textpath", "title", "tref", "tspan", "view", "vkern"]);
-const svgFilters = freeze(["feBlend", "feColorMatrix", "feComponentTransfer", "feComposite", "feConvolveMatrix", "feDiffuseLighting", "feDisplacementMap", "feDistantLight", "feDropShadow", "feFlood", "feFuncA", "feFuncB", "feFuncG", "feFuncR", "feGaussianBlur", "feImage", "feMerge", "feMergeNode", "feMorphology", "feOffset", "fePointLight", "feSpecularLighting", "feSpotLight", "feTile", "feTurbulence"]);
-const svgDisallowed = freeze(["animate", "color-profile", "cursor", "discard", "font-face", "font-face-format", "font-face-name", "font-face-src", "font-face-uri", "foreignobject", "hatch", "hatchpath", "mesh", "meshgradient", "meshpatch", "meshrow", "missing-glyph", "script", "set", "solidcolor", "unknown", "use"]);
-const mathMl$1 = freeze(["math", "menclose", "merror", "mfenced", "mfrac", "mglyph", "mi", "mlabeledtr", "mmultiscripts", "mn", "mo", "mover", "mpadded", "mphantom", "mroot", "mrow", "ms", "mspace", "msqrt", "mstyle", "msub", "msup", "msubsup", "mtable", "mtd", "mtext", "mtr", "munder", "munderover", "mprescripts"]);
-const mathMlDisallowed = freeze(["maction", "maligngroup", "malignmark", "mlongdiv", "mscarries", "mscarry", "msgroup", "mstack", "msline", "msrow", "semantics", "annotation", "annotation-xml", "mprescripts", "none"]);
-const text$1 = freeze(["#text"]);
-const html$2 = freeze(["accept", "action", "align", "alt", "autocapitalize", "autocomplete", "autopictureinpicture", "autoplay", "background", "bgcolor", "border", "capture", "cellpadding", "cellspacing", "checked", "cite", "class", "clear", "color", "cols", "colspan", "controls", "controlslist", "coords", "crossorigin", "datetime", "decoding", "default", "dir", "disabled", "disablepictureinpicture", "disableremoteplayback", "download", "draggable", "enctype", "enterkeyhint", "exportparts", "face", "for", "headers", "height", "hidden", "high", "href", "hreflang", "id", "inert", "inputmode", "integrity", "ismap", "kind", "label", "lang", "list", "loading", "loop", "low", "max", "maxlength", "media", "method", "min", "minlength", "multiple", "muted", "name", "nonce", "noshade", "novalidate", "nowrap", "open", "optimum", "part", "pattern", "placeholder", "playsinline", "popover", "popovertarget", "popovertargetaction", "poster", "preload", "pubdate", "radiogroup", "readonly", "rel", "required", "rev", "reversed", "role", "rows", "rowspan", "spellcheck", "scope", "selected", "shape", "size", "sizes", "slot", "span", "srclang", "start", "src", "srcset", "step", "style", "summary", "tabindex", "title", "translate", "type", "usemap", "valign", "value", "width", "wrap", "xmlns"]);
-const svg = freeze(["accent-height", "accumulate", "additive", "alignment-baseline", "amplitude", "ascent", "attributename", "attributetype", "azimuth", "basefrequency", "baseline-shift", "begin", "bias", "by", "class", "clip", "clippathunits", "clip-path", "clip-rule", "color", "color-interpolation", "color-interpolation-filters", "color-profile", "color-rendering", "cx", "cy", "d", "dx", "dy", "diffuseconstant", "direction", "display", "divisor", "dur", "edgemode", "elevation", "end", "exponent", "fill", "fill-opacity", "fill-rule", "filter", "filterunits", "flood-color", "flood-opacity", "font-family", "font-size", "font-size-adjust", "font-stretch", "font-style", "font-variant", "font-weight", "fx", "fy", "g1", "g2", "glyph-name", "glyphref", "gradientunits", "gradienttransform", "height", "href", "id", "image-rendering", "in", "in2", "intercept", "k", "k1", "k2", "k3", "k4", "kerning", "keypoints", "keysplines", "keytimes", "lang", "lengthadjust", "letter-spacing", "kernelmatrix", "kernelunitlength", "lighting-color", "local", "marker-end", "marker-mid", "marker-start", "markerheight", "markerunits", "markerwidth", "maskcontentunits", "maskunits", "max", "mask", "mask-type", "media", "method", "mode", "min", "name", "numoctaves", "offset", "operator", "opacity", "order", "orient", "orientation", "origin", "overflow", "paint-order", "path", "pathlength", "patterncontentunits", "patterntransform", "patternunits", "points", "preservealpha", "preserveaspectratio", "primitiveunits", "r", "rx", "ry", "radius", "refx", "refy", "repeatcount", "repeatdur", "restart", "result", "rotate", "scale", "seed", "shape-rendering", "slope", "specularconstant", "specularexponent", "spreadmethod", "startoffset", "stddeviation", "stitchtiles", "stop-color", "stop-opacity", "stroke-dasharray", "stroke-dashoffset", "stroke-linecap", "stroke-linejoin", "stroke-miterlimit", "stroke-opacity", "stroke", "stroke-width", "style", "surfacescale", "systemlanguage", "tabindex", "tablevalues", "targetx", "targety", "transform", "transform-origin", "text-anchor", "text-decoration", "text-rendering", "textlength", "type", "u1", "u2", "unicode", "values", "viewbox", "visibility", "version", "vert-adv-y", "vert-origin-x", "vert-origin-y", "width", "word-spacing", "wrap", "writing-mode", "xchannelselector", "ychannelselector", "x", "x1", "x2", "xmlns", "y", "y1", "y2", "z", "zoomandpan"]);
-const mathMl = freeze(["accent", "accentunder", "align", "bevelled", "close", "columnalign", "columnlines", "columnspacing", "columnspan", "denomalign", "depth", "dir", "display", "displaystyle", "encoding", "fence", "frame", "height", "href", "id", "largeop", "length", "linethickness", "lquote", "lspace", "mathbackground", "mathcolor", "mathsize", "mathvariant", "maxsize", "minsize", "movablelimits", "notation", "numalign", "open", "rowalign", "rowlines", "rowspacing", "rowspan", "rspace", "rquote", "scriptlevel", "scriptminsize", "scriptsizemultiplier", "selection", "separator", "separators", "stretchy", "subscriptshift", "supscriptshift", "symmetric", "voffset", "width", "xmlns"]);
-const xml = freeze(["xlink:href", "xml:id", "xlink:title", "xml:space", "xmlns:xlink"]);
-const MUSTACHE_EXPR = seal(/{{[\w\W]*|^[\w\W]*}}/g);
-const ERB_EXPR = seal(/<%[\w\W]*|^[\w\W]*%>/g);
-const TMPLIT_EXPR = seal(/\${[\w\W]*/g);
-const DATA_ATTR = seal(/^data-[\-\w.\u00B7-\uFFFF]+$/);
-const ARIA_ATTR = seal(/^aria-[\-\w]+$/);
-const IS_ALLOWED_URI = seal(
-  /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|sms|cid|xmpp|matrix):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i
-  // eslint-disable-line no-useless-escape
-);
-const IS_SCRIPT_OR_DATA = seal(/^(?:\w+script|data):/i);
-const ATTR_WHITESPACE = seal(
-  /[\u0000-\u0020\u00A0\u1680\u180E\u2000-\u2029\u205F\u3000]/g
-  // eslint-disable-line no-control-regex
-);
-const DOCTYPE_NAME = seal(/^html$/i);
-const CUSTOM_ELEMENT = seal(/^[a-z][.\w]*(-[.\w]+)+$/i);
-const NODE_TYPE = {
-  element: 1,
-  text: 3,
-  // Deprecated
-  progressingInstruction: 7,
-  comment: 8,
-  document: 9
-};
-const getGlobal = function getGlobal2() {
-  return typeof window === "undefined" ? null : window;
-};
-const _createTrustedTypesPolicy = function _createTrustedTypesPolicy2(trustedTypes, purifyHostElement) {
-  if (typeof trustedTypes !== "object" || typeof trustedTypes.createPolicy !== "function") {
-    return null;
-  }
-  let suffix = null;
-  const ATTR_NAME = "data-tt-policy-suffix";
-  if (purifyHostElement && purifyHostElement.hasAttribute(ATTR_NAME)) {
-    suffix = purifyHostElement.getAttribute(ATTR_NAME);
-  }
-  const policyName = "dompurify" + (suffix ? "#" + suffix : "");
-  try {
-    return trustedTypes.createPolicy(policyName, {
-      createHTML(html2) {
-        return html2;
-      },
-      createScriptURL(scriptUrl) {
-        return scriptUrl;
-      }
-    });
-  } catch (_2) {
-    console.warn("TrustedTypes policy " + policyName + " could not be created.");
-    return null;
-  }
-};
-const _createHooksMap = function _createHooksMap2() {
-  return {
-    afterSanitizeAttributes: [],
-    afterSanitizeElements: [],
-    afterSanitizeShadowDOM: [],
-    beforeSanitizeAttributes: [],
-    beforeSanitizeElements: [],
-    beforeSanitizeShadowDOM: [],
-    uponSanitizeAttribute: [],
-    uponSanitizeElement: [],
-    uponSanitizeShadowNode: []
-  };
-};
-function createDOMPurify() {
-  let window2 = arguments.length > 0 && arguments[0] !== void 0 ? arguments[0] : getGlobal();
-  const DOMPurify = (root2) => createDOMPurify(root2);
-  DOMPurify.version = "3.4.3";
-  DOMPurify.removed = [];
-  if (!window2 || !window2.document || window2.document.nodeType !== NODE_TYPE.document || !window2.Element) {
-    DOMPurify.isSupported = false;
-    return DOMPurify;
-  }
-  let document2 = window2.document;
-  const originalDocument = document2;
-  const currentScript = originalDocument.currentScript;
-  const DocumentFragment = window2.DocumentFragment, HTMLTemplateElement = window2.HTMLTemplateElement, Node = window2.Node, Element = window2.Element, NodeFilter = window2.NodeFilter, _window$NamedNodeMap = window2.NamedNodeMap, NamedNodeMap = _window$NamedNodeMap === void 0 ? window2.NamedNodeMap || window2.MozNamedAttrMap : _window$NamedNodeMap, HTMLFormElement = window2.HTMLFormElement, DOMParser = window2.DOMParser, trustedTypes = window2.trustedTypes;
-  const ElementPrototype = Element.prototype;
-  const cloneNode = lookupGetter(ElementPrototype, "cloneNode");
-  const remove2 = lookupGetter(ElementPrototype, "remove");
-  const getNextSibling = lookupGetter(ElementPrototype, "nextSibling");
-  const getChildNodes = lookupGetter(ElementPrototype, "childNodes");
-  const getParentNode = lookupGetter(ElementPrototype, "parentNode");
-  if (typeof HTMLTemplateElement === "function") {
-    const template = document2.createElement("template");
-    if (template.content && template.content.ownerDocument) {
-      document2 = template.content.ownerDocument;
-    }
-  }
-  let trustedTypesPolicy;
-  let emptyHTML = "";
-  const _document = document2, implementation = _document.implementation, createNodeIterator = _document.createNodeIterator, createDocumentFragment = _document.createDocumentFragment, getElementsByTagName = _document.getElementsByTagName;
-  const importNode = originalDocument.importNode;
-  let hooks = _createHooksMap();
-  DOMPurify.isSupported = typeof entries === "function" && typeof getParentNode === "function" && implementation && implementation.createHTMLDocument !== void 0;
-  const MUSTACHE_EXPR$1 = MUSTACHE_EXPR, ERB_EXPR$1 = ERB_EXPR, TMPLIT_EXPR$1 = TMPLIT_EXPR, DATA_ATTR$1 = DATA_ATTR, ARIA_ATTR$1 = ARIA_ATTR, IS_SCRIPT_OR_DATA$1 = IS_SCRIPT_OR_DATA, ATTR_WHITESPACE$1 = ATTR_WHITESPACE, CUSTOM_ELEMENT$1 = CUSTOM_ELEMENT;
-  let IS_ALLOWED_URI$1 = IS_ALLOWED_URI;
-  let ALLOWED_TAGS = null;
-  const DEFAULT_ALLOWED_TAGS = addToSet({}, [...html$1, ...svg$1, ...svgFilters, ...mathMl$1, ...text$1]);
-  let ALLOWED_ATTR = null;
-  const DEFAULT_ALLOWED_ATTR = addToSet({}, [...html$2, ...svg, ...mathMl, ...xml]);
-  let CUSTOM_ELEMENT_HANDLING = Object.seal(create$1(null, {
-    tagNameCheck: {
-      writable: true,
-      configurable: false,
-      enumerable: true,
-      value: null
-    },
-    attributeNameCheck: {
-      writable: true,
-      configurable: false,
-      enumerable: true,
-      value: null
-    },
-    allowCustomizedBuiltInElements: {
-      writable: true,
-      configurable: false,
-      enumerable: true,
-      value: false
-    }
-  }));
-  let FORBID_TAGS = null;
-  let FORBID_ATTR = null;
-  const EXTRA_ELEMENT_HANDLING = Object.seal(create$1(null, {
-    tagCheck: {
-      writable: true,
-      configurable: false,
-      enumerable: true,
-      value: null
-    },
-    attributeCheck: {
-      writable: true,
-      configurable: false,
-      enumerable: true,
-      value: null
-    }
-  }));
-  let ALLOW_ARIA_ATTR = true;
-  let ALLOW_DATA_ATTR = true;
-  let ALLOW_UNKNOWN_PROTOCOLS = false;
-  let ALLOW_SELF_CLOSE_IN_ATTR = true;
-  let SAFE_FOR_TEMPLATES = false;
-  let SAFE_FOR_XML = true;
-  let WHOLE_DOCUMENT = false;
-  let SET_CONFIG = false;
-  let FORCE_BODY = false;
-  let RETURN_DOM = false;
-  let RETURN_DOM_FRAGMENT = false;
-  let RETURN_TRUSTED_TYPE = false;
-  let SANITIZE_DOM = true;
-  let SANITIZE_NAMED_PROPS = false;
-  const SANITIZE_NAMED_PROPS_PREFIX = "user-content-";
-  let KEEP_CONTENT = true;
-  let IN_PLACE = false;
-  let USE_PROFILES = {};
-  let FORBID_CONTENTS = null;
-  const DEFAULT_FORBID_CONTENTS = addToSet({}, ["annotation-xml", "audio", "colgroup", "desc", "foreignobject", "head", "iframe", "math", "mi", "mn", "mo", "ms", "mtext", "noembed", "noframes", "noscript", "plaintext", "script", "style", "svg", "template", "thead", "title", "video", "xmp"]);
-  let DATA_URI_TAGS = null;
-  const DEFAULT_DATA_URI_TAGS = addToSet({}, ["audio", "video", "img", "source", "image", "track"]);
-  let URI_SAFE_ATTRIBUTES = null;
-  const DEFAULT_URI_SAFE_ATTRIBUTES = addToSet({}, ["alt", "class", "for", "id", "label", "name", "pattern", "placeholder", "role", "summary", "title", "value", "style", "xmlns"]);
-  const MATHML_NAMESPACE = "http://www.w3.org/1998/Math/MathML";
-  const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
-  const HTML_NAMESPACE = "http://www.w3.org/1999/xhtml";
-  let NAMESPACE2 = HTML_NAMESPACE;
-  let IS_EMPTY_INPUT = false;
-  let ALLOWED_NAMESPACES = null;
-  const DEFAULT_ALLOWED_NAMESPACES = addToSet({}, [MATHML_NAMESPACE, SVG_NAMESPACE, HTML_NAMESPACE], stringToString);
-  let MATHML_TEXT_INTEGRATION_POINTS = addToSet({}, ["mi", "mo", "mn", "ms", "mtext"]);
-  let HTML_INTEGRATION_POINTS = addToSet({}, ["annotation-xml"]);
-  const COMMON_SVG_AND_HTML_ELEMENTS = addToSet({}, ["title", "style", "font", "a", "script"]);
-  let PARSER_MEDIA_TYPE = null;
-  const SUPPORTED_PARSER_MEDIA_TYPES = ["application/xhtml+xml", "text/html"];
-  const DEFAULT_PARSER_MEDIA_TYPE = "text/html";
-  let transformCaseFunc = null;
-  let CONFIG = null;
-  const formElement = document2.createElement("form");
-  const isRegexOrFunction = function isRegexOrFunction2(testValue) {
-    return testValue instanceof RegExp || testValue instanceof Function;
-  };
-  const _parseConfig = function _parseConfig2() {
-    let cfg = arguments.length > 0 && arguments[0] !== void 0 ? arguments[0] : {};
-    if (CONFIG && CONFIG === cfg) {
-      return;
-    }
-    if (!cfg || typeof cfg !== "object") {
-      cfg = {};
-    }
-    cfg = clone$1(cfg);
-    PARSER_MEDIA_TYPE = // eslint-disable-next-line unicorn/prefer-includes
-    SUPPORTED_PARSER_MEDIA_TYPES.indexOf(cfg.PARSER_MEDIA_TYPE) === -1 ? DEFAULT_PARSER_MEDIA_TYPE : cfg.PARSER_MEDIA_TYPE;
-    transformCaseFunc = PARSER_MEDIA_TYPE === "application/xhtml+xml" ? stringToString : stringToLowerCase;
-    ALLOWED_TAGS = objectHasOwnProperty(cfg, "ALLOWED_TAGS") && arrayIsArray(cfg.ALLOWED_TAGS) ? addToSet({}, cfg.ALLOWED_TAGS, transformCaseFunc) : DEFAULT_ALLOWED_TAGS;
-    ALLOWED_ATTR = objectHasOwnProperty(cfg, "ALLOWED_ATTR") && arrayIsArray(cfg.ALLOWED_ATTR) ? addToSet({}, cfg.ALLOWED_ATTR, transformCaseFunc) : DEFAULT_ALLOWED_ATTR;
-    ALLOWED_NAMESPACES = objectHasOwnProperty(cfg, "ALLOWED_NAMESPACES") && arrayIsArray(cfg.ALLOWED_NAMESPACES) ? addToSet({}, cfg.ALLOWED_NAMESPACES, stringToString) : DEFAULT_ALLOWED_NAMESPACES;
-    URI_SAFE_ATTRIBUTES = objectHasOwnProperty(cfg, "ADD_URI_SAFE_ATTR") && arrayIsArray(cfg.ADD_URI_SAFE_ATTR) ? addToSet(clone$1(DEFAULT_URI_SAFE_ATTRIBUTES), cfg.ADD_URI_SAFE_ATTR, transformCaseFunc) : DEFAULT_URI_SAFE_ATTRIBUTES;
-    DATA_URI_TAGS = objectHasOwnProperty(cfg, "ADD_DATA_URI_TAGS") && arrayIsArray(cfg.ADD_DATA_URI_TAGS) ? addToSet(clone$1(DEFAULT_DATA_URI_TAGS), cfg.ADD_DATA_URI_TAGS, transformCaseFunc) : DEFAULT_DATA_URI_TAGS;
-    FORBID_CONTENTS = objectHasOwnProperty(cfg, "FORBID_CONTENTS") && arrayIsArray(cfg.FORBID_CONTENTS) ? addToSet({}, cfg.FORBID_CONTENTS, transformCaseFunc) : DEFAULT_FORBID_CONTENTS;
-    FORBID_TAGS = objectHasOwnProperty(cfg, "FORBID_TAGS") && arrayIsArray(cfg.FORBID_TAGS) ? addToSet({}, cfg.FORBID_TAGS, transformCaseFunc) : clone$1({});
-    FORBID_ATTR = objectHasOwnProperty(cfg, "FORBID_ATTR") && arrayIsArray(cfg.FORBID_ATTR) ? addToSet({}, cfg.FORBID_ATTR, transformCaseFunc) : clone$1({});
-    USE_PROFILES = objectHasOwnProperty(cfg, "USE_PROFILES") ? cfg.USE_PROFILES && typeof cfg.USE_PROFILES === "object" ? clone$1(cfg.USE_PROFILES) : cfg.USE_PROFILES : false;
-    ALLOW_ARIA_ATTR = cfg.ALLOW_ARIA_ATTR !== false;
-    ALLOW_DATA_ATTR = cfg.ALLOW_DATA_ATTR !== false;
-    ALLOW_UNKNOWN_PROTOCOLS = cfg.ALLOW_UNKNOWN_PROTOCOLS || false;
-    ALLOW_SELF_CLOSE_IN_ATTR = cfg.ALLOW_SELF_CLOSE_IN_ATTR !== false;
-    SAFE_FOR_TEMPLATES = cfg.SAFE_FOR_TEMPLATES || false;
-    SAFE_FOR_XML = cfg.SAFE_FOR_XML !== false;
-    WHOLE_DOCUMENT = cfg.WHOLE_DOCUMENT || false;
-    RETURN_DOM = cfg.RETURN_DOM || false;
-    RETURN_DOM_FRAGMENT = cfg.RETURN_DOM_FRAGMENT || false;
-    RETURN_TRUSTED_TYPE = cfg.RETURN_TRUSTED_TYPE || false;
-    FORCE_BODY = cfg.FORCE_BODY || false;
-    SANITIZE_DOM = cfg.SANITIZE_DOM !== false;
-    SANITIZE_NAMED_PROPS = cfg.SANITIZE_NAMED_PROPS || false;
-    KEEP_CONTENT = cfg.KEEP_CONTENT !== false;
-    IN_PLACE = cfg.IN_PLACE || false;
-    IS_ALLOWED_URI$1 = isRegex(cfg.ALLOWED_URI_REGEXP) ? cfg.ALLOWED_URI_REGEXP : IS_ALLOWED_URI;
-    NAMESPACE2 = typeof cfg.NAMESPACE === "string" ? cfg.NAMESPACE : HTML_NAMESPACE;
-    MATHML_TEXT_INTEGRATION_POINTS = objectHasOwnProperty(cfg, "MATHML_TEXT_INTEGRATION_POINTS") && cfg.MATHML_TEXT_INTEGRATION_POINTS && typeof cfg.MATHML_TEXT_INTEGRATION_POINTS === "object" ? clone$1(cfg.MATHML_TEXT_INTEGRATION_POINTS) : addToSet({}, ["mi", "mo", "mn", "ms", "mtext"]);
-    HTML_INTEGRATION_POINTS = objectHasOwnProperty(cfg, "HTML_INTEGRATION_POINTS") && cfg.HTML_INTEGRATION_POINTS && typeof cfg.HTML_INTEGRATION_POINTS === "object" ? clone$1(cfg.HTML_INTEGRATION_POINTS) : addToSet({}, ["annotation-xml"]);
-    const customElementHandling = objectHasOwnProperty(cfg, "CUSTOM_ELEMENT_HANDLING") && cfg.CUSTOM_ELEMENT_HANDLING && typeof cfg.CUSTOM_ELEMENT_HANDLING === "object" ? clone$1(cfg.CUSTOM_ELEMENT_HANDLING) : create$1(null);
-    CUSTOM_ELEMENT_HANDLING = create$1(null);
-    if (objectHasOwnProperty(customElementHandling, "tagNameCheck") && isRegexOrFunction(customElementHandling.tagNameCheck)) {
-      CUSTOM_ELEMENT_HANDLING.tagNameCheck = customElementHandling.tagNameCheck;
-    }
-    if (objectHasOwnProperty(customElementHandling, "attributeNameCheck") && isRegexOrFunction(customElementHandling.attributeNameCheck)) {
-      CUSTOM_ELEMENT_HANDLING.attributeNameCheck = customElementHandling.attributeNameCheck;
-    }
-    if (objectHasOwnProperty(customElementHandling, "allowCustomizedBuiltInElements") && typeof customElementHandling.allowCustomizedBuiltInElements === "boolean") {
-      CUSTOM_ELEMENT_HANDLING.allowCustomizedBuiltInElements = customElementHandling.allowCustomizedBuiltInElements;
-    }
-    if (SAFE_FOR_TEMPLATES) {
-      ALLOW_DATA_ATTR = false;
-    }
-    if (RETURN_DOM_FRAGMENT) {
-      RETURN_DOM = true;
-    }
-    if (USE_PROFILES) {
-      ALLOWED_TAGS = addToSet({}, text$1);
-      ALLOWED_ATTR = create$1(null);
-      if (USE_PROFILES.html === true) {
-        addToSet(ALLOWED_TAGS, html$1);
-        addToSet(ALLOWED_ATTR, html$2);
-      }
-      if (USE_PROFILES.svg === true) {
-        addToSet(ALLOWED_TAGS, svg$1);
-        addToSet(ALLOWED_ATTR, svg);
-        addToSet(ALLOWED_ATTR, xml);
-      }
-      if (USE_PROFILES.svgFilters === true) {
-        addToSet(ALLOWED_TAGS, svgFilters);
-        addToSet(ALLOWED_ATTR, svg);
-        addToSet(ALLOWED_ATTR, xml);
-      }
-      if (USE_PROFILES.mathMl === true) {
-        addToSet(ALLOWED_TAGS, mathMl$1);
-        addToSet(ALLOWED_ATTR, mathMl);
-        addToSet(ALLOWED_ATTR, xml);
-      }
-    }
-    EXTRA_ELEMENT_HANDLING.tagCheck = null;
-    EXTRA_ELEMENT_HANDLING.attributeCheck = null;
-    if (objectHasOwnProperty(cfg, "ADD_TAGS")) {
-      if (typeof cfg.ADD_TAGS === "function") {
-        EXTRA_ELEMENT_HANDLING.tagCheck = cfg.ADD_TAGS;
-      } else if (arrayIsArray(cfg.ADD_TAGS)) {
-        if (ALLOWED_TAGS === DEFAULT_ALLOWED_TAGS) {
-          ALLOWED_TAGS = clone$1(ALLOWED_TAGS);
-        }
-        addToSet(ALLOWED_TAGS, cfg.ADD_TAGS, transformCaseFunc);
-      }
-    }
-    if (objectHasOwnProperty(cfg, "ADD_ATTR")) {
-      if (typeof cfg.ADD_ATTR === "function") {
-        EXTRA_ELEMENT_HANDLING.attributeCheck = cfg.ADD_ATTR;
-      } else if (arrayIsArray(cfg.ADD_ATTR)) {
-        if (ALLOWED_ATTR === DEFAULT_ALLOWED_ATTR) {
-          ALLOWED_ATTR = clone$1(ALLOWED_ATTR);
-        }
-        addToSet(ALLOWED_ATTR, cfg.ADD_ATTR, transformCaseFunc);
-      }
-    }
-    if (objectHasOwnProperty(cfg, "ADD_URI_SAFE_ATTR") && arrayIsArray(cfg.ADD_URI_SAFE_ATTR)) {
-      addToSet(URI_SAFE_ATTRIBUTES, cfg.ADD_URI_SAFE_ATTR, transformCaseFunc);
-    }
-    if (objectHasOwnProperty(cfg, "FORBID_CONTENTS") && arrayIsArray(cfg.FORBID_CONTENTS)) {
-      if (FORBID_CONTENTS === DEFAULT_FORBID_CONTENTS) {
-        FORBID_CONTENTS = clone$1(FORBID_CONTENTS);
-      }
-      addToSet(FORBID_CONTENTS, cfg.FORBID_CONTENTS, transformCaseFunc);
-    }
-    if (objectHasOwnProperty(cfg, "ADD_FORBID_CONTENTS") && arrayIsArray(cfg.ADD_FORBID_CONTENTS)) {
-      if (FORBID_CONTENTS === DEFAULT_FORBID_CONTENTS) {
-        FORBID_CONTENTS = clone$1(FORBID_CONTENTS);
-      }
-      addToSet(FORBID_CONTENTS, cfg.ADD_FORBID_CONTENTS, transformCaseFunc);
-    }
-    if (KEEP_CONTENT) {
-      ALLOWED_TAGS["#text"] = true;
-    }
-    if (WHOLE_DOCUMENT) {
-      addToSet(ALLOWED_TAGS, ["html", "head", "body"]);
-    }
-    if (ALLOWED_TAGS.table) {
-      addToSet(ALLOWED_TAGS, ["tbody"]);
-      delete FORBID_TAGS.tbody;
-    }
-    if (cfg.TRUSTED_TYPES_POLICY) {
-      if (typeof cfg.TRUSTED_TYPES_POLICY.createHTML !== "function") {
-        throw typeErrorCreate('TRUSTED_TYPES_POLICY configuration option must provide a "createHTML" hook.');
-      }
-      if (typeof cfg.TRUSTED_TYPES_POLICY.createScriptURL !== "function") {
-        throw typeErrorCreate('TRUSTED_TYPES_POLICY configuration option must provide a "createScriptURL" hook.');
-      }
-      trustedTypesPolicy = cfg.TRUSTED_TYPES_POLICY;
-      emptyHTML = trustedTypesPolicy.createHTML("");
-    } else {
-      if (trustedTypesPolicy === void 0) {
-        trustedTypesPolicy = _createTrustedTypesPolicy(trustedTypes, currentScript);
-      }
-      if (trustedTypesPolicy !== null && typeof emptyHTML === "string") {
-        emptyHTML = trustedTypesPolicy.createHTML("");
-      }
-    }
-    if (freeze) {
-      freeze(cfg);
-    }
-    CONFIG = cfg;
-  };
-  const ALL_SVG_TAGS = addToSet({}, [...svg$1, ...svgFilters, ...svgDisallowed]);
-  const ALL_MATHML_TAGS = addToSet({}, [...mathMl$1, ...mathMlDisallowed]);
-  const _checkValidNamespace = function _checkValidNamespace2(element) {
-    let parent = getParentNode(element);
-    if (!parent || !parent.tagName) {
-      parent = {
-        namespaceURI: NAMESPACE2,
-        tagName: "template"
-      };
-    }
-    const tagName = stringToLowerCase(element.tagName);
-    const parentTagName = stringToLowerCase(parent.tagName);
-    if (!ALLOWED_NAMESPACES[element.namespaceURI]) {
-      return false;
-    }
-    if (element.namespaceURI === SVG_NAMESPACE) {
-      if (parent.namespaceURI === HTML_NAMESPACE) {
-        return tagName === "svg";
-      }
-      if (parent.namespaceURI === MATHML_NAMESPACE) {
-        return tagName === "svg" && (parentTagName === "annotation-xml" || MATHML_TEXT_INTEGRATION_POINTS[parentTagName]);
-      }
-      return Boolean(ALL_SVG_TAGS[tagName]);
-    }
-    if (element.namespaceURI === MATHML_NAMESPACE) {
-      if (parent.namespaceURI === HTML_NAMESPACE) {
-        return tagName === "math";
-      }
-      if (parent.namespaceURI === SVG_NAMESPACE) {
-        return tagName === "math" && HTML_INTEGRATION_POINTS[parentTagName];
-      }
-      return Boolean(ALL_MATHML_TAGS[tagName]);
-    }
-    if (element.namespaceURI === HTML_NAMESPACE) {
-      if (parent.namespaceURI === SVG_NAMESPACE && !HTML_INTEGRATION_POINTS[parentTagName]) {
-        return false;
-      }
-      if (parent.namespaceURI === MATHML_NAMESPACE && !MATHML_TEXT_INTEGRATION_POINTS[parentTagName]) {
-        return false;
-      }
-      return !ALL_MATHML_TAGS[tagName] && (COMMON_SVG_AND_HTML_ELEMENTS[tagName] || !ALL_SVG_TAGS[tagName]);
-    }
-    if (PARSER_MEDIA_TYPE === "application/xhtml+xml" && ALLOWED_NAMESPACES[element.namespaceURI]) {
-      return true;
-    }
-    return false;
-  };
-  const _forceRemove = function _forceRemove2(node2) {
-    arrayPush(DOMPurify.removed, {
-      element: node2
-    });
-    try {
-      getParentNode(node2).removeChild(node2);
-    } catch (_2) {
-      remove2(node2);
-    }
-  };
-  const _removeAttribute = function _removeAttribute2(name, element) {
-    try {
-      arrayPush(DOMPurify.removed, {
-        attribute: element.getAttributeNode(name),
-        from: element
-      });
-    } catch (_2) {
-      arrayPush(DOMPurify.removed, {
-        attribute: null,
-        from: element
-      });
-    }
-    element.removeAttribute(name);
-    if (name === "is") {
-      if (RETURN_DOM || RETURN_DOM_FRAGMENT) {
-        try {
-          _forceRemove(element);
-        } catch (_2) {
-        }
-      } else {
-        try {
-          element.setAttribute(name, "");
-        } catch (_2) {
-        }
-      }
-    }
-  };
-  const _initDocument = function _initDocument2(dirty) {
-    let doc = null;
-    let leadingWhitespace = null;
-    if (FORCE_BODY) {
-      dirty = "<remove></remove>" + dirty;
-    } else {
-      const matches = stringMatch(dirty, /^[\r\n\t ]+/);
-      leadingWhitespace = matches && matches[0];
-    }
-    if (PARSER_MEDIA_TYPE === "application/xhtml+xml" && NAMESPACE2 === HTML_NAMESPACE) {
-      dirty = '<html xmlns="http://www.w3.org/1999/xhtml"><head></head><body>' + dirty + "</body></html>";
-    }
-    const dirtyPayload = trustedTypesPolicy ? trustedTypesPolicy.createHTML(dirty) : dirty;
-    if (NAMESPACE2 === HTML_NAMESPACE) {
-      try {
-        doc = new DOMParser().parseFromString(dirtyPayload, PARSER_MEDIA_TYPE);
-      } catch (_2) {
-      }
-    }
-    if (!doc || !doc.documentElement) {
-      doc = implementation.createDocument(NAMESPACE2, "template", null);
-      try {
-        doc.documentElement.innerHTML = IS_EMPTY_INPUT ? emptyHTML : dirtyPayload;
-      } catch (_2) {
-      }
-    }
-    const body = doc.body || doc.documentElement;
-    if (dirty && leadingWhitespace) {
-      body.insertBefore(document2.createTextNode(leadingWhitespace), body.childNodes[0] || null);
-    }
-    if (NAMESPACE2 === HTML_NAMESPACE) {
-      return getElementsByTagName.call(doc, WHOLE_DOCUMENT ? "html" : "body")[0];
-    }
-    return WHOLE_DOCUMENT ? doc.documentElement : body;
-  };
-  const _createNodeIterator = function _createNodeIterator2(root2) {
-    return createNodeIterator.call(
-      root2.ownerDocument || root2,
-      root2,
-      // eslint-disable-next-line no-bitwise
-      NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_COMMENT | NodeFilter.SHOW_TEXT | NodeFilter.SHOW_PROCESSING_INSTRUCTION | NodeFilter.SHOW_CDATA_SECTION,
-      null
-    );
-  };
-  const _isClobbered = function _isClobbered2(element) {
-    return element instanceof HTMLFormElement && (typeof element.nodeName !== "string" || typeof element.textContent !== "string" || typeof element.removeChild !== "function" || !(element.attributes instanceof NamedNodeMap) || typeof element.removeAttribute !== "function" || typeof element.setAttribute !== "function" || typeof element.namespaceURI !== "string" || typeof element.insertBefore !== "function" || typeof element.hasChildNodes !== "function");
-  };
-  const _isNode = function _isNode2(value) {
-    return typeof Node === "function" && value instanceof Node;
-  };
-  function _executeHooks(hooks2, currentNode, data) {
-    arrayForEach(hooks2, (hook) => {
-      hook.call(DOMPurify, currentNode, data, CONFIG);
-    });
-  }
-  const _sanitizeElements = function _sanitizeElements2(currentNode) {
-    let content = null;
-    _executeHooks(hooks.beforeSanitizeElements, currentNode, null);
-    if (_isClobbered(currentNode)) {
-      _forceRemove(currentNode);
-      return true;
-    }
-    const tagName = transformCaseFunc(currentNode.nodeName);
-    _executeHooks(hooks.uponSanitizeElement, currentNode, {
-      tagName,
-      allowedTags: ALLOWED_TAGS
-    });
-    if (SAFE_FOR_XML && currentNode.hasChildNodes() && !_isNode(currentNode.firstElementChild) && regExpTest(/<[/\w!]/g, currentNode.innerHTML) && regExpTest(/<[/\w!]/g, currentNode.textContent)) {
-      _forceRemove(currentNode);
-      return true;
-    }
-    if (SAFE_FOR_XML && currentNode.namespaceURI === HTML_NAMESPACE && tagName === "style" && _isNode(currentNode.firstElementChild)) {
-      _forceRemove(currentNode);
-      return true;
-    }
-    if (currentNode.nodeType === NODE_TYPE.progressingInstruction) {
-      _forceRemove(currentNode);
-      return true;
-    }
-    if (SAFE_FOR_XML && currentNode.nodeType === NODE_TYPE.comment && regExpTest(/<[/\w]/g, currentNode.data)) {
-      _forceRemove(currentNode);
-      return true;
-    }
-    if (FORBID_TAGS[tagName] || !(EXTRA_ELEMENT_HANDLING.tagCheck instanceof Function && EXTRA_ELEMENT_HANDLING.tagCheck(tagName)) && !ALLOWED_TAGS[tagName]) {
-      if (!FORBID_TAGS[tagName] && _isBasicCustomElement(tagName)) {
-        if (CUSTOM_ELEMENT_HANDLING.tagNameCheck instanceof RegExp && regExpTest(CUSTOM_ELEMENT_HANDLING.tagNameCheck, tagName)) {
-          return false;
-        }
-        if (CUSTOM_ELEMENT_HANDLING.tagNameCheck instanceof Function && CUSTOM_ELEMENT_HANDLING.tagNameCheck(tagName)) {
-          return false;
-        }
-      }
-      if (KEEP_CONTENT && !FORBID_CONTENTS[tagName]) {
-        const parentNode = getParentNode(currentNode) || currentNode.parentNode;
-        const childNodes = getChildNodes(currentNode) || currentNode.childNodes;
-        if (childNodes && parentNode) {
-          const childCount = childNodes.length;
-          for (let i2 = childCount - 1; i2 >= 0; --i2) {
-            const childClone = cloneNode(childNodes[i2], true);
-            parentNode.insertBefore(childClone, getNextSibling(currentNode));
-          }
-        }
-      }
-      _forceRemove(currentNode);
-      return true;
-    }
-    if (currentNode instanceof Element && !_checkValidNamespace(currentNode)) {
-      _forceRemove(currentNode);
-      return true;
-    }
-    if ((tagName === "noscript" || tagName === "noembed" || tagName === "noframes") && regExpTest(/<\/no(script|embed|frames)/i, currentNode.innerHTML)) {
-      _forceRemove(currentNode);
-      return true;
-    }
-    if (SAFE_FOR_TEMPLATES && currentNode.nodeType === NODE_TYPE.text) {
-      content = currentNode.textContent;
-      arrayForEach([MUSTACHE_EXPR$1, ERB_EXPR$1, TMPLIT_EXPR$1], (expr) => {
-        content = stringReplace(content, expr, " ");
-      });
-      if (currentNode.textContent !== content) {
-        arrayPush(DOMPurify.removed, {
-          element: currentNode.cloneNode()
-        });
-        currentNode.textContent = content;
-      }
-    }
-    _executeHooks(hooks.afterSanitizeElements, currentNode, null);
-    return false;
-  };
-  const _isValidAttribute = function _isValidAttribute2(lcTag, lcName, value) {
-    if (FORBID_ATTR[lcName]) {
-      return false;
-    }
-    if (SANITIZE_DOM && (lcName === "id" || lcName === "name") && (value in document2 || value in formElement)) {
-      return false;
-    }
-    const nameIsPermitted = ALLOWED_ATTR[lcName] || EXTRA_ELEMENT_HANDLING.attributeCheck instanceof Function && EXTRA_ELEMENT_HANDLING.attributeCheck(lcName, lcTag);
-    if (ALLOW_DATA_ATTR && !FORBID_ATTR[lcName] && regExpTest(DATA_ATTR$1, lcName)) ;
-    else if (ALLOW_ARIA_ATTR && regExpTest(ARIA_ATTR$1, lcName)) ;
-    else if (!nameIsPermitted || FORBID_ATTR[lcName]) {
-      if (
-        // First condition does a very basic check if a) it's basically a valid custom element tagname AND
-        // b) if the tagName passes whatever the user has configured for CUSTOM_ELEMENT_HANDLING.tagNameCheck
-        // and c) if the attribute name passes whatever the user has configured for CUSTOM_ELEMENT_HANDLING.attributeNameCheck
-        _isBasicCustomElement(lcTag) && (CUSTOM_ELEMENT_HANDLING.tagNameCheck instanceof RegExp && regExpTest(CUSTOM_ELEMENT_HANDLING.tagNameCheck, lcTag) || CUSTOM_ELEMENT_HANDLING.tagNameCheck instanceof Function && CUSTOM_ELEMENT_HANDLING.tagNameCheck(lcTag)) && (CUSTOM_ELEMENT_HANDLING.attributeNameCheck instanceof RegExp && regExpTest(CUSTOM_ELEMENT_HANDLING.attributeNameCheck, lcName) || CUSTOM_ELEMENT_HANDLING.attributeNameCheck instanceof Function && CUSTOM_ELEMENT_HANDLING.attributeNameCheck(lcName, lcTag)) || // Alternative, second condition checks if it's an `is`-attribute, AND
-        // the value passes whatever the user has configured for CUSTOM_ELEMENT_HANDLING.tagNameCheck
-        lcName === "is" && CUSTOM_ELEMENT_HANDLING.allowCustomizedBuiltInElements && (CUSTOM_ELEMENT_HANDLING.tagNameCheck instanceof RegExp && regExpTest(CUSTOM_ELEMENT_HANDLING.tagNameCheck, value) || CUSTOM_ELEMENT_HANDLING.tagNameCheck instanceof Function && CUSTOM_ELEMENT_HANDLING.tagNameCheck(value))
-      ) ;
-      else {
-        return false;
-      }
-    } else if (URI_SAFE_ATTRIBUTES[lcName]) ;
-    else if (regExpTest(IS_ALLOWED_URI$1, stringReplace(value, ATTR_WHITESPACE$1, ""))) ;
-    else if ((lcName === "src" || lcName === "xlink:href" || lcName === "href") && lcTag !== "script" && stringIndexOf(value, "data:") === 0 && DATA_URI_TAGS[lcTag]) ;
-    else if (ALLOW_UNKNOWN_PROTOCOLS && !regExpTest(IS_SCRIPT_OR_DATA$1, stringReplace(value, ATTR_WHITESPACE$1, ""))) ;
-    else if (value) {
-      return false;
-    } else ;
-    return true;
-  };
-  const RESERVED_CUSTOM_ELEMENT_NAMES = addToSet({}, ["annotation-xml", "color-profile", "font-face", "font-face-format", "font-face-name", "font-face-src", "font-face-uri", "missing-glyph"]);
-  const _isBasicCustomElement = function _isBasicCustomElement2(tagName) {
-    return !RESERVED_CUSTOM_ELEMENT_NAMES[stringToLowerCase(tagName)] && regExpTest(CUSTOM_ELEMENT$1, tagName);
-  };
-  const _sanitizeAttributes = function _sanitizeAttributes2(currentNode) {
-    _executeHooks(hooks.beforeSanitizeAttributes, currentNode, null);
-    const attributes = currentNode.attributes;
-    if (!attributes || _isClobbered(currentNode)) {
-      return;
-    }
-    const hookEvent = {
-      attrName: "",
-      attrValue: "",
-      keepAttr: true,
-      allowedAttributes: ALLOWED_ATTR,
-      forceKeepAttr: void 0
-    };
-    let l4 = attributes.length;
-    while (l4--) {
-      const attr = attributes[l4];
-      const name = attr.name, namespaceURI = attr.namespaceURI, attrValue = attr.value;
-      const lcName = transformCaseFunc(name);
-      const initValue = attrValue;
-      let value = name === "value" ? initValue : stringTrim(initValue);
-      hookEvent.attrName = lcName;
-      hookEvent.attrValue = value;
-      hookEvent.keepAttr = true;
-      hookEvent.forceKeepAttr = void 0;
-      _executeHooks(hooks.uponSanitizeAttribute, currentNode, hookEvent);
-      value = hookEvent.attrValue;
-      if (SANITIZE_NAMED_PROPS && (lcName === "id" || lcName === "name") && stringIndexOf(value, SANITIZE_NAMED_PROPS_PREFIX) !== 0) {
-        _removeAttribute(name, currentNode);
-        value = SANITIZE_NAMED_PROPS_PREFIX + value;
-      }
-      if (SAFE_FOR_XML && regExpTest(/((--!?|])>)|<\/(style|script|title|xmp|textarea|noscript|iframe|noembed|noframes)/i, value)) {
-        _removeAttribute(name, currentNode);
-        continue;
-      }
-      if (lcName === "attributename" && stringMatch(value, "href")) {
-        _removeAttribute(name, currentNode);
-        continue;
-      }
-      if (hookEvent.forceKeepAttr) {
-        continue;
-      }
-      if (!hookEvent.keepAttr) {
-        _removeAttribute(name, currentNode);
-        continue;
-      }
-      if (!ALLOW_SELF_CLOSE_IN_ATTR && regExpTest(/\/>/i, value)) {
-        _removeAttribute(name, currentNode);
-        continue;
-      }
-      if (SAFE_FOR_TEMPLATES) {
-        arrayForEach([MUSTACHE_EXPR$1, ERB_EXPR$1, TMPLIT_EXPR$1], (expr) => {
-          value = stringReplace(value, expr, " ");
-        });
-      }
-      const lcTag = transformCaseFunc(currentNode.nodeName);
-      if (!_isValidAttribute(lcTag, lcName, value)) {
-        _removeAttribute(name, currentNode);
-        continue;
-      }
-      if (trustedTypesPolicy && typeof trustedTypes === "object" && typeof trustedTypes.getAttributeType === "function") {
-        if (namespaceURI) ;
-        else {
-          switch (trustedTypes.getAttributeType(lcTag, lcName)) {
-            case "TrustedHTML": {
-              value = trustedTypesPolicy.createHTML(value);
-              break;
-            }
-            case "TrustedScriptURL": {
-              value = trustedTypesPolicy.createScriptURL(value);
-              break;
-            }
-          }
-        }
-      }
-      if (value !== initValue) {
-        try {
-          if (namespaceURI) {
-            currentNode.setAttributeNS(namespaceURI, name, value);
-          } else {
-            currentNode.setAttribute(name, value);
-          }
-          if (_isClobbered(currentNode)) {
-            _forceRemove(currentNode);
-          } else {
-            arrayPop(DOMPurify.removed);
-          }
-        } catch (_2) {
-          _removeAttribute(name, currentNode);
-        }
-      }
-    }
-    _executeHooks(hooks.afterSanitizeAttributes, currentNode, null);
-  };
-  const _sanitizeShadowDOM2 = function _sanitizeShadowDOM(fragment) {
-    let shadowNode = null;
-    const shadowIterator = _createNodeIterator(fragment);
-    _executeHooks(hooks.beforeSanitizeShadowDOM, fragment, null);
-    while (shadowNode = shadowIterator.nextNode()) {
-      _executeHooks(hooks.uponSanitizeShadowNode, shadowNode, null);
-      _sanitizeElements(shadowNode);
-      _sanitizeAttributes(shadowNode);
-      if (shadowNode.content instanceof DocumentFragment) {
-        _sanitizeShadowDOM2(shadowNode.content);
-      }
-    }
-    _executeHooks(hooks.afterSanitizeShadowDOM, fragment, null);
-  };
-  const _sanitizeAttachedShadowRoots2 = function _sanitizeAttachedShadowRoots(root2) {
-    if (root2.nodeType === NODE_TYPE.element && root2.shadowRoot instanceof DocumentFragment) {
-      const sr = root2.shadowRoot;
-      _sanitizeAttachedShadowRoots2(sr);
-      _sanitizeShadowDOM2(sr);
-    }
-    const childNodes = root2.childNodes;
-    if (!childNodes) {
-      return;
-    }
-    const snapshot = [];
-    arrayForEach(childNodes, (child) => {
-      arrayPush(snapshot, child);
-    });
-    for (const child of snapshot) {
-      _sanitizeAttachedShadowRoots2(child);
-    }
-  };
-  DOMPurify.sanitize = function(dirty) {
-    let cfg = arguments.length > 1 && arguments[1] !== void 0 ? arguments[1] : {};
-    let body = null;
-    let importedNode = null;
-    let currentNode = null;
-    let returnNode = null;
-    IS_EMPTY_INPUT = !dirty;
-    if (IS_EMPTY_INPUT) {
-      dirty = "<!-->";
-    }
-    if (typeof dirty !== "string" && !_isNode(dirty)) {
-      dirty = stringifyValue(dirty);
-      if (typeof dirty !== "string") {
-        throw typeErrorCreate("dirty is not a string, aborting");
-      }
-    }
-    if (!DOMPurify.isSupported) {
-      return dirty;
-    }
-    if (!SET_CONFIG) {
-      _parseConfig(cfg);
-    }
-    DOMPurify.removed = [];
-    if (typeof dirty === "string") {
-      IN_PLACE = false;
-    }
-    if (IN_PLACE) {
-      const nn = dirty.nodeName;
-      if (typeof nn === "string") {
-        const tagName = transformCaseFunc(nn);
-        if (!ALLOWED_TAGS[tagName] || FORBID_TAGS[tagName]) {
-          throw typeErrorCreate("root node is forbidden and cannot be sanitized in-place");
-        }
-      }
-      _sanitizeAttachedShadowRoots2(dirty);
-    } else if (dirty instanceof Node) {
-      body = _initDocument("<!---->");
-      importedNode = body.ownerDocument.importNode(dirty, true);
-      if (importedNode.nodeType === NODE_TYPE.element && importedNode.nodeName === "BODY") {
-        body = importedNode;
-      } else if (importedNode.nodeName === "HTML") {
-        body = importedNode;
-      } else {
-        body.appendChild(importedNode);
-      }
-      _sanitizeAttachedShadowRoots2(importedNode);
-    } else {
-      if (!RETURN_DOM && !SAFE_FOR_TEMPLATES && !WHOLE_DOCUMENT && // eslint-disable-next-line unicorn/prefer-includes
-      dirty.indexOf("<") === -1) {
-        return trustedTypesPolicy && RETURN_TRUSTED_TYPE ? trustedTypesPolicy.createHTML(dirty) : dirty;
-      }
-      body = _initDocument(dirty);
-      if (!body) {
-        return RETURN_DOM ? null : RETURN_TRUSTED_TYPE ? emptyHTML : "";
-      }
-    }
-    if (body && FORCE_BODY) {
-      _forceRemove(body.firstChild);
-    }
-    const nodeIterator = _createNodeIterator(IN_PLACE ? dirty : body);
-    while (currentNode = nodeIterator.nextNode()) {
-      _sanitizeElements(currentNode);
-      _sanitizeAttributes(currentNode);
-      if (currentNode.content instanceof DocumentFragment) {
-        _sanitizeShadowDOM2(currentNode.content);
-      }
-    }
-    if (IN_PLACE) {
-      return dirty;
-    }
-    if (RETURN_DOM) {
-      if (SAFE_FOR_TEMPLATES) {
-        body.normalize();
-        let html2 = body.innerHTML;
-        arrayForEach([MUSTACHE_EXPR$1, ERB_EXPR$1, TMPLIT_EXPR$1], (expr) => {
-          html2 = stringReplace(html2, expr, " ");
-        });
-        body.innerHTML = html2;
-      }
-      if (RETURN_DOM_FRAGMENT) {
-        returnNode = createDocumentFragment.call(body.ownerDocument);
-        while (body.firstChild) {
-          returnNode.appendChild(body.firstChild);
-        }
-      } else {
-        returnNode = body;
-      }
-      if (ALLOWED_ATTR.shadowroot || ALLOWED_ATTR.shadowrootmode) {
-        returnNode = importNode.call(originalDocument, returnNode, true);
-      }
-      return returnNode;
-    }
-    let serializedHTML = WHOLE_DOCUMENT ? body.outerHTML : body.innerHTML;
-    if (WHOLE_DOCUMENT && ALLOWED_TAGS["!doctype"] && body.ownerDocument && body.ownerDocument.doctype && body.ownerDocument.doctype.name && regExpTest(DOCTYPE_NAME, body.ownerDocument.doctype.name)) {
-      serializedHTML = "<!DOCTYPE " + body.ownerDocument.doctype.name + ">\n" + serializedHTML;
-    }
-    if (SAFE_FOR_TEMPLATES) {
-      arrayForEach([MUSTACHE_EXPR$1, ERB_EXPR$1, TMPLIT_EXPR$1], (expr) => {
-        serializedHTML = stringReplace(serializedHTML, expr, " ");
-      });
-    }
-    return trustedTypesPolicy && RETURN_TRUSTED_TYPE ? trustedTypesPolicy.createHTML(serializedHTML) : serializedHTML;
-  };
-  DOMPurify.setConfig = function() {
-    let cfg = arguments.length > 0 && arguments[0] !== void 0 ? arguments[0] : {};
-    _parseConfig(cfg);
-    SET_CONFIG = true;
-  };
-  DOMPurify.clearConfig = function() {
-    CONFIG = null;
-    SET_CONFIG = false;
-  };
-  DOMPurify.isValidAttribute = function(tag2, attr, value) {
-    if (!CONFIG) {
-      _parseConfig({});
-    }
-    const lcTag = transformCaseFunc(tag2);
-    const lcName = transformCaseFunc(attr);
-    return _isValidAttribute(lcTag, lcName, value);
-  };
-  DOMPurify.addHook = function(entryPoint, hookFunction) {
-    if (typeof hookFunction !== "function") {
-      return;
-    }
-    arrayPush(hooks[entryPoint], hookFunction);
-  };
-  DOMPurify.removeHook = function(entryPoint, hookFunction) {
-    if (hookFunction !== void 0) {
-      const index = arrayLastIndexOf(hooks[entryPoint], hookFunction);
-      return index === -1 ? void 0 : arraySplice(hooks[entryPoint], index, 1)[0];
-    }
-    return arrayPop(hooks[entryPoint]);
-  };
-  DOMPurify.removeHooks = function(entryPoint) {
-    hooks[entryPoint] = [];
-  };
-  DOMPurify.removeAllHooks = function() {
-    hooks = _createHooksMap();
-  };
-  return DOMPurify;
-}
-var purify = createDOMPurify();
 var frontMatterRegex = /^-{3}\s*[\n\r](.*?)[\n\r]-{3}\s*[\n\r]+/s;
 var directiveRegex = /%{2}{\s*(?:(\w+)\s*:|(\w+))\s*(?:(\w+)|((?:(?!}%{2}).|\r?\n)*))?\s*(?:}%{2})?/gi;
 var anyCommentRegex = /\s*%%.*\n/gm;
@@ -33008,6 +33029,7 @@ function DiagramViewer({ diagram: diagram2, theme }) {
   const [mode, setMode] = reactExports.useState(diagram2.lang === "mermaid" ? "render" : "code");
   const [svg2, setSvg] = reactExports.useState("");
   const [err, setErr] = reactExports.useState("");
+  const [fullScreen, setFullScreen] = reactExports.useState(false);
   const rid = reactExports.useId();
   const isMermaid = reactExports.useMemo(() => diagram2.lang.trim().toLowerCase() === "mermaid", [diagram2.lang]);
   reactExports.useEffect(() => {
@@ -33041,12 +33063,43 @@ function DiagramViewer({ diagram: diagram2, theme }) {
         /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: mode === "render" ? "segBtn segOn" : "segBtn", onClick: () => setMode("render"), children: "Render" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: mode === "code" ? "segBtn segOn" : "segBtn", onClick: () => setMode("code"), children: "Code" })
       ] }) : null,
-      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "btn btnGhost", onClick: () => navigator.clipboard.writeText(diagram2.code), children: "Copy" })
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "8px" }, children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "btn btnGhost", onClick: () => navigator.clipboard.writeText(diagram2.code), title: "Copy code", children: "Copy" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "btn btnGhost", onClick: () => setFullScreen(true), title: "Full Screen View", "aria-label": "Open full screen", children: /* @__PURE__ */ jsxRuntimeExports.jsx("svg", { width: "15", height: "15", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "2", children: /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" }) }) })
+      ] })
     ] }),
     mode === "render" && isMermaid ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
       err ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "callout calloutBad", children: err }) : null,
-      svg2 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "diagramSvg", dangerouslySetInnerHTML: { __html: svg2 } }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "muted", children: "Rendering…" })
-    ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("pre", { className: "pre preCode", children: diagram2.code })
+      svg2 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "diagramSvg", dangerouslySetInnerHTML: { __html: purify.sanitize(svg2) } }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "muted", children: "Rendering…" })
+    ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("pre", { className: "pre preCode", children: diagram2.code }),
+    fullScreen ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "div",
+      {
+        className: "modalBackdrop",
+        style: { zIndex: 1e3 },
+        onMouseDown: (e2) => {
+          if (e2.target === e2.currentTarget) setFullScreen(false);
+        },
+        role: "presentation",
+        children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "modalPanel", style: { maxWidth: "95vw", width: "95vw", height: "90vh", maxHeight: "90vh" }, role: "dialog", "aria-modal": "true", "aria-label": "Fullscreen Diagram", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "modalTop", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "modalTitle", children: (diagram2.lang || "Diagram").toUpperCase() }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "12px" }, children: [
+              isMermaid ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "seg", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: mode === "render" ? "segBtn segOn" : "segBtn", onClick: () => setMode("render"), children: "Render" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: mode === "code" ? "segBtn segOn" : "segBtn", onClick: () => setMode("code"), children: "Code" })
+              ] }) : null,
+              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "btn btnGhost", onClick: () => navigator.clipboard.writeText(diagram2.code), children: "Copy" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "btn btnGhost", onClick: () => setFullScreen(false), children: "Close" })
+            ] })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "modalBody", style: { flex: 1, overflow: "auto", display: "flex", alignItems: "center", justifyContent: "center", background: theme === "dark" ? "#090d16" : "#f8fafc", padding: "32px" }, children: mode === "render" && isMermaid ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }, children: [
+            err ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "callout calloutBad", children: err }) : null,
+            svg2 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "diagramSvg diagramSvgFullscreen", dangerouslySetInnerHTML: { __html: purify.sanitize(svg2) }, style: { width: "100%", height: "100%", background: "transparent", padding: 0 } }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "muted", children: "Rendering…" })
+          ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("pre", { className: "pre preCode", style: { width: "100%", height: "100%", margin: 0 }, children: diagram2.code }) })
+        ] })
+      }
+    ) : null
   ] });
 }
 function _getDefaults() {
@@ -35242,8 +35295,103 @@ function formatClock(ts) {
   if (Number.isNaN(d2.getTime())) return "";
   return d2.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
+function formatNumber(value) {
+  return typeof value === "number" ? value.toLocaleString() : "0";
+}
+function formatPercent(value) {
+  if (typeof value !== "number" || Number.isNaN(value)) return "0.0%";
+  return `${value.toFixed(1)}%`;
+}
+const SEARCH_DEFAULT_MIN_SEMANTIC_SCORE = 0.3;
+const semanticFloorPresets = [
+  { label: "diagnose 0.00", value: 0 },
+  { label: "default 0.30", value: 0.3 },
+  { label: "medium 0.40", value: 0.4 },
+  { label: "high 0.55", value: 0.55 }
+];
+function formatScore(value, digits = 3) {
+  if (typeof value !== "number" || Number.isNaN(value)) return "n/a";
+  return value.toFixed(digits);
+}
+function clampUnitScore(value) {
+  if (!Number.isFinite(value)) return SEARCH_DEFAULT_MIN_SEMANTIC_SCORE;
+  return Math.min(1, Math.max(0, value));
+}
+function parseUnitScore(value) {
+  const trimmed = value.trim();
+  if (!trimmed) return void 0;
+  const parsed = Number(trimmed);
+  if (Number.isNaN(parsed)) return void 0;
+  return clampUnitScore(parsed);
+}
+function getSemanticSimilarity(memory) {
+  var _a2;
+  const value = (_a2 = memory.score_breakdown) == null ? void 0 : _a2.semantic_similarity;
+  if (typeof value !== "number" || Number.isNaN(value)) return void 0;
+  return clampUnitScore(value);
+}
+function getSemanticRelevance(value) {
+  if (typeof value !== "number" || Number.isNaN(value)) return { label: "Weak", tone: "weak" };
+  if (value >= 0.55) return { label: "High", tone: "high" };
+  if (value >= 0.4) return { label: "Medium", tone: "medium" };
+  if (value >= 0.3) return { label: "Low", tone: "low" };
+  return { label: "Weak", tone: "weak" };
+}
+function zeroTokenTotals() {
+  return {
+    records: 0,
+    returned_tokens: 0,
+    baseline_tokens: 0,
+    saved_tokens: 0
+  };
+}
+function getOperationTotals(items, operation) {
+  return (items == null ? void 0 : items.find((item) => item.operation === operation)) ?? null;
+}
+function getGroupOperationTotals(group, operation) {
+  var _a2;
+  return ((_a2 = group.operations) == null ? void 0 : _a2.find((item) => item.operation === operation)) ?? null;
+}
+function formatBytes(bytes) {
+  if (typeof bytes !== "number" || Number.isNaN(bytes) || bytes <= 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let value = bytes;
+  let index = 0;
+  while (value >= 1024 && index < units.length - 1) {
+    value /= 1024;
+    index++;
+  }
+  const digits = value >= 100 || index === 0 ? 0 : 1;
+  return `${value.toFixed(digits)} ${units[index]}`;
+}
+function toTitle(value) {
+  return value.split(/[_+\-\s]+/).filter(Boolean).map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" ");
+}
+function sortCountEntries(counts) {
+  return Object.entries(counts ?? {}).sort((a2, b2) => b2[1] - a2[1] || a2[0].localeCompare(b2[0]));
+}
+function sumCounts(counts) {
+  return Object.values(counts ?? {}).reduce((total, value) => total + value, 0);
+}
+function chartColor(index) {
+  return `var(--chart-${index % 6 + 1})`;
+}
+function formatLegendIndex(index) {
+  return `[${String(index + 1).padStart(2, "0")}]`;
+}
+function buildPieGradient(entries2) {
+  const total = sumCounts(Object.fromEntries(entries2));
+  if (total <= 0 || entries2.length === 0) return "conic-gradient(var(--bg-input) 0deg 360deg)";
+  let current = 0;
+  const stops = entries2.map(([, value], index) => {
+    const start2 = current;
+    current += value / total * 360;
+    return `${chartColor(index)} ${start2}deg ${current}deg`;
+  });
+  return `conic-gradient(${stops.join(", ")})`;
+}
 function pillList(items) {
-  if (!items.length) return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "muted", children: "—" });
+  if (!items.length) return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "muted", children: "-" });
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "pills", children: items.map((x2) => /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "pill", children: x2 }, x2)) });
 }
 function makeID() {
@@ -35253,13 +35401,58 @@ function makeID() {
     return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   }
 }
+function hasDiagram(m2) {
+  if (m2.diagram && m2.diagram.code) return true;
+  if (m2.content && (m2.content.includes("```mermaid") || m2.content.includes("```graph") || m2.content.includes("```chart"))) return true;
+  return false;
+}
+function getHealthState(stats, statsErr) {
+  if (statsErr) {
+    return {
+      tone: "bad",
+      label: "Degraded",
+      detail: statsErr
+    };
+  }
+  if (!stats) {
+    return {
+      tone: "warn",
+      label: "Loading",
+      detail: "Collecting workspace diagnostics."
+    };
+  }
+  if (stats.memory_count === 0) {
+    return {
+      tone: "warn",
+      label: "Empty",
+      detail: "Workspace is healthy but has no stored memories yet."
+    };
+  }
+  return {
+    tone: "good",
+    label: "Healthy",
+    detail: "Stats loaded and the workspace responds normally."
+  };
+}
 function App() {
+  var _a2;
+  const [surface, setSurface] = reactExports.useState("overview");
   const [mode, setMode] = reactExports.useState("search");
   const [projects, setProjects] = reactExports.useState([]);
   const [workspace, setWorkspace] = reactExports.useState("");
   const [stats, setStats] = reactExports.useState(null);
   const [statsErr, setStatsErr] = reactExports.useState("");
-  const [infoOpen, setInfoOpen] = reactExports.useState(false);
+  const [sessions, setSessions] = reactExports.useState([]);
+  const [sessionsBusy, setSessionsBusy] = reactExports.useState(false);
+  const [sessionsErr, setSessionsErr] = reactExports.useState("");
+  const [selectedSessionID, setSelectedSessionID] = reactExports.useState("");
+  const [observations, setObservations] = reactExports.useState([]);
+  const [observationsBusy, setObservationsBusy] = reactExports.useState(false);
+  const [observationsErr, setObservationsErr] = reactExports.useState("");
+  const [promotionBusyFor, setPromotionBusyFor] = reactExports.useState("");
+  const [promotionResults, setPromotionResults] = reactExports.useState({});
+  const [overviewExperimentFocusKey, setOverviewExperimentFocusKey] = reactExports.useState(0);
+  const [rawStatsOpen, setRawStatsOpen] = reactExports.useState(false);
   const [deepSearchPrompt, setDeepSearchPrompt] = reactExports.useState({
     open: false,
     query: ""
@@ -35273,6 +35466,9 @@ function App() {
   const [outcome, setOutcome] = reactExports.useState("");
   const [minConfidence, setMinConfidence] = reactExports.useState("");
   const [minDecay, setMinDecay] = reactExports.useState("");
+  const [minSemantic, setMinSemantic] = reactExports.useState(SEARCH_DEFAULT_MIN_SEMANTIC_SCORE.toFixed(2));
+  const [minTotal, setMinTotal] = reactExports.useState("");
+  const [relativeCutoff, setRelativeCutoff] = reactExports.useState("");
   const [entities, setEntities] = reactExports.useState("");
   const [fromDate, setFromDate] = reactExports.useState("");
   const [toDate, setToDate] = reactExports.useState("");
@@ -35282,6 +35478,10 @@ function App() {
   const [recentsBusy, setRecentsBusy] = reactExports.useState(false);
   const [messages, setMessages] = reactExports.useState([]);
   const [theme, setTheme] = reactExports.useState("dark");
+  const [selectedMemory, setSelectedMemory] = reactExports.useState(null);
+  const [diagramPreviewOpen, setDiagramPreviewOpen] = reactExports.useState(false);
+  const [inputFocused, setInputFocused] = reactExports.useState(false);
+  const [composerFocused, setComposerFocused] = reactExports.useState(false);
   const threadRef = reactExports.useRef(null);
   const composerRef = reactExports.useRef(null);
   reactExports.useEffect(() => {
@@ -35303,22 +35503,61 @@ function App() {
   }, [theme]);
   reactExports.useEffect(() => {
     if (threadRef.current) {
+      threadRef.current.scrollTop = 0;
+    }
+  }, [surface]);
+  reactExports.useEffect(() => {
+    if ((surface === "search" || surface === "recall") && threadRef.current) {
       threadRef.current.scrollTop = threadRef.current.scrollHeight;
     }
-  }, [messages]);
+  }, [messages, surface]);
+  const selectedProject = reactExports.useMemo(() => projects.find((x2) => x2.name === workspace), [projects, workspace]);
   const projectLabel = reactExports.useMemo(() => {
-    const p2 = projects.find((x2) => x2.name === workspace);
-    if (!p2) return workspace || "workspace";
-    return `${p2.name} (${p2.memory_count} mem)`;
-  }, [projects, workspace]);
+    if (!selectedProject) return workspace || "workspace";
+    return `${selectedProject.name} (${selectedProject.memory_count} mem)`;
+  }, [selectedProject, workspace]);
+  const healthState = reactExports.useMemo(() => getHealthState(stats, statsErr), [stats, statsErr]);
+  const sessionsUnavailable = reactExports.useMemo(() => sessionsErr.toLowerCase().includes("route not enabled"), [sessionsErr]);
+  const selectedSession = reactExports.useMemo(
+    () => sessions.find((session) => session.session_id === selectedSessionID) ?? sessions[0],
+    [selectedSessionID, sessions]
+  );
+  const composerExpanded = composerFocused || advancedOpen || draft.trim().length > 0;
+  const semanticThreshold = reactExports.useMemo(() => parseUnitScore(minSemantic) ?? SEARCH_DEFAULT_MIN_SEMANTIC_SCORE, [minSemantic]);
+  const semanticThresholdRelevance = reactExports.useMemo(() => getSemanticRelevance(semanticThreshold), [semanticThreshold]);
+  const selectedSemanticSimilarity = reactExports.useMemo(
+    () => selectedMemory ? getSemanticSimilarity(selectedMemory) : void 0,
+    [selectedMemory]
+  );
+  const selectedSemanticRelevance = reactExports.useMemo(
+    () => getSemanticRelevance(selectedSemanticSimilarity),
+    [selectedSemanticSimilarity]
+  );
+  const diagramMemories = reactExports.useMemo(() => {
+    var _a3, _b2, _c2;
+    const map2 = /* @__PURE__ */ new Map();
+    for (const msg of messages) {
+      if ((_a3 = msg.payload) == null ? void 0 : _a3.results) {
+        for (const m2 of msg.payload.results) {
+          if (hasDiagram(m2)) map2.set(m2.id, m2);
+        }
+      }
+      if ((_c2 = (_b2 = msg.payload) == null ? void 0 : _b2.recall) == null ? void 0 : _c2.memories_included_full) {
+        for (const m2 of msg.payload.recall.memories_included_full) {
+          if (hasDiagram(m2)) map2.set(m2.id, m2);
+        }
+      }
+    }
+    return Array.from(map2.values());
+  }, [messages]);
   reactExports.useEffect(() => {
     let cancelled = false;
     listProjects().then((r2) => {
       if (cancelled) return;
       setProjects(r2.projects ?? []);
       setWorkspace((prev2) => {
-        var _a2, _b2;
-        return prev2 || (((_b2 = (_a2 = r2.projects) == null ? void 0 : _a2[0]) == null ? void 0 : _b2.name) ?? "");
+        var _a3, _b2;
+        return prev2 || (((_b2 = (_a3 = r2.projects) == null ? void 0 : _a3[0]) == null ? void 0 : _b2.name) ?? "");
       });
     }).catch(() => {
       if (cancelled) return;
@@ -35344,6 +35583,68 @@ function App() {
       cancelled = true;
     };
   }, [workspace]);
+  reactExports.useEffect(() => {
+    if (!workspace) return;
+    setSelectedSessionID("");
+    setObservations([]);
+    setObservationsErr("");
+    setPromotionResults({});
+  }, [workspace]);
+  reactExports.useEffect(() => {
+    let cancelled = false;
+    if (!workspace) return;
+    setSessionsBusy(true);
+    setSessionsErr("");
+    listSessions({ workspace, limit: 12 }).then((response) => {
+      if (cancelled) return;
+      setSessions(response.sessions ?? []);
+    }).catch((e2) => {
+      if (cancelled) return;
+      setSessions([]);
+      setSessionsErr(e2 instanceof Error ? e2.message : String(e2));
+    }).finally(() => {
+      if (cancelled) return;
+      setSessionsBusy(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [workspace]);
+  reactExports.useEffect(() => {
+    if (!sessions.length) {
+      setSelectedSessionID("");
+      return;
+    }
+    setSelectedSessionID((current) => {
+      var _a3;
+      if (current && sessions.some((session) => session.session_id === current)) return current;
+      return ((_a3 = sessions[0]) == null ? void 0 : _a3.session_id) ?? "";
+    });
+  }, [sessions]);
+  reactExports.useEffect(() => {
+    let cancelled = false;
+    if (!workspace || !selectedSessionID) {
+      setObservations([]);
+      setObservationsErr("");
+      return;
+    }
+    setObservationsBusy(true);
+    setObservationsErr("");
+    listObservations({ workspace, session_id: selectedSessionID, limit: 80 }).then((response) => {
+      if (cancelled) return;
+      setObservations(response.observations ?? []);
+    }).catch((e2) => {
+      if (cancelled) return;
+      setObservations([]);
+      setObservationsErr(e2 instanceof Error ? e2.message : String(e2));
+    }).finally(() => {
+      if (cancelled) return;
+      setObservationsBusy(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedSessionID, workspace]);
   const filters = reactExports.useMemo(() => {
     const parsedEntities = entities.split(",").map((s2) => s2.trim()).filter(Boolean);
     return {
@@ -35352,29 +35653,80 @@ function App() {
       outcome_result: outcome || void 0,
       min_confidence: minConfidence.trim() ? Number(minConfidence) : void 0,
       min_decay_score: minDecay.trim() ? Number(minDecay) : void 0,
+      min_semantic_score: semanticThreshold,
+      min_total_score: minTotal.trim() ? Number(minTotal) : void 0,
+      relative_cutoff: relativeCutoff.trim() ? Number(relativeCutoff) : void 0,
       entities: parsedEntities.length ? parsedEntities : void 0,
       date_from: fromDate || void 0,
       date_to: toDate || void 0
     };
-  }, [entities, fromDate, minConfidence, minDecay, outcome, tiers, toDate, types]);
+  }, [entities, fromDate, minConfidence, minDecay, minTotal, outcome, relativeCutoff, semanticThreshold, tiers, toDate, types]);
+  function openSearch() {
+    setMode("search");
+    setSurface("search");
+    setSelectedMemory(null);
+  }
+  function openRecall() {
+    setMode("recall");
+    setSurface("recall");
+    setSelectedMemory(null);
+  }
+  function openSessions() {
+    setSurface("sessions");
+    setSelectedMemory(null);
+  }
+  async function promoteSelectedSession(type2 = "episodic") {
+    if (!workspace || !selectedSession) return;
+    setPromotionBusyFor(selectedSession.session_id);
+    try {
+      const result = await promoteObservations({
+        workspace,
+        session_id: selectedSession.session_id,
+        max_items: 200,
+        type: type2
+      });
+      setPromotionResults((current) => ({
+        ...current,
+        [selectedSession.session_id]: result
+      }));
+    } catch (e2) {
+      setPromotionResults((current) => ({
+        ...current,
+        [selectedSession.session_id]: {
+          workspace,
+          session_id: selectedSession.session_id,
+          requested_type: type2,
+          observations: observations.length,
+          created_id: "",
+          deduplicated: false,
+          rejected: true,
+          reject_reason: e2 instanceof Error ? e2.message : String(e2)
+        }
+      }));
+    } finally {
+      setPromotionBusyFor("");
+    }
+  }
   async function showRecentsCapture() {
-    var _a2;
+    var _a3;
     if (!workspace) return;
     if (recentsBusy) return;
+    openSearch();
     setRecentsBusy(true);
+    setSelectedMemory(null);
     const pendingID = makeID();
     const pending = {
       id: pendingID,
       role: "assistant",
       mode: "search",
-      text: "Loading recent memories…",
+      text: "Loading recent memories...",
       createdAt: Date.now(),
       pending: true
     };
     setMessages((m2) => [...m2, pending]);
     try {
       const r2 = await listRecentMemories({ workspace, limit: topK });
-      const hitCount = ((_a2 = r2.results) == null ? void 0 : _a2.length) ?? 0;
+      const hitCount = ((_a3 = r2.results) == null ? void 0 : _a3.length) ?? 0;
       setMessages(
         (m2) => m2.map(
           (x2) => x2.id === pendingID ? {
@@ -35400,17 +35752,137 @@ function App() {
       setRecentsBusy(false);
     }
   }
-  async function runDeepSearch(query) {
-    const q2 = query.trim();
-    if (!q2 || !workspace) return;
-    setDeepSearchPrompt({ open: false, query: "" });
+  async function runSearchFlow(query) {
+    var _a3;
+    const text2 = query.trim();
+    if (!workspace || !text2) return;
+    openSearch();
     setBusy(true);
+    setSelectedMemory(null);
+    const userMsg = {
+      id: makeID(),
+      role: "user",
+      mode: "search",
+      text: text2,
+      createdAt: Date.now()
+    };
+    const pendingID = makeID();
+    const pending = {
+      id: pendingID,
+      role: "assistant",
+      mode: "search",
+      text: "Searching...",
+      createdAt: Date.now(),
+      pending: true
+    };
+    setMessages((m2) => [...m2, userMsg, pending]);
+    try {
+      const r2 = await searchMemories({
+        workspace,
+        query: text2,
+        top_k: topK,
+        explain,
+        filters
+      });
+      const hitCount = ((_a3 = r2.results) == null ? void 0 : _a3.length) ?? 0;
+      setMessages(
+        (m2) => m2.map(
+          (x2) => x2.id === pendingID ? {
+            ...x2,
+            pending: false,
+            text: hitCount > 0 ? `Found ${hitCount} memories.` : "No results found.",
+            payload: { results: r2.results ?? [], search: r2 }
+          } : x2
+        )
+      );
+      if (hitCount === 0) {
+        setDeepSearchPrompt({ open: true, query: text2 });
+      }
+    } catch (e2) {
+      setMessages(
+        (m2) => m2.map(
+          (x2) => x2.id === pendingID ? {
+            ...x2,
+            pending: false,
+            text: "Request failed.",
+            error: e2 instanceof Error ? e2.message : String(e2)
+          } : x2
+        )
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function runRecallFlow(task) {
+    const text2 = task.trim();
+    if (!workspace || !text2) return;
+    openRecall();
+    setBusy(true);
+    setSelectedMemory(null);
+    const userMsg = {
+      id: makeID(),
+      role: "user",
+      mode: "recall",
+      text: text2,
+      createdAt: Date.now()
+    };
     const pendingID = makeID();
     const pending = {
       id: pendingID,
       role: "assistant",
       mode: "recall",
-      text: "Deep searching (recall preview)…",
+      text: "Recalling...",
+      createdAt: Date.now(),
+      pending: true
+    };
+    setMessages((m2) => [...m2, userMsg, pending]);
+    try {
+      const r2 = await recallPreview({
+        workspace,
+        task_description: text2,
+        top_k: recallTopK,
+        token_budget: budget,
+        explain,
+        include_memories: true
+      });
+      setMessages(
+        (m2) => m2.map(
+          (x2) => x2.id === pendingID ? {
+            ...x2,
+            pending: false,
+            text: `Recall preview: ${r2.tokens_used}/${r2.tokens_budget} tokens.`,
+            payload: { recall: r2 }
+          } : x2
+        )
+      );
+    } catch (e2) {
+      setMessages(
+        (m2) => m2.map(
+          (x2) => x2.id === pendingID ? {
+            ...x2,
+            pending: false,
+            text: "Request failed.",
+            error: e2 instanceof Error ? e2.message : String(e2)
+          } : x2
+        )
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function runDeepSearch(query) {
+    const q2 = query.trim();
+    if (!q2 || !workspace) return;
+    openRecall();
+    setDeepSearchPrompt({ open: false, query: "" });
+    setBusy(true);
+    setSelectedMemory(null);
+    const pendingID = makeID();
+    const pending = {
+      id: pendingID,
+      role: "assistant",
+      mode: "recall",
+      text: "Deep searching (recall preview)...",
       createdAt: Date.now(),
       pending: true
     };
@@ -35450,189 +35922,50 @@ function App() {
     }
   }
   async function submit() {
-    var _a2;
-    if (!workspace) return;
     const text2 = draft.trim();
     if (!text2) return;
     setDraft("");
-    setBusy(true);
-    const userMsg = {
-      id: makeID(),
-      role: "user",
-      mode,
-      text: text2,
-      createdAt: Date.now()
-    };
-    const pendingID = makeID();
-    const pending = {
-      id: pendingID,
-      role: "assistant",
-      mode,
-      text: mode === "search" ? "Searching…" : "Recalling…",
-      createdAt: Date.now(),
-      pending: true
-    };
-    setMessages((m2) => [...m2, userMsg, pending]);
-    try {
-      if (mode === "search") {
-        const r2 = await searchMemories({
-          workspace,
-          query: text2,
-          top_k: topK,
-          explain,
-          filters
-        });
-        const hitCount = ((_a2 = r2.results) == null ? void 0 : _a2.length) ?? 0;
-        setMessages(
-          (m2) => m2.map(
-            (x2) => x2.id === pendingID ? {
-              ...x2,
-              pending: false,
-              text: hitCount > 0 ? `Found ${hitCount} memories.` : "No results found.",
-              payload: { results: r2.results ?? [] }
-            } : x2
-          )
-        );
-        if (hitCount === 0) {
-          setDeepSearchPrompt({ open: true, query: text2 });
-        }
-      } else {
-        const r2 = await recallPreview({
-          workspace,
-          task_description: text2,
-          top_k: recallTopK,
-          token_budget: budget,
-          explain,
-          include_memories: true
-        });
-        setMessages(
-          (m2) => m2.map(
-            (x2) => x2.id === pendingID ? {
-              ...x2,
-              pending: false,
-              text: `Recall preview: ${r2.tokens_used}/${r2.tokens_budget} tokens.`,
-              payload: { recall: r2 }
-            } : x2
-          )
-        );
-      }
-    } catch (e2) {
-      setMessages(
-        (m2) => m2.map(
-          (x2) => x2.id === pendingID ? {
-            ...x2,
-            pending: false,
-            text: "Request failed.",
-            error: e2 instanceof Error ? e2.message : String(e2)
-          } : x2
-        )
-      );
-    } finally {
-      setBusy(false);
+    if (mode === "search") {
+      await runSearchFlow(text2);
+      return;
     }
+    await runRecallFlow(text2);
+  }
+  function focusExperimentComparisons() {
+    setSurface("overview");
+    setOverviewExperimentFocusKey((current) => current + 1);
+  }
+  function openGuidedDiagrams() {
+    if (diagramMemories.length > 0) {
+      if (diagramMemories.length === 1) {
+        setSelectedMemory(diagramMemories[0]);
+      } else {
+        setDiagramPreviewOpen(true);
+      }
+      return;
+    }
+    void runSearchFlow("architecture diagram mermaid flow");
   }
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "shell chatShell", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("header", { className: "topbar chatTopbar", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "topbarRow", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "topbarLeft", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "brand", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "brandMark", "aria-hidden": "true" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "brandText", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "brandTitle", children: [
-              "Agent Memory ",
-              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "10px", opacity: 0.5, fontWeight: 400 }, children: "v1.0.12" })
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "brandSub", children: "Chat-style human inspection (English-only)" })
-          ] })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "brandMark", "aria-hidden": "true", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "brandMarkText", children: "[+]" }) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "brandText", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "brandTitle", children: [
+            "agent-memory/dashboard ",
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "brandVersion", children: "v0.7" })
+          ] }) })
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "topbarRight", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "button",
-            {
-              className: "iconBtn iconBtnInfo",
-              onClick: () => setInfoOpen(true),
-              "aria-label": "Info",
-              title: "System Info",
-              style: {
-                width: 32,
-                height: 32,
-                padding: 0,
-                borderRadius: "8px",
-                border: "1px solid var(--top-btn-border)",
-                background: "var(--top-btn-bg)",
-                color: "var(--top-btn-text)",
-                transition: "all 0.2s ease"
-              },
-              children: /* @__PURE__ */ jsxRuntimeExports.jsxs("svg", { width: "16", height: "16", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "2", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("circle", { cx: "12", cy: "12", r: "10" }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M12 16v-4M12 8h.01" })
-              ] })
-            }
-          ),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs(
-            "button",
-            {
-              className: "topLink",
-              onClick: () => setTheme((t2) => t2 === "dark" ? "light" : "dark"),
-              style: {
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "6px",
-                padding: "6px 12px",
-                borderRadius: "8px",
-                border: "1px solid var(--top-btn-border)",
-                background: "var(--top-btn-bg)",
-                color: "var(--top-btn-text)",
-                transition: "all 0.2s ease",
-                cursor: "pointer",
-                fontSize: "12px",
-                fontWeight: 500
-              },
-              children: [
-                theme === "dark" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("svg", { width: "14", height: "14", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "2", children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("circle", { cx: "12", cy: "12", r: "5" }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" })
-                ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("svg", { width: "14", height: "14", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "2", children: /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" }) }),
-                theme === "dark" ? "Light" : "Dark"
-              ]
-            }
-          ),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs(
-            "a",
-            {
-              className: "topLink",
-              href: "/health",
-              target: "_blank",
-              rel: "noreferrer noopener",
-              style: {
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "6px",
-                padding: "6px 12px",
-                borderRadius: "8px",
-                textDecoration: "none",
-                fontSize: "12px",
-                fontWeight: 500,
-                color: "var(--top-btn-text)",
-                border: "1px solid var(--top-btn-border)",
-                background: "var(--top-btn-bg)",
-                transition: "all 0.2s ease"
-              },
-              children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("svg", { width: "14", height: "14", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "2", children: /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M22 12h-4l-3 9L9 3l-3 9H2" }) }),
-                "Health"
-              ]
-            }
-          )
-        ] })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("nav", { className: "mainSidebar", "aria-label": "Main sidebar", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs(
           "select",
           {
             className: "projectSelect",
             value: workspace,
-            onChange: (e2) => setWorkspace(e2.target.value),
-            "aria-label": "Switch project",
+            onChange: (e2) => {
+              setWorkspace(e2.target.value);
+              setSelectedMemory(null);
+            },
+            "aria-label": "Switch workspace",
             children: [
               projects.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: "(no workspaces)" }) : null,
               projects.map((p2) => /* @__PURE__ */ jsxRuntimeExports.jsxs("option", { value: p2.name, children: [
@@ -35643,314 +35976,441 @@ function App() {
               ] }, p2.name))
             ]
           }
-        ),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mainSidebarGroup", "aria-label": "Features", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs(
-            "button",
-            {
-              className: mode === "search" ? "navItem navItemOn" : "navItem",
-              onClick: () => setMode("search"),
-              type: "button",
-              "aria-label": "Search mode",
-              children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("svg", { width: "16", height: "16", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "2", children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("circle", { cx: "11", cy: "11", r: "7" }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M21 21l-4.3-4.3" })
-                ] }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "navLabel", children: "Search" })
-              ]
-            }
-          ),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs(
-            "button",
-            {
-              className: mode === "recall" ? "navItem navItemOn" : "navItem",
-              onClick: () => setMode("recall"),
-              type: "button",
-              "aria-label": "Recall preview mode",
-              children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("svg", { width: "16", height: "16", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "2", children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M3 12a9 9 0 101.8-5.4" }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M3 4v6h6" })
-                ] }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "navLabel", children: "Recall Preview" })
-              ]
-            }
-          ),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs(
-            "button",
-            {
-              className: "navItem",
-              onClick: showRecentsCapture,
-              type: "button",
-              "aria-label": "Recents capture",
-              disabled: recentsBusy || !workspace,
-              title: "Show recently added memories",
-              children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("svg", { width: "16", height: "16", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "2", children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("circle", { cx: "12", cy: "12", r: "9" }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M12 7v5l3 2" })
-                ] }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "navLabel", children: "Recents capture" })
-              ]
-            }
-          ),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs(
-            "button",
-            {
-              className: advancedOpen ? "navItem navItemOn" : "navItem",
-              onClick: () => setAdvancedOpen((v2) => !v2),
-              type: "button",
-              "aria-label": "Toggle advanced options",
-              children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("svg", { width: "16", height: "16", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "2", children: /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M12 2l2.2 6.6L21 9l-5 4 1.6 7L12 16.8 6.4 20 8 13 3 9l6.8-.4L12 2z" }) }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "navLabel", children: "Advanced" })
-              ]
-            }
-          )
+        )
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("nav", { className: "topbarCenter", "aria-label": "Mode switcher", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { className: surface === "overview" ? "navItem navItemOn" : "navItem", onClick: () => setSurface("overview"), type: "button", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "navKey", children: "[01]" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "navLabel", children: "Overview" })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { className: surface === "search" ? "navItem navItemOn" : "navItem", onClick: openSearch, type: "button", "aria-label": "Search mode", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "navKey", children: "[02]" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "navLabel", children: "Search" })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { className: surface === "recall" ? "navItem navItemOn" : "navItem", onClick: openRecall, type: "button", "aria-label": "Recall preview mode", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "navKey", children: "[03]" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "navLabel", children: "Recall Preview" })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { className: "navItem", onClick: showRecentsCapture, type: "button", "aria-label": "Recents capture", disabled: recentsBusy || !workspace, title: "Show recently added memories", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "navKey", children: "[04]" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "navLabel", children: "Recents" })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { className: surface === "sessions" ? "navItem navItemOn" : "navItem", onClick: openSessions, type: "button", "aria-label": "Sessions", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "navKey", children: "[05]" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "navLabel", children: "Sessions" })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { className: surface === "diagnostics" ? "navItem navItemOn" : "navItem", onClick: () => setSurface("diagnostics"), type: "button", "aria-label": "Diagnostics", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "navKey", children: "[06]" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "navLabel", children: "Diagnostics" })
         ] })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "topbarRight", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            className: "iconBtn iconBtnInfo",
+            onClick: () => setRawStatsOpen(true),
+            "aria-label": "Raw stats payload",
+            title: "Raw stats payload",
+            children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "raw" })
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            className: "iconBtn",
+            onClick: () => setTheme((t2) => t2 === "dark" ? "light" : "dark"),
+            title: theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode",
+            "aria-label": theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode",
+            children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: theme === "dark" ? "light" : "dark" })
+          }
+        )
       ] })
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "chatLayout chatLayoutNoSidebar", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("main", { className: "chatMain", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "thread", ref: threadRef, children: messages.map((m2) => /* @__PURE__ */ jsxRuntimeExports.jsx(Message, { m: m2, theme }, m2.id)) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "composerDock", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "composer", children: [
-          advancedOpen ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "composerAdvanced", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "composerRow", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "composerRowTitle", children: "Mode" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "modePills modePillsInline", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx(
-                  "button",
-                  {
-                    className: mode === "search" ? "modePill modePillOn" : "modePill",
-                    onClick: () => setMode("search"),
-                    type: "button",
-                    children: "Search"
-                  }
-                ),
-                /* @__PURE__ */ jsxRuntimeExports.jsx(
-                  "button",
-                  {
-                    className: mode === "recall" ? "modePill modePillOn" : "modePill",
-                    onClick: () => setMode("recall"),
-                    type: "button",
-                    children: "Recall Preview"
-                  }
-                )
-              ] })
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "check", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("input", { type: "checkbox", checked: explain, onChange: (e2) => setExplain(e2.target.checked) }),
-              "Explain scoring"
-            ] }),
-            mode === "search" ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "row row2", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Top K" }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsx(
-                    "input",
-                    {
-                      className: "input",
-                      type: "number",
-                      min: 1,
-                      max: 200,
-                      value: topK,
-                      onChange: (e2) => setTopK(Number(e2.target.value))
-                    }
-                  )
-                ] }),
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Outcome" }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsxs(
-                    "select",
-                    {
-                      className: "input",
-                      value: outcome,
-                      onChange: (e2) => setOutcome(e2.target.value),
-                      children: [
-                        /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: "any" }),
-                        /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "success", children: "success" }),
-                        /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "failure", children: "failure" }),
-                        /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "partial", children: "partial" })
-                      ]
-                    }
-                  )
-                ] })
-              ] }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Types" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "chips", children: allTypes.map((t2) => /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: types.has(t2.key) ? "chip chipOn" : "chip", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx(
-                  "input",
-                  {
-                    type: "checkbox",
-                    checked: types.has(t2.key),
-                    onChange: (e2) => {
-                      const next2 = new Set(types);
-                      if (e2.target.checked) next2.add(t2.key);
-                      else next2.delete(t2.key);
-                      setTypes(next2);
-                    }
-                  }
-                ),
-                t2.label
-              ] }, t2.key)) }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Tiers" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "chips", children: allTiers.map((t2) => /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: tiers.has(t2.key) ? "chip chipOn" : "chip", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx(
-                  "input",
-                  {
-                    type: "checkbox",
-                    checked: tiers.has(t2.key),
-                    onChange: (e2) => {
-                      const next2 = new Set(tiers);
-                      if (e2.target.checked) next2.add(t2.key);
-                      else next2.delete(t2.key);
-                      setTiers(next2);
-                    }
-                  }
-                ),
-                t2.label
-              ] }, t2.key)) }),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "row row2", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Min confidence" }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsx(
-                    "input",
-                    {
-                      className: "input",
-                      inputMode: "decimal",
-                      value: minConfidence,
-                      onChange: (e2) => setMinConfidence(e2.target.value),
-                      placeholder: "0.00 – 1.00"
-                    }
-                  )
-                ] }),
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Min decay" }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsx(
-                    "input",
-                    {
-                      className: "input",
-                      inputMode: "decimal",
-                      value: minDecay,
-                      onChange: (e2) => setMinDecay(e2.target.value),
-                      placeholder: "0.00 – 1.00"
-                    }
-                  )
-                ] })
-              ] }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Entities (comma-separated)" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx(
-                "input",
-                {
-                  className: "input",
-                  value: entities,
-                  onChange: (e2) => setEntities(e2.target.value),
-                  placeholder: "orders, kafka, schema"
-                }
-              ),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "row row2", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "From" }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsx(
-                    "input",
-                    {
-                      className: "input",
-                      type: "date",
-                      value: fromDate,
-                      onChange: (e2) => setFromDate(e2.target.value)
-                    }
-                  )
-                ] }),
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "To" }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsx(
-                    "input",
-                    {
-                      className: "input",
-                      type: "date",
-                      value: toDate,
-                      onChange: (e2) => setToDate(e2.target.value)
-                    }
-                  )
-                ] })
-              ] })
-            ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "row row2", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Top K" }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx(
-                  "input",
-                  {
-                    className: "input",
-                    type: "number",
-                    min: 1,
-                    max: 500,
-                    value: recallTopK,
-                    onChange: (e2) => setRecallTopK(Number(e2.target.value))
-                  }
-                )
-              ] }),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Budget" }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx(
-                  "input",
-                  {
-                    className: "input",
-                    type: "number",
-                    min: 1,
-                    value: budget,
-                    onChange: (e2) => setBudget(Number(e2.target.value))
-                  }
-                )
-              ] })
-            ] })
-          ] }) : null,
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "textarea",
-            {
-              className: "composerInput",
-              value: draft,
-              onChange: (e2) => setDraft(e2.target.value),
-              placeholder: mode === "search" ? "How can I help you today?" : "Describe the task to recall…",
-              rows: 2,
-              onKeyDown: (e2) => {
-                if (e2.key === "Enter" && !e2.shiftKey) {
-                  e2.preventDefault();
-                  submit();
-                }
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "chatLayout", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("main", { className: "chatMain", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "chatFeed", children: [
+        diagramMemories.length > 0 && (surface === "search" || surface === "recall") ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "button",
+          {
+            className: "floatingDiagramBtn",
+            onClick: () => {
+              if (diagramMemories.length === 1) {
+                setSelectedMemory(diagramMemories[0]);
+              } else {
+                setDiagramPreviewOpen(true);
               }
+            },
+            "aria-label": "View diagrams",
+            title: "Quick access to diagrams",
+            children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "[diagrams]" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "floatingDiagramBadge", children: diagramMemories.length })
+            ]
+          }
+        ) : null,
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "thread", ref: threadRef, children: [
+          surface === "overview" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+            OverviewPanel,
+            {
+              workspace,
+              project: selectedProject,
+              stats,
+              statsErr,
+              healthState,
+              diagramCount: diagramMemories.length,
+              experimentFocusKey: overviewExperimentFocusKey,
+              onCompareRuns: focusExperimentComparisons,
+              onInspectFailures: () => void runSearchFlow("recent failures errors regressions"),
+              onReviewLastSession: openSessions,
+              onRunDiagramAction: openGuidedDiagrams
             }
-          ),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "composerToolbar", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "composerToolbarLeft", children: /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "btn btnGhost", style: { padding: "8px", color: "rgba(255,255,255,0.6)", border: "none", background: "transparent" }, title: "Add attachment", children: /* @__PURE__ */ jsxRuntimeExports.jsx("svg", { width: "20", height: "20", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "2", children: /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M12 5v14M5 12h14" }) }) }) }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "composerToolbarRight", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { className: "btn btnGhost", style: { border: "none", background: "transparent", padding: "4px 8px", color: "rgba(255,255,255,0.5)", fontSize: "12px" }, onClick: () => setAdvancedOpen((v2) => !v2), children: [
-                advancedOpen ? "Hide Advanced" : "Advanced Settings",
-                " ⌄"
-              ] }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "sendBtn", onClick: submit, disabled: !workspace || busy || !draft.trim(), children: /* @__PURE__ */ jsxRuntimeExports.jsx("svg", { width: "18", height: "18", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "2", children: /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M12 19V5M5 12l7-7 7 7" }) }) })
-            ] })
-          ] })
+          ) : null,
+          surface === "sessions" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+            SessionsPanel,
+            {
+              workspace,
+              sessions,
+              sessionsBusy,
+              sessionsErr,
+              sessionsUnavailable,
+              selectedSessionID: (selectedSession == null ? void 0 : selectedSession.session_id) ?? "",
+              observations,
+              observationsBusy,
+              observationsErr,
+              promotionResult: selectedSession ? promotionResults[selectedSession.session_id] : void 0,
+              promotionBusy: Boolean(selectedSession && promotionBusyFor === selectedSession.session_id),
+              onSelectSession: setSelectedSessionID,
+              onPromote: promoteSelectedSession
+            }
+          ) : null,
+          surface === "diagnostics" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+            DiagnosticsPanel,
+            {
+              workspaceLabel: projectLabel,
+              project: selectedProject,
+              stats,
+              statsErr,
+              healthState,
+              onOpenRaw: () => setRawStatsOpen(true)
+            }
+          ) : null,
+          (surface === "search" || surface === "recall") && messages.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(QueryEmptyState, { mode, onOpenOverview: () => setSurface("overview") }) : null,
+          (surface === "search" || surface === "recall") && messages.map((m2) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+            Message,
+            {
+              m: m2,
+              theme,
+              selectedId: selectedMemory == null ? void 0 : selectedMemory.id,
+              onSelectMemory: setSelectedMemory
+            },
+            m2.id
+          ))
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "composerFoot", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "muted small", style: { display: "block", textAlign: "center" }, children: [
-          "Served locally by ",
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mono", children: "agent-memory serve" }),
-          ". Markdown is sanitized; Mermaid renders when present."
-        ] }) })
-      ] })
+        /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "div",
+          {
+            className: composerExpanded ? "composerDock composerDockExpanded" : "composerDock composerDockCollapsed",
+            ref: composerRef,
+            onFocusCapture: () => setComposerFocused(true),
+            onBlurCapture: (e2) => {
+              var _a3;
+              const nextTarget = e2.relatedTarget;
+              if (nextTarget instanceof Node && ((_a3 = composerRef.current) == null ? void 0 : _a3.contains(nextTarget))) return;
+              setComposerFocused(false);
+              if (!draft.trim()) setAdvancedOpen(false);
+            },
+            children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: composerExpanded ? "composer composerExpanded" : "composer composerCollapsed", children: [
+                advancedOpen ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "composerAdvanced", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "composerRow", children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "composerRowTitle", children: "Mode" }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "modePills modePillsInline", children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: mode === "search" ? "modePill modePillOn" : "modePill", onClick: openSearch, type: "button", children: "Search" }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: mode === "recall" ? "modePill modePillOn" : "modePill", onClick: openRecall, type: "button", children: "Recall Preview" })
+                    ] })
+                  ] }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "check", children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("input", { type: "checkbox", checked: explain, onChange: (e2) => setExplain(e2.target.checked) }),
+                    "Explain scoring"
+                  ] }),
+                  mode === "search" ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "row row2", children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                        /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Top K" }),
+                        /* @__PURE__ */ jsxRuntimeExports.jsx("input", { className: "input", type: "number", min: 1, max: 200, value: topK, onChange: (e2) => setTopK(Number(e2.target.value)) })
+                      ] }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                        /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Outcome" }),
+                        /* @__PURE__ */ jsxRuntimeExports.jsxs("select", { className: "input", value: outcome, onChange: (e2) => setOutcome(e2.target.value), children: [
+                          /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: "any" }),
+                          /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "success", children: "success" }),
+                          /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "failure", children: "failure" }),
+                          /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "partial", children: "partial" })
+                        ] })
+                      ] })
+                    ] }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Types" }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "chips", children: allTypes.map((t2) => /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: types.has(t2.key) ? "chip chipOn" : "chip", children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsx(
+                        "input",
+                        {
+                          type: "checkbox",
+                          checked: types.has(t2.key),
+                          onChange: (e2) => {
+                            const next2 = new Set(types);
+                            if (e2.target.checked) next2.add(t2.key);
+                            else next2.delete(t2.key);
+                            setTypes(next2);
+                          }
+                        }
+                      ),
+                      t2.label
+                    ] }, t2.key)) }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Tiers" }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "chips", children: allTiers.map((t2) => /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: tiers.has(t2.key) ? "chip chipOn" : "chip", children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsx(
+                        "input",
+                        {
+                          type: "checkbox",
+                          checked: tiers.has(t2.key),
+                          onChange: (e2) => {
+                            const next2 = new Set(tiers);
+                            if (e2.target.checked) next2.add(t2.key);
+                            else next2.delete(t2.key);
+                            setTiers(next2);
+                          }
+                        }
+                      ),
+                      t2.label
+                    ] }, t2.key)) }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "row row2", children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                        /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Min confidence" }),
+                        /* @__PURE__ */ jsxRuntimeExports.jsx("input", { className: "input", inputMode: "decimal", value: minConfidence, onChange: (e2) => setMinConfidence(e2.target.value), placeholder: "0.00 - 1.00" })
+                      ] }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                        /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Min decay" }),
+                        /* @__PURE__ */ jsxRuntimeExports.jsx("input", { className: "input", inputMode: "decimal", value: minDecay, onChange: (e2) => setMinDecay(e2.target.value), placeholder: "0.00 - 1.00" })
+                      ] })
+                    ] }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "semanticFilterCard", children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "semanticFilterHeader", children: [
+                        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                          /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", htmlFor: "min-semantic-score", children: "Min semantic score" }),
+                          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "semanticFilterHint", children: "Search defaults to `0.30`. Raise it for stricter relevance or lower it only when diagnosing weak matches." })
+                        ] }),
+                        /* @__PURE__ */ jsxRuntimeExports.jsx(
+                          "button",
+                          {
+                            className: "btn btnGhost semanticPresetReset",
+                            type: "button",
+                            onClick: () => setMinSemantic(SEARCH_DEFAULT_MIN_SEMANTIC_SCORE.toFixed(2)),
+                            children: "reset 0.30"
+                          }
+                        )
+                      ] }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsx(
+                        "input",
+                        {
+                          id: "min-semantic-score",
+                          className: "semanticSlider",
+                          type: "range",
+                          min: 0,
+                          max: 1,
+                          step: 0.05,
+                          value: semanticThreshold,
+                          onChange: (e2) => setMinSemantic(Number(e2.target.value).toFixed(2))
+                        }
+                      ),
+                      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "semanticFilterSummary", children: [
+                        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "semanticThresholdValue", children: semanticThreshold.toFixed(2) }),
+                        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "semanticThresholdCopy", children: [
+                          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "semanticThresholdLabel", children: "Active search floor" }),
+                          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "semanticThresholdHint", children: "Sent to backend as `min_semantic_score`." })
+                        ] }),
+                        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `memPill relevancePill relevancePill${toTitle(semanticThresholdRelevance.tone)}`, children: semanticThresholdRelevance.label })
+                      ] }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "semanticPresetRow", children: semanticFloorPresets.map((preset) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+                        "button",
+                        {
+                          className: semanticThreshold === preset.value ? "semanticPreset semanticPresetOn" : "semanticPreset",
+                          type: "button",
+                          onClick: () => setMinSemantic(preset.value.toFixed(2)),
+                          children: preset.label
+                        },
+                        preset.label
+                      )) }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "semanticFilterScale", children: "Weak < 0.30 | Low 0.30+ | Medium 0.40+ | High 0.55+" })
+                    ] }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "row row2", children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                        /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Min total" }),
+                        /* @__PURE__ */ jsxRuntimeExports.jsx("input", { className: "input", inputMode: "decimal", value: minTotal, onChange: (e2) => setMinTotal(e2.target.value), placeholder: "0.00 - 1.00" })
+                      ] }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                        /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Relative cutoff" }),
+                        /* @__PURE__ */ jsxRuntimeExports.jsx("input", { className: "input", inputMode: "decimal", value: relativeCutoff, onChange: (e2) => setRelativeCutoff(e2.target.value), placeholder: "0.00 - 1.00" })
+                      ] })
+                    ] }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Entities (comma-separated)" }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("input", { className: "input", value: entities, onChange: (e2) => setEntities(e2.target.value), placeholder: "orders, kafka, schema" }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "row row2", children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                        /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "From" }),
+                        /* @__PURE__ */ jsxRuntimeExports.jsx("input", { className: "input", type: "date", value: fromDate, onChange: (e2) => setFromDate(e2.target.value) })
+                      ] }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                        /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "To" }),
+                        /* @__PURE__ */ jsxRuntimeExports.jsx("input", { className: "input", type: "date", value: toDate, onChange: (e2) => setToDate(e2.target.value) })
+                      ] })
+                    ] })
+                  ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "row row2", children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Top K" }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("input", { className: "input", type: "number", min: 1, max: 500, value: recallTopK, onChange: (e2) => setRecallTopK(Number(e2.target.value)) })
+                    ] }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Budget" }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("input", { className: "input", type: "number", min: 1, value: budget, onChange: (e2) => setBudget(Number(e2.target.value)) })
+                    ] })
+                  ] })
+                ] }) : null,
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "textarea",
+                  {
+                    className: "composerInput",
+                    value: draft,
+                    onChange: (e2) => setDraft(e2.target.value),
+                    onFocus: () => setInputFocused(true),
+                    onBlur: () => setInputFocused(false),
+                    placeholder: mode === "search" ? "Search your memory system..." : "Describe the task to recall...",
+                    rows: inputFocused || composerFocused || draft.trim().length > 0 || advancedOpen ? 3 : 1,
+                    onKeyDown: (e2) => {
+                      if (e2.key === "Enter" && !e2.shiftKey) {
+                        e2.preventDefault();
+                        submit();
+                      }
+                    }
+                  }
+                ),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: composerExpanded ? "composerToolbar" : "composerToolbar composerToolbarCollapsed", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "composerToolbarLeft", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "muted small", children: surface === "overview" ? "Ready to query." : surface === "diagnostics" ? "Diagnostics open." : surface === "sessions" ? "Sessions open." : "Searching this workspace." }) }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "composerToolbarRight", children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "btn btnGhost", type: "button", onClick: () => setAdvancedOpen((v2) => !v2), children: advancedOpen ? "[-] filters" : "[+] filters" }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "sendBtn", type: "button", onClick: submit, disabled: !workspace || busy || !draft.trim(), title: "Send query", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sendBtnLabel", children: "RUN" }) })
+                  ] })
+                ] })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: composerExpanded ? "composerFoot" : "composerFoot composerFootCollapsed", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "muted small", style: { display: "block", textAlign: "center" }, children: [
+                "Served locally by ",
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mono", children: "agent-memory serve" }),
+                ". Markdown is sanitized; Mermaid renders when present."
+              ] }) })
+            ]
+          }
+        )
+      ] }),
+      selectedMemory ? /* @__PURE__ */ jsxRuntimeExports.jsxs("aside", { className: "detailDrawer", "aria-label": "Memory details", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "detailDrawerTop", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "detailDrawerHeader", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "detailDrawerTitle", children: "Memory Details" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mono detailDrawerID", children: selectedMemory.id })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "btn btnGhost", onClick: () => setSelectedMemory(null), "aria-label": "Close details", style: { padding: "8px 12px" }, children: "[x]" })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "detailDrawerBody", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "detailPills", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "memPill", children: selectedMemory.type }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "memPill", children: selectedMemory.storage_tier }),
+            selectedMemory.band ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "memPill memPillAccent", children: selectedMemory.band }) : null,
+            typeof selectedSemanticSimilarity === "number" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: `memPill relevancePill relevancePill${toTitle(selectedSemanticRelevance.tone)}`, children: [
+              selectedSemanticRelevance.label,
+              " semantic ",
+              formatScore(selectedSemanticSimilarity, 2)
+            ] }) : null
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "detailSection", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "detailSectionTitle", children: "Content" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "detailContentCard", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(MarkdownView, { markdown: selectedMemory.content, clamp: false, theme }),
+              selectedMemory.diagram ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "diagramBlock", children: /* @__PURE__ */ jsxRuntimeExports.jsx(DiagramViewer, { diagram: selectedMemory.diagram, theme }) }) : null
+            ] })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "detailSection", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "detailSectionTitle", children: "Memory Facts" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memMetaGrid", children: [
+              typeof selectedSemanticSimilarity === "number" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memMeta memMetaSemantic", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memMetaLabel", children: "Semantic Similarity" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memMetaValue memMetaPrimaryValue", children: formatScore(selectedSemanticSimilarity, 3) })
+              ] }) : null,
+              typeof selectedSemanticSimilarity === "number" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memMeta", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memMetaLabel", children: "Relevance" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memMetaValue", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `memPill relevancePill relevancePill${toTitle(selectedSemanticRelevance.tone)}`, children: selectedSemanticRelevance.label }) })
+              ] }) : null,
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memMeta", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memMetaLabel", children: "Updated" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memMetaValue", children: formatTS(selectedMemory.updated_at) })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memMeta", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memMetaLabel", children: "Created" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memMetaValue", children: formatTS(selectedMemory.created_at) })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memMeta", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memMetaLabel", children: "Confidence" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memMetaValue", children: selectedMemory.confidence.toFixed(2) })
+              ] }),
+              typeof selectedMemory.score === "number" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memMeta", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memMetaLabel", children: "Blended Score" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memMetaValue", children: formatScore(selectedMemory.score, 3) })
+              ] }) : null,
+              typeof selectedMemory.salience_score === "number" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memMeta", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memMetaLabel", children: "Salience" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memMetaValue", children: selectedMemory.salience_score.toFixed(2) })
+              ] }) : null,
+              typeof selectedMemory.suppression_score === "number" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memMeta", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memMetaLabel", children: "Suppression" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memMetaValue", children: selectedMemory.suppression_score.toFixed(2) })
+              ] }) : null,
+              typeof selectedMemory.access_count === "number" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memMeta", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memMetaLabel", children: "Retrieved" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memMetaValue", children: [
+                  formatNumber(selectedMemory.access_count),
+                  " times"
+                ] })
+              ] }) : null,
+              ((_a2 = selectedMemory.exclusion_reasons) == null ? void 0 : _a2.length) ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memMeta", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memMetaLabel", children: "Excluded By" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memMetaValue", children: pillList(selectedMemory.exclusion_reasons) })
+              ] }) : null,
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memMeta", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memMetaLabel", children: "Entities" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memMetaValue", children: pillList(selectedMemory.entities ?? []) })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memMeta", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memMetaLabel", children: "Tags" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memMetaValue", children: pillList(selectedMemory.tags ?? []) })
+              ] })
+            ] })
+          ] }),
+          selectedMemory.score_breakdown ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "detailSection", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "detailSectionTitle", children: "Score Breakdown" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("pre", { className: "pre", children: JSON.stringify(selectedMemory.score_breakdown, null, 2) })
+          ] }) : null
+        ] })
+      ] }) : null
     ] }) }),
-    infoOpen ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+    rawStatsOpen ? /* @__PURE__ */ jsxRuntimeExports.jsx(
       "div",
       {
         className: "modalBackdrop",
         onMouseDown: (e2) => {
-          if (e2.target === e2.currentTarget) setInfoOpen(false);
+          if (e2.target === e2.currentTarget) setRawStatsOpen(false);
         },
         role: "presentation",
-        children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "modalPanel", role: "dialog", "aria-modal": "true", "aria-label": "Info", children: [
+        children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "modalPanel", role: "dialog", "aria-modal": "true", "aria-label": "Raw stats payload", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "modalTop", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "modalTitle", children: "Info" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "btn btnGhost", onClick: () => setInfoOpen(false), children: "Close" })
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "modalTitle", children: "Raw Stats Payload" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "btn btnGhost", onClick: () => setRawStatsOpen(false), children: "Close" })
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "modalBody", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "muted small", children: [
@@ -35958,7 +36418,7 @@ function App() {
               /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mono", children: projectLabel })
             ] }),
             statsErr ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "callout calloutBad", children: statsErr }) : null,
-            /* @__PURE__ */ jsxRuntimeExports.jsx("pre", { className: "pre", children: stats ? JSON.stringify(stats, null, 2) : "Loading…" })
+            /* @__PURE__ */ jsxRuntimeExports.jsx("pre", { className: "pre", children: stats ? JSON.stringify(stats, null, 2) : "Loading..." })
           ] })
         ] })
       }
@@ -35986,11 +36446,582 @@ function App() {
           ] })
         ] })
       }
+    ) : null,
+    diagramPreviewOpen ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "div",
+      {
+        className: "modalBackdrop",
+        onMouseDown: (e2) => {
+          if (e2.target === e2.currentTarget) setDiagramPreviewOpen(false);
+        },
+        role: "presentation",
+        children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "modalPanel", role: "dialog", "aria-modal": "true", "aria-label": "Diagrams list", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "modalTop", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "modalTitle", children: [
+              "Available Diagrams (",
+              diagramMemories.length,
+              ")"
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "btn btnGhost", onClick: () => setDiagramPreviewOpen(false), children: "Close" })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "modalBody", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "muted", children: "Tap a card to instantly open its full detail view and interactive architecture canvas:" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "diagramPreviewGrid", children: diagramMemories.map((m2) => {
+              var _a3, _b2;
+              const snippet2 = ((_a3 = m2.diagram) == null ? void 0 : _a3.code) || ((_b2 = m2.content.split("```mermaid")[1]) == null ? void 0 : _b2.split("```")[0]) || m2.content;
+              return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                "div",
+                {
+                  className: "diagramPreviewCard",
+                  onClick: () => {
+                    setSelectedMemory(m2);
+                    setDiagramPreviewOpen(false);
+                  },
+                  children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "diagramPreviewHeader", children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "diagramPreviewID", children: [
+                        m2.id.slice(0, 16),
+                        "..."
+                      ] }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "memPill", children: m2.type })
+                    ] }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "diagramPreviewSnippet", children: [
+                      snippet2.trim().slice(0, 140),
+                      "..."
+                    ] })
+                  ]
+                },
+                m2.id
+              );
+            }) })
+          ] })
+        ] })
+      }
     ) : null
   ] });
 }
-function Message({ m: m2, theme }) {
-  var _a2, _b2, _c2, _d2;
+function OverviewPanel({
+  workspace,
+  project,
+  stats,
+  statsErr,
+  healthState,
+  diagramCount,
+  experimentFocusKey,
+  onCompareRuns,
+  onInspectFailures,
+  onReviewLastSession,
+  onRunDiagramAction
+}) {
+  const typeEntries = sortCountEntries(stats == null ? void 0 : stats.memory_type_counts);
+  const tierEntries = sortCountEntries(stats == null ? void 0 : stats.storage_tier_counts);
+  const tokenGroups = (stats == null ? void 0 : stats.token_metrics_by_group_all) ?? [];
+  const llmGroups = (stats == null ? void 0 : stats.llm_usage_by_group_all) ?? [];
+  const recallTokenTotals = (stats == null ? void 0 : stats.recall_token_metrics) ?? getOperationTotals(stats == null ? void 0 : stats.token_metrics_by_operation, "recall") ?? zeroTokenTotals();
+  const recallTokenSavingsPercent = (stats == null ? void 0 : stats.recall_token_savings_percent) ?? (stats == null ? void 0 : stats.token_savings_percent) ?? 0;
+  const totalMemories = (stats == null ? void 0 : stats.memory_count) ?? (project == null ? void 0 : project.memory_count) ?? 0;
+  const retrievedMemoryCount = (stats == null ? void 0 : stats.retrieved_memory_count) ?? 0;
+  const neverReachedMemoryCount = (stats == null ? void 0 : stats.never_reached_memory_count) ?? Math.max(0, totalMemories - retrievedMemoryCount);
+  const retrieveCountTotal = (stats == null ? void 0 : stats.retrieve_count_total) ?? 0;
+  const retrievalCoveragePercent = (stats == null ? void 0 : stats.retrieval_coverage_percent) ?? (totalMemories > 0 ? retrievedMemoryCount / totalMemories * 100 : 0);
+  const lowReachPercentile = (stats == null ? void 0 : stats.low_reach_percentile) ?? 25;
+  const lowReachThreshold = (stats == null ? void 0 : stats.low_reach_threshold) ?? 0;
+  const lowReachMemoryCount = (stats == null ? void 0 : stats.low_reach_memory_count) ?? 0;
+  const topRetrievedMemories = (stats == null ? void 0 : stats.top_retrieved_memories) ?? [];
+  const experimentsRef = reactExports.useRef(null);
+  reactExports.useEffect(() => {
+    var _a2;
+    if (experimentFocusKey <= 0) return;
+    (_a2 = experimentsRef.current) == null ? void 0 : _a2.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [experimentFocusKey]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "surfaceStack", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "overviewHero", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "overviewHeroCopy", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "overviewEyebrow", children: "Control Surface" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "overviewTitle", children: workspace || "Select a workspace" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "overviewText", children: "See what this workspace remembers, how experiments are trending, and whether the system is healthy before you run another query." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "overviewMetaRow asciiChipRow", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "asciiChipRowItem", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "asciiChipIndex", children: "[01]" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "asciiChipLead", children: ".-" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `statusBadge statusBadge${toTitle(healthState.tone)}`, children: healthState.label })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "asciiChipRowItem", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "asciiChipIndex", children: "[02]" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "asciiChipLead", children: ".-" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "overviewMetaItem", children: [
+            "Last activity ",
+            formatTS((stats == null ? void 0 : stats.last_activity) || (project == null ? void 0 : project.last_activity)) || "n/a"
+          ] })
+        ] })
+      ] })
+    ] }) }),
+    statsErr ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "callout calloutBad", children: statsErr }) : null,
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "starterStrip", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "starterCard", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "starterCardEyebrow", children: "Guided" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "starterCardTitle", children: "Compare Memory ON/OFF" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "starterCardText", children: "Jump to the grouped token and LLM comparison section." }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "btn", type: "button", onClick: onCompareRuns, children: "Compare" })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "starterCard", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "starterCardEyebrow", children: "Guided" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "starterCardTitle", children: "Inspect Recent Failures" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "starterCardText", children: "Run a failure-focused search across recent incidents and regressions." }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "btn", type: "button", onClick: onInspectFailures, children: "Inspect" })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "starterCard", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "starterCardEyebrow", children: "Guided" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "starterCardTitle", children: "Open Diagrams" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "starterCardText", children: diagramCount > 0 ? `Open the ${diagramCount} loaded visual memories, or fall back to search if needed.` : "Search for architecture and Mermaid-style memories." }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "btn", type: "button", onClick: onRunDiagramAction, children: diagramCount > 0 ? "Open" : "Find" })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "starterCard", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "starterCardEyebrow", children: "Guided" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "starterCardTitle", children: "Review Last Session" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "starterCardText", children: "Open the latest captured session timeline." }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "btn", type: "button", onClick: onReviewLastSession, children: "Review" })
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "statsGrid", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(MetricCard, { title: "Memories", value: formatNumber(totalMemories), detail: "Current workspace volume" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(MetricCard, { title: "Storage", value: formatBytes((stats == null ? void 0 : stats.db_size_bytes) ?? (project == null ? void 0 : project.size_bytes)), detail: "SQLite footprint on disk" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(MetricCard, { title: "Recall Savings", value: formatPercent(recallTokenSavingsPercent), detail: `${formatNumber(recallTokenTotals.records)} recall operations` }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(MetricCard, { title: "LLM Usage", value: formatNumber(stats == null ? void 0 : stats.llm_usage_totals.total_tokens), detail: `${formatNumber(stats == null ? void 0 : stats.llm_usage_totals.records)} provider reports` }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(MetricCard, { title: "Retrieved", value: formatNumber(retrievedMemoryCount), detail: `${formatPercent(retrievalCoveragePercent)} ever surfaced` }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(MetricCard, { title: "Never Reached", value: formatNumber(neverReachedMemoryCount), detail: `${formatNumber(retrieveCountTotal)} total retrieval events` }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(MetricCard, { title: "Low Reach", value: formatNumber(lowReachMemoryCount), detail: `Bottom ${formatNumber(lowReachPercentile)}% of reached memories` }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(MetricCard, { title: "Pinned", value: formatNumber(stats == null ? void 0 : stats.pinned_count), detail: "Pinned memories retained" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(MetricCard, { title: "Diagrams", value: formatNumber(stats == null ? void 0 : stats.diagram_count), detail: "Memories with visual payloads" })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "overviewColumns", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(BreakdownCard, { title: "Memory Types", subtitle: `${formatNumber(sumCounts(stats == null ? void 0 : stats.memory_type_counts))} total`, children: /* @__PURE__ */ jsxRuntimeExports.jsx(PieChartBreakdown, { entries: typeEntries, emptyLabel: "No type distribution yet." }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(BreakdownCard, { title: "Storage Tiers", subtitle: `${formatNumber(sumCounts(stats == null ? void 0 : stats.storage_tier_counts))} classified`, children: /* @__PURE__ */ jsxRuntimeExports.jsx(PieChartBreakdown, { entries: tierEntries, emptyLabel: "No tier distribution yet." }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(BreakdownCard, { title: "Retrieval Reach", subtitle: `${formatPercent(retrievalCoveragePercent)} coverage`, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "diagnosticsList", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Retrieved Memories", value: formatNumber(retrievedMemoryCount) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Never Reached", value: formatNumber(neverReachedMemoryCount) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: `Low Reach (P${formatNumber(lowReachPercentile)})`, value: formatNumber(lowReachMemoryCount) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Total Retrieval Events", value: formatNumber(retrieveCountTotal) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Low-Reach Threshold", value: `<= ${formatNumber(lowReachThreshold)} hits` }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Last Accessed", value: formatTS(stats == null ? void 0 : stats.last_memory_accessed_at) || "n/a" })
+      ] }) })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "comparisonSection", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "comparisonHeader", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "breakdownTitle", children: "Most Reached Memories" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "breakdownSubtitle", children: "Top memories by retrieval count. Use this to spot hot memories and dead zones." })
+      ] }) }),
+      topRetrievedMemories.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "emptyInline", children: "No retrieval activity yet. Once memories are surfaced by search or recall, they will appear here." }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "diagnosticsList", children: topRetrievedMemories.map((memory) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+        DiagnosticRow,
+        {
+          label: `${memory.preview} (${toTitle(memory.type)} / ${toTitle(memory.storage_tier)}${memory.pinned ? " / pinned" : ""})`,
+          value: `${formatNumber(memory.access_count)} hits`
+        },
+        memory.id
+      )) })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { ref: experimentsRef, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(ComparisonSection, { title: "Recall Savings Comparison", description: "Recall-only token savings grouped by run label and memory enabled state.", emptyLabel: "No grouped recall metrics yet. Run labeled ON/OFF recall experiments to populate this view.", children: tokenGroups.map((group, index) => /* @__PURE__ */ jsxRuntimeExports.jsx(TokenGroupCard, { group, index }, `token-${group.run_label}-${group.memory_enabled ? "on" : "off"}`)) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(ComparisonSection, { title: "LLM Usage Comparison", description: "Provider-reported usage grouped by run label and memory enabled state.", emptyLabel: "No grouped LLM usage yet. Ingest provider usage metrics to populate this view.", children: llmGroups.map((group, index) => /* @__PURE__ */ jsxRuntimeExports.jsx(LLMGroupCard, { group, index }, `llm-${group.run_label}-${group.memory_enabled ? "on" : "off"}`)) })
+    ] })
+  ] });
+}
+function DiagnosticsPanel({
+  workspaceLabel,
+  project,
+  stats,
+  statsErr,
+  healthState,
+  onOpenRaw
+}) {
+  const recallTokenTotals = (stats == null ? void 0 : stats.recall_token_metrics) ?? getOperationTotals(stats == null ? void 0 : stats.token_metrics_by_operation, "recall") ?? zeroTokenTotals();
+  const recallTokenSavingsPercent = (stats == null ? void 0 : stats.recall_token_savings_percent) ?? (stats == null ? void 0 : stats.token_savings_percent) ?? 0;
+  const searchTokenTotals = getOperationTotals(stats == null ? void 0 : stats.token_metrics_by_operation, "search") ?? zeroTokenTotals();
+  const totalMemories = (stats == null ? void 0 : stats.memory_count) ?? (project == null ? void 0 : project.memory_count) ?? 0;
+  const retrievedMemoryCount = (stats == null ? void 0 : stats.retrieved_memory_count) ?? 0;
+  const neverReachedMemoryCount = (stats == null ? void 0 : stats.never_reached_memory_count) ?? Math.max(0, totalMemories - retrievedMemoryCount);
+  const retrieveCountTotal = (stats == null ? void 0 : stats.retrieve_count_total) ?? 0;
+  const retrievalCoveragePercent = (stats == null ? void 0 : stats.retrieval_coverage_percent) ?? (totalMemories > 0 ? retrievedMemoryCount / totalMemories * 100 : 0);
+  const lowReachPercentile = (stats == null ? void 0 : stats.low_reach_percentile) ?? 25;
+  const lowReachThreshold = (stats == null ? void 0 : stats.low_reach_threshold) ?? 0;
+  const lowReachMemoryCount = (stats == null ? void 0 : stats.low_reach_memory_count) ?? 0;
+  const topRetrievedMemories = (stats == null ? void 0 : stats.top_retrieved_memories) ?? [];
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "surfaceStack", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "diagnosticsHero", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "overviewEyebrow", children: "Diagnostics" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("h2", { className: "sectionTitle", children: [
+          workspaceLabel || "Workspace",
+          " Health"
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "sectionText", children: "Current runtime state, storage status, and experiment signal summary." })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "diagnosticsHeroSide", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `statusBadge statusBadge${toTitle(healthState.tone)}`, children: healthState.label }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "btn", type: "button", onClick: onOpenRaw, children: "Raw Payload" })
+      ] })
+    ] }),
+    statsErr ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "callout calloutBad", children: statsErr }) : null,
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "statsGrid", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(MetricCard, { title: "DB Size", value: formatBytes((stats == null ? void 0 : stats.db_size_bytes) ?? (project == null ? void 0 : project.size_bytes)), detail: "Local store footprint" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(MetricCard, { title: "Last Activity", value: formatTS((stats == null ? void 0 : stats.last_activity) || (project == null ? void 0 : project.last_activity)) || "n/a", detail: "Most recent update or access" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(MetricCard, { title: "Last Memory Update", value: formatTS(stats == null ? void 0 : stats.last_memory_updated_at) || "n/a", detail: "Latest memory write timestamp" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(MetricCard, { title: "Memories", value: formatNumber(totalMemories), detail: "Current workspace volume" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(MetricCard, { title: "Retrieved", value: formatNumber(retrievedMemoryCount), detail: `${formatPercent(retrievalCoveragePercent)} ever surfaced` }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(MetricCard, { title: "Never Reached", value: formatNumber(neverReachedMemoryCount), detail: "Memories with zero retrieval count" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(MetricCard, { title: "Low Reach", value: formatNumber(lowReachMemoryCount), detail: `Bottom ${formatNumber(lowReachPercentile)}% of reached memories` })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "diagnosticsGrid", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(BreakdownCard, { title: "Memory Footprint", subtitle: "Current retained memory shape", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "diagnosticsList", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Pinned Memories", value: formatNumber(stats == null ? void 0 : stats.pinned_count) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Diagram Memories", value: formatNumber(stats == null ? void 0 : stats.diagram_count) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Default Workspace", value: workspaceLabel || "n/a" })
+      ] }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(BreakdownCard, { title: "Experiment Signals", subtitle: "Quick operational summary", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "diagnosticsList", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Recall Records", value: formatNumber(recallTokenTotals.records) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Recall Tokens Saved", value: formatNumber(recallTokenTotals.saved_tokens) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Recall Savings Rate", value: formatPercent(recallTokenSavingsPercent) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Search Records", value: formatNumber(searchTokenTotals.records) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "LLM Records", value: formatNumber(stats == null ? void 0 : stats.llm_usage_totals.records) })
+      ] }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(BreakdownCard, { title: "Retrieval Reachability", subtitle: "Which memories are reached and which remain untouched", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "diagnosticsList", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Total Retrieval Events", value: formatNumber(retrieveCountTotal) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Retrieved Memories", value: formatNumber(retrievedMemoryCount) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Never Reached Memories", value: formatNumber(neverReachedMemoryCount) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: `Low Reach Memories (P${formatNumber(lowReachPercentile)})`, value: formatNumber(lowReachMemoryCount) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Low-Reach Threshold", value: `<= ${formatNumber(lowReachThreshold)} hits` }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Coverage Rate", value: formatPercent(retrievalCoveragePercent) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Last Accessed Memory", value: formatTS(stats == null ? void 0 : stats.last_memory_accessed_at) || "n/a" })
+        ] }),
+        topRetrievedMemories.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "diagnosticsList", style: { marginTop: 16 }, children: topRetrievedMemories.map((memory) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+          DiagnosticRow,
+          {
+            label: `${memory.preview} (${toTitle(memory.type)} / ${toTitle(memory.storage_tier)}${memory.pinned ? " / pinned" : ""})`,
+            value: `${formatNumber(memory.access_count)} hits`
+          },
+          memory.id
+        )) }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "muted", children: "No memories have been retrieved yet for this workspace." })
+      ] })
+    ] })
+  ] });
+}
+function SessionsPanel({
+  workspace,
+  sessions,
+  sessionsBusy,
+  sessionsErr,
+  sessionsUnavailable,
+  selectedSessionID,
+  observations,
+  observationsBusy,
+  observationsErr,
+  promotionResult,
+  promotionBusy,
+  onSelectSession,
+  onPromote
+}) {
+  const selectedSession = sessions.find((session) => session.session_id === selectedSessionID) ?? sessions[0];
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "surfaceStack", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "diagnosticsHero", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "overviewEyebrow", children: "Session Explorer" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("h2", { className: "sectionTitle", children: [
+        workspace || "Workspace",
+        " Sessions"
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "sectionText", children: "Inspect one session at a time and promote it when the signal is worth keeping." })
+    ] }) }),
+    sessionsUnavailable ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "emptyStateCard", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "overviewEyebrow", children: "Auto-Capture Disabled" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "sectionTitle", children: "Sessions Are Not Available Yet" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "sectionText", children: "The session routes are feature-gated. Enable observation capture to populate this explorer, then reload the dashboard." })
+    ] }) : null,
+    !sessionsUnavailable && sessionsErr ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "callout calloutBad", children: sessionsErr }) : null,
+    !sessionsUnavailable && !sessionsBusy && sessions.length === 0 && !sessionsErr ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "emptyStateCard", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "overviewEyebrow", children: "No Sessions Yet" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "sectionTitle", children: "This Workspace Has No Captured Sessions" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "sectionText", children: "Auto-capture is enabled, but there are no recent sessions for this workspace yet. Once observations are ingested, they will appear here ordered by recent activity." })
+    ] }) : null,
+    !sessionsUnavailable && sessions.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "comparisonSection", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "comparisonHeader", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "breakdownTitle", children: "Session Timeline" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "breakdownSubtitle", children: 'Pick a session to answer basic "what happened?" questions and optionally promote it into memory.' })
+      ] }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "sessionExplorerLayout", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "sessionRail", children: sessions.map((session, index) => {
+          const isSelected = session.session_id === (selectedSession == null ? void 0 : selectedSession.session_id);
+          const promoted = promotionResult && session.session_id === promotionResult.session_id;
+          return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "button",
+            {
+              type: "button",
+              className: isSelected ? "sessionRailCard sessionRailCardOn" : "sessionRailCard",
+              onClick: () => onSelectSession(session.session_id),
+              children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "sessionRailTop", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "sessionRailHeading", children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sessionRailIndex", children: formatLegendIndex(index) }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sessionRailLead", children: ".-" }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "sessionRailTitle", children: session.session_id })
+                  ] }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "groupBadge groupBadgeOn", children: [
+                    formatNumber(session.observation_count),
+                    " obs"
+                  ] })
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "sessionRailMeta", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sessionRailStamp", children: "last_seen:" }),
+                  " ",
+                  formatTS(session.last_seen_at) || "n/a"
+                ] }),
+                promoted ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "sessionRailMeta", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sessionRailStamp", children: "promotion:" }),
+                  " ",
+                  promotionResult.deduplicated ? "Already promoted" : promotionResult.rejected ? "Promotion rejected" : "Promotion recorded"
+                ] }) : null
+              ]
+            },
+            session.session_id
+          );
+        }) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "sessionDetailPanel", children: selectedSession ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "sessionDetailHeader", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "sessionCardTitle", children: selectedSession.session_id }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "sessionCardMeta", children: "Observation timeline for the selected session" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "sessionDetailSummary asciiChipRow", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "asciiChipRowItem", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "asciiChipIndex", children: "[01]" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "asciiChipLead", children: ".-" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "overviewMetaItem", children: [
+                    formatNumber(selectedSession.observation_count),
+                    " observations"
+                  ] })
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "asciiChipRowItem", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "asciiChipIndex", children: "[02]" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "asciiChipLead", children: ".-" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "overviewMetaItem", children: [
+                    "last seen ",
+                    formatTS(selectedSession.last_seen_at) || "n/a"
+                  ] })
+                ] })
+              ] })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "sessionDetailActions", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "btn btnPrimary", type: "button", disabled: promotionBusy, onClick: () => onPromote("episodic"), children: promotionBusy ? "Promoting..." : "Promote Episodic" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "btn", type: "button", disabled: promotionBusy, onClick: () => onPromote("procedural"), children: "Promote Procedural" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "btn", type: "button", disabled: promotionBusy, onClick: () => onPromote("semantic"), children: "Promote Semantic" })
+            ] })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "diagnosticsGrid", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(BreakdownCard, { title: "Session Facts", subtitle: "High-level session metadata", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "diagnosticsList", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Last Seen", value: formatTS(selectedSession.last_seen_at) || "n/a" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Started", value: formatTS(selectedSession.started_at) || "n/a" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Ended", value: formatTS(selectedSession.ended_at) || "open" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Project Root", value: selectedSession.project_root || "n/a" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "CWD", value: selectedSession.cwd || "n/a" })
+            ] }) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(BreakdownCard, { title: "Promotion Status", subtitle: "Visible once a promotion attempt has been made", children: promotionResult ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "diagnosticsList", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Requested Type", value: promotionResult.requested_type }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                DiagnosticRow,
+                {
+                  label: "Result",
+                  value: promotionResult.rejected ? "rejected" : promotionResult.deduplicated ? "deduplicated" : promotionResult.created_id ? "created" : "empty"
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Created ID", value: promotionResult.created_id || "n/a" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Observations", value: formatNumber(promotionResult.observations) }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Storage Tier", value: promotionResult.storage_tier || "n/a" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Confidence", value: typeof promotionResult.confidence === "number" ? promotionResult.confidence.toFixed(2) : "n/a" }),
+              promotionResult.reject_reason ? /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Reason", value: promotionResult.reject_reason }) : null
+            ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "muted", children: "No promotion has been run for this session in the current dashboard view yet." }) })
+          ] }),
+          observationsErr ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "callout calloutBad", children: observationsErr }) : null,
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "timelineSection", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "comparisonHeader", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "breakdownTitle", children: "Observation Timeline" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "breakdownSubtitle", children: "Newest first. Each observation is already privacy-scrubbed and summarized." })
+            ] }) }),
+            observationsBusy ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "emptyInline", children: "Loading observations..." }) : null,
+            !observationsBusy && observations.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "emptyInline", children: "No observations for this session yet." }) : null,
+            !observationsBusy && observations.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "timelineList", children: observations.map((observation) => /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "timelineCard", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "timelineRail", "aria-hidden": "true", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "timelineRailDot" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "timelineRailLine" })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "timelineCardBody", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "timelineTop", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "timelineTitle", children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "timelinePrefix", children: ".-" }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: toTitle(observation.kind) })
+                    ] }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "timelineMeta", children: formatTS(observation.occurred_at) || "n/a" })
+                  ] }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "memPill timelineToolPill", children: observation.tool_name || "system" })
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "timelineSummary", children: observation.summary }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "timelineFooter", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "mono timelineStamp", children: [
+                    "id:",
+                    observation.id.slice(0, 16),
+                    "..."
+                  ] }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "muted small timelineStamp", children: [
+                    "created:",
+                    formatTS(observation.created_at) || "n/a"
+                  ] })
+                ] })
+              ] })
+            ] }, observation.id)) }) : null
+          ] })
+        ] }) : null })
+      ] })
+    ] }) : null
+  ] });
+}
+function QueryEmptyState({ mode, onOpenOverview }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "emptyStateCard", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "overviewEyebrow", children: mode === "search" ? "Search" : "Recall" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "sectionTitle", children: mode === "search" ? "Start a memory search" : "Build a recall preview" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "sectionText", children: "Use the composer below to query the selected workspace." }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "btn", type: "button", onClick: onOpenOverview, children: "Overview" })
+  ] });
+}
+function MetricCard({ title, value, detail }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "metricCard", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "metricLabel", children: title }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "metricValue", children: value }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "metricDetail", children: detail })
+  ] });
+}
+function BreakdownCard({ title, subtitle, children: children2 }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "breakdownCard", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "breakdownHeader", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "breakdownTitle", children: title }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "breakdownSubtitle", children: subtitle })
+    ] }),
+    children2
+  ] });
+}
+function PieChartBreakdown({ entries: entries2, emptyLabel }) {
+  const total = entries2.reduce((sum, [, value]) => sum + value, 0);
+  if (entries2.length === 0) return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "muted", children: emptyLabel });
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "pieChartBlock", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "pieChartWrap", "aria-hidden": "true", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "pieChartVisual", style: { background: buildPieGradient(entries2) }, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "pieChartCenter", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "pieChartTotal", children: formatNumber(total) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "pieChartCaption", children: "total" })
+    ] }) }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "breakdownList", children: entries2.map(([label, value], index) => {
+      const percent = total > 0 ? value / total * 100 : 0;
+      return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "breakdownRow", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "breakdownRowTop", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "breakdownLabelGroup", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "breakdownIndex", children: formatLegendIndex(index) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "breakdownSwatch", style: { background: chartColor(index) } }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "breakdownLead", children: ".-" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "breakdownLabelText", children: toTitle(label) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "breakdownLeader", "aria-hidden": "true" })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "mono breakdownValue", children: [
+          formatNumber(value),
+          " / ",
+          formatPercent(percent)
+        ] })
+      ] }) }, label);
+    }) })
+  ] });
+}
+function ComparisonSection({
+  title,
+  description,
+  emptyLabel,
+  children: children2
+}) {
+  const items = React.Children.toArray(children2);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "comparisonSection", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "comparisonHeader", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "breakdownTitle", children: title }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "breakdownSubtitle", children: description })
+    ] }) }),
+    items.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "emptyInline", children: emptyLabel }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "comparisonGrid", children: items })
+  ] });
+}
+function TokenGroupCard({ group, index }) {
+  const recall = getGroupOperationTotals(group, "recall");
+  const totals = recall ?? group;
+  const savingsLabel = recall ? "of recall baseline" : "of baseline";
+  const recordsLabel = recall ? "recall records" : "records";
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "groupCard", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "groupCardTop", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "groupHeading", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "groupIndex", children: formatLegendIndex(index) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "groupLead", children: ".-" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "groupTitle", children: group.run_label || "default" })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: group.memory_enabled ? "groupBadge groupBadgeOn" : "groupBadge groupBadgeOff", children: group.memory_enabled ? "memory on" : "memory off" })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "groupMetric", children: [
+      formatNumber(totals.saved_tokens),
+      " saved"
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "groupSub", children: [
+      formatPercent(totals.baseline_tokens > 0 ? totals.saved_tokens / totals.baseline_tokens * 100 : 0),
+      " ",
+      savingsLabel,
+      " across ",
+      formatNumber(totals.records),
+      " ",
+      recordsLabel
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "groupStats", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Returned", value: formatNumber(totals.returned_tokens) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Baseline", value: formatNumber(totals.baseline_tokens) })
+    ] })
+  ] });
+}
+function LLMGroupCard({ group, index }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "groupCard", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "groupCardTop", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "groupHeading", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "groupIndex", children: formatLegendIndex(index) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "groupLead", children: ".-" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "groupTitle", children: group.run_label || "default" })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: group.memory_enabled ? "groupBadge groupBadgeOn" : "groupBadge groupBadgeOff", children: group.memory_enabled ? "memory on" : "memory off" })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "groupMetric", children: [
+      formatNumber(group.total_tokens),
+      " total"
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "groupSub", children: [
+      formatNumber(group.records),
+      " usage reports captured"
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "groupStats", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Prompt", value: formatNumber(group.prompt_tokens) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Completion", value: formatNumber(group.completion_tokens) })
+    ] })
+  ] });
+}
+function DiagnosticRow({ label, value }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "diagnosticRow", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "diagnosticLabelGroup", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "diagnosticIndex", "aria-hidden": "true" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "diagnosticLead", children: ".-" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "diagnosticLabel", children: label }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "diagnosticLeader", "aria-hidden": "true" })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "diagnosticValue", children: value })
+  ] });
+}
+function Message({
+  m: m2,
+  theme,
+  selectedId,
+  onSelectMemory
+}) {
+  var _a2, _b2, _c2, _d2, _e3, _f2, _g2, _h2, _i2, _j2, _k2;
   const isUser = m2.role === "user";
   const isSystem = m2.role === "system";
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: isSystem ? "msg msgSystem" : isUser ? "msg msgUser" : "msg msgAssistant", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "msgInner", children: [
@@ -36006,9 +37037,28 @@ function Message({ m: m2, theme }) {
           /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "assistantTitle", children: "Results" }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "muted small", children: m2.payload.results.length })
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "assistantList", children: m2.payload.results.map((r2) => /* @__PURE__ */ jsxRuntimeExports.jsx(ResultCard, { m: r2, theme }, r2.id)) })
+        ((_b2 = m2.payload.search) == null ? void 0 : _b2.retrieval_policy) ? /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "detailsFold", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "detailsSum", children: "Retrieval policy" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("pre", { className: "pre", children: JSON.stringify(m2.payload.search.retrieval_policy, null, 2) })
+        ] }) : null,
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "assistantList", children: m2.payload.results.map((r2) => /* @__PURE__ */ jsxRuntimeExports.jsx(ResultCard, { m: r2, theme, isSelected: r2.id === selectedId, onSelect: onSelectMemory }, r2.id)) }),
+        ((_d2 = (_c2 = m2.payload.search) == null ? void 0 : _c2.weak_results) == null ? void 0 : _d2.length) ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "assistantHdr", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "assistantTitle", children: "Weak familiarity" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "muted small", children: m2.payload.search.weak_results.length })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "assistantList", children: m2.payload.search.weak_results.map((r2) => /* @__PURE__ */ jsxRuntimeExports.jsx(ResultCard, { m: r2, theme, isSelected: r2.id === selectedId, onSelect: onSelectMemory }, r2.id)) })
+        ] }) : null,
+        ((_f2 = (_e3 = m2.payload.search) == null ? void 0 : _e3.suppressed_results) == null ? void 0 : _f2.length) ? /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "detailsFold", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("summary", { className: "detailsSum", children: [
+            "Suppressed (",
+            m2.payload.search.suppressed_results.length,
+            ")"
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "assistantList", children: m2.payload.search.suppressed_results.map((r2) => /* @__PURE__ */ jsxRuntimeExports.jsx(ResultCard, { m: r2, theme, isSelected: r2.id === selectedId, onSelect: onSelectMemory }, r2.id)) })
+        ] }) : null
       ] }) : null,
-      ((_b2 = m2.payload) == null ? void 0 : _b2.recall) ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "assistantBlock", children: [
+      ((_g2 = m2.payload) == null ? void 0 : _g2.recall) ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "assistantBlock", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "assistantHdr", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "assistantTitle", children: "Recall context" }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "muted small", children: [
@@ -36019,22 +37069,34 @@ function Message({ m: m2, theme }) {
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "detailsFold", open: true, children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "detailsSum", children: "Context block" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "detailsTools", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "button",
-            {
-              className: "btn btnGhost",
-              onClick: () => navigator.clipboard.writeText(m2.payload.recall.context_block),
-              children: "Copy"
-            }
-          ) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "detailsTools", children: /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "btn btnGhost", onClick: () => navigator.clipboard.writeText(m2.payload.recall.context_block), children: "Copy" }) }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("pre", { className: "pre preTall", children: m2.payload.recall.context_block })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "assistantHdr", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "assistantTitle", children: "Included memories" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "muted small", children: ((_c2 = m2.payload.recall.memories_included_full) == null ? void 0 : _c2.length) ?? 0 })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "muted small", children: ((_h2 = m2.payload.recall.memories_included_full) == null ? void 0 : _h2.length) ?? 0 })
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "assistantList", children: (m2.payload.recall.memories_included_full ?? []).map((r2) => /* @__PURE__ */ jsxRuntimeExports.jsx(ResultCard, { m: r2, theme }, r2.id)) }),
-        ((_d2 = m2.payload.recall.memories_clipped) == null ? void 0 : _d2.length) ? /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "detailsFold", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "assistantList", children: (m2.payload.recall.memories_included_full ?? []).map((r2) => /* @__PURE__ */ jsxRuntimeExports.jsx(ResultCard, { m: r2, theme, isSelected: r2.id === selectedId, onSelect: onSelectMemory }, r2.id)) }),
+        m2.payload.recall.retrieval_policy ? /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "detailsFold", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "detailsSum", children: "Retrieval policy" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("pre", { className: "pre", children: JSON.stringify(m2.payload.recall.retrieval_policy, null, 2) })
+        ] }) : null,
+        ((_i2 = m2.payload.recall.weak_memories) == null ? void 0 : _i2.length) ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "assistantHdr", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "assistantTitle", children: "Weak familiarity" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "muted small", children: m2.payload.recall.weak_memories.length })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "assistantList", children: m2.payload.recall.weak_memories.map((r2) => /* @__PURE__ */ jsxRuntimeExports.jsx(ResultCard, { m: r2, theme, isSelected: r2.id === selectedId, onSelect: onSelectMemory }, r2.id)) })
+        ] }) : null,
+        ((_j2 = m2.payload.recall.suppressed_memories) == null ? void 0 : _j2.length) ? /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "detailsFold", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("summary", { className: "detailsSum", children: [
+            "Suppressed (",
+            m2.payload.recall.suppressed_memories.length,
+            ")"
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "assistantList", children: m2.payload.recall.suppressed_memories.map((r2) => /* @__PURE__ */ jsxRuntimeExports.jsx(ResultCard, { m: r2, theme, isSelected: r2.id === selectedId, onSelect: onSelectMemory }, r2.id)) })
+        ] }) : null,
+        ((_k2 = m2.payload.recall.memories_clipped) == null ? void 0 : _k2.length) ? /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "detailsFold", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("summary", { className: "detailsSum", children: [
             "Clipped (",
             m2.payload.recall.memories_clipped.length,
@@ -36046,54 +37108,54 @@ function Message({ m: m2, theme }) {
     ] })
   ] }) });
 }
-function ResultCard({ m: m2, theme }) {
-  const [open, setOpen] = reactExports.useState(false);
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "memCard", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { className: "memHdr", onClick: () => setOpen((v2) => !v2), "aria-expanded": open, children: [
+function ResultCard({
+  m: m2,
+  theme,
+  isSelected,
+  onSelect
+}) {
+  const timeStr = formatTS(m2.created_at || m2.updated_at);
+  const semanticSimilarity = getSemanticSimilarity(m2);
+  const semanticRelevance = getSemanticRelevance(semanticSimilarity);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: isSelected ? "memCard memCardOn" : "memCard", onClick: () => onSelect(m2), children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memHdr", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memHdrLeft", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "memDot", "aria-hidden": "true" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mono memID", children: m2.id })
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "mono memID", title: m2.id, children: [
+          m2.id.slice(0, 16),
+          "..."
+        ] })
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memHdrRight", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "memPill", children: m2.type }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memHdrRight", children: timeStr ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "memTime", style: { fontSize: "12px", opacity: 0.7 }, children: timeStr }) : null })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memBody memBodyCompact", children: /* @__PURE__ */ jsxRuntimeExports.jsx(MarkdownView, { markdown: m2.content, clamp: true, theme }) }),
+    typeof semanticSimilarity === "number" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memSignal", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memSignalTop", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "memSignalLabel", children: "semantic similarity" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `memPill relevancePill relevancePill${toTitle(semanticRelevance.tone)}`, children: semanticRelevance.label })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memSignalValue", children: formatScore(semanticSimilarity, 3) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memSignalHint", children: "Primary relevance signal from `score_breakdown.semantic_similarity`." })
+    ] }) : null,
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memFooter", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memFooterLeft", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "memPill memPillAccent", children: m2.type }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "memPill", children: m2.storage_tier }),
-        typeof m2.score === "number" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "memPill", children: [
-          "score ",
-          m2.score.toFixed(3)
+        hasDiagram(m2) ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "memPill memPillVisual", children: "visual" }) : null
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memFooterRight", children: [
+        typeof m2.score === "number" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "memMetric", children: [
+          "Blended: ",
+          /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: formatScore(m2.score, 3) })
         ] }) : null,
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "memPill", children: [
-          "conf ",
-          m2.confidence.toFixed(2)
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "memMetric", children: [
+          "Conf: ",
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("strong", { children: [
+            Math.round(m2.confidence * 100),
+            "%"
+          ] })
         ] })
       ] })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memBody", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(MarkdownView, { markdown: m2.content, clamp: !open, theme }),
-      m2.diagram ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "diagramBlock", children: /* @__PURE__ */ jsxRuntimeExports.jsx(DiagramViewer, { diagram: m2.diagram, theme }) }) : null,
-      open ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memMetaGrid", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memMeta", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memMetaLabel", children: "Updated" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memMetaValue", children: formatTS(m2.updated_at) })
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memMeta", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memMetaLabel", children: "Created" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memMetaValue", children: formatTS(m2.created_at) })
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memMeta", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memMetaLabel", children: "Entities" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memMetaValue", children: pillList(m2.entities ?? []) })
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memMeta", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memMetaLabel", children: "Tags" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memMetaValue", children: pillList(m2.tags ?? []) })
-          ] })
-        ] }),
-        m2.score_breakdown ? /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "detailsFold", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "detailsSum", children: "Score breakdown" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("pre", { className: "pre", children: JSON.stringify(m2.score_breakdown, null, 2) })
-        ] }) : null
-      ] }) : null
     ] })
   ] });
 }

@@ -61,7 +61,7 @@ func openDeps(ctx context.Context, cfg runtimeConfig) (*sqlite.Store, embeddings
 		_ = store.Close()
 		return nil, nil, err
 	}
-	provider, err := embeddings.NewLocalProvider(cfg.modelDir)
+	provider, err := embeddings.NewProvider(cfg.modelDir)
 	if err != nil {
 		_ = store.Close()
 		return nil, nil, err
@@ -101,13 +101,13 @@ func newWriteCommand() *cobra.Command {
 				}
 				return writeSuccessEnvelope(cmd.OutOrStdout(), "write", out)
 			}
-			store, _, err := openDeps(ctx, cfg)
+			store, provider, err := openDeps(ctx, cfg)
 			if err != nil {
 				return err
 			}
 			defer func() { _ = store.Close() }()
 
-			p := engine.NewWritePipeline(store)
+			p := engine.NewWritePipelineWithEmbedder(store, provider)
 			mt := core.MemoryType(mType)
 			res, err := p.Write(ctx, engine.WriteInput{
 				Workspace: cfg.workspace,
@@ -251,13 +251,13 @@ func newSearchCommand() *cobra.Command {
 				if minD != nil {
 					filters["min_decay_score"] = *minD
 				}
-				if minSemanticScore > 0 {
+				if cmd.Flags().Changed("min-semantic-score") {
 					filters["min_semantic_score"] = minSemanticScore
 				}
-				if minTotalScore > 0 {
+				if cmd.Flags().Changed("min-total-score") {
 					filters["min_total_score"] = minTotalScore
 				}
-				if relativeCutoff > 0 {
+				if cmd.Flags().Changed("relative-cutoff") {
 					filters["relative_cutoff"] = relativeCutoff
 				}
 				if len(entities) > 0 {
@@ -308,9 +308,9 @@ func newSearchCommand() *cobra.Command {
 					DateTo:        dateTo,
 				},
 				Policy: engine.RetrievalPolicy{
-					MinSemanticScore:    floatPtrIfPositive(minSemanticScore),
-					MinTotalScore:       floatPtrIfPositive(minTotalScore),
-					RelativeScoreCutoff: floatPtrIfPositive(relativeCutoff),
+					MinSemanticScore:    floatPtrIfChanged(cmd, "min-semantic-score", minSemanticScore),
+					MinTotalScore:       floatPtrIfChanged(cmd, "min-total-score", minTotalScore),
+					RelativeScoreCutoff: floatPtrIfChanged(cmd, "relative-cutoff", relativeCutoff),
 				},
 			})
 			if err != nil {
@@ -583,8 +583,8 @@ func parseTimeFlexibleCLI(s string) (time.Time, bool) {
 	return time.Time{}, false
 }
 
-func floatPtrIfPositive(v float64) *float64 {
-	if v <= 0 {
+func floatPtrIfChanged(cmd *cobra.Command, name string, v float64) *float64 {
+	if cmd == nil || !cmd.Flags().Changed(name) {
 		return nil
 	}
 	return &v
@@ -663,12 +663,12 @@ func newSessionEndCommand() *cobra.Command {
 				}
 				return writeSuccessEnvelope(cmd.OutOrStdout(), "session-end", out)
 			}
-			store, _, err := openDeps(ctx, cfg)
+			store, provider, err := openDeps(ctx, cfg)
 			if err != nil {
 				return err
 			}
 			defer func() { _ = store.Close() }()
-			pipeline := engine.NewWritePipeline(store)
+			pipeline := engine.NewWritePipelineWithEmbedder(store, provider)
 			extractor := engine.NewSessionEndExtractor(pipeline)
 			out, err := extractor.ExtractAndStore(ctx, cfg.workspace, transcript)
 			if err != nil {
@@ -1062,7 +1062,7 @@ func newDashboardCommand() *cobra.Command {
 			if err := os.MkdirAll(cfg.modelDir, 0o755); err != nil {
 				return err
 			}
-			provider, err := embeddings.NewLocalProvider(cfg.modelDir)
+			provider, err := embeddings.NewProvider(cfg.modelDir)
 			if err != nil {
 				return err
 			}
@@ -1200,12 +1200,12 @@ func newStudyCommand() *cobra.Command {
 			if cfg.apiURL != "" {
 				return errors.New("study is only supported in in-process mode")
 			}
-			store, _, err := openDeps(ctx, cfg)
+			store, provider, err := openDeps(ctx, cfg)
 			if err != nil {
 				return err
 			}
 			defer func() { _ = store.Close() }()
-			study := engine.NewStudyEngine(engine.NewWritePipeline(store))
+			study := engine.NewStudyEngine(engine.NewWritePipelineWithEmbedder(store, provider))
 			out, err := study.IngestWithOptions(ctx, engine.StudyOptions{
 				Workspace: cfg.workspace,
 				Sources:   sources,
@@ -1253,12 +1253,12 @@ func newReconstructCommand() *cobra.Command {
 				}
 				return writeSuccessEnvelope(cmd.OutOrStdout(), "reconstruct", out)
 			}
-			store, _, err := openDeps(ctx, cfg)
+			store, provider, err := openDeps(ctx, cfg)
 			if err != nil {
 				return err
 			}
 			defer func() { _ = store.Close() }()
-			re := engine.NewReconstructionEngine(store, engine.NewWritePipeline(store))
+			re := engine.NewReconstructionEngine(store, engine.NewWritePipelineWithEmbedder(store, provider))
 			out, err := re.Reconstruct(ctx, cfg.workspace, query, confirm)
 			if err != nil {
 				return err
@@ -1718,13 +1718,13 @@ become procedural rules, large episodic clusters merge into semantic facts.`,
 				return writeSuccessEnvelope(cmd.OutOrStdout(), "consolidate", out)
 			}
 
-			store, _, err := openDeps(ctx, cfg)
+			store, provider, err := openDeps(ctx, cfg)
 			if err != nil {
 				return err
 			}
 			defer func() { _ = store.Close() }()
 
-			pipeline := engine.NewWritePipeline(store)
+			pipeline := engine.NewWritePipelineWithEmbedder(store, provider)
 
 			if deep {
 				dc := engine.NewDeepConsolidationEngine(store, pipeline)

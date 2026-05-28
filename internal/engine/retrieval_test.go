@@ -143,9 +143,9 @@ func TestRetrievalEngineBandsAndCutoffs(t *testing.T) {
 		TopK:      5,
 		Mode:      ModeRecall,
 		Policy: RetrievalPolicy{
-			MinSemanticScore:    floatPtr(0.2),
-			MinTotalScore:       floatPtr(0.18),
-			RelativeScoreCutoff: floatPtr(0.2),
+			MinSemanticScore:    floatPtr(0.01),
+			MinTotalScore:       floatPtr(0.01),
+			RelativeScoreCutoff: floatPtr(0.95),
 			WeakSemanticScore:   floatPtr(0.01),
 			WeakTotalScore:      floatPtr(0.01),
 			WeakRelativeCutoff:  floatPtr(0.01),
@@ -223,6 +223,12 @@ func TestRetrievalEngineRecallCanReturnEmptyWithStrictFloors(t *testing.T) {
 	if len(res.Hits) != 0 {
 		t.Fatalf("expected strict recall to return no strong hits, got %d", len(res.Hits))
 	}
+	if len(res.WeakHits) != 0 {
+		t.Fatalf("expected strict recall to return no weak hits, got %d", len(res.WeakHits))
+	}
+	if len(res.SuppressedHits) != 0 {
+		t.Fatalf("expected hard semantic floor to exclude suppressed candidates too, got %d", len(res.SuppressedHits))
+	}
 }
 
 func TestPolicyForModeRuntimeAndRequestOverridePrecedence(t *testing.T) {
@@ -244,6 +250,24 @@ func TestPolicyForModeRuntimeAndRequestOverridePrecedence(t *testing.T) {
 	}
 	if explicit.MinTotalScore != 0.33 {
 		t.Fatalf("expected untouched runtime field to remain, got %f", explicit.MinTotalScore)
+	}
+}
+
+func TestPolicyForModeFinalDefaultSemanticFloors(t *testing.T) {
+	cases := []struct {
+		mode RetrievalMode
+		want float64
+	}{
+		{mode: ModeSearch, want: 0.30},
+		{mode: ModeRecall, want: 0.25},
+		{mode: ModeRelate, want: 0.35},
+		{mode: ModeOutcomes, want: 0.15},
+	}
+	for _, tc := range cases {
+		got := policyForMode(tc.mode, RetrievalPolicy{}).MinSemanticScore
+		if got != tc.want {
+			t.Fatalf("mode %s: expected min semantic floor %.2f, got %.2f", tc.mode, tc.want, got)
+		}
 	}
 }
 

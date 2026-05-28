@@ -55,6 +55,9 @@ func TestE2ELifecycleFlow(t *testing.T) {
 		Query:     "how to deploy safely",
 		TopK:      6,
 		Mode:      ModeRecall,
+		Policy: RetrievalPolicy{
+			MinSemanticScore: floatPtr(0),
+		},
 	})
 	if err != nil {
 		t.Fatalf("retrieve recall: %v", err)
