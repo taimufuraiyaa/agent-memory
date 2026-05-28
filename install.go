@@ -38,6 +38,22 @@ type config struct {
 	quiet           bool
 	initHere        bool
 	projectName     string
+	ideTargets      stringSliceFlag
+}
+
+type stringSliceFlag []string
+
+func (s *stringSliceFlag) String() string {
+	return strings.Join(*s, ",")
+}
+
+func (s *stringSliceFlag) Set(value string) error {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	*s = append(*s, value)
+	return nil
 }
 
 const (
@@ -87,8 +103,9 @@ func parseFlags() config {
 	flag.BoolVar(&cfg.uninstall, "uninstall", false, "remove the installed binary (data is preserved)")
 	flag.BoolVar(&cfg.status, "status", false, "show install state and exit")
 	flag.BoolVar(&cfg.quiet, "quiet", false, "less chatter")
-	flag.BoolVar(&cfg.initHere, "init-here", false, "run per-project init in the current directory after install")
-	flag.StringVar(&cfg.projectName, "project-name", "", "project name for --init-here (default: cwd basename)")
+	flag.BoolVar(&cfg.initHere, "init-here", false, "run per-project setup in the current directory after install (init new project, reinstall existing)")
+	flag.StringVar(&cfg.projectName, "project-name", "", "project name for --init-here setup (default: cwd basename)")
+	flag.Var(&cfg.ideTargets, "ide", "IDE rule targets for --init-here project setup (repeatable): cursor|antigravity|claude|aierules|cursorrules|trae|windsurfrules|generic|all")
 	flag.Parse()
 
 	if cfg.binDir == "" {
@@ -208,7 +225,10 @@ func runStatus(cfg config) {
 	fmt.Fprintf(os.Stderr, "  PATH ok     : %v\n", isOnPath(cfg.binDir))
 	fmt.Fprintf(os.Stderr, "  go version  : %s\n", runtime.Version())
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "  per-project setup:  cd <project> && agent-memory init --project-name <name>")
+	fmt.Fprintln(os.Stderr, "  per-project setup:")
+	fmt.Fprintln(os.Stderr, "    new project      : cd <project> && agent-memory init --project-name <name>")
+	fmt.Fprintln(os.Stderr, "    existing project : cd <project> && agent-memory reinstall --project-name <name>")
+	fmt.Fprintln(os.Stderr, "    Trae AI explicit : cd <project> && agent-memory reinstall --project-name <name> --ide trae")
 }
 
 func runUninstall(cfg config) {
@@ -894,11 +914,43 @@ func runInitHere(cfg config, binPath string) error {
 	if strings.TrimSpace(name) == "" {
 		name = filepath.Base(cwd)
 	}
-	cmd := exec.Command(binPath, "init", "--base-dir", cfg.dataDir, "--project-name", name)
+	if err := runProjectSetupCommand(cfg, cwd, binPath, projectSetupArgs(cfg, "init", name)...); err == nil {
+		return nil
+	} else if strings.Contains(err.Error(), "project already exists") {
+		info(cfg, "project already exists; running reinstall to repair IDE files")
+		args := append(projectSetupArgs(cfg, "reinstall", name), "--force=true")
+		return runProjectSetupCommand(cfg, cwd, binPath, args...)
+	} else {
+		return err
+	}
+}
+
+func projectSetupArgs(cfg config, command, name string) []string {
+	args := []string{command, "--base-dir", cfg.dataDir, "--project-name", name}
+	for _, ide := range cfg.ideTargets {
+		args = append(args, "--ide", ide)
+	}
+	return args
+}
+
+func runProjectSetupCommand(cfg config, cwd, binPath string, args ...string) error {
+	cmd := exec.Command(binPath, args...)
 	cmd.Stdout = streamOrDiscard(cfg)
-	cmd.Stderr = streamOrDiscard(cfg)
+	var stderr bytes.Buffer
+	if cfg.quiet {
+		cmd.Stderr = &stderr
+	} else {
+		cmd.Stderr = io.MultiWriter(os.Stderr, &stderr)
+	}
 	cmd.Dir = cwd
-	return cmd.Run()
+	if err := cmd.Run(); err != nil {
+		msg := strings.TrimSpace(stderr.String())
+		if msg == "" {
+			return err
+		}
+		return fmt.Errorf("%s: %w", msg, err)
+	}
+	return nil
 }
 
 func defaultBinDir() string {
@@ -1134,8 +1186,10 @@ func printNextSteps(cfg config, binPath string) {
 	fmt.Fprintf(os.Stderr, "  1) Confirm:   %s --help\n", binPath)
 	fmt.Fprintln(os.Stderr, "  2) Wire a project (run inside each repo you want to enable):")
 	fmt.Fprintln(os.Stderr, "       cd <project>")
-	fmt.Fprintln(os.Stderr, "       agent-memory init --project-name <name>")
-	fmt.Fprintln(os.Stderr, "     Or do it now: go run install.go --init-here")
+	fmt.Fprintln(os.Stderr, "       agent-memory init --project-name <name>        # new project")
+	fmt.Fprintln(os.Stderr, "       agent-memory reinstall --project-name <name>   # existing project")
+	fmt.Fprintln(os.Stderr, "       agent-memory reinstall --project-name <name> --ide trae")
+	fmt.Fprintln(os.Stderr, "     Or do it now: go run install.go --init-here --ide trae")
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "  3) Dashboard env (standalone React UI):")
 	if runtime.GOOS == "windows" {

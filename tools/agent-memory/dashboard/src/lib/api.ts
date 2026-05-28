@@ -218,6 +218,81 @@ export type RecallPreviewResponse = {
   retrieval_policy?: RetrievalPolicy
 }
 
+export type BenchmarkClusterSummary = {
+  cluster_id: string
+  cluster_title: string
+  cases: number
+  precision: number
+  recall: number
+  gold_recall: number
+  keyword_coverage: number
+  ndcg: number
+  f1: number
+  token_efficiency: number
+  baseline_tokens: number
+  returned_tokens: number
+  saved_tokens: number
+  cost_with_memory: number
+  cost_without_memory: number
+  cost_saved: number
+  cost_saved_pct: number
+  combined_score: number
+  verdict: string
+}
+
+export type BenchmarkRun = {
+  id: number
+  workspace: string
+  run_id: string
+  seed_count: number
+  case_count: number
+  case_limit: number
+  top_k: number
+  budget: number
+  seed_duration_ms: number
+  on_duration_ms: number
+  off_duration_ms: number
+  precision: number
+  recall: number
+  gold_recall: number
+  keyword_coverage: number
+  ndcg: number
+  f1: number
+  token_efficiency: number
+  baseline_tokens: number
+  returned_tokens: number
+  saved_tokens: number
+  cost_with_memory: number
+  cost_without_memory: number
+  cost_saved: number
+  cost_saved_pct: number
+  combined_score: number
+  verdict: string
+  off_cases: number
+  off_disabled_count: number
+  off_all_disabled: boolean
+  off_returned_tokens: number
+  off_baseline_tokens: number
+  off_saved_tokens: number
+  generator_manifest?: Record<string, unknown>
+  run_manifest?: Record<string, unknown>
+  clusters: BenchmarkClusterSummary[]
+  created_at: string
+}
+
+export type PinMemoryResponse = {
+  workspace: string
+  memory_id: string
+  pinned: boolean
+  updated_memory: MemoryEntry
+}
+
+export type DeleteMemoriesResponse = {
+  workspace: string
+  memory_ids: string[]
+  deleted_count: number
+}
+
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
     ...init,
@@ -269,6 +344,13 @@ export function listObservations(input: {
   if (input.from) qs.set('from', input.from)
   if (input.to) qs.set('to', input.to)
   return api(`/api/v1/observations?${qs.toString()}`, { method: 'GET' })
+}
+
+export function listBenchmarkRuns(input: { workspace: string; limit?: number }): Promise<{ workspace: string; limit: number; runs: BenchmarkRun[] }> {
+  const qs = new URLSearchParams()
+  qs.set('workspace', input.workspace)
+  if (typeof input.limit === 'number') qs.set('limit', String(input.limit))
+  return api(`/api/v1/benchmark/runs?${qs.toString()}`, { method: 'GET' })
 }
 
 export function promoteObservations(input: {
@@ -325,6 +407,20 @@ export function searchMemories(input: {
       explain: input.explain,
       filters: input.filters,
     }),
+  })
+}
+
+export function setMemoryPinned(input: { workspace: string; memory_id: string; pinned: boolean }): Promise<PinMemoryResponse> {
+  return api('/api/v1/memories/pin', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+}
+
+export function deleteMemories(input: { workspace: string; memory_ids: string[] }): Promise<DeleteMemoriesResponse> {
+  return api('/api/v1/memories/delete', {
+    method: 'POST',
+    body: JSON.stringify(input),
   })
 }
 

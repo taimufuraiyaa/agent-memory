@@ -135,15 +135,24 @@ Common options:
 
 ```bash
 agent-memory init --project-name my-project
+agent-memory init --project-name my-project --ide trae
+agent-memory reinstall --project-name my-project
+agent-memory reinstall --project-name my-project --ide trae
+go run install.go --init-here --ide trae
 agent-memory init --study
 agent-memory init --reuse
 agent-memory init --force
 ```
 
+Use `agent-memory init` for a new workspace registration.
+Use `agent-memory reinstall` when the project already exists and you just need to repair or refresh IDE files.
+Use `--ide trae` when you want to create or refresh Trae AI project rules explicitly.
+
 What `init` does:
 - Registers the project under `~/.agent-memory/workspaces.json`
 - Creates/uses a per-workspace SQLite DB under `~/.agent-memory/<workspace>.db`
-- Writes a Cursor rule file (default: `.cursor/rules/agent-memory.mdc`) unless `--no-rule`
+- Writes IDE rule files for detected project IDEs (for example Cursor, Trae, Claude, Antigravity) unless `--no-rule`
+- Falls back to writing the Cursor rule at `.cursor/rules/agent-memory.mdc` when no IDE markers are present
 
 ### Day-to-day usage (inside a project)
 
@@ -200,7 +209,7 @@ agent-memory delete --project-name old-project-name --keep-data --yes
 ## Planned Command Catalog (V1)
 | Command | Purpose | Run From |
 |---|---|---|
-| `agent-memory init` (`i`) | Wire current project (create DB + Cursor rule) | Inside project |
+| `agent-memory init` (`i`) | Wire current project (create DB + IDE rule files) | Inside project |
 | `agent-memory rename --to <new>` | Rename project (move DB, update rule) | Anywhere |
 | `agent-memory list` | List registered projects | Anywhere |
 | `agent-memory delete --project-name <name>` | Remove project (`--keep-data` archives DB) | Anywhere |

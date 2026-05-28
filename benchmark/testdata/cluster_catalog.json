@@ -1,0 +1,152 @@
+[
+  {
+    "id": "retrieval-engine",
+    "title": "Retrieval Engine",
+    "keywords": ["query planning", "ranking", "cutoffs", "policy"],
+    "adjacent_clusters": ["vector-search", "adaptive-tuning"]
+  },
+  {
+    "id": "vector-search",
+    "title": "Vector Search",
+    "keywords": ["embeddings", "similarity", "neighbors", "scores"],
+    "adjacent_clusters": ["retrieval-engine", "embeddings"]
+  },
+  {
+    "id": "embeddings",
+    "title": "Embeddings",
+    "keywords": ["model dir", "provider", "tokenizer", "onnx"],
+    "adjacent_clusters": ["vector-search", "study-mode"]
+  },
+  {
+    "id": "sqlite-storage",
+    "title": "SQLite Storage",
+    "keywords": ["schema", "wal mode", "queries", "migrations"],
+    "adjacent_clusters": ["write-pipeline", "token-metrics"]
+  },
+  {
+    "id": "cli-recall",
+    "title": "CLI Recall",
+    "keywords": ["budget", "context block", "top k", "clipping"],
+    "adjacent_clusters": ["retrieval-engine", "cli-search"]
+  },
+  {
+    "id": "cli-search",
+    "title": "CLI Search",
+    "keywords": ["query", "filters", "relevance", "preview"],
+    "adjacent_clusters": ["cli-recall", "api-server"]
+  },
+  {
+    "id": "dashboard",
+    "title": "Dashboard",
+    "keywords": ["metric cards", "history", "clusters", "responsive layout"],
+    "adjacent_clusters": ["api-server", "token-metrics"]
+  },
+  {
+    "id": "api-server",
+    "title": "API Server",
+    "keywords": ["routes", "handlers", "json", "http"],
+    "adjacent_clusters": ["dashboard", "cli-search"]
+  },
+  {
+    "id": "workspace-init",
+    "title": "Workspace Init",
+    "keywords": ["workspace", "rules", "project root", "reuse"],
+    "adjacent_clusters": ["lifecycle", "study-mode"]
+  },
+  {
+    "id": "write-pipeline",
+    "title": "Write Pipeline",
+    "keywords": ["sources", "normalization", "confidence", "storage tier"],
+    "adjacent_clusters": ["sqlite-storage", "observations"]
+  },
+  {
+    "id": "session-end",
+    "title": "Session End",
+    "keywords": ["transcript", "summary", "capture", "session timeline"],
+    "adjacent_clusters": ["observations", "lifecycle"]
+  },
+  {
+    "id": "observations",
+    "title": "Observations",
+    "keywords": ["agent observation", "promotion", "signals", "evidence"],
+    "adjacent_clusters": ["write-pipeline", "session-end"]
+  },
+  {
+    "id": "outcomes",
+    "title": "Outcomes",
+    "keywords": ["success", "failure", "approach", "reason"],
+    "adjacent_clusters": ["observations", "feedback"]
+  },
+  {
+    "id": "token-metrics",
+    "title": "Token Metrics",
+    "keywords": ["baseline tokens", "returned tokens", "saved tokens", "aggregation"],
+    "adjacent_clusters": ["dashboard", "llm-usage"]
+  },
+  {
+    "id": "llm-usage",
+    "title": "LLM Usage",
+    "keywords": ["prompt tokens", "completion tokens", "totals", "run label"],
+    "adjacent_clusters": ["token-metrics", "dashboard"]
+  },
+  {
+    "id": "diagrams",
+    "title": "Diagrams",
+    "keywords": ["mermaid", "viewer", "rendering", "theme"],
+    "adjacent_clusters": ["dashboard", "api-server"]
+  },
+  {
+    "id": "study-mode",
+    "title": "Study Mode",
+    "keywords": ["bootstrap", "files", "directories", "discovery"],
+    "adjacent_clusters": ["workspace-init", "embeddings"]
+  },
+  {
+    "id": "export-import",
+    "title": "Export Import",
+    "keywords": ["export", "import", "payload", "snapshot"],
+    "adjacent_clusters": ["lifecycle", "sqlite-storage"]
+  },
+  {
+    "id": "lifecycle",
+    "title": "Lifecycle",
+    "keywords": ["init", "archive", "upgrade", "toggle"],
+    "adjacent_clusters": ["workspace-init", "export-import"]
+  },
+  {
+    "id": "security",
+    "title": "Security",
+    "keywords": ["redaction", "secrets", "pii", "filters"],
+    "adjacent_clusters": ["write-pipeline", "study-mode"]
+  },
+  {
+    "id": "adaptive-tuning",
+    "title": "Adaptive Tuning",
+    "keywords": ["policy override", "cooldown", "runtime config", "feedback"],
+    "adjacent_clusters": ["retrieval-engine", "feedback"]
+  },
+  {
+    "id": "reconstruction",
+    "title": "Reconstruction",
+    "keywords": ["lineage", "timeline", "rebuild", "history"],
+    "adjacent_clusters": ["session-end", "consolidation"]
+  },
+  {
+    "id": "decay-scoring",
+    "title": "Decay Scoring",
+    "keywords": ["recency", "salience", "decay", "familiarity"],
+    "adjacent_clusters": ["retrieval-engine", "feedback"]
+  },
+  {
+    "id": "feedback",
+    "title": "Feedback",
+    "keywords": ["retrieval feedback", "useful", "rejected", "cooldown"],
+    "adjacent_clusters": ["adaptive-tuning", "decay-scoring"]
+  },
+  {
+    "id": "consolidation",
+    "title": "Consolidation",
+    "keywords": ["merge", "deduplication", "promotion", "study"],
+    "adjacent_clusters": ["reconstruction", "observations"]
+  }
+]

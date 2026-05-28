@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760" fill="none">
+  <rect width="1200" height="760" fill="#05080d"/>
+  <rect x="58" y="26" width="95" height="44" rx="22" fill="#a9c9de"/>
+  <rect x="165" y="26" width="98" height="44" rx="22" stroke="#31404f"/>
+  <rect x="275" y="26" width="102" height="44" rx="22" stroke="#31404f"/>
+
+  <rect x="798" y="26" width="108" height="36" stroke="#31404f"/>
+  <rect x="920" y="26" width="84" height="36" stroke="#31404f"/>
+  <rect x="1018" y="26" width="72" height="36" stroke="#31404f"/>
+  <rect x="1104" y="26" width="78" height="36" stroke="#31404f"/>
+
+  <rect x="58" y="108" width="1084" height="548" rx="22" stroke="#31404f"/>
+  <text x="600" y="296" text-anchor="middle" fill="#8ea0b2" font-family="Menlo, Monaco, monospace" font-size="18">agent-memory/wiki :: agent-memory</text>
+  <text x="600" y="352" text-anchor="middle" fill="#dce4ee" font-family="Menlo, Monaco, monospace" font-size="40" font-weight="700">memory becomes wiki</text>
+  <text x="600" y="396" text-anchor="middle" fill="#8798aa" font-family="Menlo, Monaco, monospace" font-size="16">Browse what the system has learned across projects, outcomes, diagrams, and</text>
+  <text x="600" y="424" text-anchor="middle" fill="#8798aa" font-family="Menlo, Monaco, monospace" font-size="16">long-lived operational knowledge.</text>
+
+  <rect x="278" y="448" width="180" height="38" rx="19" stroke="#31404f"/>
+  <rect x="470" y="448" width="188" height="38" rx="19" stroke="#31404f"/>
+  <rect x="674" y="448" width="118" height="38" rx="19" stroke="#31404f"/>
+  <rect x="806" y="448" width="112" height="38" rx="19" stroke="#31404f"/>
+
+  <rect x="40" y="676" width="1120" height="74" rx="18" stroke="#31404f"/>
+  <rect x="56" y="690" width="1088" height="34" rx="10" stroke="#31404f"/>
+
+  <rect x="56" y="736" width="148" height="34" rx="10" stroke="#31404f" transform="translate(0 -30)"/>
+  <rect x="216" y="736" width="168" height="34" rx="10" stroke="#31404f" transform="translate(0 -30)"/>
+  <rect x="396" y="708" width="1" height="30" fill="#31404f"/>
+  <rect x="920" y="736" width="98" height="34" rx="10" stroke="#31404f" transform="translate(0 -30)"/>
+  <rect x="1030" y="736" width="68" height="34" rx="10" stroke="#31404f" transform="translate(0 -30)"/>
+  <rect x="1110" y="736" width="34" height="34" rx="10" stroke="#31404f" transform="translate(0 -30)"/>
+
+  <text x="85" y="54" fill="#071018" font-family="Menlo, Monaco, monospace" font-size="18" font-weight="700">search</text>
+  <text x="191" y="54" fill="#dce4ee" font-family="Menlo, Monaco, monospace" font-size="18">recall</text>
+  <text x="303" y="54" fill="#dce4ee" font-family="Menlo, Monaco, monospace" font-size="18">recents</text>
+
+  <text x="830" y="50" fill="#dce4ee" font-family="Menlo, Monaco, monospace" font-size="17">[dashboard]</text>
+  <text x="942" y="50" fill="#dce4ee" font-family="Menlo, Monaco, monospace" font-size="17">[clear]</text>
+  <text x="1036" y="50" fill="#dce4ee" font-family="Menlo, Monaco, monospace" font-size="17">[raw]</text>
+  <text x="1120" y="50" fill="#dce4ee" font-family="Menlo, Monaco, monospace" font-size="17">[light]</text>
+
+  <text x="292" y="473" fill="#dce4ee" font-family="Menlo, Monaco, monospace" font-size="16">[pinned threads]</text>
+  <text x="487" y="473" fill="#dce4ee" font-family="Menlo, Monaco, monospace" font-size="16">[recent research]</text>
+  <text x="690" y="473" fill="#dce4ee" font-family="Menlo, Monaco, monospace" font-size="16">[diagrams]</text>
+  <text x="821" y="473" fill="#dce4ee" font-family="Menlo, Monaco, monospace" font-size="16">[failures]</text>
+
+  <text x="72" y="712" fill="#8798aa" font-family="Menlo, Monaco, monospace" font-size="15">search the wiki...</text>
+  <text x="72" y="731" fill="#dce4ee" font-family="Menlo, Monaco, monospace" font-size="16">agent-memory</text>
+  <text x="232" y="731" fill="#dce4ee" font-family="Menlo, Monaco, monospace" font-size="16">wiki article</text>
+  <text x="940" y="731" fill="#dce4ee" font-family="Menlo, Monaco, monospace" font-size="16">options v</text>
+  <text x="1048" y="731" fill="#dce4ee" font-family="Menlo, Monaco, monospace" font-size="16">clear</text>
+</svg>

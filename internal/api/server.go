@@ -3,8 +3,10 @@ package api
 import (
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"net/http"
@@ -31,6 +33,8 @@ type Service struct {
 	mu     sync.RWMutex
 	stores map[string]*workspaceAssets
 }
+
+const allProjectsScope = "__all_projects__"
 
 type workspaceAssets struct {
 	Store     *sqlite.Store
@@ -72,6 +76,53 @@ func (s *Service) resolve(ctx context.Context, ws string) (*workspaceAssets, err
 	}
 	s.stores[ws] = assets
 	return assets, nil
+}
+
+func (s *Service) listProjectNames(ctx context.Context) ([]string, error) {
+	mgr, err := workspace.NewManager(s.BaseDir)
+	if err != nil {
+		return nil, err
+	}
+	items, err := mgr.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	names := make([]string, 0, len(items))
+	for _, item := range items {
+		if strings.TrimSpace(item.Name) == "" {
+			continue
+		}
+		names = append(names, item.Name)
+	}
+	sort.Strings(names)
+	return names, nil
+}
+
+func rankRetrievalHits(hits []engine.RetrievalHit) {
+	sort.SliceStable(hits, func(i, j int) bool {
+		if hits[i].Score != hits[j].Score {
+			return hits[i].Score > hits[j].Score
+		}
+		left := hits[i].Memory
+		right := hits[j].Memory
+		if left.AccessCount != right.AccessCount {
+			return left.AccessCount > right.AccessCount
+		}
+		if left.UpdatedAt != right.UpdatedAt {
+			return left.UpdatedAt.After(right.UpdatedAt)
+		}
+		if left.Workspace != right.Workspace {
+			return left.Workspace < right.Workspace
+		}
+		return left.ID < right.ID
+	})
+}
+
+func trimRetrievalHits(hits []engine.RetrievalHit, limit int) []engine.RetrievalHit {
+	if limit <= 0 || len(hits) <= limit {
+		return hits
+	}
+	return hits[:limit]
 }
 
 func NewMux(svc *Service) *http.ServeMux {
@@ -193,6 +244,106 @@ func NewMux(svc *Service) *http.ServeMux {
 			"reason_category":        strings.TrimSpace(req.ReasonCategory),
 			"reconsolidation_action": req.ReconsolidationAction,
 			"updated_memory":         updated,
+		})
+	})
+	mux.HandleFunc("/api/v1/memories/pin", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeErr(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+			return
+		}
+		var req struct {
+			Workspace string `json:"workspace"`
+			MemoryID  string `json:"memory_id"`
+			Pinned    bool   `json:"pinned"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
+			return
+		}
+		ws := strings.TrimSpace(req.Workspace)
+		if ws == "" {
+			ws = workspaceFromRequest(r, svc.Workspace)
+		}
+		if strings.TrimSpace(req.MemoryID) == "" {
+			writeErr(w, http.StatusBadRequest, "validation", "memory_id is required")
+			return
+		}
+		assets, err := svc.resolve(r.Context(), ws)
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
+			return
+		}
+		if assets.Store == nil {
+			writeErr(w, http.StatusInternalServerError, "runtime", "store is not available")
+			return
+		}
+		updated, err := assets.Store.SetPinned(r.Context(), strings.TrimSpace(req.MemoryID), req.Pinned)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				writeErr(w, http.StatusNotFound, "not_found", "memory not found")
+				return
+			}
+			writeErr(w, http.StatusBadRequest, "runtime", err.Error())
+			return
+		}
+		writeOK(w, http.StatusOK, map[string]any{
+			"workspace":      ws,
+			"memory_id":      req.MemoryID,
+			"pinned":         req.Pinned,
+			"updated_memory": updated,
+		})
+	})
+	mux.HandleFunc("/api/v1/memories/delete", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeErr(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+			return
+		}
+		var req struct {
+			Workspace string   `json:"workspace"`
+			MemoryIDs []string `json:"memory_ids"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
+			return
+		}
+		ws := strings.TrimSpace(req.Workspace)
+		if ws == "" {
+			ws = workspaceFromRequest(r, svc.Workspace)
+		}
+		ids := make([]string, 0, len(req.MemoryIDs))
+		seen := make(map[string]struct{}, len(req.MemoryIDs))
+		for _, raw := range req.MemoryIDs {
+			id := strings.TrimSpace(raw)
+			if id == "" {
+				continue
+			}
+			if _, ok := seen[id]; ok {
+				continue
+			}
+			seen[id] = struct{}{}
+			ids = append(ids, id)
+		}
+		if len(ids) == 0 {
+			writeErr(w, http.StatusBadRequest, "validation", "memory_ids is required")
+			return
+		}
+		assets, err := svc.resolve(r.Context(), ws)
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
+			return
+		}
+		if assets.Store == nil {
+			writeErr(w, http.StatusInternalServerError, "runtime", "store is not available")
+			return
+		}
+		if err := assets.Store.DeleteByIDs(r.Context(), ids); err != nil {
+			writeErr(w, http.StatusBadRequest, "runtime", err.Error())
+			return
+		}
+		writeOK(w, http.StatusOK, map[string]any{
+			"workspace":     ws,
+			"memory_ids":    ids,
+			"deleted_count": len(ids),
 		})
 	})
 
@@ -377,26 +528,84 @@ func NewMux(svc *Service) *http.ServeMux {
 				RelativeScoreCutoff: relativeCutoff,
 			},
 		}
-		out, err := assets.Retrieval.Retrieve(r.Context(), engine.RetrievalOptions{
-			Workspace: opt.Workspace,
-			Query:     opt.Query,
-			TopK:      opt.TopK,
-			Mode:      opt.Mode,
-			Filters:   opt.Filters,
-			Policy:    opt.Policy,
-		})
-		if err != nil {
-			writeErr(w, http.StatusBadRequest, "runtime", err.Error())
-			return
-		}
-		hits := out.Hits
-		if assets.Store != nil {
-			_ = assets.Store.AddTokenMetricV2(r.Context(), ws, "search", sumHitTokens(hits), sumHitTokens(hits), engine.RunLabel(), engine.MemoryEnabled())
+		var (
+			hits           []engine.RetrievalHit
+			strongHits     []engine.RetrievalHit
+			weakHits       []engine.RetrievalHit
+			suppressedHits []engine.RetrievalHit
+			policySnapshot engine.RetrievalPolicySnapshot
+			tokenTotal     int
+		)
+		if ws == allProjectsScope {
+			projectNames, err := svc.listProjectNames(r.Context())
+			if err != nil {
+				writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
+				return
+			}
+			for _, projectName := range projectNames {
+				projectAssets, err := svc.resolve(r.Context(), projectName)
+				if err != nil {
+					writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
+					return
+				}
+				projectOut, err := projectAssets.Retrieval.Retrieve(r.Context(), engine.RetrievalOptions{
+					Workspace: projectName,
+					Query:     opt.Query,
+					TopK:      opt.TopK,
+					Mode:      opt.Mode,
+					Filters:   opt.Filters,
+					Policy:    opt.Policy,
+				})
+				if err != nil {
+					writeErr(w, http.StatusBadRequest, "runtime", err.Error())
+					return
+				}
+				hits = append(hits, projectOut.Hits...)
+				strongHits = append(strongHits, projectOut.StrongHits...)
+				weakHits = append(weakHits, projectOut.WeakHits...)
+				suppressedHits = append(suppressedHits, projectOut.SuppressedHits...)
+				policySnapshot = projectOut.Policy
+				projectTokens := sumHitTokens(projectOut.Hits)
+				tokenTotal += projectTokens
+				if projectAssets.Store != nil {
+					_ = projectAssets.Store.AddTokenMetricV2(r.Context(), projectName, "search", projectTokens, projectTokens, engine.RunLabel(), engine.MemoryEnabled())
+				}
+			}
+			rankRetrievalHits(hits)
+			rankRetrievalHits(strongHits)
+			rankRetrievalHits(weakHits)
+			rankRetrievalHits(suppressedHits)
+			hits = trimRetrievalHits(hits, topK)
+			strongHits = trimRetrievalHits(strongHits, topK)
+			weakHits = trimRetrievalHits(weakHits, topK)
+			suppressedHits = trimRetrievalHits(suppressedHits, topK)
+		} else {
+			out, err := assets.Retrieval.Retrieve(r.Context(), engine.RetrievalOptions{
+				Workspace: opt.Workspace,
+				Query:     opt.Query,
+				TopK:      opt.TopK,
+				Mode:      opt.Mode,
+				Filters:   opt.Filters,
+				Policy:    opt.Policy,
+			})
+			if err != nil {
+				writeErr(w, http.StatusBadRequest, "runtime", err.Error())
+				return
+			}
+			hits = out.Hits
+			strongHits = out.StrongHits
+			weakHits = out.WeakHits
+			suppressedHits = out.SuppressedHits
+			policySnapshot = out.Policy
+			tokenTotal = sumHitTokens(hits)
+			if assets.Store != nil {
+				_ = assets.Store.AddTokenMetricV2(r.Context(), ws, "search", tokenTotal, tokenTotal, engine.RunLabel(), engine.MemoryEnabled())
+			}
 		}
 		results := renderSearchResults(hits, req.Explain)
-		strongResults := renderSearchResults(out.StrongHits, req.Explain)
-		weakResults := renderSearchResults(out.WeakHits, req.Explain)
-		suppressedResults := renderSearchResults(out.SuppressedHits, req.Explain)
+		strongResults := renderSearchResults(strongHits, req.Explain)
+		weakResults := renderSearchResults(weakHits, req.Explain)
+		suppressedResults := renderSearchResults(suppressedHits, req.Explain)
 		writeOK(w, http.StatusOK, map[string]any{
 			"results":            results,
 			"strong_results":     strongResults,
@@ -407,8 +616,8 @@ func NewMux(svc *Service) *http.ServeMux {
 				string(engine.BandWeakFamiliarity): len(weakResults),
 				string(engine.BandSuppressed):      len(suppressedResults),
 			},
-			"retrieval_policy": out.Policy,
-			"total_tokens":     sumResultTokens(results),
+			"retrieval_policy": policySnapshot,
+			"total_tokens":     tokenTotal,
 			"search_time_ms":   time.Since(started).Milliseconds(),
 			"workspace":        ws,
 			"requested_query":  req.Query,
@@ -1239,6 +1448,77 @@ func NewMux(svc *Service) *http.ServeMux {
 			"workspace":      ws,
 			"run_label":      label,
 			"memory_enabled": enabled,
+		})
+	})
+
+	mux.HandleFunc("/api/v1/benchmark/ingest", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeErr(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+			return
+		}
+		var req sqlite.BenchmarkRun
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
+			return
+		}
+		ws := strings.TrimSpace(req.Workspace)
+		if ws == "" {
+			ws = workspaceFromRequest(r, svc.Workspace)
+		}
+		if strings.TrimSpace(req.RunID) == "" {
+			writeErr(w, http.StatusBadRequest, "validation", "run_id is required")
+			return
+		}
+		assets, err := svc.resolve(r.Context(), ws)
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
+			return
+		}
+		if assets.Store == nil {
+			writeErr(w, http.StatusInternalServerError, "runtime", "store is not available")
+			return
+		}
+		req.Workspace = ws
+		stored, err := assets.Store.InsertBenchmarkRun(r.Context(), req)
+		if err != nil {
+			writeErr(w, http.StatusBadRequest, "runtime", err.Error())
+			return
+		}
+		writeOK(w, http.StatusOK, map[string]any{
+			"stored":    true,
+			"workspace": ws,
+			"run":       stored,
+		})
+	})
+
+	mux.HandleFunc("/api/v1/benchmark/runs", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			writeErr(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+			return
+		}
+		ws := strings.TrimSpace(r.URL.Query().Get("workspace"))
+		if ws == "" {
+			ws = workspaceFromRequest(r, svc.Workspace)
+		}
+		assets, err := svc.resolve(r.Context(), ws)
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
+			return
+		}
+		if assets.Store == nil {
+			writeErr(w, http.StatusInternalServerError, "runtime", "store is not available")
+			return
+		}
+		limit := parseIntOrDefault(r.URL.Query().Get("limit"), 10)
+		runs, err := assets.Store.ListBenchmarkRuns(r.Context(), ws, limit)
+		if err != nil {
+			writeErr(w, http.StatusBadRequest, "runtime", err.Error())
+			return
+		}
+		writeOK(w, http.StatusOK, map[string]any{
+			"workspace": ws,
+			"limit":     clamp(limit, 1, 200),
+			"runs":      runs,
 		})
 	})
 

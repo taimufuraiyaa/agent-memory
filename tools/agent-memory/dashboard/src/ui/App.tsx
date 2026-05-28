@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import {
+  deleteMemories,
   getStats,
+  listBenchmarkRuns,
   listObservations,
   listSessions,
   listProjects,
@@ -8,7 +10,10 @@ import {
   promoteObservations,
   recallPreview,
   searchMemories,
+  setMemoryPinned,
   type CountMap,
+  type BenchmarkClusterSummary,
+  type BenchmarkRun,
   type DashboardStats,
   type LLMUsageGroupTotals,
   type MemoryEntry,
@@ -25,11 +30,13 @@ import {
   type TokenMetricOperationTotals,
   type TokenMetricTotals,
 } from '../lib/api'
-import { DiagramViewer } from './DiagramViewer'
+import { DiagramViewer, renderDiagramMarkupForExport } from './DiagramViewer'
 import { MarkdownView } from './MarkdownView'
 
 type ChatMode = 'search' | 'recall'
-type Surface = 'overview' | 'search' | 'recall' | 'diagnostics' | 'sessions'
+type Surface = 'overview' | 'search' | 'recall' | 'diagnostics' | 'sessions' | 'benchmark' | 'wiki'
+type WikiViewMode = 'article' | 'raw'
+type WikiMode = 'search' | 'recall' | 'recents'
 
 type ChatMessage = {
   id: string
@@ -44,6 +51,14 @@ type ChatMessage = {
   }
   pending?: boolean
   error?: string
+}
+
+type WikiSearchState = {
+  mode: WikiMode
+  query: string
+  searched: boolean
+  results: MemoryEntry[]
+  weakResults: MemoryEntry[]
 }
 
 const allTypes: Array<{ key: MemoryType; label: string }> = [
@@ -82,7 +97,29 @@ function formatPercent(value?: number): string {
   return `${value.toFixed(1)}%`
 }
 
+function formatUnitPercent(value?: number): string {
+  if (typeof value !== 'number' || Number.isNaN(value)) return '0.0%'
+  return `${(value * 100).toFixed(1)}%`
+}
+
+function formatDuration(ms?: number): string {
+  if (typeof ms !== 'number' || Number.isNaN(ms) || ms <= 0) return '0s'
+  const seconds = ms / 1000
+  if (seconds < 60) return `${seconds.toFixed(seconds >= 10 ? 0 : 1)}s`
+  const minutes = Math.floor(seconds / 60)
+  const remainder = Math.round(seconds % 60)
+  return `${minutes}m ${remainder}s`
+}
+
 const SEARCH_DEFAULT_MIN_SEMANTIC_SCORE = 0.3
+const ALL_PROJECTS_SCOPE = '__all_projects__'
+
+const wikiSuggestionPresets = [
+  { label: 'pinned threads', query: 'show pinned rules and long-lived facts' },
+  { label: 'recent research', query: 'what did we recently learn' },
+  { label: 'diagrams', query: 'architecture diagram mermaid flow' },
+  { label: 'failures', query: 'recent failures regressions incidents' },
+] as const
 
 const semanticFloorPresets = [
   { label: 'diagnose 0.00', value: 0 },
@@ -219,6 +256,91 @@ function hasDiagram(m: MemoryEntry): boolean {
   return false
 }
 
+function buildMemoryKey(memory: MemoryEntry): string {
+  return `${memory.workspace}:${memory.id}`
+}
+
+function compareMemoryRelevance(a: MemoryEntry, b: MemoryEntry): number {
+  const semanticDelta = (getSemanticSimilarity(b) ?? -1) - (getSemanticSimilarity(a) ?? -1)
+  if (semanticDelta !== 0) return semanticDelta
+  const scoreDelta = (b.score ?? -1) - (a.score ?? -1)
+  if (scoreDelta !== 0) return scoreDelta
+  const accessDelta = (b.access_count ?? 0) - (a.access_count ?? 0)
+  if (accessDelta !== 0) return accessDelta
+  const updatedDelta = new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime()
+  if (updatedDelta !== 0) return updatedDelta
+  return a.id.localeCompare(b.id)
+}
+
+function compareMemoryRecency(a: MemoryEntry, b: MemoryEntry): number {
+  return new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime()
+}
+
+function mergeMemoryResults(items: MemoryEntry[]): MemoryEntry[] {
+  const merged = new Map<string, MemoryEntry>()
+  for (const item of items) {
+    const key = buildMemoryKey(item)
+    const current = merged.get(key)
+    if (!current || compareMemoryRelevance(item, current) < 0) {
+      merged.set(key, item)
+    }
+  }
+  return Array.from(merged.values()).sort(compareMemoryRelevance)
+}
+
+function escapeHTML(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;')
+}
+
+async function buildConsolidatedExportHTML(memories: MemoryEntry[], theme: 'light' | 'dark'): Promise<string> {
+  const sections = await Promise.all(
+    memories.map(async (memory) => {
+      const semantic = getSemanticSimilarity(memory)
+      const diagramMarkup = memory.diagram ? await renderDiagramMarkupForExport(memory.diagram, theme) : ''
+      return `
+        <section class="memory">
+          <div class="badges">
+            <span>${escapeHTML(memory.workspace)}</span>
+            <span>${escapeHTML(memory.type)}</span>
+            <span>${escapeHTML(memory.storage_tier)}</span>
+            <span>semantic ${escapeHTML(semantic ? semantic.toFixed(2) : 'n/a')}</span>
+          </div>
+          <div class="content-block">${escapeHTML(memory.content)}</div>
+          ${diagramMarkup}
+        </section>
+      `
+    }),
+  )
+  const joinedSections = sections.join('\n')
+  return `<!doctype html>
+  <html>
+    <head>
+      <meta charset="utf-8" />
+      <title>Consolidated Wiki View</title>
+      <style>
+        body { font-family: Menlo, Monaco, monospace; background: #faf7ef; color: #1e1b18; padding: 32px; }
+        h1 { margin: 0 0 24px; font-size: 24px; }
+        .memory { border: 1px solid #7a7165; padding: 16px; margin-bottom: 18px; }
+        .badges { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+        .badges span { border: 1px solid #7a7165; padding: 4px 8px; }
+        .content-block, pre { white-space: pre-wrap; word-break: break-word; border: 1px dotted #7a7165; padding: 12px; background: #f3f0e8; }
+        .export-diagram { margin-top: 14px; border: 1px dotted #7a7165; padding: 12px; background: #f3f0e8; }
+        .export-diagram svg { width: 100%; height: auto; max-height: 720px; }
+        .export-diagram-note { margin-top: 8px; color: #6b5f52; }
+      </style>
+    </head>
+    <body>
+      <h1>Consolidated Wiki View</h1>
+      ${joinedSections}
+    </body>
+  </html>`
+}
+
 function getHealthState(stats: DashboardStats | null, statsErr: string) {
   if (statsErr) {
     return {
@@ -249,13 +371,16 @@ function getHealthState(stats: DashboardStats | null, statsErr: string) {
 }
 
 export function App() {
-  const [surface, setSurface] = useState<Surface>('overview')
+  const [surface, setSurface] = useState<Surface>('wiki')
   const [mode, setMode] = useState<ChatMode>('search')
 
   const [projects, setProjects] = useState<ProjectListItem[]>([])
   const [workspace, setWorkspace] = useState<string>('')
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [statsErr, setStatsErr] = useState<string>('')
+  const [benchmarkRuns, setBenchmarkRuns] = useState<BenchmarkRun[]>([])
+  const [benchmarkBusy, setBenchmarkBusy] = useState<boolean>(false)
+  const [benchmarkErr, setBenchmarkErr] = useState<string>('')
   const [sessions, setSessions] = useState<SessionEntry[]>([])
   const [sessionsBusy, setSessionsBusy] = useState<boolean>(false)
   const [sessionsErr, setSessionsErr] = useState<string>('')
@@ -300,6 +425,20 @@ export function App() {
   const [diagramPreviewOpen, setDiagramPreviewOpen] = useState<boolean>(false)
   const [inputFocused, setInputFocused] = useState<boolean>(false)
   const [composerFocused, setComposerFocused] = useState<boolean>(false)
+  const [wikiQuery, setWikiQuery] = useState<string>('')
+  const [wikiMode, setWikiMode] = useState<WikiMode>('search')
+  const [wikiScope, setWikiScope] = useState<string>(ALL_PROJECTS_SCOPE)
+  const [wikiViewMode, setWikiViewMode] = useState<WikiViewMode>('article')
+  const [wikiOptionsOpen, setWikiOptionsOpen] = useState<boolean>(false)
+  const [wikiBusy, setWikiBusy] = useState<boolean>(false)
+  const [wikiError, setWikiError] = useState<string>('')
+  const [wikiSearch, setWikiSearch] = useState<WikiSearchState>({ mode: 'search', query: '', searched: false, results: [], weakResults: [] })
+  const [wikiRecall, setWikiRecall] = useState<RecallPreviewResponse | null>(null)
+  const [wikiSelectedIds, setWikiSelectedIds] = useState<Set<string>>(new Set())
+  const [wikiConsolidatedOpen, setWikiConsolidatedOpen] = useState<boolean>(false)
+  const [wikiPinBusyIds, setWikiPinBusyIds] = useState<Set<string>>(new Set())
+  const [wikiDeleteBusy, setWikiDeleteBusy] = useState<boolean>(false)
+  const [wikiDiagramMemory, setWikiDiagramMemory] = useState<MemoryEntry | null>(null)
   const threadRef = useRef<HTMLDivElement>(null)
   const composerRef = useRef<HTMLDivElement>(null)
 
@@ -334,6 +473,37 @@ export function App() {
     }
   }, [messages, surface])
 
+  useEffect(() => {
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      if (wikiDiagramMemory) {
+        setWikiDiagramMemory(null)
+        return
+      }
+      if (wikiConsolidatedOpen) {
+        setWikiConsolidatedOpen(false)
+        return
+      }
+      if (diagramPreviewOpen) {
+        setDiagramPreviewOpen(false)
+        return
+      }
+      if (deepSearchPrompt.open) {
+        setDeepSearchPrompt({ open: false, query: '' })
+        return
+      }
+      if (rawStatsOpen) {
+        setRawStatsOpen(false)
+        return
+      }
+      if (selectedMemory) {
+        setSelectedMemory(null)
+      }
+    }
+    window.addEventListener('keydown', handleEscape)
+    return () => window.removeEventListener('keydown', handleEscape)
+  }, [deepSearchPrompt.open, diagramPreviewOpen, rawStatsOpen, selectedMemory, wikiConsolidatedOpen, wikiDiagramMemory])
+
   const selectedProject = useMemo(() => projects.find((x) => x.name === workspace), [projects, workspace])
 
   const projectLabel = useMemo(() => {
@@ -347,6 +517,7 @@ export function App() {
     () => sessions.find((session) => session.session_id === selectedSessionID) ?? sessions[0],
     [selectedSessionID, sessions],
   )
+  const dashboardWikiLauncher = surface !== 'wiki' && mode === 'search'
   const composerExpanded = composerFocused || advancedOpen || draft.trim().length > 0
   const semanticThreshold = useMemo(() => parseUnitScore(minSemantic) ?? SEARCH_DEFAULT_MIN_SEMANTIC_SCORE, [minSemantic])
   const semanticThresholdRelevance = useMemo(() => getSemanticRelevance(semanticThreshold), [semanticThreshold])
@@ -375,6 +546,21 @@ export function App() {
     }
     return Array.from(map.values())
   }, [messages])
+  const wikiAllFragments = useMemo(() => mergeMemoryResults([...wikiSearch.results, ...wikiSearch.weakResults]), [wikiSearch])
+  const wikiPinnedResults = useMemo(() => wikiAllFragments.filter((memory) => memory.pinned), [wikiAllFragments])
+  const wikiPinnedKeys = useMemo(() => new Set(wikiPinnedResults.map((memory) => buildMemoryKey(memory))), [wikiPinnedResults])
+  const wikiMainResults = useMemo(
+    () => wikiSearch.results.filter((memory) => !wikiPinnedKeys.has(buildMemoryKey(memory))),
+    [wikiPinnedKeys, wikiSearch.results],
+  )
+  const wikiWeakResults = useMemo(
+    () => wikiSearch.weakResults.filter((memory) => !wikiPinnedKeys.has(buildMemoryKey(memory))),
+    [wikiPinnedKeys, wikiSearch.weakResults],
+  )
+  const wikiSelectedFragments = useMemo(
+    () => wikiAllFragments.filter((memory) => wikiSelectedIds.has(buildMemoryKey(memory))),
+    [wikiAllFragments, wikiSelectedIds],
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -418,6 +604,32 @@ export function App() {
     setObservations([])
     setObservationsErr('')
     setPromotionResults({})
+    setBenchmarkRuns([])
+    setBenchmarkErr('')
+  }, [workspace])
+
+  useEffect(() => {
+    let cancelled = false
+    if (!workspace) return
+    setBenchmarkBusy(true)
+    setBenchmarkErr('')
+    listBenchmarkRuns({ workspace, limit: 12 })
+      .then((response) => {
+        if (cancelled) return
+        setBenchmarkRuns(response.runs ?? [])
+      })
+      .catch((e) => {
+        if (cancelled) return
+        setBenchmarkRuns([])
+        setBenchmarkErr(e instanceof Error ? e.message : String(e))
+      })
+      .finally(() => {
+        if (cancelled) return
+        setBenchmarkBusy(false)
+      })
+    return () => {
+      cancelled = true
+    }
   }, [workspace])
 
   useEffect(() => {
@@ -505,19 +717,44 @@ export function App() {
 
   function openSearch() {
     setMode('search')
-    setSurface('search')
+    setWikiMode('search')
+    setSurface('wiki')
     setSelectedMemory(null)
   }
 
   function openRecall() {
     setMode('recall')
-    setSurface('recall')
+    setWikiMode('recall')
+    setSurface('wiki')
     setSelectedMemory(null)
   }
 
   function openSessions() {
     setSurface('sessions')
     setSelectedMemory(null)
+  }
+
+  function openBenchmark() {
+    setSurface('benchmark')
+    setSelectedMemory(null)
+  }
+
+  function openWiki(modeOverride?: WikiMode) {
+    if (modeOverride) {
+      setWikiMode(modeOverride)
+      if (modeOverride === 'search' || modeOverride === 'recall') {
+        setMode(modeOverride)
+      }
+    }
+    setSurface('wiki')
+    setSelectedMemory(null)
+  }
+
+  function resetWikiTransientState() {
+    setWikiError('')
+    setSelectedMemory(null)
+    setWikiSelectedIds(new Set())
+    setWikiConsolidatedOpen(false)
   }
 
   async function promoteSelectedSession(type: MemoryType = 'episodic') {
@@ -554,235 +791,58 @@ export function App() {
   }
 
   async function showRecentsCapture() {
-    if (!workspace) return
     if (recentsBusy) return
-    openSearch()
+    openWiki('recents')
     setRecentsBusy(true)
-    setSelectedMemory(null)
-    const pendingID = makeID()
-    const pending: ChatMessage = {
-      id: pendingID,
-      role: 'assistant',
-      mode: 'search',
-      text: 'Loading recent memories...',
-      createdAt: Date.now(),
-      pending: true,
-    }
-    setMessages((m) => [...m, pending])
+    resetWikiTransientState()
     try {
-      const r = await listRecentMemories({ workspace, limit: topK })
-      const hitCount = r.results?.length ?? 0
-      setMessages((m) =>
-        m.map((x) =>
-          x.id === pendingID
-            ? {
-                ...x,
-                pending: false,
-                text: hitCount > 0 ? `Recent memories (${hitCount}).` : 'No recent memories found.',
-                payload: { results: r.results ?? [] },
-              }
-            : x,
-        ),
-      )
+      const limit = Math.max(1, topK)
+      let recentResults: MemoryEntry[] = []
+      if (wikiScope === ALL_PROJECTS_SCOPE) {
+        const targets = projects.map((project) => project.name).filter(Boolean)
+        if (targets.length === 0) throw new Error('No projects available to load recents.')
+        const responses = await Promise.all(targets.map((projectName) => listRecentMemories({ workspace: projectName, limit })))
+        recentResults = responses.flatMap((response) => response.results ?? [])
+      } else {
+        const targetWorkspace = (wikiScope || workspace).trim()
+        if (!targetWorkspace) throw new Error('No project selected for recents.')
+        const response = await listRecentMemories({ workspace: targetWorkspace, limit })
+        recentResults = response.results ?? []
+      }
+      const mergedResults = mergeMemoryResults(recentResults).sort(compareMemoryRecency).slice(0, limit)
+      setWikiSearch({
+        mode: 'recents',
+        query: 'recent memories',
+        searched: true,
+        results: mergedResults,
+        weakResults: [],
+      })
+      setWikiRecall(null)
+      threadRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
     } catch (e) {
-      setMessages((m) =>
-        m.map((x) =>
-          x.id === pendingID
-            ? {
-                ...x,
-                pending: false,
-                text: 'Request failed.',
-                error: e instanceof Error ? e.message : String(e),
-              }
-            : x,
-        ),
-      )
+      setWikiSearch({ mode: 'recents', query: 'recent memories', searched: true, results: [], weakResults: [] })
+      setWikiError(e instanceof Error ? e.message : String(e))
     } finally {
       setRecentsBusy(false)
     }
   }
 
   async function runSearchFlow(query: string) {
-    const text = query.trim()
-    if (!workspace || !text) return
     openSearch()
-    setBusy(true)
-    setSelectedMemory(null)
-    const userMsg: ChatMessage = {
-      id: makeID(),
-      role: 'user',
-      mode: 'search',
-      text,
-      createdAt: Date.now(),
-    }
-    const pendingID = makeID()
-    const pending: ChatMessage = {
-      id: pendingID,
-      role: 'assistant',
-      mode: 'search',
-      text: 'Searching...',
-      createdAt: Date.now(),
-      pending: true,
-    }
-    setMessages((m) => [...m, userMsg, pending])
-    try {
-      const r = await searchMemories({
-        workspace,
-        query: text,
-        top_k: topK,
-        explain,
-        filters,
-      })
-      const hitCount = r.results?.length ?? 0
-      setMessages((m) =>
-        m.map((x) =>
-          x.id === pendingID
-            ? {
-                ...x,
-                pending: false,
-                text: hitCount > 0 ? `Found ${hitCount} memories.` : 'No results found.',
-                payload: { results: r.results ?? [], search: r },
-              }
-            : x,
-        ),
-      )
-      if (hitCount === 0) {
-        setDeepSearchPrompt({ open: true, query: text })
-      }
-    } catch (e) {
-      setMessages((m) =>
-        m.map((x) =>
-          x.id === pendingID
-            ? {
-                ...x,
-                pending: false,
-                text: 'Request failed.',
-                error: e instanceof Error ? e.message : String(e),
-              }
-            : x,
-        ),
-      )
-    } finally {
-      setBusy(false)
-    }
+    await runWikiSearch(query)
   }
 
   async function runRecallFlow(task: string) {
-    const text = task.trim()
-    if (!workspace || !text) return
     openRecall()
-    setBusy(true)
-    setSelectedMemory(null)
-    const userMsg: ChatMessage = {
-      id: makeID(),
-      role: 'user',
-      mode: 'recall',
-      text,
-      createdAt: Date.now(),
-    }
-    const pendingID = makeID()
-    const pending: ChatMessage = {
-      id: pendingID,
-      role: 'assistant',
-      mode: 'recall',
-      text: 'Recalling...',
-      createdAt: Date.now(),
-      pending: true,
-    }
-    setMessages((m) => [...m, userMsg, pending])
-    try {
-      const r = await recallPreview({
-        workspace,
-        task_description: text,
-        top_k: recallTopK,
-        token_budget: budget,
-        explain,
-        include_memories: true,
-      })
-      setMessages((m) =>
-        m.map((x) =>
-          x.id === pendingID
-            ? {
-                ...x,
-                pending: false,
-                text: `Recall preview: ${r.tokens_used}/${r.tokens_budget} tokens.`,
-                payload: { recall: r },
-              }
-            : x,
-        ),
-      )
-    } catch (e) {
-      setMessages((m) =>
-        m.map((x) =>
-          x.id === pendingID
-            ? {
-                ...x,
-                pending: false,
-                text: 'Request failed.',
-                error: e instanceof Error ? e.message : String(e),
-              }
-            : x,
-        ),
-      )
-    } finally {
-      setBusy(false)
-    }
+    await runWikiRecall(task)
   }
 
   async function runDeepSearch(query: string) {
     const q = query.trim()
-    if (!q || !workspace) return
+    if (!q) return
     openRecall()
     setDeepSearchPrompt({ open: false, query: '' })
-    setBusy(true)
-    setSelectedMemory(null)
-    const pendingID = makeID()
-    const pending: ChatMessage = {
-      id: pendingID,
-      role: 'assistant',
-      mode: 'recall',
-      text: 'Deep searching (recall preview)...',
-      createdAt: Date.now(),
-      pending: true,
-    }
-    setMessages((m) => [...m, pending])
-    try {
-      const r = await recallPreview({
-        workspace,
-        task_description: q,
-        top_k: recallTopK,
-        token_budget: budget,
-        explain,
-        include_memories: true,
-      })
-      setMessages((m) =>
-        m.map((x) =>
-          x.id === pendingID
-            ? {
-                ...x,
-                pending: false,
-                text: `Deep search: ${r.tokens_used}/${r.tokens_budget} tokens.`,
-                payload: { recall: r },
-              }
-            : x,
-        ),
-      )
-    } catch (e) {
-      setMessages((m) =>
-        m.map((x) =>
-          x.id === pendingID
-            ? {
-                ...x,
-                pending: false,
-                text: 'Deep search failed.',
-                error: e instanceof Error ? e.message : String(e),
-              }
-            : x,
-        ),
-      )
-    } finally {
-      setBusy(false)
-    }
+    await runWikiRecall(q)
   }
 
   async function submit() {
@@ -813,9 +873,215 @@ export function App() {
     void runSearchFlow('architecture diagram mermaid flow')
   }
 
+  function toggleWikiSelection(memory: MemoryEntry) {
+    const key = buildMemoryKey(memory)
+    setWikiSelectedIds((current) => {
+      const next = new Set(current)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
+
+  function applyWikiMemoryUpdate(updatedMemory: MemoryEntry) {
+    const apply = (items: MemoryEntry[]) => items.map((memory) => (buildMemoryKey(memory) === buildMemoryKey(updatedMemory) ? updatedMemory : memory))
+    setWikiSearch((current) => ({
+      ...current,
+      results: apply(current.results),
+      weakResults: apply(current.weakResults),
+    }))
+    setSelectedMemory((current) => (current && buildMemoryKey(current) === buildMemoryKey(updatedMemory) ? updatedMemory : current))
+  }
+
+  function removeWikiMemories(deletedKeys: Set<string>) {
+    setWikiSearch((current) => ({
+      ...current,
+      results: current.results.filter((memory) => !deletedKeys.has(buildMemoryKey(memory))),
+      weakResults: current.weakResults.filter((memory) => !deletedKeys.has(buildMemoryKey(memory))),
+    }))
+    setWikiSelectedIds((current) => {
+      const next = new Set(current)
+      for (const key of deletedKeys) next.delete(key)
+      return next
+    })
+    setSelectedMemory((current) => (current && deletedKeys.has(buildMemoryKey(current)) ? null : current))
+  }
+
+  async function toggleWikiPin(memory: MemoryEntry) {
+    const key = buildMemoryKey(memory)
+    if (wikiPinBusyIds.has(key)) return
+    setWikiPinBusyIds((current) => new Set(current).add(key))
+    try {
+      const response = await setMemoryPinned({
+        workspace: memory.workspace,
+        memory_id: memory.id,
+        pinned: !memory.pinned,
+      })
+      applyWikiMemoryUpdate(response.updated_memory)
+    } catch (e) {
+      setWikiError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setWikiPinBusyIds((current) => {
+        const next = new Set(current)
+        next.delete(key)
+        return next
+      })
+    }
+  }
+
+  async function runWikiSearch(queryOverride?: string) {
+    const text = (queryOverride ?? wikiQuery).trim()
+    if (!text) return
+    const targetWorkspace = wikiScope === ALL_PROJECTS_SCOPE ? ALL_PROJECTS_SCOPE : (wikiScope || workspace).trim()
+    if (!targetWorkspace) {
+      setWikiError('No projects available to search.')
+      return
+    }
+    openWiki('search')
+    setWikiBusy(true)
+    resetWikiTransientState()
+    setWikiQuery(text)
+    try {
+      const response = await searchMemories({
+        workspace: targetWorkspace,
+        query: text,
+        top_k: topK,
+        explain,
+        filters,
+      })
+      const mergedResults = mergeMemoryResults(response.results ?? [])
+      const resultKeys = new Set(mergedResults.map((memory) => buildMemoryKey(memory)))
+      const mergedWeak = mergeMemoryResults((response.weak_results ?? []).filter((memory) => !resultKeys.has(buildMemoryKey(memory))))
+      setWikiSearch({ mode: 'search', query: text, searched: true, results: mergedResults, weakResults: mergedWeak })
+      setWikiRecall(null)
+      threadRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
+    } catch (e) {
+      setWikiSearch({ mode: 'search', query: text, searched: true, results: [], weakResults: [] })
+      setWikiError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setWikiBusy(false)
+    }
+  }
+
+  async function runWikiRecall(taskOverride?: string) {
+    const text = (taskOverride ?? wikiQuery).trim()
+    if (!text) return
+    const targetWorkspace = (wikiScope === ALL_PROJECTS_SCOPE ? workspace : wikiScope || workspace).trim()
+    if (!targetWorkspace) {
+      setWikiError('No project selected for recall.')
+      return
+    }
+    if (wikiScope === ALL_PROJECTS_SCOPE) {
+      setWikiError('Recall preview currently requires a single project scope.')
+      return
+    }
+    openWiki('recall')
+    setWikiBusy(true)
+    resetWikiTransientState()
+    setWikiQuery(text)
+    try {
+      const response = await recallPreview({
+        workspace: targetWorkspace,
+        task_description: text,
+        top_k: recallTopK,
+        token_budget: budget,
+        explain,
+        include_memories: true,
+      })
+      const mergedResults = mergeMemoryResults(response.memories_included_full ?? [])
+      const resultKeys = new Set(mergedResults.map((memory) => buildMemoryKey(memory)))
+      const mergedWeak = mergeMemoryResults((response.weak_memories ?? []).filter((memory) => !resultKeys.has(buildMemoryKey(memory))))
+      setWikiSearch({ mode: 'recall', query: text, searched: true, results: mergedResults, weakResults: mergedWeak })
+      setWikiRecall(response)
+      threadRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
+    } catch (e) {
+      setWikiSearch({ mode: 'recall', query: text, searched: true, results: [], weakResults: [] })
+      setWikiRecall(null)
+      setWikiError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setWikiBusy(false)
+    }
+  }
+
+  async function exportWikiSelection() {
+    if (wikiSelectedFragments.length === 0) return
+    try {
+      const html = await buildConsolidatedExportHTML(wikiSelectedFragments, theme)
+      const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
+      const url = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download = `wiki-selection-${Date.now()}.html`
+      anchor.click()
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      setWikiError(e instanceof Error ? e.message : String(e))
+    }
+  }
+
+  async function printWikiSelection() {
+    if (wikiSelectedFragments.length === 0) return
+    try {
+      const popup = window.open('', '_blank', 'noopener,noreferrer,width=960,height=720')
+      if (!popup) return
+      const html = (await buildConsolidatedExportHTML(wikiSelectedFragments, theme)).replace(/^<!doctype html>\s*/i, '')
+      popup.document.open()
+      popup.document.documentElement.innerHTML = html
+      popup.document.close()
+      popup.focus()
+      popup.print()
+    } catch (e) {
+      setWikiError(e instanceof Error ? e.message : String(e))
+    }
+  }
+
+  async function deleteWikiSelection() {
+    if (wikiDeleteBusy || wikiSelectedFragments.length === 0) return
+    const confirmed = window.confirm(
+      `Delete ${wikiSelectedFragments.length} selected memor${wikiSelectedFragments.length === 1 ? 'y' : 'ies'}? This cannot be undone.`,
+    )
+    if (!confirmed) return
+    setWikiDeleteBusy(true)
+    setWikiError('')
+    try {
+      const grouped = new Map<string, string[]>()
+      for (const memory of wikiSelectedFragments) {
+        const current = grouped.get(memory.workspace) ?? []
+        current.push(memory.id)
+        grouped.set(memory.workspace, current)
+      }
+      await Promise.all(
+        Array.from(grouped.entries()).map(([targetWorkspace, memoryIDs]) =>
+          deleteMemories({
+            workspace: targetWorkspace,
+            memory_ids: memoryIDs,
+          }),
+        ),
+      )
+      removeWikiMemories(new Set(wikiSelectedFragments.map((memory) => buildMemoryKey(memory))))
+    } catch (e) {
+      setWikiError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setWikiDeleteBusy(false)
+    }
+  }
+
+  function clearWikiView() {
+    setWikiQuery('')
+    setWikiError('')
+    setWikiSearch({ mode: wikiMode, query: '', searched: false, results: [], weakResults: [] })
+    setWikiRecall(null)
+    setWikiSelectedIds(new Set())
+    setWikiConsolidatedOpen(false)
+    setSelectedMemory(null)
+    setWikiDiagramMemory(null)
+    setWikiOptionsOpen(false)
+  }
+
   return (
-    <div className="shell chatShell">
-      <header className="topbar chatTopbar">
+    <div className={surface === 'wiki' ? 'shell chatShell shellWikiMode' : 'shell chatShell'}>
+      {surface !== 'wiki' ? (
+        <header className="topbar chatTopbar">
         <div className="topbarLeft">
           <div className="brand">
             <div className="brandMark" aria-hidden="true">
@@ -850,25 +1116,21 @@ export function App() {
             <span className="navKey">[01]</span>
             <span className="navLabel">Overview</span>
           </button>
-          <button className={surface === 'search' ? 'navItem navItemOn' : 'navItem'} onClick={openSearch} type="button" aria-label="Search mode">
-            <span className="navKey">[02]</span>
-            <span className="navLabel">Search</span>
-          </button>
-          <button className={surface === 'recall' ? 'navItem navItemOn' : 'navItem'} onClick={openRecall} type="button" aria-label="Recall preview mode">
-            <span className="navKey">[03]</span>
-            <span className="navLabel">Recall Preview</span>
-          </button>
-          <button className="navItem" onClick={showRecentsCapture} type="button" aria-label="Recents capture" disabled={recentsBusy || !workspace} title="Show recently added memories">
-            <span className="navKey">[04]</span>
-            <span className="navLabel">Recents</span>
-          </button>
           <button className={surface === 'sessions' ? 'navItem navItemOn' : 'navItem'} onClick={openSessions} type="button" aria-label="Sessions">
-            <span className="navKey">[05]</span>
+            <span className="navKey">[02]</span>
             <span className="navLabel">Sessions</span>
           </button>
           <button className={surface === 'diagnostics' ? 'navItem navItemOn' : 'navItem'} onClick={() => setSurface('diagnostics')} type="button" aria-label="Diagnostics">
-            <span className="navKey">[06]</span>
+            <span className="navKey">[03]</span>
             <span className="navLabel">Diagnostics</span>
+          </button>
+          <button className={surface === 'benchmark' ? 'navItem navItemOn' : 'navItem'} onClick={openBenchmark} type="button" aria-label="Benchmark">
+            <span className="navKey">[04]</span>
+            <span className="navLabel">Benchmark</span>
+          </button>
+          <button className="navItem" onClick={() => openWiki()} type="button" aria-label="Wiki">
+            <span className="navKey">[05]</span>
+            <span className="navLabel">Wiki</span>
           </button>
         </nav>
 
@@ -890,7 +1152,8 @@ export function App() {
             <span>{theme === 'dark' ? 'light' : 'dark'}</span>
           </button>
         </div>
-      </header>
+        </header>
+      ) : null}
 
       <div className="chatLayout">
         <main className="chatMain">
@@ -959,6 +1222,109 @@ export function App() {
                 />
               ) : null}
 
+              {surface === 'benchmark' ? (
+                <BenchmarkPanel
+                  workspace={workspace}
+                  runs={benchmarkRuns}
+                  busy={benchmarkBusy}
+                  error={benchmarkErr}
+                />
+              ) : null}
+
+              {surface === 'wiki' ? (
+                <WikiPanel
+                  theme={theme}
+                  workspace={workspace}
+                  projects={projects}
+                  mode={wikiMode}
+                  query={wikiQuery}
+                  scope={wikiScope}
+                  viewMode={wikiViewMode}
+                  optionsOpen={wikiOptionsOpen}
+                  searched={wikiSearch.searched}
+                  busy={wikiBusy}
+                  error={wikiError}
+                  results={wikiMainResults}
+                  pinnedResults={wikiPinnedResults}
+                  weakResults={wikiWeakResults}
+                  recall={wikiRecall}
+                  recentsBusy={recentsBusy}
+                  selectedCount={wikiSelectedFragments.length}
+                  selectedIds={wikiSelectedIds}
+                  explain={explain}
+                  topK={topK}
+                  recallTopK={recallTopK}
+                  budget={budget}
+                  semanticThreshold={semanticThreshold}
+                  minTotal={minTotal}
+                  minConfidence={minConfidence}
+                  outcome={outcome}
+                  types={types}
+                  tiers={tiers}
+                  onQueryChange={setWikiQuery}
+                  onModeChange={(nextMode: WikiMode) => {
+                    setWikiMode(nextMode)
+                    setWikiError('')
+                    setWikiSearch((current) => (current.mode === nextMode ? current : { ...current, mode: nextMode, searched: false }))
+                    if (nextMode !== 'recall') setWikiRecall(null)
+                    if (nextMode === 'search') setMode('search')
+                    if (nextMode === 'recall') setMode('recall')
+                    if (nextMode === 'recents') void showRecentsCapture()
+                  }}
+                  onScopeChange={setWikiScope}
+                  onViewModeChange={setWikiViewMode}
+                  onExitWiki={() => setSurface('overview')}
+                  onOpenRaw={() => setRawStatsOpen(true)}
+                  onToggleTheme={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
+                  onClearView={clearWikiView}
+                  onToggleOptions={() => setWikiOptionsOpen((current) => !current)}
+                  onSubmit={() => {
+                    if (wikiMode === 'recall') {
+                      void runWikiRecall()
+                      return
+                    }
+                    if (wikiMode === 'recents') {
+                      void showRecentsCapture()
+                      return
+                    }
+                    void runWikiSearch()
+                  }}
+                  onSuggestion={(query) => void runWikiSearch(query)}
+                  onToggleSelection={toggleWikiSelection}
+                  onOpenMemory={setSelectedMemory}
+                  onOpenDiagram={setWikiDiagramMemory}
+                  onTogglePin={(memory) => void toggleWikiPin(memory)}
+                  isPinned={(memory) => memory.pinned}
+                  isPinBusy={(memory) => wikiPinBusyIds.has(buildMemoryKey(memory))}
+                  onOpenConsolidated={() => setWikiConsolidatedOpen(true)}
+                  onDownloadSelection={exportWikiSelection}
+                  onPrintSelection={printWikiSelection}
+                  onDeleteSelection={() => void deleteWikiSelection()}
+                  deleteBusy={wikiDeleteBusy}
+                  onSetMinSemantic={(value) => setMinSemantic(value.toFixed(2))}
+                  onSetExplain={setExplain}
+                  onSetTopK={setTopK}
+                  onSetRecallTopK={setRecallTopK}
+                  onSetBudget={setBudget}
+                  onSetMinTotal={setMinTotal}
+                  onSetMinConfidence={setMinConfidence}
+                  onSetOutcome={setOutcome}
+                  onToggleType={(memoryType, checked) => {
+                    const next = new Set(types)
+                    if (checked) next.add(memoryType)
+                    else next.delete(memoryType)
+                    setTypes(next)
+                  }}
+                  onToggleTier={(tier, checked) => {
+                    const next = new Set(tiers)
+                    if (checked) next.add(tier)
+                    else next.delete(tier)
+                    setTiers(next)
+                  }}
+                  onCollapseOptions={() => setWikiOptionsOpen(false)}
+                />
+              ) : null}
+
               {(surface === 'search' || surface === 'recall') && messages.length === 0 ? (
                 <QueryEmptyState mode={mode} onOpenOverview={() => setSurface('overview')} />
               ) : null}
@@ -975,234 +1341,248 @@ export function App() {
                 ))}
             </div>
 
-            <div
-              className={composerExpanded ? 'composerDock composerDockExpanded' : 'composerDock composerDockCollapsed'}
-              ref={composerRef}
-              onFocusCapture={() => setComposerFocused(true)}
-              onBlurCapture={(e) => {
-                const nextTarget = e.relatedTarget
-                if (nextTarget instanceof Node && composerRef.current?.contains(nextTarget)) return
-                setComposerFocused(false)
-                if (!draft.trim()) setAdvancedOpen(false)
-              }}
-            >
-              <div className={composerExpanded ? 'composer composerExpanded' : 'composer composerCollapsed'}>
-                {advancedOpen ? (
-                  <div className="composerAdvanced">
-                    <div className="composerRow">
-                      <div className="composerRowTitle">Mode</div>
-                      <div className="modePills modePillsInline">
-                        <button className={mode === 'search' ? 'modePill modePillOn' : 'modePill'} onClick={openSearch} type="button">
-                          Search
+            {surface !== 'wiki' ? (
+              <div
+                className={dashboardWikiLauncher ? 'composerDock composerDockLauncher' : (composerExpanded ? 'composerDock composerDockExpanded' : 'composerDock composerDockCollapsed')}
+                ref={composerRef}
+                onFocusCapture={() => setComposerFocused(true)}
+                onBlurCapture={(e) => {
+                  const nextTarget = e.relatedTarget
+                  if (nextTarget instanceof Node && composerRef.current?.contains(nextTarget)) return
+                  setComposerFocused(false)
+                  if (!draft.trim()) setAdvancedOpen(false)
+                }}
+              >
+                {dashboardWikiLauncher ? (
+                  <button className="composerWikiLauncherBtn" type="button" onClick={() => openWiki('search')}>
+                    Explore wiki
+                  </button>
+                ) : (
+                  <div className={composerExpanded ? 'composer composerExpanded' : 'composer composerCollapsed'}>
+                    {advancedOpen ? (
+                      <div className="composerAdvanced">
+                        <div className="composerRow">
+                          <div className="composerRowTitle">Mode</div>
+                          <div className="modePills modePillsInline">
+                            <button className={mode === 'search' ? 'modePill modePillOn' : 'modePill'} onClick={openSearch} type="button">
+                              Search
+                            </button>
+                            <button className={mode === 'recall' ? 'modePill modePillOn' : 'modePill'} onClick={openRecall} type="button">
+                              Recall Preview
+                            </button>
+                          </div>
+                        </div>
+                        <label className="check">
+                          <input type="checkbox" checked={explain} onChange={(e) => setExplain(e.target.checked)} />
+                          Explain scoring
+                        </label>
+                        {mode === 'search' ? (
+                          <>
+                            <div className="row row2">
+                              <div>
+                                <label className="label">Top K</label>
+                                <input className="input" type="number" min={1} max={200} value={topK} onChange={(e) => setTopK(Number(e.target.value))} />
+                              </div>
+                              <div>
+                                <label className="label">Outcome</label>
+                                <select className="input" value={outcome} onChange={(e) => setOutcome(e.target.value as OutcomeResult | '')}>
+                                  <option value="">any</option>
+                                  <option value="success">success</option>
+                                  <option value="failure">failure</option>
+                                  <option value="partial">partial</option>
+                                </select>
+                              </div>
+                            </div>
+
+                            <label className="label">Types</label>
+                            <div className="chips">
+                              {allTypes.map((t) => (
+                                <label key={t.key} className={types.has(t.key) ? 'chip chipOn' : 'chip'}>
+                                  <input
+                                    type="checkbox"
+                                    checked={types.has(t.key)}
+                                    onChange={(e) => {
+                                      const next = new Set(types)
+                                      if (e.target.checked) next.add(t.key)
+                                      else next.delete(t.key)
+                                      setTypes(next)
+                                    }}
+                                  />
+                                  {t.label}
+                                </label>
+                              ))}
+                            </div>
+
+                            <label className="label">Tiers</label>
+                            <div className="chips">
+                              {allTiers.map((t) => (
+                                <label key={t.key} className={tiers.has(t.key) ? 'chip chipOn' : 'chip'}>
+                                  <input
+                                    type="checkbox"
+                                    checked={tiers.has(t.key)}
+                                    onChange={(e) => {
+                                      const next = new Set(tiers)
+                                      if (e.target.checked) next.add(t.key)
+                                      else next.delete(t.key)
+                                      setTiers(next)
+                                    }}
+                                  />
+                                  {t.label}
+                                </label>
+                              ))}
+                            </div>
+
+                            <div className="row row2">
+                              <div>
+                                <label className="label">Min confidence</label>
+                                <input className="input" inputMode="decimal" value={minConfidence} onChange={(e) => setMinConfidence(e.target.value)} placeholder="0.00 - 1.00" />
+                              </div>
+                              <div>
+                                <label className="label">Min decay</label>
+                                <input className="input" inputMode="decimal" value={minDecay} onChange={(e) => setMinDecay(e.target.value)} placeholder="0.00 - 1.00" />
+                              </div>
+                            </div>
+
+                            <div className="semanticFilterCard">
+                              <div className="semanticFilterHeader">
+                                <div>
+                                  <label className="label" htmlFor="min-semantic-score">
+                                    Min semantic score
+                                  </label>
+                                  <div className="semanticFilterHint">
+                                    Search defaults to `0.30`. Raise it for stricter relevance or lower it only when diagnosing weak matches.
+                                  </div>
+                                </div>
+                                <button
+                                  className="btn btnGhost semanticPresetReset"
+                                  type="button"
+                                  onClick={() => setMinSemantic(SEARCH_DEFAULT_MIN_SEMANTIC_SCORE.toFixed(2))}
+                                >
+                                  reset 0.30
+                                </button>
+                              </div>
+                              <input
+                                id="min-semantic-score"
+                                className="semanticSlider"
+                                type="range"
+                                min={0}
+                                max={1}
+                                step={0.05}
+                                value={semanticThreshold}
+                                onChange={(e) => setMinSemantic(Number(e.target.value).toFixed(2))}
+                              />
+                              <div className="semanticFilterSummary">
+                                <div className="semanticThresholdValue">{semanticThreshold.toFixed(2)}</div>
+                                <div className="semanticThresholdCopy">
+                                  <div className="semanticThresholdLabel">Active search floor</div>
+                                  <div className="semanticThresholdHint">Sent to backend as `min_semantic_score`.</div>
+                                </div>
+                                <span className={`memPill relevancePill relevancePill${toTitle(semanticThresholdRelevance.tone)}`}>
+                                  {semanticThresholdRelevance.label}
+                                </span>
+                              </div>
+                              <div className="semanticPresetRow">
+                                {semanticFloorPresets.map((preset) => (
+                                  <button
+                                    key={preset.label}
+                                    className={semanticThreshold === preset.value ? 'semanticPreset semanticPresetOn' : 'semanticPreset'}
+                                    type="button"
+                                    onClick={() => setMinSemantic(preset.value.toFixed(2))}
+                                  >
+                                    {preset.label}
+                                  </button>
+                                ))}
+                              </div>
+                              <div className="semanticFilterScale">
+                                Weak &lt; 0.30 | Low 0.30+ | Medium 0.40+ | High 0.55+
+                              </div>
+                            </div>
+
+                            <div className="row row2">
+                              <div>
+                                <label className="label">Min total</label>
+                                <input className="input" inputMode="decimal" value={minTotal} onChange={(e) => setMinTotal(e.target.value)} placeholder="0.00 - 1.00" />
+                              </div>
+                              <div>
+                                <label className="label">Relative cutoff</label>
+                                <input className="input" inputMode="decimal" value={relativeCutoff} onChange={(e) => setRelativeCutoff(e.target.value)} placeholder="0.00 - 1.00" />
+                              </div>
+                            </div>
+
+                            <label className="label">Entities (comma-separated)</label>
+                            <input className="input" value={entities} onChange={(e) => setEntities(e.target.value)} placeholder="orders, kafka, schema" />
+
+                            <div className="row row2">
+                              <div>
+                                <label className="label">From</label>
+                                <input className="input" type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
+                              </div>
+                              <div>
+                                <label className="label">To</label>
+                                <input className="input" type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
+                              </div>
+                            </div>
+                          </>
+                        ) : (
+                          <div className="row row2">
+                            <div>
+                              <label className="label">Top K</label>
+                              <input className="input" type="number" min={1} max={500} value={recallTopK} onChange={(e) => setRecallTopK(Number(e.target.value))} />
+                            </div>
+                            <div>
+                              <label className="label">Budget</label>
+                              <input className="input" type="number" min={1} value={budget} onChange={(e) => setBudget(Number(e.target.value))} />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ) : null}
+
+                    <textarea
+                      className="composerInput"
+                      value={draft}
+                      onChange={(e) => setDraft(e.target.value)}
+                      onFocus={() => setInputFocused(true)}
+                      onBlur={() => setInputFocused(false)}
+                      placeholder={mode === 'search' ? 'Explore wiki...' : 'Describe the task to recall...'}
+                      rows={inputFocused || composerFocused || draft.trim().length > 0 || advancedOpen ? 3 : 1}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault()
+                          submit()
+                        }
+                      }}
+                    />
+                    <div className={composerExpanded ? 'composerToolbar' : 'composerToolbar composerToolbarCollapsed'}>
+                      <div className="composerToolbarLeft">
+                        <span className="muted small">
+                          {surface === 'overview'
+                            ? 'Ready to explore wiki.'
+                            : surface === 'diagnostics'
+                              ? 'Diagnostics open.'
+                              : surface === 'sessions'
+                                ? 'Sessions open.'
+                                : 'Searching this workspace.'}
+                        </span>
+                      </div>
+                      <div className="composerToolbarRight">
+                        <button className="btn btnGhost" type="button" onClick={() => setAdvancedOpen((v) => !v)}>
+                          {advancedOpen ? '[-] filters' : '[+] filters'}
                         </button>
-                        <button className={mode === 'recall' ? 'modePill modePillOn' : 'modePill'} onClick={openRecall} type="button">
-                          Recall Preview
+                        <button className="sendBtn" type="button" onClick={submit} disabled={!workspace || busy || !draft.trim()} title="Send query">
+                          <span className="sendBtnLabel">RUN</span>
                         </button>
                       </div>
                     </div>
-                    <label className="check">
-                      <input type="checkbox" checked={explain} onChange={(e) => setExplain(e.target.checked)} />
-                      Explain scoring
-                    </label>
-                    {mode === 'search' ? (
-                      <>
-                        <div className="row row2">
-                          <div>
-                            <label className="label">Top K</label>
-                            <input className="input" type="number" min={1} max={200} value={topK} onChange={(e) => setTopK(Number(e.target.value))} />
-                          </div>
-                          <div>
-                            <label className="label">Outcome</label>
-                            <select className="input" value={outcome} onChange={(e) => setOutcome(e.target.value as OutcomeResult | '')}>
-                              <option value="">any</option>
-                              <option value="success">success</option>
-                              <option value="failure">failure</option>
-                              <option value="partial">partial</option>
-                            </select>
-                          </div>
-                        </div>
-
-                        <label className="label">Types</label>
-                        <div className="chips">
-                          {allTypes.map((t) => (
-                            <label key={t.key} className={types.has(t.key) ? 'chip chipOn' : 'chip'}>
-                              <input
-                                type="checkbox"
-                                checked={types.has(t.key)}
-                                onChange={(e) => {
-                                  const next = new Set(types)
-                                  if (e.target.checked) next.add(t.key)
-                                  else next.delete(t.key)
-                                  setTypes(next)
-                                }}
-                              />
-                              {t.label}
-                            </label>
-                          ))}
-                        </div>
-
-                        <label className="label">Tiers</label>
-                        <div className="chips">
-                          {allTiers.map((t) => (
-                            <label key={t.key} className={tiers.has(t.key) ? 'chip chipOn' : 'chip'}>
-                              <input
-                                type="checkbox"
-                                checked={tiers.has(t.key)}
-                                onChange={(e) => {
-                                  const next = new Set(tiers)
-                                  if (e.target.checked) next.add(t.key)
-                                  else next.delete(t.key)
-                                  setTiers(next)
-                                }}
-                              />
-                              {t.label}
-                            </label>
-                          ))}
-                        </div>
-
-                        <div className="row row2">
-                          <div>
-                            <label className="label">Min confidence</label>
-                            <input className="input" inputMode="decimal" value={minConfidence} onChange={(e) => setMinConfidence(e.target.value)} placeholder="0.00 - 1.00" />
-                          </div>
-                          <div>
-                            <label className="label">Min decay</label>
-                            <input className="input" inputMode="decimal" value={minDecay} onChange={(e) => setMinDecay(e.target.value)} placeholder="0.00 - 1.00" />
-                          </div>
-                        </div>
-
-                        <div className="semanticFilterCard">
-                          <div className="semanticFilterHeader">
-                            <div>
-                              <label className="label" htmlFor="min-semantic-score">
-                                Min semantic score
-                              </label>
-                              <div className="semanticFilterHint">
-                                Search defaults to `0.30`. Raise it for stricter relevance or lower it only when diagnosing weak matches.
-                              </div>
-                            </div>
-                            <button
-                              className="btn btnGhost semanticPresetReset"
-                              type="button"
-                              onClick={() => setMinSemantic(SEARCH_DEFAULT_MIN_SEMANTIC_SCORE.toFixed(2))}
-                            >
-                              reset 0.30
-                            </button>
-                          </div>
-                          <input
-                            id="min-semantic-score"
-                            className="semanticSlider"
-                            type="range"
-                            min={0}
-                            max={1}
-                            step={0.05}
-                            value={semanticThreshold}
-                            onChange={(e) => setMinSemantic(Number(e.target.value).toFixed(2))}
-                          />
-                          <div className="semanticFilterSummary">
-                            <div className="semanticThresholdValue">{semanticThreshold.toFixed(2)}</div>
-                            <div className="semanticThresholdCopy">
-                              <div className="semanticThresholdLabel">Active search floor</div>
-                              <div className="semanticThresholdHint">Sent to backend as `min_semantic_score`.</div>
-                            </div>
-                            <span className={`memPill relevancePill relevancePill${toTitle(semanticThresholdRelevance.tone)}`}>
-                              {semanticThresholdRelevance.label}
-                            </span>
-                          </div>
-                          <div className="semanticPresetRow">
-                            {semanticFloorPresets.map((preset) => (
-                              <button
-                                key={preset.label}
-                                className={semanticThreshold === preset.value ? 'semanticPreset semanticPresetOn' : 'semanticPreset'}
-                                type="button"
-                                onClick={() => setMinSemantic(preset.value.toFixed(2))}
-                              >
-                                {preset.label}
-                              </button>
-                            ))}
-                          </div>
-                          <div className="semanticFilterScale">
-                            Weak &lt; 0.30 | Low 0.30+ | Medium 0.40+ | High 0.55+
-                          </div>
-                        </div>
-
-                        <div className="row row2">
-                          <div>
-                            <label className="label">Min total</label>
-                            <input className="input" inputMode="decimal" value={minTotal} onChange={(e) => setMinTotal(e.target.value)} placeholder="0.00 - 1.00" />
-                          </div>
-                          <div>
-                            <label className="label">Relative cutoff</label>
-                            <input className="input" inputMode="decimal" value={relativeCutoff} onChange={(e) => setRelativeCutoff(e.target.value)} placeholder="0.00 - 1.00" />
-                          </div>
-                        </div>
-
-                        <label className="label">Entities (comma-separated)</label>
-                        <input className="input" value={entities} onChange={(e) => setEntities(e.target.value)} placeholder="orders, kafka, schema" />
-
-                        <div className="row row2">
-                          <div>
-                            <label className="label">From</label>
-                            <input className="input" type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
-                          </div>
-                          <div>
-                            <label className="label">To</label>
-                            <input className="input" type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
-                          </div>
-                        </div>
-                      </>
-                    ) : (
-                      <div className="row row2">
-                        <div>
-                          <label className="label">Top K</label>
-                          <input className="input" type="number" min={1} max={500} value={recallTopK} onChange={(e) => setRecallTopK(Number(e.target.value))} />
-                        </div>
-                        <div>
-                          <label className="label">Budget</label>
-                          <input className="input" type="number" min={1} value={budget} onChange={(e) => setBudget(Number(e.target.value))} />
-                        </div>
-                      </div>
-                    )}
                   </div>
-                ) : null}
-
-                <textarea
-                  className="composerInput"
-                  value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
-                  onFocus={() => setInputFocused(true)}
-                  onBlur={() => setInputFocused(false)}
-                  placeholder={mode === 'search' ? 'Search your memory system...' : 'Describe the task to recall...'}
-                  rows={inputFocused || composerFocused || draft.trim().length > 0 || advancedOpen ? 3 : 1}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault()
-                      submit()
-                    }
-                  }}
-                />
-                <div className={composerExpanded ? 'composerToolbar' : 'composerToolbar composerToolbarCollapsed'}>
-                  <div className="composerToolbarLeft">
-                    <span className="muted small">
-                      {surface === 'overview' ? 'Ready to query.' : surface === 'diagnostics' ? 'Diagnostics open.' : surface === 'sessions' ? 'Sessions open.' : 'Searching this workspace.'}
-                    </span>
-                  </div>
-                  <div className="composerToolbarRight">
-                    <button className="btn btnGhost" type="button" onClick={() => setAdvancedOpen((v) => !v)}>
-                      {advancedOpen ? '[-] filters' : '[+] filters'}
-                    </button>
-                    <button className="sendBtn" type="button" onClick={submit} disabled={!workspace || busy || !draft.trim()} title="Send query">
-                      <span className="sendBtnLabel">RUN</span>
-                    </button>
-                  </div>
+                )}
+                <div className={composerExpanded ? 'composerFoot' : 'composerFoot composerFootCollapsed'}>
+                  <span className="muted small" style={{ display: 'block', textAlign: 'center' }}>
+                    Served locally by <span className="mono">agent-memory serve</span>. Markdown is sanitized; Mermaid renders when present.
+                  </span>
                 </div>
               </div>
-              <div className={composerExpanded ? 'composerFoot' : 'composerFoot composerFootCollapsed'}>
-                <span className="muted small" style={{ display: 'block', textAlign: 'center' }}>
-                  Served locally by <span className="mono">agent-memory serve</span>. Markdown is sanitized; Mermaid renders when present.
-                </span>
-              </div>
-            </div>
+            ) : null}
           </div>
 
           {selectedMemory ? (
@@ -1424,6 +1804,92 @@ export function App() {
           </div>
         </div>
       ) : null}
+
+      {wikiConsolidatedOpen ? (
+        <div
+          className="modalBackdrop"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setWikiConsolidatedOpen(false)
+          }}
+          role="presentation"
+        >
+          <div className="modalPanel wikiConsolidatedModal" role="dialog" aria-modal="true" aria-label="Consolidated wiki view">
+            <div className="modalTop">
+              <div className="modalTitle">Consolidated Wiki View</div>
+              <div className="modalActions">
+                <button className="btn btnGhost" onClick={exportWikiSelection}>
+                  Download
+                </button>
+                <button className="btn btnGhost" onClick={printWikiSelection}>
+                  Print
+                </button>
+                <button className="btn btnGhost" onClick={() => setWikiConsolidatedOpen(false)}>
+                  Close
+                </button>
+              </div>
+            </div>
+            <div className="modalBody wikiConsolidatedBody">
+              {wikiSelectedFragments.map((memory) => (
+                <article key={buildMemoryKey(memory)} className="wikiConsolidatedFragment">
+                  <div className="wikiFragmentBadges">
+                    <span className="memPill">{memory.workspace}</span>
+                    <span className="memPill">{memory.type}</span>
+                    <span className="memPill">{memory.storage_tier}</span>
+                    {typeof getSemanticSimilarity(memory) === 'number' ? (
+                      <span className={`memPill relevancePill relevancePill${toTitle(getSemanticRelevance(getSemanticSimilarity(memory)).tone)}`}>
+                        {getSemanticRelevance(getSemanticSimilarity(memory)).label} {formatScore(getSemanticSimilarity(memory), 2)}
+                      </span>
+                    ) : null}
+                  </div>
+                  <MarkdownView markdown={memory.content} clamp={false} theme={theme} />
+                  {hasDiagram(memory) ? (
+                    <div className="diagramBlock">
+                      <DiagramViewer diagram={memory.diagram ?? { lang: 'mermaid', code: memory.content.split('```mermaid')[1]?.split('```')[0] ?? '' }} theme={theme} />
+                    </div>
+                  ) : null}
+                </article>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {wikiDiagramMemory?.diagram ? (
+        <div
+          className="modalBackdrop"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setWikiDiagramMemory(null)
+          }}
+          role="presentation"
+        >
+          <div className="modalPanel wikiDiagramModal" role="dialog" aria-modal="true" aria-label="Wiki diagram viewer">
+            <div className="modalTop">
+              <div>
+                <div className="modalTitle">Wiki Diagram</div>
+                <div className="muted small">
+                  {wikiDiagramMemory.workspace} / {wikiDiagramMemory.type} / {wikiDiagramMemory.id}
+                </div>
+              </div>
+              <div className="modalActions">
+                <button className="btn btnGhost" onClick={() => setSelectedMemory(wikiDiagramMemory)}>
+                  Open Memory
+                </button>
+                <button className="btn btnGhost" onClick={() => setWikiDiagramMemory(null)}>
+                  Close
+                </button>
+              </div>
+            </div>
+            <div className="modalBody wikiDiagramModalBody">
+              <div className="wikiFragmentBadges">
+                <span className="memPill">{wikiDiagramMemory.workspace}</span>
+                <span className="memPill">{wikiDiagramMemory.type}</span>
+                <span className="memPill">{wikiDiagramMemory.storage_tier}</span>
+              </div>
+              <DiagramViewer diagram={wikiDiagramMemory.diagram} theme={theme} />
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -1612,6 +2078,141 @@ function OverviewPanel({
         </ComparisonSection>
       </section>
     </section>
+  )
+}
+
+function BenchmarkPanel({
+  workspace,
+  runs,
+  busy,
+  error,
+}: {
+  workspace: string
+  runs: BenchmarkRun[]
+  busy: boolean
+  error: string
+}) {
+  const latest = runs[0]
+
+  return (
+    <section className="surfaceStack">
+      <div className="diagnosticsHero">
+        <div>
+          <div className="overviewEyebrow">Benchmark</div>
+          <h2 className="sectionTitle">{workspace || 'Workspace'} Quality Benchmark</h2>
+          <p className="sectionText">Review memory ON/OFF benchmark quality, token efficiency, cluster-level coverage, and recent run history.</p>
+        </div>
+        {latest ? (
+          <div className="diagnosticsHeroSide">
+            <span className="statusBadge statusBadgeGood">{latest.verdict}</span>
+            <span className="muted small">{formatTS(latest.created_at) || 'n/a'}</span>
+          </div>
+        ) : null}
+      </div>
+
+      {error ? <div className="callout calloutBad">{error}</div> : null}
+      {busy ? <div className="emptyInline">Loading benchmark runs...</div> : null}
+      {!busy && !error && !latest ? (
+        <div className="emptyStateCard">
+          <div className="overviewEyebrow">No Benchmark Runs</div>
+          <div className="sectionTitle">This workspace has not ingested benchmark results yet.</div>
+          <p className="sectionText">Run the benchmark pipeline and persist the scored report to populate this panel.</p>
+        </div>
+      ) : null}
+
+      {latest ? (
+        <>
+          <div className="benchmarkStatsGrid">
+            <MetricCard title="Combined Score" value={latest.combined_score.toFixed(3)} detail={latest.verdict} />
+            <MetricCard title="Cases" value={formatNumber(latest.case_count)} detail={`${formatNumber(latest.seed_count)} seeds`} />
+            <MetricCard title="Precision" value={formatUnitPercent(latest.precision)} detail={`Gold recall ${formatUnitPercent(latest.gold_recall)}`} />
+            <MetricCard title="NDCG" value={latest.ndcg.toFixed(3)} detail={`F1 ${latest.f1.toFixed(3)}`} />
+            <MetricCard title="Token Efficiency" value={formatUnitPercent(latest.token_efficiency)} detail={`${formatNumber(latest.saved_tokens)} tokens saved`} />
+            <MetricCard title="Cost Saved" value={formatUnitPercent(latest.cost_saved_pct)} detail={`$${latest.cost_saved.toFixed(2)} saved`} />
+          </div>
+
+          <div className="benchmarkColumns">
+            <BreakdownCard title="Quality Metrics" subtitle={`Latest run ${latest.run_id}`}>
+              <div className="diagnosticsList">
+                <DiagnosticRow label="Precision" value={formatUnitPercent(latest.precision)} />
+                <DiagnosticRow label="Recall" value={formatUnitPercent(latest.recall)} />
+                <DiagnosticRow label="Gold Recall" value={formatUnitPercent(latest.gold_recall)} />
+                <DiagnosticRow label="Keyword Coverage" value={formatUnitPercent(latest.keyword_coverage)} />
+                <DiagnosticRow label="NDCG" value={latest.ndcg.toFixed(3)} />
+                <DiagnosticRow label="F1" value={latest.f1.toFixed(3)} />
+              </div>
+            </BreakdownCard>
+
+            <BreakdownCard title="Efficiency And Runtime" subtitle={`top_k ${latest.top_k} | budget ${latest.budget}`}>
+              <div className="diagnosticsList">
+                <DiagnosticRow label="Baseline Tokens" value={formatNumber(latest.baseline_tokens)} />
+                <DiagnosticRow label="Returned Tokens" value={formatNumber(latest.returned_tokens)} />
+                <DiagnosticRow label="Saved Tokens" value={formatNumber(latest.saved_tokens)} />
+                <DiagnosticRow label="Seed Duration" value={formatDuration(latest.seed_duration_ms)} />
+                <DiagnosticRow label="ON Duration" value={formatDuration(latest.on_duration_ms)} />
+                <DiagnosticRow label="OFF Duration" value={formatDuration(latest.off_duration_ms)} />
+              </div>
+            </BreakdownCard>
+          </div>
+
+          <section className="comparisonSection">
+            <div className="comparisonHeader">
+              <div>
+                <div className="breakdownTitle">Cluster Breakdown</div>
+                <div className="breakdownSubtitle">Per-cluster quality and efficiency summaries for the latest benchmark run.</div>
+              </div>
+            </div>
+            <div className="benchmarkClusterGrid">
+              {latest.clusters.map((cluster, index) => (
+                <BenchmarkClusterCard key={`${cluster.cluster_id}-${index}`} cluster={cluster} index={index} />
+              ))}
+            </div>
+          </section>
+
+          <section className="comparisonSection">
+            <div className="comparisonHeader">
+              <div>
+                <div className="breakdownTitle">Run History</div>
+                <div className="breakdownSubtitle">Newest benchmark runs first, grouped in the same workspace.</div>
+              </div>
+            </div>
+            <div className="diagnosticsList">
+              {runs.map((run) => (
+                <DiagnosticRow
+                  key={run.run_id}
+                  label={`${run.run_id} | ${formatTS(run.created_at) || 'n/a'} | ${formatNumber(run.case_count)} cases | ${run.verdict}`}
+                  value={`${run.combined_score.toFixed(3)} / ${formatUnitPercent(run.token_efficiency)}`}
+                />
+              ))}
+            </div>
+          </section>
+        </>
+      ) : null}
+    </section>
+  )
+}
+
+function BenchmarkClusterCard({ cluster, index }: { cluster: BenchmarkClusterSummary; index: number }) {
+  return (
+    <article className="groupCard benchmarkClusterCard">
+      <div className="groupCardTop">
+        <div className="groupHeading">
+          <span className="groupIndex">{formatLegendIndex(index)}</span>
+          <span className="groupLead">.-</span>
+          <div className="groupTitle">{cluster.cluster_title}</div>
+        </div>
+        <span className="groupBadge groupBadgeOn">{cluster.verdict}</span>
+      </div>
+      <div className="groupMeta mono">cluster:{cluster.cluster_id}</div>
+      <div className="diagnosticsList" style={{ marginTop: 14 }}>
+        <DiagnosticRow label="Cases" value={formatNumber(cluster.cases)} />
+        <DiagnosticRow label="Combined Score" value={cluster.combined_score.toFixed(3)} />
+        <DiagnosticRow label="Precision" value={formatUnitPercent(cluster.precision)} />
+        <DiagnosticRow label="Gold Recall" value={formatUnitPercent(cluster.gold_recall)} />
+        <DiagnosticRow label="Keyword Coverage" value={formatUnitPercent(cluster.keyword_coverage)} />
+        <DiagnosticRow label="Token Efficiency" value={formatUnitPercent(cluster.token_efficiency)} />
+      </div>
+    </article>
   )
 }
 
@@ -1945,6 +2546,690 @@ function SessionsPanel({
         </section>
       ) : null}
     </section>
+  )
+}
+
+function WikiPanel({
+  theme,
+  workspace,
+  projects,
+  mode,
+  query,
+  scope,
+  viewMode,
+  optionsOpen,
+  searched,
+  busy,
+  error,
+  results,
+  pinnedResults,
+  weakResults,
+  recall,
+  recentsBusy,
+  selectedCount,
+  selectedIds,
+  explain,
+  topK,
+  recallTopK,
+  budget,
+  semanticThreshold,
+  minTotal,
+  minConfidence,
+  outcome,
+  types,
+  tiers,
+  onQueryChange,
+  onModeChange,
+  onScopeChange,
+  onViewModeChange,
+  onExitWiki,
+  onOpenRaw,
+  onToggleTheme,
+  onClearView,
+  onToggleOptions,
+  onSubmit,
+  onSuggestion,
+  onToggleSelection,
+  onOpenMemory,
+  onOpenDiagram,
+  onTogglePin,
+  isPinned,
+  isPinBusy,
+  onOpenConsolidated,
+  onDownloadSelection,
+  onPrintSelection,
+  onDeleteSelection,
+  deleteBusy,
+  onSetMinSemantic,
+  onSetExplain,
+  onSetTopK,
+  onSetRecallTopK,
+  onSetBudget,
+  onSetMinTotal,
+  onSetMinConfidence,
+  onSetOutcome,
+  onToggleType,
+  onToggleTier,
+  onCollapseOptions,
+}: {
+  theme: 'light' | 'dark'
+  workspace: string
+  projects: ProjectListItem[]
+  mode: WikiMode
+  query: string
+  scope: string
+  viewMode: WikiViewMode
+  optionsOpen: boolean
+  searched: boolean
+  busy: boolean
+  error: string
+  results: MemoryEntry[]
+  pinnedResults: MemoryEntry[]
+  weakResults: MemoryEntry[]
+  recall: RecallPreviewResponse | null
+  recentsBusy: boolean
+  selectedCount: number
+  selectedIds: Set<string>
+  explain: boolean
+  topK: number
+  recallTopK: number
+  budget: number
+  semanticThreshold: number
+  minTotal: string
+  minConfidence: string
+  outcome: OutcomeResult | ''
+  types: Set<MemoryType>
+  tiers: Set<StorageTier>
+  onQueryChange: (value: string) => void
+  onModeChange: (value: WikiMode) => void
+  onScopeChange: (value: string) => void
+  onViewModeChange: (value: WikiViewMode) => void
+  onExitWiki: () => void
+  onOpenRaw: () => void
+  onToggleTheme: () => void
+  onClearView: () => void
+  onToggleOptions: () => void
+  onSubmit: () => void
+  onSuggestion: (query: string) => void
+  onToggleSelection: (memory: MemoryEntry) => void
+  onOpenMemory: (memory: MemoryEntry) => void
+  onOpenDiagram: (memory: MemoryEntry) => void
+  onTogglePin: (memory: MemoryEntry) => void
+  isPinned: (memory: MemoryEntry) => boolean
+  isPinBusy: (memory: MemoryEntry) => boolean
+  onOpenConsolidated: () => void
+  onDownloadSelection: () => void
+  onPrintSelection: () => void
+  onDeleteSelection: () => void
+  deleteBusy: boolean
+  onSetMinSemantic: (value: number) => void
+  onSetExplain: (value: boolean) => void
+  onSetTopK: (value: number) => void
+  onSetRecallTopK: (value: number) => void
+  onSetBudget: (value: number) => void
+  onSetMinTotal: (value: string) => void
+  onSetMinConfidence: (value: string) => void
+  onSetOutcome: (value: OutcomeResult | '') => void
+  onToggleType: (memoryType: MemoryType, checked: boolean) => void
+  onToggleTier: (tier: StorageTier, checked: boolean) => void
+  onCollapseOptions: () => void
+}) {
+  const hasResults = pinnedResults.length > 0 || results.length > 0 || weakResults.length > 0
+  const scopeLabel = scope === ALL_PROJECTS_SCOPE ? 'all projects' : scope
+  const isRecentsMode = mode === 'recents'
+  const isRecallMode = mode === 'recall'
+  const working = busy || recentsBusy
+  const showResultSurface = searched || working || Boolean(error)
+  const resultTitle = isRecentsMode ? 'recent memories' : query
+  const leadLabel = isRecallMode ? 'recall preview' : isRecentsMode ? 'recent stream' : 'stitched view'
+  const inputPlaceholder = isRecallMode ? 'describe the task to recall...' : isRecentsMode ? 'recents loads from the selected scope' : 'search the wiki...'
+  const submitLabel = working ? 'WAIT' : isRecentsMode ? 'LOAD' : isRecallMode ? 'RECALL' : 'GO'
+  const loadingLabel = isRecallMode ? 'recalling knowledge' : isRecentsMode ? 'loading recents' : 'searching wiki'
+  const [weakTailOpen, setWeakTailOpen] = useState<boolean>(results.length === 0 && weakResults.length > 0)
+  const [dockFocused, setDockFocused] = useState<boolean>(false)
+  const dockShellRef = useRef<HTMLDivElement>(null)
+  const dockExpanded = dockFocused || optionsOpen
+
+  useEffect(() => {
+    if (weakResults.length === 0) {
+      setWeakTailOpen(false)
+      return
+    }
+    if (results.length === 0) {
+      setWeakTailOpen(true)
+    }
+  }, [results.length, weakResults.length])
+
+  useEffect(() => {
+    const handleOutsidePointer = (event: MouseEvent | TouchEvent) => {
+      if (!dockShellRef.current) return
+      if (dockShellRef.current.contains(event.target as Node)) return
+      setDockFocused(false)
+      onCollapseOptions()
+    }
+    document.addEventListener('mousedown', handleOutsidePointer)
+    document.addEventListener('touchstart', handleOutsidePointer)
+    return () => {
+      document.removeEventListener('mousedown', handleOutsidePointer)
+      document.removeEventListener('touchstart', handleOutsidePointer)
+    }
+  }, [onCollapseOptions])
+
+  return (
+    <section className="wikiSurface">
+      <div className="wikiCanvas">
+        <div className="wikiUtilityCluster">
+          <div className="wikiModeRail" role="tablist" aria-label="Wiki modes">
+            <button className={mode === 'search' ? 'memPill memPillAccent wikiModePill' : 'memPill wikiModePill'} type="button" onClick={() => onModeChange('search')}>
+              search
+            </button>
+            <button className={mode === 'recall' ? 'memPill memPillAccent wikiModePill' : 'memPill wikiModePill'} type="button" onClick={() => onModeChange('recall')}>
+              recall
+            </button>
+            <button className={mode === 'recents' ? 'memPill memPillAccent wikiModePill' : 'memPill wikiModePill'} type="button" onClick={() => onModeChange('recents')}>
+              recents
+            </button>
+          </div>
+          <div className="wikiUtilityActions">
+            <button className="btn btnGhost" type="button" onClick={onExitWiki}>
+              [dashboard]
+            </button>
+            <button className="btn btnGhost" type="button" onClick={onClearView}>
+              [clear]
+            </button>
+            <button className="btn btnGhost" type="button" onClick={onOpenRaw}>
+              [raw]
+            </button>
+            <button className="btn btnGhost" type="button" onClick={onToggleTheme}>
+              [{theme === 'dark' ? 'light' : 'dark'}]
+            </button>
+          </div>
+        </div>
+
+        {!showResultSurface ? (
+          <section className="wikiHero">
+            <div className="wikiHeroMark">agent-memory/wiki :: {workspace || 'workspace'}</div>
+            <h1 className="wikiHeroTitle">{isRecallMode ? 'task becomes recall' : isRecentsMode ? 'time becomes wiki' : 'memory becomes wiki'}</h1>
+            <p className="wikiHeroText">
+              {isRecallMode
+                ? 'Recall preview distills the most useful knowledge for a task and keeps the included memories in one stitched reading flow.'
+                : isRecentsMode
+                  ? 'Recents turns the latest captured memories into one quiet stream so new findings, incidents, and diagrams stay easy to scan.'
+                  : 'Browse what the system has learned across projects, outcomes, diagrams, and long-lived operational knowledge.'}
+            </p>
+            {isRecentsMode ? (
+              <div className="wikiSuggestionRow">
+                <span className="memPill">latest additions</span>
+                <span className="memPill">{scopeLabel || 'workspace'}</span>
+                <button className="wikiSuggestion" type="button" onClick={onSubmit}>
+                  [load recents]
+                </button>
+              </div>
+            ) : (
+              <div className="wikiSuggestionRow">
+                {wikiSuggestionPresets.map((item) => (
+                  <button
+                    key={item.label}
+                    className="wikiSuggestion"
+                    type="button"
+                    onClick={() => {
+                      onModeChange('search')
+                      onQueryChange(item.query)
+                      onSuggestion(item.query)
+                    }}
+                  >
+                    [{item.label}]
+                  </button>
+                ))}
+              </div>
+            )}
+          </section>
+        ) : (
+          <section className="wikiResultSurface">
+            <div className="wikiResultHeader">
+              <div className="wikiResultHeaderCopy">
+                <div className="wikiHeroMark">{leadLabel}</div>
+                <h2 className="sectionTitle">{resultTitle}</h2>
+                <div className="wikiMetaRow">
+                  <span className="memPill">{scopeLabel || 'workspace'}</span>
+                  <span className="memPill">{mode}</span>
+                  <span className="memPill">{viewMode === 'article' ? 'wiki article' : 'raw'}</span>
+                  <span className="memPill">{formatNumber(results.length + weakResults.length)} fragments</span>
+                  {isRecallMode && recall ? <span className="memPill">{formatNumber(recall.tokens_used)} / {formatNumber(recall.tokens_budget)} tokens</span> : null}
+                </div>
+              </div>
+              {selectedCount > 0 ? (
+                <div className="wikiSelectionBadge">
+                  <span className="memPill">{selectedCount} selected</span>
+                  <details className="wikiSelectionMenu">
+                    <summary className="wikiSelectionSummary">
+                      <span className="memPill">consolidate v</span>
+                    </summary>
+                    <div className="wikiSelectionActions">
+                      <button className="btn btnGhost" type="button" onClick={onOpenConsolidated}>
+                        Open
+                      </button>
+                      <button className="btn btnGhost" type="button" onClick={onDownloadSelection}>
+                        Download
+                      </button>
+                      <button className="btn btnGhost" type="button" onClick={onPrintSelection}>
+                        Print
+                      </button>
+                      <button className="btn btnGhost wikiDeleteAction" type="button" onClick={onDeleteSelection} disabled={deleteBusy}>
+                        {deleteBusy ? 'Deleting...' : 'Delete'}
+                      </button>
+                    </div>
+                  </details>
+                </div>
+              ) : null}
+            </div>
+
+            {error ? <div className="callout calloutBad">{error}</div> : null}
+            {working ? (
+              <section className="wikiLoadingCard" aria-live="polite" aria-busy="true">
+                <div className="wikiLoadingTopline">
+                  <span className="memPill memPillAccent">{loadingLabel}</span>
+                  <span className="memPill wikiQuietBadge">{scopeLabel || 'workspace'}</span>
+                  <span className="memPill wikiQuietBadge">{mode}</span>
+                </div>
+                <div className="wikiLoadingTrack" aria-hidden="true">
+                  <span className="wikiLoadingTrackFill" />
+                </div>
+                <div className="wikiLoadingPulseRow" aria-hidden="true">
+                  <span className="wikiLoadingPulse wikiLoadingPulseA" />
+                  <span className="wikiLoadingPulse wikiLoadingPulseB" />
+                  <span className="wikiLoadingPulse wikiLoadingPulseC" />
+                </div>
+                <div className="muted small">Stitching fragments into one wiki view.</div>
+              </section>
+            ) : null}
+            {!working && !error && !hasResults ? <div className="emptyStateCard">No results found for this wiki view.</div> : null}
+
+            {isRecallMode && recall?.context_block ? (
+              <section className="wikiRecallCard">
+                <div className="wikiMetaRow">
+                  <span className="memPill">context block</span>
+                  <span className="memPill">top-k {formatNumber(recall.requested_top_k)}</span>
+                  <span className="memPill">budget {formatNumber(recall.requested_budget)}</span>
+                </div>
+                <pre className="wikiRecallContext">{recall.context_block}</pre>
+              </section>
+            ) : null}
+
+            {pinnedResults.length > 0 ? (
+              <section className="wikiPinnedRail">
+                <div className="wikiSectionLead">[pin rail]</div>
+                <div className="wikiArticleList">
+                  {pinnedResults.map((memory) => (
+                    <WikiMemoryFragment
+                      key={buildMemoryKey(memory)}
+                      memory={memory}
+                      theme={theme}
+                      raw={viewMode === 'raw'}
+                      selected={selectedIds.has(buildMemoryKey(memory))}
+                      pinned={isPinned(memory)}
+                      pinBusy={isPinBusy(memory)}
+                      onToggleSelection={onToggleSelection}
+                      onOpenMemory={onOpenMemory}
+                      onOpenDiagram={onOpenDiagram}
+                      onTogglePin={onTogglePin}
+                    />
+                  ))}
+                </div>
+              </section>
+            ) : null}
+
+            {results.length > 0 ? (
+              <div className={viewMode === 'raw' ? 'wikiArticleList wikiArticleListRaw' : 'wikiArticleList'}>
+                {results.map((memory) => (
+                  <WikiMemoryFragment
+                    key={buildMemoryKey(memory)}
+                    memory={memory}
+                    theme={theme}
+                    raw={viewMode === 'raw'}
+                    selected={selectedIds.has(buildMemoryKey(memory))}
+                    pinned={isPinned(memory)}
+                    pinBusy={isPinBusy(memory)}
+                    onToggleSelection={onToggleSelection}
+                    onOpenMemory={onOpenMemory}
+                    onOpenDiagram={onOpenDiagram}
+                    onTogglePin={onTogglePin}
+                  />
+                ))}
+              </div>
+            ) : null}
+
+            {weakResults.length > 0 ? (
+              <section className="wikiWeakTail">
+                <button className="wikiWeakTailToggle" type="button" onClick={() => setWeakTailOpen((current) => !current)} aria-expanded={weakTailOpen}>
+                  <span className="wikiMetaRow">
+                    <span className="memPill wikiQuietBadge">weak</span>
+                    <span className="memPill wikiQuietBadge">tail</span>
+                    <span className="memPill wikiQuietBadge">lower confidence</span>
+                    <span className="memPill wikiQuietBadge">{formatNumber(weakResults.length)} fragments</span>
+                  </span>
+                  <span className="wikiWeakTailToggleText">[{weakTailOpen ? 'collapse' : 'expand'}]</span>
+                </button>
+                {weakTailOpen ? (
+                  <div className={viewMode === 'raw' ? 'wikiArticleList wikiArticleListRaw' : 'wikiArticleList'}>
+                    {weakResults.map((memory) => (
+                      <WikiMemoryFragment
+                        key={buildMemoryKey(memory)}
+                        memory={memory}
+                        theme={theme}
+                        raw={viewMode === 'raw'}
+                        weak
+                        selected={selectedIds.has(buildMemoryKey(memory))}
+                        pinned={isPinned(memory)}
+                        pinBusy={isPinBusy(memory)}
+                        onToggleSelection={onToggleSelection}
+                        onOpenMemory={onOpenMemory}
+                        onOpenDiagram={onOpenDiagram}
+                        onTogglePin={onTogglePin}
+                      />
+                    ))}
+                  </div>
+                ) : null}
+              </section>
+            ) : null}
+          </section>
+        )}
+      </div>
+
+      <div className={dockExpanded ? (optionsOpen ? 'wikiDock wikiDockFocused wikiDockOpen' : 'wikiDock wikiDockFocused') : 'wikiDock wikiDockCollapsed'}>
+        <div
+          ref={dockShellRef}
+          className="wikiDockShell"
+          onFocusCapture={() => setDockFocused(true)}
+          onBlurCapture={(e) => {
+            const nextTarget = e.relatedTarget
+            if (nextTarget instanceof Node && e.currentTarget.contains(nextTarget)) return
+            setDockFocused(false)
+          }}
+        >
+          <div className="wikiDockRow wikiDockRowPrimary">
+            <textarea
+              className="wikiSearchInput"
+              value={query}
+              onChange={(e) => onQueryChange(e.target.value)}
+              placeholder={inputPlaceholder}
+              disabled={isRecentsMode}
+              rows={dockExpanded || query.trim().length > 0 ? 3 : 1}
+              aria-label="Wiki query"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault()
+                  onSubmit()
+                }
+              }}
+            />
+          </div>
+          <div className="wikiDockRow wikiDockRowActions">
+            <div className="wikiDockControlGroup">
+              <select className="input wikiInlineSelect" value={scope} onChange={(e) => onScopeChange(e.target.value)} aria-label="Wiki project scope">
+                <option value={ALL_PROJECTS_SCOPE}>all projects</option>
+                {projects.map((project) => (
+                  <option key={project.name} value={project.name}>
+                    {project.name}
+                  </option>
+                ))}
+              </select>
+              <select className="input wikiInlineSelect" value={viewMode} onChange={(e) => onViewModeChange(e.target.value as WikiViewMode)} aria-label="Wiki result mode">
+                <option value="article">wiki article</option>
+                <option value="raw">raw</option>
+              </select>
+            </div>
+            <div className="wikiDockButtonGroup">
+              <button className="btn btnGhost" type="button" onClick={onToggleOptions}>
+                {optionsOpen ? 'options -' : 'options v'}
+              </button>
+              <button className="btn btnGhost" type="button" onClick={onClearView}>
+                clear
+              </button>
+              <button className={working ? 'sendBtn wikiSendBtnBusy' : 'sendBtn'} type="button" onClick={onSubmit} disabled={working || (!isRecentsMode && !query.trim())}>
+                <span className="sendBtnLabel">{submitLabel}</span>
+                {working ? <span className="wikiDockBusyDots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span> : null}
+              </button>
+            </div>
+          </div>
+
+          {optionsOpen ? (
+            <div className="wikiDockAdvanced">
+              <div className="wikiFilterGrid">
+                {isRecallMode ? (
+                  <>
+                    <div className="row row2">
+                      <div>
+                        <label className="label">Recall top-k</label>
+                        <input className="input" type="number" min={1} max={200} value={recallTopK} onChange={(e) => onSetRecallTopK(Number(e.target.value))} />
+                      </div>
+                      <div>
+                        <label className="label">Token budget</label>
+                        <input className="input" type="number" min={200} max={32000} step={100} value={budget} onChange={(e) => onSetBudget(Number(e.target.value))} />
+                      </div>
+                    </div>
+                    <label className="check">
+                      <input type="checkbox" checked={explain} onChange={(e) => onSetExplain(e.target.checked)} />
+                      Explain recall policy
+                    </label>
+                    <div className="emptyStateCard">
+                      Recall keeps a single-project scope for now and turns the included memories into one stitched article with a context block.
+                    </div>
+                  </>
+                ) : isRecentsMode ? (
+                  <>
+                    <div>
+                      <label className="label">Recent limit</label>
+                      <input className="input" type="number" min={1} max={100} value={topK} onChange={(e) => onSetTopK(Number(e.target.value))} />
+                    </div>
+                    <div className="emptyStateCard">
+                      Recents loads the latest captured memories from the selected scope and sorts them by freshest timestamp first.
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="semanticFilterCard">
+                      <div className="semanticFilterHeader">
+                        <div>
+                          <label className="label">Semantic score</label>
+                          <div className="semanticFilterHint">Primary relevance control reused from dashboard search.</div>
+                        </div>
+                        <button className="btn btnGhost semanticPresetReset" type="button" onClick={() => onSetMinSemantic(SEARCH_DEFAULT_MIN_SEMANTIC_SCORE)}>
+                          reset
+                        </button>
+                      </div>
+                      <input className="semanticSlider" type="range" min={0} max={1} step={0.05} value={semanticThreshold} onChange={(e) => onSetMinSemantic(Number(e.target.value))} />
+                      <div className="semanticFilterSummary">
+                        <div className="semanticThresholdValue">{semanticThreshold.toFixed(2)}</div>
+                        <div className="semanticThresholdCopy">
+                          <div className="semanticThresholdLabel">Active search floor</div>
+                          <div className="semanticThresholdHint">Controls stitched-result strictness.</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="row row2">
+                      <div>
+                        <label className="label">Top K</label>
+                        <input className="input" type="number" min={1} max={200} value={topK} onChange={(e) => onSetTopK(Number(e.target.value))} />
+                      </div>
+                      <div>
+                        <label className="label">Min total</label>
+                        <input className="input" inputMode="decimal" value={minTotal} onChange={(e) => onSetMinTotal(e.target.value)} placeholder="0.00 - 1.00" />
+                      </div>
+                    </div>
+
+                    <div className="row row2">
+                      <div>
+                        <label className="label">Min confidence</label>
+                        <input className="input" inputMode="decimal" value={minConfidence} onChange={(e) => onSetMinConfidence(e.target.value)} placeholder="0.00 - 1.00" />
+                      </div>
+                      <label className="check">
+                        <input type="checkbox" checked={explain} onChange={(e) => onSetExplain(e.target.checked)} />
+                        Explain scoring
+                      </label>
+                    </div>
+
+                    <div>
+                      <label className="label">Outcome</label>
+                      <select className="input" value={outcome} onChange={(e) => onSetOutcome(e.target.value as OutcomeResult | '')}>
+                        <option value="">any</option>
+                        <option value="success">success</option>
+                        <option value="failure">failure</option>
+                        <option value="partial">partial</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="label">Types</label>
+                      <div className="chips">
+                        {allTypes.map((typeItem) => (
+                          <label key={typeItem.key} className={types.has(typeItem.key) ? 'chip chipOn' : 'chip'}>
+                            <input type="checkbox" checked={types.has(typeItem.key)} onChange={(e) => onToggleType(typeItem.key, e.target.checked)} />
+                            {typeItem.label}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="label">Tiers</label>
+                      <div className="chips">
+                        {allTiers.map((tierItem) => (
+                          <label key={tierItem.key} className={tiers.has(tierItem.key) ? 'chip chipOn' : 'chip'}>
+                            <input type="checkbox" checked={tiers.has(tierItem.key)} onChange={(e) => onToggleTier(tierItem.key, e.target.checked)} />
+                            {tierItem.label}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+              <div className="wikiDockFooter">
+                <button className="btn btnGhost" type="button" onClick={onCollapseOptions}>
+                  simple mode
+                </button>
+                <span className="muted small">
+                  {isRecallMode
+                    ? 'Recall distills task context into one article and keeps weaker fragments in a quiet tail.'
+                    : isRecentsMode
+                      ? 'Recents keeps the latest captured memories inside the same wiki reader.'
+                      : 'Search stitches memories into one reading flow and keeps weaker fragments in a quiet tail.'}
+                </span>
+              </div>
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function WikiMemoryFragment({
+  memory,
+  theme,
+  raw = false,
+  weak = false,
+  selected,
+  pinned,
+  pinBusy = false,
+  onToggleSelection,
+  onOpenMemory,
+  onOpenDiagram,
+  onTogglePin,
+}: {
+  memory: MemoryEntry
+  theme: 'light' | 'dark'
+  raw?: boolean
+  weak?: boolean
+  selected: boolean
+  pinned: boolean
+  pinBusy?: boolean
+  onToggleSelection: (memory: MemoryEntry) => void
+  onOpenMemory: (memory: MemoryEntry) => void
+  onOpenDiagram: (memory: MemoryEntry) => void
+  onTogglePin: (memory: MemoryEntry) => void
+}) {
+  const semanticSimilarity = getSemanticSimilarity(memory)
+  const semanticRelevance = getSemanticRelevance(semanticSimilarity)
+  const pinLabel = pinBusy ? 'wait' : pinned ? 'unpin' : 'pin'
+
+  return (
+    <article
+      className={raw ? 'wikiFragment wikiFragmentRaw' : 'wikiFragment'}
+      onClick={() => onOpenMemory(memory)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onOpenMemory(memory)
+        }
+      }}
+      role="button"
+      tabIndex={0}
+      aria-label={`Open memory ${memory.id}`}
+    >
+      <div className="wikiFragmentTop">
+        <button
+          className={selected ? 'wikiSelect wikiSelectOn' : 'wikiSelect'}
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation()
+            onToggleSelection(memory)
+          }}
+          aria-label={selected ? 'Deselect memory fragment' : 'Select memory fragment'}
+        >
+          {selected ? '[x]' : '[ ]'}
+        </button>
+        <div className="wikiFragmentBadges">
+          <span className="memPill">{memory.workspace}</span>
+          <span className="memPill">{memory.type}</span>
+          <span className="memPill">{memory.storage_tier}</span>
+          {typeof semanticSimilarity === 'number' ? (
+            <span className={`memPill relevancePill relevancePill${toTitle(semanticRelevance.tone)}`}>
+              {semanticRelevance.label} {formatScore(semanticSimilarity, 2)}
+            </span>
+          ) : null}
+          {weak ? <span className="memPill wikiQuietBadge">weak</span> : null}
+        </div>
+        <button
+          className="btn btnGhost wikiPinButton"
+          type="button"
+          disabled={pinBusy}
+          onClick={(e) => {
+            e.stopPropagation()
+            onTogglePin(memory)
+          }}
+        >
+          [{pinLabel}]
+        </button>
+        {memory.diagram ? (
+          <button
+            className="btn btnGhost wikiDiagramButton"
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              onOpenDiagram(memory)
+            }}
+          >
+            [diagram]
+          </button>
+        ) : null}
+      </div>
+      <div className="wikiFragmentBody">
+        <MarkdownView markdown={memory.content} clamp={false} theme={theme} />
+      </div>
+      {memory.diagram ? (
+        <div
+          className="diagramBlock wikiFragmentDiagram"
+          onClick={(e) => {
+            e.stopPropagation()
+          }}
+        >
+          <DiagramViewer diagram={memory.diagram} theme={theme} />
+        </div>
+      ) : null}
+    </article>
   )
 }
 

@@ -87,6 +87,7 @@ type ReinstallOptions struct {
 	CWD         string
 	ProjectName string
 	Force       bool
+	IDEs        []string
 }
 
 type ReinstallResult struct {
@@ -209,6 +210,7 @@ func (m *Manager) Reinstall(ctx context.Context, opt ReinstallOptions) (*Reinsta
 		CWD:       root,
 		Workspace: name,
 		Force:     opt.Force,
+		IDEs:      opt.IDEs,
 	})
 	if err != nil {
 		return nil, err
@@ -249,7 +251,7 @@ func (m *Manager) Init(ctx context.Context, opt InitOptions) (*InitResult, error
 
 		out := &InitResult{Project: name, DBPath: dbPath}
 		if !opt.NoRule {
-			targets, err := normalizeRuleTargets(opt.IDEs)
+			targets, err := normalizeRuleTargets(opt.CWD, opt.IDEs)
 			if err != nil {
 				return nil, err
 			}
@@ -294,6 +296,12 @@ func (m *Manager) Init(ctx context.Context, opt InitOptions) (*InitResult, error
 					written = append(written, p)
 				case "claude":
 					p := filepath.Join(opt.CWD, "CLAUDE.md")
+					if err := appendRuleSectionIfMissing(p, "## agent-memory (MANDATORY)", genericRulesSection(name)); err != nil {
+						return nil, err
+					}
+					written = append(written, p)
+				case "trae":
+					p := filepath.Join(opt.CWD, ".trae", "rules", "project_rules.md")
 					if err := appendRuleSectionIfMissing(p, "## agent-memory (MANDATORY)", genericRulesSection(name)); err != nil {
 						return nil, err
 					}
@@ -548,9 +556,9 @@ func writeCursorRule(path, workspace string) error {
 	return writeRuleFile(path, cursorRuleContent(workspace))
 }
 
-func normalizeRuleTargets(in []string) ([]string, error) {
+func normalizeRuleTargets(cwd string, in []string) ([]string, error) {
 	if len(in) == 0 {
-		return []string{"cursor"}, nil
+		return detectDefaultRuleTargets(cwd), nil
 	}
 	expanded := make([]string, 0, len(in))
 	for _, raw := range in {
@@ -560,9 +568,9 @@ func normalizeRuleTargets(in []string) ([]string, error) {
 		}
 		switch v {
 		case "all":
-			expanded = append(expanded, "cursor", "antigravity", "aierules", "cursorrules", "windsurfrules", "claude")
+			expanded = append(expanded, "cursor", "antigravity", "aierules", "cursorrules", "windsurfrules", "claude", "trae")
 		case "generic":
-			expanded = append(expanded, "aierules", "cursorrules", "windsurfrules")
+			expanded = append(expanded, "aierules", "cursorrules", "windsurfrules", "trae")
 		default:
 			expanded = append(expanded, v)
 		}
@@ -575,17 +583,46 @@ func normalizeRuleTargets(in []string) ([]string, error) {
 			continue
 		}
 		switch t {
-		case "cursor", "antigravity", "aierules", "cursorrules", "windsurfrules", "claude":
+		case "cursor", "antigravity", "aierules", "cursorrules", "windsurfrules", "claude", "trae":
 			seen[t] = true
 			out = append(out, t)
 		default:
-			return nil, fmt.Errorf("invalid ide: %s (allowed: cursor|antigravity|claude|aierules|cursorrules|windsurfrules|generic|all)", t)
+			return nil, fmt.Errorf("invalid ide: %s (allowed: cursor|antigravity|claude|aierules|cursorrules|trae|windsurfrules|generic|all)", t)
 		}
 	}
 	if len(out) == 0 {
-		return []string{"cursor"}, nil
+		return detectDefaultRuleTargets(cwd), nil
 	}
 	return out, nil
+}
+
+func detectDefaultRuleTargets(cwd string) []string {
+	targets := make([]string, 0, 7)
+	if dirExists(filepath.Join(cwd, ".cursor")) {
+		targets = append(targets, "cursor")
+	}
+	if dirExists(filepath.Join(cwd, ".agents")) {
+		targets = append(targets, "antigravity")
+	}
+	if fileExists(filepath.Join(cwd, ".aierules")) {
+		targets = append(targets, "aierules")
+	}
+	if fileExists(filepath.Join(cwd, ".cursorrules")) {
+		targets = append(targets, "cursorrules")
+	}
+	if dirExists(filepath.Join(cwd, ".trae")) {
+		targets = append(targets, "trae")
+	}
+	if fileExists(filepath.Join(cwd, ".windsurfrules")) {
+		targets = append(targets, "windsurfrules")
+	}
+	if fileExists(filepath.Join(cwd, "CLAUDE.md")) {
+		targets = append(targets, "claude")
+	}
+	if len(targets) == 0 {
+		return []string{"cursor"}
+	}
+	return targets
 }
 
 func writeRuleFile(path, content string) error {
@@ -596,6 +633,9 @@ func writeRuleFile(path, content string) error {
 }
 
 func appendRuleSectionIfMissing(path, marker, section string) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
 	b, err := os.ReadFile(path)
 	if err == nil {
 		if strings.Contains(string(b), marker) {
@@ -775,6 +815,9 @@ type WriteAgentFilesOptions struct {
 	Workspace string
 	// Force overwrites existing files even if content is identical.
 	Force bool
+	// IDEs optionally forces writing specific IDE files even if the project
+	// does not already contain that IDE's marker files/directories.
+	IDEs []string
 }
 
 // IDEUpgradeResult reports what was written or skipped for a single IDE.
@@ -807,6 +850,10 @@ func WriteAgentFiles(opt WriteAgentFilesOptions) (*WriteAgentFilesResult, error)
 	if strings.TrimSpace(opt.CWD) == "" {
 		return nil, errors.New("CWD is required")
 	}
+	forcedTargets, err := normalizeExplicitRuleTargets(opt.CWD, opt.IDEs)
+	if err != nil {
+		return nil, err
+	}
 
 	// Resolve workspace name: explicit > read from cursor rule > cwd basename.
 	ws := strings.TrimSpace(opt.Workspace)
@@ -823,7 +870,7 @@ func WriteAgentFiles(opt WriteAgentFilesOptions) (*WriteAgentFilesResult, error)
 	res := &WriteAgentFilesResult{Workspace: ws}
 
 	// --- Kiro: .kiro/hooks/*.json ---
-	if dirExists(filepath.Join(opt.CWD, ".kiro")) {
+	if targetEnabled(forcedTargets, "kiro") || dirExists(filepath.Join(opt.CWD, ".kiro")) {
 		ir := IDEUpgradeResult{IDE: "kiro"}
 		hooksDir := filepath.Join(opt.CWD, ".kiro", "hooks")
 		if err := os.MkdirAll(hooksDir, 0o755); err != nil {
@@ -847,7 +894,7 @@ func WriteAgentFiles(opt WriteAgentFilesOptions) (*WriteAgentFilesResult, error)
 	}
 
 	// --- Cursor: .cursor/rules/agent-memory.mdc (full overwrite — always canonical) ---
-	if dirExists(filepath.Join(opt.CWD, ".cursor")) {
+	if targetEnabled(forcedTargets, "cursor") || dirExists(filepath.Join(opt.CWD, ".cursor")) {
 		ir := IDEUpgradeResult{IDE: "cursor"}
 		rulePath := filepath.Join(opt.CWD, ".cursor", "rules", "agent-memory.mdc")
 		newContent := cursorRuleContent(ws)
@@ -871,7 +918,7 @@ func WriteAgentFiles(opt WriteAgentFilesOptions) (*WriteAgentFilesResult, error)
 	}
 
 	// --- Cursor (legacy): .cursorrules (upsert section) ---
-	if fileExists(filepath.Join(opt.CWD, ".cursorrules")) {
+	if targetEnabled(forcedTargets, "cursorrules") || fileExists(filepath.Join(opt.CWD, ".cursorrules")) {
 		ir := IDEUpgradeResult{IDE: "cursorrules"}
 		rulePath := filepath.Join(opt.CWD, ".cursorrules")
 		marker := "## agent-memory (MANDATORY)"
@@ -889,7 +936,7 @@ func WriteAgentFiles(opt WriteAgentFilesOptions) (*WriteAgentFilesResult, error)
 	}
 
 	// --- Antigravity: .agents/rules/agent-memory.md (full overwrite) ---
-	if dirExists(filepath.Join(opt.CWD, ".agents")) {
+	if targetEnabled(forcedTargets, "antigravity") || dirExists(filepath.Join(opt.CWD, ".agents")) {
 		ir := IDEUpgradeResult{IDE: "antigravity"}
 		rulePath := filepath.Join(opt.CWD, ".agents", "rules", "agent-memory.md")
 		newContent := antigravityRuleContent(ws)
@@ -913,7 +960,7 @@ func WriteAgentFiles(opt WriteAgentFilesOptions) (*WriteAgentFilesResult, error)
 	}
 
 	// --- Trae: .trae/rules/project_rules.md (upsert section) ---
-	if dirExists(filepath.Join(opt.CWD, ".trae")) {
+	if targetEnabled(forcedTargets, "trae") || dirExists(filepath.Join(opt.CWD, ".trae")) {
 		ir := IDEUpgradeResult{IDE: "trae"}
 		rulePath := filepath.Join(opt.CWD, ".trae", "rules", "project_rules.md")
 		marker := "## agent-memory (MANDATORY)"
@@ -931,7 +978,7 @@ func WriteAgentFiles(opt WriteAgentFilesOptions) (*WriteAgentFilesResult, error)
 	}
 
 	// --- AI Rules: .aierules (upsert section) ---
-	if fileExists(filepath.Join(opt.CWD, ".aierules")) {
+	if targetEnabled(forcedTargets, "aierules") || fileExists(filepath.Join(opt.CWD, ".aierules")) {
 		ir := IDEUpgradeResult{IDE: "aierules"}
 		rulePath := filepath.Join(opt.CWD, ".aierules")
 		marker := "## agent-memory (MANDATORY)"
@@ -949,7 +996,7 @@ func WriteAgentFiles(opt WriteAgentFilesOptions) (*WriteAgentFilesResult, error)
 	}
 
 	// --- Windsurf Rules: .windsurfrules (upsert section) ---
-	if fileExists(filepath.Join(opt.CWD, ".windsurfrules")) {
+	if targetEnabled(forcedTargets, "windsurfrules") || fileExists(filepath.Join(opt.CWD, ".windsurfrules")) {
 		ir := IDEUpgradeResult{IDE: "windsurfrules"}
 		rulePath := filepath.Join(opt.CWD, ".windsurfrules")
 		marker := "## agent-memory (MANDATORY)"
@@ -967,7 +1014,7 @@ func WriteAgentFiles(opt WriteAgentFilesOptions) (*WriteAgentFilesResult, error)
 	}
 
 	// --- Claude: CLAUDE.md (upsert section) ---
-	if fileExists(filepath.Join(opt.CWD, "CLAUDE.md")) {
+	if targetEnabled(forcedTargets, "claude") || fileExists(filepath.Join(opt.CWD, "CLAUDE.md")) {
 		ir := IDEUpgradeResult{IDE: "claude"}
 		rulePath := filepath.Join(opt.CWD, "CLAUDE.md")
 		marker := "## agent-memory (MANDATORY)"
@@ -985,6 +1032,25 @@ func WriteAgentFiles(opt WriteAgentFilesOptions) (*WriteAgentFilesResult, error)
 	}
 
 	return res, nil
+}
+
+func normalizeExplicitRuleTargets(cwd string, in []string) (map[string]bool, error) {
+	if len(in) == 0 {
+		return nil, nil
+	}
+	targets, err := normalizeRuleTargets(cwd, in)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]bool, len(targets))
+	for _, target := range targets {
+		out[target] = true
+	}
+	return out, nil
+}
+
+func targetEnabled(targets map[string]bool, name string) bool {
+	return targets != nil && targets[name]
 }
 
 // dirExists returns true if path exists and is a directory.

@@ -115,6 +115,42 @@ func TestManagerInitMultipleIDERules(t *testing.T) {
 	}
 }
 
+func TestManagerInitAutoDetectsTraeWhenNoIDEFlagsProvided(t *testing.T) {
+	base := t.TempDir()
+	cwd := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(cwd, ".trae"), 0o755); err != nil {
+		t.Fatalf("mkdir .trae: %v", err)
+	}
+	mgr, err := NewManager(base)
+	if err != nil {
+		t.Fatalf("new manager: %v", err)
+	}
+	out, err := mgr.Init(context.Background(), InitOptions{
+		CWD:         cwd,
+		ProjectName: "proj-trae",
+	})
+	if err != nil {
+		t.Fatalf("init: %v", err)
+	}
+	if len(out.RuleFiles) != 1 {
+		t.Fatalf("expected 1 rule file, got %d", len(out.RuleFiles))
+	}
+	traeRule := filepath.Join(cwd, ".trae", "rules", "project_rules.md")
+	if out.RuleFiles[0] != traeRule {
+		t.Fatalf("expected trae rule path %s, got %+v", traeRule, out.RuleFiles)
+	}
+	b, err := os.ReadFile(traeRule)
+	if err != nil {
+		t.Fatalf("read trae rule: %v", err)
+	}
+	if !strings.Contains(string(b), "workspace: proj-trae") {
+		t.Fatalf("expected workspace in trae rule")
+	}
+	if _, err := os.Stat(filepath.Join(cwd, ".cursor", "rules", "agent-memory.mdc")); !os.IsNotExist(err) {
+		t.Fatalf("expected init without IDE flags to avoid writing cursor rule in a Trae-only repo")
+	}
+}
+
 func TestManagerInitReuseAndForce(t *testing.T) {
 	base := t.TempDir()
 	cwd := t.TempDir()
@@ -214,6 +250,43 @@ func TestManagerReinstallKeepsDBAndProjectName(t *testing.T) {
 	}
 }
 
+func TestManagerReinstallCanCreateTraeFilesWhenExplicitlyRequested(t *testing.T) {
+	base := t.TempDir()
+	cwd := t.TempDir()
+	mgr, err := NewManager(base)
+	if err != nil {
+		t.Fatalf("new manager: %v", err)
+	}
+	if _, err := mgr.Init(context.Background(), InitOptions{
+		CWD:         cwd,
+		ProjectName: "proj-trae-reinstall",
+		NoRule:      true,
+	}); err != nil {
+		t.Fatalf("init: %v", err)
+	}
+
+	out, err := mgr.Reinstall(context.Background(), ReinstallOptions{
+		CWD:         cwd,
+		ProjectName: "proj-trae-reinstall",
+		Force:       true,
+		IDEs:        []string{"trae"},
+	})
+	if err != nil {
+		t.Fatalf("reinstall: %v", err)
+	}
+	if out.AgentFiles == nil {
+		t.Fatalf("expected agent files result")
+	}
+	traeRule := filepath.Join(cwd, ".trae", "rules", "project_rules.md")
+	b, err := os.ReadFile(traeRule)
+	if err != nil {
+		t.Fatalf("read trae rule: %v", err)
+	}
+	if !strings.Contains(string(b), "workspace: proj-trae-reinstall") {
+		t.Fatalf("expected workspace in trae rule")
+	}
+}
+
 func TestManagerInitAndReinstallWriteStagedRetrievalPolicyAcrossFiles(t *testing.T) {
 	base := t.TempDir()
 	cwd := t.TempDir()
@@ -257,6 +330,11 @@ func TestManagerInitAndReinstallWriteStagedRetrievalPolicyAcrossFiles(t *testing
 			"Run task `recall` only when the task is about continuing previous work",
 		},
 		filepath.Join(cwd, "CLAUDE.md"): {
+			"run memory `search` first",
+			"Run task `recall` only when the task is about continuing previous work",
+		},
+		filepath.Join(cwd, ".trae", "rules", "project_rules.md"): {
+			"workspace: proj-stage",
 			"run memory `search` first",
 			"Run task `recall` only when the task is about continuing previous work",
 		},
