@@ -282,17 +282,48 @@ func updateStandaloneDashboardFromSource(srcRoot, dstDir string) (string, error)
 	if err := copyDir(dstDir, src); err != nil {
 		return src, err
 	}
-	ci := exec.Command("npm", "ci")
-	ci.Dir = dstDir
-	_, errOut, err := runAndCapture(ci)
-	if err != nil {
+	if err := runDashboardNPMCI(dstDir); err != nil {
+		return src, err
+	}
+	return src, nil
+}
+
+func runDashboardNPMCI(dstDir string) error {
+	if strings.TrimSpace(dstDir) == "" {
+		return errors.New("dashboard dir is required")
+	}
+	run := func() (string, error) {
+		ci := exec.Command("npm", "ci")
+		ci.Dir = dstDir
+		_, errOut, err := runAndCapture(ci)
+		if err == nil {
+			return "", nil
+		}
 		msg := strings.TrimSpace(errOut)
 		if msg == "" {
 			msg = err.Error()
 		}
-		return src, fmt.Errorf("npm ci failed: %s", msg)
+		return msg, err
 	}
-	return src, nil
+
+	msg, err := run()
+	if err == nil {
+		return nil
+	}
+
+	// Recover from partial/corrupt dashboard installs left by interrupted upgrades.
+	for _, sub := range []string{"node_modules", "package-lock.json.tmp", ".package-lock.json"} {
+		_ = os.RemoveAll(filepath.Join(dstDir, sub))
+	}
+	if cleanupErr := os.RemoveAll(filepath.Join(dstDir, "node_modules")); cleanupErr != nil {
+		return fmt.Errorf("npm ci failed: %s (cleanup failed: %v)", msg, cleanupErr)
+	}
+
+	retryMsg, retryErr := run()
+	if retryErr == nil {
+		return nil
+	}
+	return fmt.Errorf("npm ci failed after clean retry: %s", retryMsg)
 }
 
 func newUpgradeCommand() *cobra.Command {

@@ -126,6 +126,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 			memory_id TEXT PRIMARY KEY,
 			workspace TEXT NOT NULL,
 			embedding_json TEXT NOT NULL,
+			embedding_provider TEXT NOT NULL DEFAULT '',
 			updated_at TEXT NOT NULL,
 			FOREIGN KEY(memory_id) REFERENCES memories(id) ON DELETE CASCADE
 		)`,
@@ -296,6 +297,9 @@ func (s *Store) Migrate(ctx context.Context) error {
 		return err
 	}
 	if err := s.ensureColumn(ctx, "memories", "diagram_code", `ALTER TABLE memories ADD COLUMN diagram_code TEXT NOT NULL DEFAULT ''`); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "memory_vectors", "embedding_provider", `ALTER TABLE memory_vectors ADD COLUMN embedding_provider TEXT NOT NULL DEFAULT ''`); err != nil {
 		return err
 	}
 	if err := s.ensureColumn(ctx, "token_metrics", "run_label", `ALTER TABLE token_metrics ADD COLUMN run_label TEXT NOT NULL DEFAULT ''`); err != nil {

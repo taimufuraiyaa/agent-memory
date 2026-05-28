@@ -1,7 +1,12 @@
 package main
 
 import (
+	"archive/tar"
+	"archive/zip"
+	"bytes"
+	"compress/gzip"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -19,25 +24,28 @@ import (
 )
 
 type config struct {
-	binDir       string
-	dataDir      string
-	src          string
-	skipModel    bool
-	noDashboard  bool
-	dashboardSrc string
-	dashboardDir string
-	writeEnvFile bool
-	uninstall    bool
-	status       bool
-	quiet        bool
-	initHere     bool
-	projectName  string
+	binDir          string
+	dataDir         string
+	src             string
+	skipModel       bool
+	skipONNXRuntime bool
+	noDashboard     bool
+	dashboardSrc    string
+	dashboardDir    string
+	writeEnvFile    bool
+	uninstall       bool
+	status          bool
+	quiet           bool
+	initHere        bool
+	projectName     string
 }
 
 const (
-	binName      = "agent-memory"
-	modelDirName = "all-MiniLM-L6-v2"
-	modelBaseURL = "https://huggingface.co/Xenova/all-MiniLM-L6-v2/resolve/main"
+	binName            = "agent-memory"
+	modelDirName       = "all-MiniLM-L6-v2"
+	modelBaseURL       = "https://huggingface.co/Xenova/all-MiniLM-L6-v2/resolve/main"
+	modelMirrorBaseURL = "https://raw.githubusercontent.com/Xyntopia/all-MiniLM-L6-v2/main"
+	onnxRuntimeVersion = "1.25.0"
 )
 
 type modelFile struct {
@@ -71,6 +79,7 @@ func parseFlags() config {
 	flag.StringVar(&cfg.dataDir, "data-dir", "", "data dir (default: ~/.agent-memory)")
 	flag.StringVar(&cfg.src, "src", "./cmd/agent-memory", "path to the agent-memory main package")
 	flag.BoolVar(&cfg.skipModel, "no-model", false, "skip downloading the MiniLM ONNX model")
+	flag.BoolVar(&cfg.skipONNXRuntime, "skip-onnx-runtime", false, "skip downloading ONNX Runtime shared libraries")
 	flag.BoolVar(&cfg.noDashboard, "no-dashboard", false, "skip installing the standalone dashboard (React/Vite)")
 	flag.StringVar(&cfg.dashboardSrc, "dashboard-src", "./tools/agent-memory/dashboard", "path to dashboard source folder (contains package.json)")
 	flag.StringVar(&cfg.dashboardDir, "dashboard-dir", "", "dashboard install dir (default: <data-dir>/dashboard)")
@@ -98,13 +107,13 @@ func runInstall(cfg config) {
 	header(cfg, "agent-memory installer")
 	checkGo(cfg)
 
-	step(cfg, "1/4 data directories")
+	step(cfg, "1/6 data directories")
 	if err := ensureDataDirs(cfg); err != nil {
 		die("failed to create data dirs: %v", err)
 	}
 	ok(cfg, "ready at %s", cfg.dataDir)
 
-	step(cfg, "2/4 binary")
+	step(cfg, "2/6 binary")
 	installed, err := buildAndInstall(cfg)
 	if err != nil {
 		die("build/install failed: %v", err)
@@ -112,7 +121,19 @@ func runInstall(cfg config) {
 	ok(cfg, "installed: %s", installed)
 	checkPATH(cfg, filepath.Dir(installed))
 
-	step(cfg, "3/4 local embedding model")
+	runtimePath := ""
+	step(cfg, "3/6 onnx runtime")
+	if cfg.skipONNXRuntime {
+		info(cfg, "skipped (--skip-onnx-runtime)")
+	} else if p, err := ensureONNXRuntime(cfg); err != nil {
+		warn(cfg, "onnx runtime install failed: %v", err)
+		warn(cfg, "semantic embeddings will stay unavailable until this succeeds")
+	} else {
+		runtimePath = p
+		ok(cfg, "installed: %s", runtimePath)
+	}
+
+	step(cfg, "4/6 local embedding model")
 	if cfg.skipModel {
 		info(cfg, "skipped (--no-model)")
 	} else if err := ensureModel(cfg); err != nil {
@@ -122,7 +143,7 @@ func runInstall(cfg config) {
 		ok(cfg, "ready at %s", filepath.Join(cfg.dataDir, "models", modelDirName))
 	}
 
-	step(cfg, "4/5 dashboard (React + TypeScript)")
+	step(cfg, "5/6 dashboard (React + TypeScript)")
 	dashInstalled := ""
 	if cfg.noDashboard {
 		info(cfg, "skipped (--no-dashboard)")
@@ -140,6 +161,9 @@ func runInstall(cfg config) {
 			"AGENT_MEMORY_OBSERVE_ENABLED": "1",
 			"AGENT_MEMORY_ENABLED":         "1",
 		}
+		if strings.TrimSpace(runtimePath) != "" {
+			vars["AGENT_MEMORY_ONNX_RUNTIME_PATH"] = runtimePath
+		}
 		if strings.TrimSpace(dashInstalled) != "" {
 			vars["AGENT_MEMORY_DASHBOARD_DIR"] = cfg.dashboardDir
 		}
@@ -156,7 +180,7 @@ func runInstall(cfg config) {
 		}
 	}
 
-	step(cfg, "5/5 next steps")
+	step(cfg, "6/6 next steps")
 	printNextSteps(cfg, installed)
 	if cfg.initHere {
 		if err := runInitHere(cfg, installed); err != nil {
@@ -170,9 +194,15 @@ func runInstall(cfg config) {
 func runStatus(cfg config) {
 	header(cfg, "agent-memory installer - status")
 	binPath := filepath.Join(cfg.binDir, binNameWithExt())
+	runtimePath := runtimeLibraryPath(cfg.dataDir)
+	modelStatus := existsLabel(filepath.Join(cfg.dataDir, "models", modelDirName, "model.onnx"))
+	if err := validateModelDir(filepath.Join(cfg.dataDir, "models", modelDirName)); err == nil {
+		modelStatus = "✓ validated " + filepath.Join(cfg.dataDir, "models", modelDirName)
+	}
 	fmt.Fprintf(os.Stderr, "  binary      : %s\n", existsLabel(binPath))
 	fmt.Fprintf(os.Stderr, "  data dir    : %s\n", existsLabel(cfg.dataDir))
-	fmt.Fprintf(os.Stderr, "  model       : %s\n", existsLabel(filepath.Join(cfg.dataDir, "models", modelDirName, "model.onnx")))
+	fmt.Fprintf(os.Stderr, "  runtime     : %s\n", existsLabel(runtimePath))
+	fmt.Fprintf(os.Stderr, "  model       : %s\n", modelStatus)
 	fmt.Fprintf(os.Stderr, "  dashboard   : %s\n", existsLabel(filepath.Join(cfg.dataDir, "dashboard", "package.json")))
 	fmt.Fprintf(os.Stderr, "  env file    : %s\n", existsLabel(filepath.Join(cfg.dataDir, "agent-memory.env")))
 	fmt.Fprintf(os.Stderr, "  PATH ok     : %v\n", isOnPath(cfg.binDir))
@@ -222,7 +252,7 @@ func parseGoVersion(v string) (int, int, bool) {
 }
 
 func ensureDataDirs(cfg config) error {
-	for _, sub := range []string{"", "models", "logs"} {
+	for _, sub := range []string{"", "models", "logs", "onnxruntime"} {
 		if err := os.MkdirAll(filepath.Join(cfg.dataDir, sub), 0755); err != nil {
 			return err
 		}
@@ -266,6 +296,10 @@ func ensureModel(cfg config) error {
 	if err := os.MkdirAll(filepath.Join(target, "onnx"), 0755); err != nil {
 		return err
 	}
+	if err := validateModelDir(target); err == nil {
+		info(cfg, "model files already validated")
+		return nil
+	}
 	for _, mf := range modelFiles {
 		var local string
 		if strings.HasPrefix(mf.path, "onnx/") {
@@ -279,12 +313,369 @@ func ensureModel(cfg config) error {
 		}
 		url := modelBaseURL + "/" + mf.path
 		info(cfg, "%s ↓", mf.name)
-		if err := downloadFile(url, local); err != nil {
+		if err := downloadFile(url, local); err == nil {
+			if err := validateModelFile(mf.name, local); err == nil {
+				continue
+			}
+			_ = os.Remove(local)
+		}
+
+		info(cfg, "%s fallback ↓", mf.name)
+		if err := downloadModelFallback(cfg, mf, local); err != nil {
 			_ = os.Remove(local)
 			return fmt.Errorf("download %s: %w", mf.name, err)
 		}
+		if err := validateModelFile(mf.name, local); err != nil {
+			_ = os.Remove(local)
+			return fmt.Errorf("validate %s: %w", mf.name, err)
+		}
+	}
+	return validateModelDir(target)
+}
+
+func ensureONNXRuntime(cfg config) (string, error) {
+	target := filepath.Join(cfg.dataDir, "onnxruntime")
+	if existing := runtimeLibraryPath(cfg.dataDir); fileExists(existing) {
+		return existing, nil
+	}
+	url, archiveType, err := runtimeDownloadSpec()
+	if err != nil {
+		return "", err
+	}
+
+	archivePath := filepath.Join(target, "onnxruntime-"+onnxRuntimeVersion+archiveSuffix(archiveType))
+	if !fileExists(archivePath) {
+		info(cfg, "runtime archive ↓")
+		if err := downloadFile(url, archivePath); err != nil {
+			return "", err
+		}
+	}
+
+	extractDir := filepath.Join(target, "dist")
+	_ = os.RemoveAll(extractDir)
+	if err := os.MkdirAll(extractDir, 0o755); err != nil {
+		return "", err
+	}
+	if err := extractArchive(archivePath, extractDir, archiveType); err != nil {
+		return "", err
+	}
+	p := runtimeLibraryPath(cfg.dataDir)
+	if !fileExists(p) {
+		return "", fmt.Errorf("runtime library missing after extraction: %s", p)
+	}
+	return p, nil
+}
+
+func runtimeDownloadSpec() (string, string, error) {
+	if override := strings.TrimSpace(os.Getenv("AGENT_MEMORY_ONNX_RUNTIME_URL")); override != "" {
+		switch {
+		case strings.HasSuffix(override, ".zip"):
+			return override, "zip", nil
+		case strings.HasSuffix(override, ".tgz"), strings.HasSuffix(override, ".tar.gz"):
+			return override, "tgz", nil
+		default:
+			return "", "", fmt.Errorf("unsupported runtime archive: %s", override)
+		}
+	}
+
+	switch runtime.GOOS {
+	case "darwin":
+		switch runtime.GOARCH {
+		case "arm64":
+			return fmt.Sprintf("https://github.com/microsoft/onnxruntime/releases/download/v%s/onnxruntime-osx-arm64-%s.tgz", onnxRuntimeVersion, onnxRuntimeVersion), "tgz", nil
+		case "amd64":
+			return fmt.Sprintf("https://github.com/microsoft/onnxruntime/releases/download/v%s/onnxruntime-osx-x86_64-%s.tgz", onnxRuntimeVersion, onnxRuntimeVersion), "tgz", nil
+		}
+	case "linux":
+		switch runtime.GOARCH {
+		case "amd64":
+			return fmt.Sprintf("https://github.com/microsoft/onnxruntime/releases/download/v%s/onnxruntime-linux-x64-%s.tgz", onnxRuntimeVersion, onnxRuntimeVersion), "tgz", nil
+		case "arm64":
+			return fmt.Sprintf("https://github.com/microsoft/onnxruntime/releases/download/v%s/onnxruntime-linux-aarch64-%s.tgz", onnxRuntimeVersion, onnxRuntimeVersion), "tgz", nil
+		}
+	case "windows":
+		switch runtime.GOARCH {
+		case "amd64":
+			return fmt.Sprintf("https://github.com/microsoft/onnxruntime/releases/download/v%s/onnxruntime-win-x64-%s.zip", onnxRuntimeVersion, onnxRuntimeVersion), "zip", nil
+		case "386":
+			return fmt.Sprintf("https://github.com/microsoft/onnxruntime/releases/download/v%s/onnxruntime-win-x86-%s.zip", onnxRuntimeVersion, onnxRuntimeVersion), "zip", nil
+		case "arm64":
+			return fmt.Sprintf("https://github.com/microsoft/onnxruntime/releases/download/v%s/onnxruntime-win-arm64-%s.zip", onnxRuntimeVersion, onnxRuntimeVersion), "zip", nil
+		}
+	}
+	return "", "", fmt.Errorf("unsupported runtime platform %s/%s", runtime.GOOS, runtime.GOARCH)
+}
+
+func runtimeLibraryPath(dataDir string) string {
+	base := filepath.Join(dataDir, "onnxruntime", "dist")
+	switch runtime.GOOS {
+	case "windows":
+		return firstExistingPath(
+			filepath.Join(base, "lib", "onnxruntime.dll"),
+			filepath.Join(base, "lib64", "onnxruntime.dll"),
+			filepath.Join(base, "onnxruntime.dll"),
+		)
+	case "darwin":
+		return firstExistingPath(
+			filepath.Join(base, "lib", "libonnxruntime.dylib"),
+			filepath.Join(base, "lib64", "libonnxruntime.dylib"),
+			filepath.Join(base, "libonnxruntime.dylib"),
+		)
+	default:
+		return firstExistingPath(
+			filepath.Join(base, "lib", "libonnxruntime.so"),
+			filepath.Join(base, "lib64", "libonnxruntime.so"),
+			filepath.Join(base, "libonnxruntime.so"),
+		)
+	}
+}
+
+func modelFallbackURL(mf modelFile) string {
+	if base := strings.TrimSpace(os.Getenv("AGENT_MEMORY_MODEL_FALLBACK_BASE_URL")); base != "" {
+		return strings.TrimRight(base, "/") + "/" + mf.path
+	}
+	return modelMirrorBaseURL + "/" + mf.path
+}
+
+func downloadModelFallback(cfg config, mf modelFile, dest string) error {
+	if err := downloadModelFallbackFromNPM(cfg, mf, dest); err == nil {
+		return nil
+	}
+	return downloadFile(modelFallbackURL(mf), dest)
+}
+
+func downloadModelFallbackFromNPM(cfg config, mf modelFile, dest string) error {
+	pkg := strings.TrimSpace(os.Getenv("AGENT_MEMORY_MODEL_NPM_PACKAGE"))
+	tarballURL := strings.TrimSpace(os.Getenv("AGENT_MEMORY_MODEL_NPM_TARBALL_URL"))
+	if pkg == "" && tarballURL == "" {
+		return errors.New("npm fallback not configured")
+	}
+
+	tmpDir, err := os.MkdirTemp("", "agent-memory-model-npm-*")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+
+	tarballPath := filepath.Join(tmpDir, "model-fallback.tgz")
+	switch {
+	case tarballURL != "":
+		if err := downloadFile(tarballURL, tarballPath); err != nil {
+			return err
+		}
+	case pkg != "":
+		cmd := exec.Command("npm", "pack", pkg, "--silent")
+		cmd.Dir = tmpDir
+		out, err := cmd.Output()
+		if err != nil {
+			return err
+		}
+		name := strings.TrimSpace(string(out))
+		if name == "" {
+			return errors.New("npm pack produced no tarball name")
+		}
+		tarballPath = filepath.Join(tmpDir, filepath.Base(name))
+	}
+
+	extractDir := filepath.Join(tmpDir, "extract")
+	if err := os.MkdirAll(extractDir, 0o755); err != nil {
+		return err
+	}
+	if err := extractTarGzArchive(tarballPath, extractDir); err != nil {
+		return err
+	}
+
+	prefix := strings.Trim(strings.TrimSpace(os.Getenv("AGENT_MEMORY_MODEL_NPM_PREFIX")), "/")
+	if prefix == "" {
+		prefix = "package"
+	}
+	source := filepath.Join(extractDir, prefix, mf.path)
+	if mf.name == "model.onnx" && !fileExists(source) {
+		source = filepath.Join(extractDir, prefix, "model.onnx")
+	}
+	if !fileExists(source) {
+		return fmt.Errorf("npm fallback asset missing: %s", source)
+	}
+	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+		return err
+	}
+	in, err := os.Open(source)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = in.Close() }()
+	out, err := os.OpenFile(dest, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(out, in); err != nil {
+		_ = out.Close()
+		return err
+	}
+	return out.Close()
+}
+
+func validateModelDir(dir string) error {
+	for _, mf := range modelFiles {
+		local := filepath.Join(dir, mf.name)
+		if mf.name == "model.onnx" {
+			local = filepath.Join(dir, "model.onnx")
+		}
+		if err := validateModelFile(mf.name, local); err != nil {
+			return err
+		}
 	}
 	return nil
+}
+
+func validateModelFile(name, path string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	if len(data) == 0 {
+		return fmt.Errorf("%s is empty", name)
+	}
+	snippet := strings.TrimSpace(strings.ToLower(string(data[:min(len(data), 256)])))
+	if strings.HasPrefix(snippet, "<!doctype") || strings.HasPrefix(snippet, "<html") || strings.Contains(snippet, "<title>") {
+		return fmt.Errorf("%s looks like HTML, not a model asset", name)
+	}
+	switch filepath.Ext(name) {
+	case ".json":
+		var v any
+		if err := json.Unmarshal(data, &v); err != nil {
+			return fmt.Errorf("invalid json: %w", err)
+		}
+	case ".onnx":
+		if len(data) < 1024*1024 {
+			return fmt.Errorf("onnx file too small: %d bytes", len(data))
+		}
+		if bytes.Contains(bytes.ToLower(data[:min(len(data), 4096)]), []byte("<html")) {
+			return fmt.Errorf("onnx file looks like html")
+		}
+	}
+	return nil
+}
+
+func extractArchive(archivePath, destDir, archiveType string) error {
+	switch archiveType {
+	case "zip":
+		return extractZipArchive(archivePath, destDir)
+	case "tgz":
+		return extractTarGzArchive(archivePath, destDir)
+	default:
+		return fmt.Errorf("unsupported archive type: %s", archiveType)
+	}
+}
+
+func extractZipArchive(path, destDir string) error {
+	r, err := zip.OpenReader(path)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = r.Close() }()
+
+	for _, f := range r.File {
+		target := filepath.Join(destDir, f.Name)
+		if !strings.HasPrefix(target, filepath.Clean(destDir)+string(os.PathSeparator)) {
+			return fmt.Errorf("zip entry escapes target dir: %s", f.Name)
+		}
+		if f.FileInfo().IsDir() {
+			if err := os.MkdirAll(target, 0o755); err != nil {
+				return err
+			}
+			continue
+		}
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			return err
+		}
+		in, err := f.Open()
+		if err != nil {
+			return err
+		}
+		out, err := os.OpenFile(target, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
+		if err != nil {
+			_ = in.Close()
+			return err
+		}
+		_, copyErr := io.Copy(out, in)
+		closeErr := out.Close()
+		_ = in.Close()
+		if copyErr != nil {
+			return copyErr
+		}
+		if closeErr != nil {
+			return closeErr
+		}
+	}
+	return nil
+}
+
+func extractTarGzArchive(path, destDir string) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = f.Close() }()
+	gzr, err := gzip.NewReader(f)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = gzr.Close() }()
+	tr := tar.NewReader(gzr)
+	for {
+		hdr, err := tr.Next()
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(destDir, hdr.Name)
+		if !strings.HasPrefix(target, filepath.Clean(destDir)+string(os.PathSeparator)) {
+			return fmt.Errorf("tar entry escapes target dir: %s", hdr.Name)
+		}
+		switch hdr.Typeflag {
+		case tar.TypeDir:
+			if err := os.MkdirAll(target, 0o755); err != nil {
+				return err
+			}
+		case tar.TypeReg:
+			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+				return err
+			}
+			out, err := os.OpenFile(target, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
+			if err != nil {
+				return err
+			}
+			if _, err := io.Copy(out, tr); err != nil {
+				_ = out.Close()
+				return err
+			}
+			if err := out.Close(); err != nil {
+				return err
+			}
+		}
+	}
+}
+
+func archiveSuffix(archiveType string) string {
+	if archiveType == "zip" {
+		return ".zip"
+	}
+	return ".tgz"
+}
+
+func firstExistingPath(paths ...string) string {
+	for _, p := range paths {
+		if fileExists(p) {
+			return p
+		}
+	}
+	if len(paths) == 0 {
+		return ""
+	}
+	return paths[0]
 }
 
 func ensureDashboard(cfg config) error {
@@ -309,11 +700,32 @@ func ensureDashboard(cfg config) error {
 	if err := copyDir(dst, src); err != nil {
 		return err
 	}
-	cmd := exec.Command("npm", "ci")
-	cmd.Stdout = streamOrDiscard(cfg)
-	cmd.Stderr = streamOrDiscard(cfg)
-	cmd.Dir = dst
-	if err := cmd.Run(); err != nil {
+	if err := runDashboardInstall(dst, streamOrDiscard(cfg), streamOrDiscard(cfg)); err != nil {
+		return err
+	}
+	return nil
+}
+
+func runDashboardInstall(dst string, stdout, stderr io.Writer) error {
+	if strings.TrimSpace(dst) == "" {
+		return errors.New("dashboard dir is required")
+	}
+	run := func() error {
+		cmd := exec.Command("npm", "ci")
+		cmd.Stdout = stdout
+		cmd.Stderr = stderr
+		cmd.Dir = dst
+		return cmd.Run()
+	}
+	if err := run(); err == nil {
+		return nil
+	}
+
+	// Recover from partial/corrupt dashboard installs left by interrupted setup.
+	for _, sub := range []string{"node_modules", "package-lock.json.tmp", ".package-lock.json"} {
+		_ = os.RemoveAll(filepath.Join(dst, sub))
+	}
+	if err := run(); err != nil {
 		return err
 	}
 	return nil
@@ -704,6 +1116,7 @@ func info(cfg config, format string, a ...any) {
 }
 
 func warn(cfg config, format string, a ...any) {
+	_ = cfg
 	fmt.Fprintf(os.Stderr, "  ! "+format+"\n", a...)
 }
 

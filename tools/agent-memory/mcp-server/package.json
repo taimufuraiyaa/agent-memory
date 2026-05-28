@@ -1,6 +1,6 @@
 {
   "name": "@agent-memory/mcp-server",
-  "version": "0.1.0",
+  "version": "0.7.0",
   "private": true,
   "description": "Deferred V1.5+ MCP shim package scaffold",
   "scripts": {

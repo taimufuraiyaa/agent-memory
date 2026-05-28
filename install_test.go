@@ -1,6 +1,10 @@
 package main
 
 import (
+	"bytes"
+	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -39,5 +43,103 @@ func TestMergeEnvFileGuidanceIsIdempotent(t *testing.T) {
 	}
 	if strings.Count(second, amconfig.AdaptiveTuningEnvGuidanceHeader()) != 1 {
 		t.Fatalf("expected one guidance header in second output, got %q", second)
+	}
+}
+
+func TestRunDashboardInstallRetriesAfterCleanup(t *testing.T) {
+	dst := t.TempDir()
+	t.Setenv("PATH", fakeInstallNPMScriptDir(t, `#!/bin/sh
+set -eu
+marker=".npm-ci-attempt"
+if [ ! -f "$marker" ]; then
+  touch "$marker"
+  mkdir -p node_modules/esbuild
+  echo "simulated failure" >&2
+  exit 1
+fi
+if [ -d node_modules ]; then
+  echo "node_modules should have been removed before retry" >&2
+  exit 1
+fi
+touch npm-ci-success
+`)+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	if err := runDashboardInstall(dst, io.Discard, io.Discard); err != nil {
+		t.Fatalf("runDashboardInstall: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dst, "npm-ci-success")); err != nil {
+		t.Fatalf("expected retry success marker: %v", err)
+	}
+}
+
+func TestRunDashboardInstallReturnsFailureAfterRetry(t *testing.T) {
+	dst := t.TempDir()
+	t.Setenv("PATH", fakeInstallNPMScriptDir(t, `#!/bin/sh
+echo "still broken" >&2
+exit 1
+`)+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	if err := runDashboardInstall(dst, io.Discard, io.Discard); err == nil {
+		t.Fatalf("expected retry failure")
+	}
+}
+
+func fakeInstallNPMScriptDir(t *testing.T, script string) string {
+	t.Helper()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "npm")
+	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
+		t.Fatalf("write fake npm: %v", err)
+	}
+	return dir
+}
+
+func TestValidateModelDirAcceptsValidFiles(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), modelDirName)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("mkdir model dir: %v", err)
+	}
+	writeTestModelJSON(t, filepath.Join(dir, "config.json"), `{"hidden_size":384}`)
+	writeTestModelJSON(t, filepath.Join(dir, "tokenizer.json"), `{"model":{"type":"WordPiece","vocab":{"[PAD]":0}}}`)
+	writeTestModelJSON(t, filepath.Join(dir, "tokenizer_config.json"), `{"model_max_length":128}`)
+	writeTestModelJSON(t, filepath.Join(dir, "special_tokens_map.json"), `{"cls_token":"[CLS]"}`)
+	writeTestModelONNX(t, filepath.Join(dir, "model.onnx"))
+
+	if err := validateModelDir(dir); err != nil {
+		t.Fatalf("validate model dir: %v", err)
+	}
+}
+
+func TestValidateModelFileRejectsHTML(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	if err := os.WriteFile(path, []byte("<html><title>Denied</title></html>"), 0o644); err != nil {
+		t.Fatalf("write html: %v", err)
+	}
+	if err := validateModelFile("config.json", path); err == nil {
+		t.Fatalf("expected html validation failure")
+	}
+}
+
+func TestModelFallbackURLHonorsOverride(t *testing.T) {
+	t.Setenv("AGENT_MEMORY_MODEL_FALLBACK_BASE_URL", "https://mirror.example/minilm")
+	got := modelFallbackURL(modelFile{name: "config.json", path: "config.json"})
+	want := "https://mirror.example/minilm/config.json"
+	if got != want {
+		t.Fatalf("unexpected fallback url: got %s want %s", got, want)
+	}
+}
+
+func writeTestModelJSON(t *testing.T, path, payload string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(payload), 0o644); err != nil {
+		t.Fatalf("write %s: %v", path, err)
+	}
+}
+
+func writeTestModelONNX(t *testing.T, path string) {
+	t.Helper()
+	payload := append([]byte("ONNX"), bytes.Repeat([]byte{0x1}, 1024*1024)...)
+	if err := os.WriteFile(path, payload, 0o644); err != nil {
+		t.Fatalf("write %s: %v", path, err)
 	}
 }

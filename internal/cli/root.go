@@ -84,6 +84,7 @@ func NewRootCommand() *cobra.Command {
 	cmd.AddCommand(newWriteCommand())
 	cmd.AddCommand(newSearchCommand())
 	cmd.AddCommand(newRecallCommand())
+	cmd.AddCommand(newReembedCommand())
 	cmd.AddCommand(newFeedbackCommand())
 	cmd.AddCommand(newSessionEndCommand())
 	cmd.AddCommand(newConsolidateCommand())

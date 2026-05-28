@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/time/timebooks/agent-memory/internal/core"
+	"github.com/time/timebooks/agent-memory/internal/embeddings"
 	"github.com/time/timebooks/agent-memory/internal/storage/markdown"
 	"github.com/time/timebooks/agent-memory/internal/storage/sqlite"
 )
@@ -56,6 +57,13 @@ type WritePipeline struct {
 	filter     SecurityFilter
 	router     HybridRouter
 	markdown   *markdown.Adapter
+	embedder   embeddings.Provider
+}
+
+// WritePipelineOptions customizes pipeline behavior for production entry points.
+type WritePipelineOptions struct {
+	MarkdownFilePath string
+	Embedder         embeddings.Provider
 }
 
 // Extractor performs extraction/transformation of input content.
@@ -90,8 +98,18 @@ func (e LLMAssistedExtractor) Extract(ctx context.Context, content string) (stri
 
 // NewWritePipeline constructs the default write pipeline.
 func NewWritePipeline(store *sqlite.Store) *WritePipeline {
+	return NewWritePipelineWithOptions(store, WritePipelineOptions{})
+}
+
+// NewWritePipelineWithEmbedder creates a pipeline that eagerly persists vectors.
+func NewWritePipelineWithEmbedder(store *sqlite.Store, embedder embeddings.Provider) *WritePipeline {
+	return NewWritePipelineWithOptions(store, WritePipelineOptions{Embedder: embedder})
+}
+
+// NewWritePipelineWithOptions creates a pipeline with optional markdown and embedder hooks.
+func NewWritePipelineWithOptions(store *sqlite.Store, opt WritePipelineOptions) *WritePipeline {
 	fast := FastExtractor{}
-	return &WritePipeline{
+	p := &WritePipeline{
 		store:  store,
 		filter: NewRegexSecurityFilter(),
 		router: NewHybridRouter(),
@@ -100,15 +118,16 @@ func NewWritePipeline(store *sqlite.Store) *WritePipeline {
 			ExtractLLMAssisted: LLMAssistedExtractor{fallback: fast},
 		},
 	}
+	p.embedder = opt.Embedder
+	if strings.TrimSpace(opt.MarkdownFilePath) != "" {
+		p.markdown = markdown.NewAdapter(opt.MarkdownFilePath, 4000)
+	}
+	return p
 }
 
 // NewWritePipelineWithMarkdown creates a write pipeline with markdown tier adapter.
 func NewWritePipelineWithMarkdown(store *sqlite.Store, markdownFilePath string) *WritePipeline {
-	p := NewWritePipeline(store)
-	if strings.TrimSpace(markdownFilePath) != "" {
-		p.markdown = markdown.NewAdapter(markdownFilePath, 4000)
-	}
-	return p
+	return NewWritePipelineWithOptions(store, WritePipelineOptions{MarkdownFilePath: markdownFilePath})
 }
 
 // Write executes stages: security -> extract -> dedup -> route/store.
@@ -226,8 +245,23 @@ func (p *WritePipeline) Write(ctx context.Context, in WriteInput) (*WriteResult,
 		}
 		return nil, err
 	}
+	if p.embedder != nil {
+		text := memoryVectorText(*entry)
+		if strings.TrimSpace(text) != "" {
+			vec, err := p.embedder.Embed(ctx, text)
+			if err != nil {
+				_ = p.store.DeleteByIDs(ctx, []string{entry.ID})
+				return nil, fmt.Errorf("persist eager vector: embed memory %s: %w", entry.ID, err)
+			}
+			if err := p.store.UpsertMemoryVector(ctx, entry.ID, entry.Workspace, p.embedder.Name(), vec); err != nil {
+				_ = p.store.DeleteByIDs(ctx, []string{entry.ID})
+				return nil, fmt.Errorf("persist eager vector: upsert memory %s: %w", entry.ID, err)
+			}
+		}
+	}
 	if p.markdown != nil && tier == core.TierMarkdown {
 		if err := p.markdown.Upsert(entry.ID, entry.Content); err != nil {
+			_ = p.store.DeleteByIDs(ctx, []string{entry.ID})
 			return nil, err
 		}
 	}
@@ -319,4 +353,15 @@ func extractDiagramFence(content string) (string, *core.Diagram) {
 		out = append(out, lines[i])
 	}
 	return content, nil
+}
+
+func memoryVectorText(memory core.MemoryEntry) string {
+	text := strings.TrimSpace(memory.Content)
+	if memory.Diagram == nil || strings.TrimSpace(memory.Diagram.Code) == "" {
+		return text
+	}
+	if text == "" {
+		return strings.TrimSpace(memory.Diagram.Code)
+	}
+	return text + "\n" + strings.TrimSpace(memory.Diagram.Code)
 }

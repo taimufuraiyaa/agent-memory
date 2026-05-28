@@ -10,6 +10,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const productVersion = "0.7"
+
 type versionInfo struct {
 	Binary   string `json:"binary"`
 	Version  string `json:"version"`
@@ -25,7 +27,7 @@ type versionInfo struct {
 func collectVersionInfo() versionInfo {
 	info := versionInfo{
 		Binary:   "agent-memory",
-		Version:  "dev",
+		Version:  productVersion,
 		Go:       runtime.Version(),
 		Platform: runtime.GOOS + "/" + runtime.GOARCH,
 	}
@@ -36,9 +38,6 @@ func collectVersionInfo() versionInfo {
 	if bi, ok := debug.ReadBuildInfo(); ok && bi != nil {
 		if strings.TrimSpace(bi.Main.Path) != "" {
 			info.Module = bi.Main.Path
-		}
-		if strings.TrimSpace(bi.Main.Version) != "" {
-			info.Version = bi.Main.Version
 		}
 		for _, s := range bi.Settings {
 			switch s.Key {

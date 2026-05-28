@@ -12,6 +12,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/time/timebooks/agent-memory/internal/embeddings"
 )
 
 type apiEnvelope struct {
@@ -45,7 +47,7 @@ func resolveRuntime(flags commonFlags) (runtimeConfig, error) {
 	modelDir := strings.TrimSpace(flags.modelDir)
 	if modelDir == "" {
 		home, _ := os.UserHomeDir()
-		modelDir = embeddingsDefaultModelDir(home)
+		modelDir = embeddings.DefaultModelDir(home)
 	}
 	return runtimeConfig{
 		workspace: workspace,
@@ -193,8 +195,4 @@ func getAPI(ctx context.Context, baseURL, path string, out any) error {
 		return nil
 	}
 	return json.Unmarshal(env.Data, out)
-}
-
-func embeddingsDefaultModelDir(home string) string {
-	return filepath.Join(home, ".agent-memory", "models")
 }

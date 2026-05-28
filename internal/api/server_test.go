@@ -317,6 +317,57 @@ func TestServerDisabledNoops(t *testing.T) {
 	}
 }
 
+func TestServerSearchMinSemanticOverrideAffectsResults(t *testing.T) {
+	baseDir := t.TempDir()
+	modelDir := filepath.Join(t.TempDir(), "model")
+	if err := os.MkdirAll(modelDir, 0o755); err != nil {
+		t.Fatalf("mkdir model: %v", err)
+	}
+	provider, err := embeddings.NewLocalProvider(modelDir)
+	if err != nil {
+		t.Fatalf("provider: %v", err)
+	}
+	svc := &Service{
+		Workspace:         "ws",
+		BaseDir:           baseDir,
+		EmbeddingProvider: provider,
+	}
+	ts := httptest.NewServer(NewMux(svc))
+	defer ts.Close()
+
+	postJSON(t, ts.URL+"/api/v1/memories/write", map[string]any{"type": "semantic", "content": "orders service publishes order.created"})
+
+	strict := postJSON(t, ts.URL+"/api/v1/memories/search", map[string]any{
+		"query":     "order event",
+		"workspace": "ws",
+		"top_k":     5,
+		"mode":      "search",
+		"explain":   true,
+		"filters": map[string]any{
+			"min_semantic_score": 0.95,
+		},
+	})
+	strictResults, _ := strict["results"].([]any)
+	if len(strictResults) != 0 {
+		t.Fatalf("expected strict semantic floor to suppress results, got %+v", strictResults)
+	}
+
+	relaxed := postJSON(t, ts.URL+"/api/v1/memories/search", map[string]any{
+		"query":     "order event",
+		"workspace": "ws",
+		"top_k":     5,
+		"mode":      "search",
+		"explain":   true,
+		"filters": map[string]any{
+			"min_semantic_score": 0.0,
+		},
+	})
+	relaxedResults, _ := relaxed["results"].([]any)
+	if len(relaxedResults) == 0 {
+		t.Fatalf("expected explicit zero semantic floor override to return results")
+	}
+}
+
 func TestServerLLMUsageIngest(t *testing.T) {
 	baseDir := t.TempDir()
 	modelDir := filepath.Join(t.TempDir(), "model")

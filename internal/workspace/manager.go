@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/time/timebooks/agent-memory/internal/embeddings"
 	"github.com/time/timebooks/agent-memory/internal/engine"
 	"github.com/time/timebooks/agent-memory/internal/storage/sqlite"
 )
@@ -310,8 +311,13 @@ func (m *Manager) Init(ctx context.Context, opt InitOptions) (*InitResult, error
 				return nil, err
 			}
 			defer func() { _ = store.Close() }()
+			home, _ := os.UserHomeDir()
+			provider, err := embeddings.NewProvider(embeddings.DefaultModelDir(home))
+			if err != nil {
+				return nil, err
+			}
 			sources := defaultStudySources(opt.CWD)
-			study := engine.NewStudyEngine(engine.NewWritePipeline(store))
+			study := engine.NewStudyEngine(engine.NewWritePipelineWithEmbedder(store, provider))
 			sr, err := study.IngestWithOptions(ctx, engine.StudyOptions{
 				Workspace: name,
 				Sources:   sources,

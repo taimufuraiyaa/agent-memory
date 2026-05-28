@@ -3,7 +3,6 @@ package engine
 import (
 	"context"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/time/timebooks/agent-memory/internal/core"
@@ -88,16 +87,13 @@ func (s *VectorSearcher) SearchWithOptions(ctx context.Context, opt VectorSearch
 		}
 		mv := cachedVectors[m.ID]
 		if len(mv) == 0 {
-			text := m.Content
-			if m.Diagram != nil && strings.TrimSpace(m.Diagram.Code) != "" {
-				text = strings.TrimSpace(text) + "\n" + m.Diagram.Code
-			}
+			text := memoryVectorText(m)
 			mv, err = s.provider.Embed(ctx, text)
 			if err != nil {
 				return nil, err
 			}
 			// Best-effort cache write; retrieval should still succeed without cache.
-			_ = s.store.UpsertMemoryVector(ctx, m.ID, m.Workspace, mv)
+			_ = s.store.UpsertMemoryVector(ctx, m.ID, m.Workspace, s.provider.Name(), mv)
 		}
 		score, err := embeddings.Cosine(qv, mv)
 		if err != nil {

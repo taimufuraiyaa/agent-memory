@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -10,27 +11,52 @@ import (
 	"github.com/time/timebooks/agent-memory/internal/core"
 )
 
+type MemoryVectorRow struct {
+	MemoryID          string
+	Workspace         string
+	Embedding         []float32
+	EmbeddingProvider string
+	UpdatedAt         time.Time
+}
+
 // UpsertMemoryVector writes or updates an embedding for a memory row.
-func (s *Store) UpsertMemoryVector(ctx context.Context, memoryID, workspace string, embedding []float32) error {
+func (s *Store) UpsertMemoryVector(ctx context.Context, memoryID, workspace, provider string, embedding []float32) error {
+	if strings.TrimSpace(provider) == "" {
+		return errors.New("embedding provider is required")
+	}
 	b, err := json.Marshal(embedding)
 	if err != nil {
 		return err
 	}
 	_, err = s.db.ExecContext(ctx, `
-INSERT INTO memory_vectors (memory_id, workspace, embedding_json, updated_at)
-VALUES (?, ?, ?, ?)
+INSERT INTO memory_vectors (memory_id, workspace, embedding_json, embedding_provider, updated_at)
+VALUES (?, ?, ?, ?, ?)
 ON CONFLICT(memory_id) DO UPDATE SET
 	workspace=excluded.workspace,
 	embedding_json=excluded.embedding_json,
+	embedding_provider=excluded.embedding_provider,
 	updated_at=excluded.updated_at
-`, memoryID, workspace, string(b), time.Now().UTC().Format(time.RFC3339Nano))
+`, memoryID, workspace, string(b), strings.TrimSpace(provider), time.Now().UTC().Format(time.RFC3339Nano))
 	return err
 }
 
 // ListMemoryVectorsByWorkspace returns cached embeddings keyed by memory ID.
 func (s *Store) ListMemoryVectorsByWorkspace(ctx context.Context, workspace string) (map[string][]float32, error) {
+	rows, err := s.ListMemoryVectorRowsByWorkspace(ctx, workspace)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string][]float32, len(rows))
+	for _, row := range rows {
+		out[row.MemoryID] = row.Embedding
+	}
+	return out, nil
+}
+
+// ListMemoryVectorRowsByWorkspace returns cached embeddings plus provenance data.
+func (s *Store) ListMemoryVectorRowsByWorkspace(ctx context.Context, workspace string) ([]MemoryVectorRow, error) {
 	rows, err := s.db.QueryContext(ctx, `
-SELECT memory_id, embedding_json
+SELECT memory_id, workspace, embedding_json, embedding_provider, updated_at
 FROM memory_vectors
 WHERE workspace = ?
 `, workspace)
@@ -38,17 +64,49 @@ WHERE workspace = ?
 		return nil, err
 	}
 	defer func() { _ = rows.Close() }()
-	out := make(map[string][]float32)
+	out := make([]MemoryVectorRow, 0)
 	for rows.Next() {
-		var id, embJSON string
-		if err := rows.Scan(&id, &embJSON); err != nil {
+		var row MemoryVectorRow
+		var embJSON string
+		var updatedAtRaw string
+		if err := rows.Scan(&row.MemoryID, &row.Workspace, &embJSON, &row.EmbeddingProvider, &updatedAtRaw); err != nil {
 			return nil, err
 		}
-		var vec []float32
-		if err := json.Unmarshal([]byte(embJSON), &vec); err != nil {
+		if err := json.Unmarshal([]byte(embJSON), &row.Embedding); err != nil {
 			return nil, err
 		}
-		out[id] = vec
+		if ts, err := time.Parse(time.RFC3339Nano, updatedAtRaw); err == nil {
+			row.UpdatedAt = ts
+		}
+		out = append(out, row)
+	}
+	return out, rows.Err()
+}
+
+// CountMemoryVectorsByProvider returns provider counts for one workspace.
+func (s *Store) CountMemoryVectorsByProvider(ctx context.Context, workspace string) (map[string]int, error) {
+	rows, err := s.db.QueryContext(ctx, `
+SELECT embedding_provider, COUNT(*)
+FROM memory_vectors
+WHERE workspace = ?
+GROUP BY embedding_provider
+`, workspace)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	out := make(map[string]int)
+	for rows.Next() {
+		var provider string
+		var count int
+		if err := rows.Scan(&provider, &count); err != nil {
+			return nil, err
+		}
+		provider = strings.TrimSpace(provider)
+		if provider == "" {
+			provider = "<missing>"
+		}
+		out[provider] = count
 	}
 	return out, rows.Err()
 }

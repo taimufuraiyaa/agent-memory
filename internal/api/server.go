@@ -63,7 +63,7 @@ func (s *Service) resolve(ctx context.Context, ws string) (*workspaceAssets, err
 	}
 	assets = &workspaceAssets{
 		Store:     store,
-		Writer:    engine.NewWritePipeline(store),
+		Writer:    engine.NewWritePipelineWithEmbedder(store, s.EmbeddingProvider),
 		Retrieval: engine.NewRetrievalEngine(engine.NewVectorSearcher(store, s.EmbeddingProvider)),
 		Clipper:   engine.NewTokenClipper(nil),
 	}
@@ -383,6 +383,7 @@ func NewMux(svc *Service) *http.ServeMux {
 			TopK:      opt.TopK,
 			Mode:      opt.Mode,
 			Filters:   opt.Filters,
+			Policy:    opt.Policy,
 		})
 		if err != nil {
 			writeErr(w, http.StatusBadRequest, "runtime", err.Error())

@@ -31,7 +31,7 @@ If the agent is implementing work that maps to a defined Kiro spec task list (`.
 workspace: agent-memory
 
 Always use `agent-memory` as the memory system:
-- Before doing any self-research: run memory `search`, then task `recall`.
+- Before doing any self-research: run memory `search` first. Run task `recall` only when the task is about continuing previous work, or when search returns no useful / weak / insufficient results.
 - After learning durable new knowledge: write it to memory immediately.
 - At the end of a session: store a short session summary via `session-end`.
 
