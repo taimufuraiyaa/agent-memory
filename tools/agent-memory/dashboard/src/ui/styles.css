@@ -1090,6 +1090,86 @@ body.light .diagramSvg {
   background: rgba(0, 0, 0, 0.01);
 }
 
+.diagramSvg svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.diagramSvgLight {
+  --diagram-mermaid-fg: #172033;
+  --diagram-mermaid-line: #334155;
+  --diagram-mermaid-border: #475569;
+  --diagram-mermaid-node-bg: #ffffff;
+  --diagram-mermaid-cluster-bg: #e2e8f0;
+  --diagram-mermaid-label-bg: #f8fafc;
+}
+
+.diagramSvgDark {
+  --diagram-mermaid-fg: #f8fafc;
+  --diagram-mermaid-line: #94a3b8;
+  --diagram-mermaid-border: #64748b;
+  --diagram-mermaid-node-bg: #0f172a;
+  --diagram-mermaid-cluster-bg: #0b1220;
+  --diagram-mermaid-label-bg: #111827;
+}
+
+.diagramSvg svg .label,
+.diagramSvg svg .label text,
+.diagramSvg svg .nodeLabel,
+.diagramSvg svg .cluster-label text,
+.diagramSvg svg .edgeLabel,
+.diagramSvg svg .edgeLabel text,
+.diagramSvg svg .edgeLabel span,
+.diagramSvg svg .edgeLabel p,
+.diagramSvg svg .messageText,
+.diagramSvg svg .loopText,
+.diagramSvg svg .noteText {
+  color: var(--diagram-mermaid-fg) !important;
+  fill: var(--diagram-mermaid-fg) !important;
+}
+
+.diagramSvg svg .node rect,
+.diagramSvg svg .node circle,
+.diagramSvg svg .node ellipse,
+.diagramSvg svg .node polygon,
+.diagramSvg svg .node path,
+.diagramSvg svg .label-container {
+  fill: var(--diagram-mermaid-node-bg) !important;
+  stroke: var(--diagram-mermaid-border) !important;
+}
+
+.diagramSvg svg .cluster rect,
+.diagramSvg svg .cluster polygon {
+  fill: var(--diagram-mermaid-cluster-bg) !important;
+  stroke: var(--diagram-mermaid-border) !important;
+}
+
+.diagramSvg svg .edgePath .path,
+.diagramSvg svg .flowchart-link,
+.diagramSvg svg .relationshipLine,
+.diagramSvg svg .messageLine0,
+.diagramSvg svg .messageLine1,
+.diagramSvg svg .loopLine,
+.diagramSvg svg .activation0,
+.diagramSvg svg .activation1 {
+  stroke: var(--diagram-mermaid-line) !important;
+}
+
+.diagramSvg svg .arrowheadPath,
+.diagramSvg svg marker path {
+  fill: var(--diagram-mermaid-line) !important;
+  stroke: var(--diagram-mermaid-line) !important;
+}
+
+.diagramSvg svg .edgeLabel rect,
+.diagramSvg svg .labelBkg,
+.diagramSvg svg .label-container rect {
+  fill: var(--diagram-mermaid-label-bg) !important;
+  background-color: var(--diagram-mermaid-label-bg) !important;
+  opacity: 1 !important;
+}
+
 .diagramSvgFullscreen svg {
   max-width: 100%;
   max-height: 75vh;

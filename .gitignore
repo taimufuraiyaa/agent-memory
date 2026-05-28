@@ -27,3 +27,4 @@ pnpm-debug.log*
 .kiro/specs/
 .DS_Store
 Thumbs.db
+*.tgz

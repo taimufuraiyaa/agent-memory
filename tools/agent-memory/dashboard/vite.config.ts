@@ -6,6 +6,13 @@ const apiTarget = process.env.VITE_API_TARGET || 'http://localhost:3210'
 export default defineConfig({
   base: '/',
   plugins: [react()],
+  optimizeDeps: {
+    // Mermaid pulls in dayjs and lazy-loaded diagram modules in dev.
+    // Force Mermaid through Vite's optimizer and enable CJS interop for dayjs
+    // so the browser doesn't request raw dayjs files without a synthetic default.
+    include: ['mermaid', 'dayjs'],
+    needsInterop: ['dayjs'],
+  },
   server: {
     proxy: {
       '/api': {
