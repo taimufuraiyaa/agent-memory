@@ -2,7 +2,7 @@
 A persistent, multi-tier memory layer for AI coding agents (Cursor, Claude Code, Codex, Cline, custom). It retains knowledge across sessions, learns from outcomes, and reduces repeated research/token consumption through hybrid storage and lifecycle management.
 
 <img width="2292" height="1766" alt="CleanShot 2026-05-29 at 01 28 36@2x" src="https://github.com/user-attachments/assets/bf0c19b6-c75d-4ee0-8dd8-c72033e2dedf" />
-<img width="2410" height="1786" alt="CleanShot 2026-05-29 at 01 25 31@2x" src="https://github.com/user-attachments/assets/9afad42f-6811-48d9-8740-8e88da520c66" />
+<img width="2430" height="1806" alt="CleanShot 2026-05-29 at 01 33 15@2x" src="https://github.com/user-attachments/assets/122c9408-110b-447f-b11b-f380a4b26baa" />
 <img width="2992" height="1806" alt="CleanShot 2026-05-29 at 01 23 12@2x" src="https://github.com/user-attachments/assets/851abf28-683c-4c8e-869d-641c38cebc1a" />
 
 
