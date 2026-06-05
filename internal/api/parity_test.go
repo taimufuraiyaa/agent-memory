@@ -28,15 +28,8 @@ func TestSearchParityHTTPVsEngine(t *testing.T) {
 		t.Fatalf("open store: %v", err)
 	}
 	defer func() { _ = store.Close() }()
-	modelDir := filepath.Join(t.TempDir(), "model")
-	if err := os.MkdirAll(modelDir, 0o755); err != nil {
-		t.Fatalf("mkdir model: %v", err)
-	}
-	provider, err := embeddings.NewLocalProvider(modelDir)
-	if err != nil {
-		t.Fatalf("provider: %v", err)
-	}
-	pipe := engine.NewWritePipeline(store)
+	_, provider := newParityProvider(t)
+	pipe := engine.NewWritePipelineWithEmbedder(store, provider)
 	_, _ = pipe.Write(context.Background(), engine.WriteInput{Workspace: "ws", Type: core.SemanticMemory, Content: "orders service emits order.created", Source: core.MemorySource{Type: core.SourceUserInput}})
 	_, _ = pipe.Write(context.Background(), engine.WriteInput{Workspace: "ws", Type: core.SemanticMemory, Content: "payments retries timeouts", Source: core.MemorySource{Type: core.SourceUserInput}})
 
@@ -107,15 +100,8 @@ func TestRecallPreviewParityWithRawRecall(t *testing.T) {
 		t.Fatalf("open store: %v", err)
 	}
 	defer func() { _ = store.Close() }()
-	modelDir := filepath.Join(t.TempDir(), "model")
-	if err := os.MkdirAll(modelDir, 0o755); err != nil {
-		t.Fatalf("mkdir model: %v", err)
-	}
-	provider, err := embeddings.NewLocalProvider(modelDir)
-	if err != nil {
-		t.Fatalf("provider: %v", err)
-	}
-	pipe := engine.NewWritePipeline(store)
+	_, provider := newParityProvider(t)
+	pipe := engine.NewWritePipelineWithEmbedder(store, provider)
 	_, _ = pipe.Write(context.Background(), engine.WriteInput{Workspace: "ws", Type: core.SemanticMemory, Content: "orders service emits order.created events", Source: core.MemorySource{Type: core.SourceUserInput}})
 	_, _ = pipe.Write(context.Background(), engine.WriteInput{Workspace: "ws", Type: core.ProceduralMemory, Content: "when order queue fails, inspect retry DLQ first", Source: core.MemorySource{Type: core.SourceUserInput}})
 
@@ -179,16 +165,9 @@ func TestRecallParityHTTPVsCLIWithStagedGating(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = store.Close() })
 
-	modelDir := filepath.Join(t.TempDir(), "model")
-	if err := os.MkdirAll(modelDir, 0o755); err != nil {
-		t.Fatalf("mkdir model: %v", err)
-	}
-	provider, err := embeddings.NewLocalProvider(modelDir)
-	if err != nil {
-		t.Fatalf("provider: %v", err)
-	}
+	modelDir, provider := newParityProvider(t)
 
-	pipe := engine.NewWritePipeline(store)
+	pipe := engine.NewWritePipelineWithEmbedder(store, provider)
 	_, _ = pipe.Write(context.Background(), engine.WriteInput{Workspace: "ws", Type: core.SemanticMemory, Content: "redis config path is config/redis.conf", Source: core.MemorySource{Type: core.SourceUserInput}})
 
 	svc := &apipkg.Service{Workspace: "ws", BaseDir: baseDir, EmbeddingProvider: provider}
@@ -257,16 +236,9 @@ func TestSearchParityHTTPVsCLI(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = store.Close() })
 
-	modelDir := filepath.Join(t.TempDir(), "model")
-	if err := os.MkdirAll(modelDir, 0o755); err != nil {
-		t.Fatalf("mkdir model: %v", err)
-	}
-	provider, err := embeddings.NewLocalProvider(modelDir)
-	if err != nil {
-		t.Fatalf("provider: %v", err)
-	}
+	modelDir, provider := newParityProvider(t)
 
-	pipe := engine.NewWritePipeline(store)
+	pipe := engine.NewWritePipelineWithEmbedder(store, provider)
 	_, _ = pipe.Write(context.Background(), engine.WriteInput{Workspace: "ws", Type: core.SemanticMemory, Content: "orders service emits order.created", Source: core.MemorySource{Type: core.SourceUserInput}})
 	_, _ = pipe.Write(context.Background(), engine.WriteInput{Workspace: "ws", Type: core.SemanticMemory, Content: "payments retries timeouts", Source: core.MemorySource{Type: core.SourceUserInput}})
 
@@ -362,14 +334,7 @@ func TestSearchParityHTTPVsCLIWithTierFilter(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = store.Close() })
 
-	modelDir := filepath.Join(t.TempDir(), "model")
-	if err := os.MkdirAll(modelDir, 0o755); err != nil {
-		t.Fatalf("mkdir model: %v", err)
-	}
-	provider, err := embeddings.NewLocalProvider(modelDir)
-	if err != nil {
-		t.Fatalf("provider: %v", err)
-	}
+	modelDir, provider := newParityProvider(t)
 
 	ctx := context.Background()
 	insert := func(id string, tier core.StorageTier, content string) {
@@ -478,16 +443,9 @@ func TestRecallPreviewParityHTTPVsCLIRaw(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = store.Close() })
 
-	modelDir := filepath.Join(t.TempDir(), "model")
-	if err := os.MkdirAll(modelDir, 0o755); err != nil {
-		t.Fatalf("mkdir model: %v", err)
-	}
-	provider, err := embeddings.NewLocalProvider(modelDir)
-	if err != nil {
-		t.Fatalf("provider: %v", err)
-	}
+	modelDir, provider := newParityProvider(t)
 
-	pipe := engine.NewWritePipeline(store)
+	pipe := engine.NewWritePipelineWithEmbedder(store, provider)
 	_, _ = pipe.Write(context.Background(), engine.WriteInput{Workspace: "ws", Type: core.SemanticMemory, Content: "orders service emits order.created events", Source: core.MemorySource{Type: core.SourceUserInput}})
 	_, _ = pipe.Write(context.Background(), engine.WriteInput{Workspace: "ws", Type: core.ProceduralMemory, Content: "when order queue fails, inspect retry DLQ first", Source: core.MemorySource{Type: core.SourceUserInput}})
 
@@ -545,4 +503,76 @@ func TestRecallPreviewParityHTTPVsCLIRaw(t *testing.T) {
 
 func float64Ptr(v float64) *float64 {
 	return &v
+}
+
+func newParityProvider(t *testing.T) (string, embeddings.Provider) {
+	t.Helper()
+	t.Setenv("AGENT_MEMORY_TEST_FAKE_ONNX_RUNTIME", "1")
+
+	modelDir := filepath.Join(t.TempDir(), "model")
+	writeParityMiniLMTestModel(t, modelDir)
+
+	provider, err := embeddings.NewProvider(modelDir)
+	if err != nil {
+		t.Fatalf("provider: %v", err)
+	}
+	return modelDir, provider
+}
+
+func writeParityMiniLMTestModel(t *testing.T, modelDir string) {
+	t.Helper()
+	if err := os.MkdirAll(modelDir, 0o755); err != nil {
+		t.Fatalf("mkdir model dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(modelDir, "model.onnx"), []byte("onnx"), 0o644); err != nil {
+		t.Fatalf("write model.onnx: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(modelDir, "tokenizer.json"), []byte(`{
+  "truncation": {"max_length": 8},
+  "normalizer": {
+    "type": "BertNormalizer",
+    "clean_text": true,
+    "handle_chinese_chars": true,
+    "strip_accents": null,
+    "lowercase": true
+  },
+  "model": {
+    "type": "WordPiece",
+    "unk_token": "[UNK]",
+    "continuing_subword_prefix": "##",
+    "max_input_chars_per_word": 100,
+    "vocab": {
+      "[PAD]": 0,
+      "[UNK]": 100,
+      "[CLS]": 101,
+      "[SEP]": 102,
+      "redis": 2001,
+      "config": 2002,
+      "path": 2003,
+      "order": 2004,
+      "orders": 2005,
+      "event": 2006,
+      "events": 2007,
+      "created": 2008,
+      "queue": 2009,
+      "incident": 2010,
+      "retry": 2011,
+      "dlq": 2012,
+      "payments": 2013,
+      "timeouts": 2014,
+      "service": 2015,
+      "emits": 2016,
+      "find": 2017,
+      "investigate": 2018,
+      "when": 2019,
+      "fails": 2020,
+      "inspect": 2021,
+      "first": 2022,
+      ".": 2023,
+      "/": 2024
+    }
+  }
+}`), 0o644); err != nil {
+		t.Fatalf("write tokenizer.json: %v", err)
+	}
 }

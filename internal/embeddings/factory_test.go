@@ -2,10 +2,11 @@ package embeddings
 
 import (
 	"errors"
+	"strings"
 	"testing"
 )
 
-func TestNewProviderFallsBackToLocal(t *testing.T) {
+func TestNewProviderFailsWhenONNXConstructionFails(t *testing.T) {
 	modelDir := t.TempDir()
 
 	got, err := newProviderWithFactories(
@@ -17,15 +18,15 @@ func TestNewProviderFallsBackToLocal(t *testing.T) {
 			t.Fatal("onnx readiness should not run when construction fails")
 			return nil
 		},
-		func(dir string) (*LocalProvider, error) {
-			return &LocalProvider{modelDir: dir}, nil
-		},
 	)
-	if err != nil {
-		t.Fatalf("resolve provider: %v", err)
+	if err == nil {
+		t.Fatal("expected provider resolution to fail")
 	}
-	if got.Name() != "local-minilm-scaffold" {
-		t.Fatalf("unexpected provider: %s", got.Name())
+	if got != nil {
+		t.Fatalf("expected nil provider, got %#v", got)
+	}
+	if !strings.Contains(err.Error(), "onnx provider unavailable") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
@@ -44,10 +45,6 @@ func TestNewProviderPrefersONNX(t *testing.T) {
 			}
 			return nil
 		},
-		func(string) (*LocalProvider, error) {
-			t.Fatal("local fallback should not be used when onnx succeeds")
-			return nil, nil
-		},
 	)
 	if err != nil {
 		t.Fatalf("resolve provider: %v", err)
@@ -57,7 +54,7 @@ func TestNewProviderPrefersONNX(t *testing.T) {
 	}
 }
 
-func TestNewProviderFallsBackToLocalWhenONNXWarmupFails(t *testing.T) {
+func TestNewProviderFailsWhenONNXWarmupFails(t *testing.T) {
 	modelDir := t.TempDir()
 
 	got, err := newProviderWithFactories(
@@ -68,14 +65,14 @@ func TestNewProviderFallsBackToLocalWhenONNXWarmupFails(t *testing.T) {
 		func(*ONNXMiniLMProvider) error {
 			return errors.New("runtime init failed")
 		},
-		func(dir string) (*LocalProvider, error) {
-			return &LocalProvider{modelDir: dir}, nil
-		},
 	)
-	if err != nil {
-		t.Fatalf("resolve provider: %v", err)
+	if err == nil {
+		t.Fatal("expected provider resolution to fail")
 	}
-	if got.Name() != "local-minilm-scaffold" {
-		t.Fatalf("unexpected provider: %s", got.Name())
+	if got != nil {
+		t.Fatalf("expected nil provider, got %#v", got)
+	}
+	if !strings.Contains(err.Error(), "onnx provider not ready") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }

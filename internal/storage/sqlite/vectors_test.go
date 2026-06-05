@@ -92,7 +92,7 @@ func TestSearchMemoryVectorsSQL(t *testing.T) {
 	if err := store.UpsertMemoryVector(ctx, "m2", "ws", "test-provider", []float32{0, 1, 0}); err != nil {
 		t.Fatalf("vector m2: %v", err)
 	}
-	scores, err := store.SearchMemoryVectorsSQL(ctx, "ws", []float32{1, 0, 0}, 5, nil, nil)
+	scores, err := store.SearchMemoryVectorsSQL(ctx, "ws", "test-provider", []float32{1, 0, 0}, 5, nil, nil)
 	if err != nil {
 		t.Fatalf("search vectors sql: %v", err)
 	}
@@ -102,6 +102,7 @@ func TestSearchMemoryVectorsSQL(t *testing.T) {
 	filtered, err := store.SearchMemoryVectorsSQL(
 		ctx,
 		"ws",
+		"test-provider",
 		[]float32{1, 0, 0},
 		5,
 		[]core.MemoryType{core.ProceduralMemory},
@@ -112,5 +113,15 @@ func TestSearchMemoryVectorsSQL(t *testing.T) {
 	}
 	if len(filtered) != 1 || filtered[0].MemoryID != "m2" {
 		t.Fatalf("expected filtered result m2, got %+v", filtered)
+	}
+	if err := store.UpsertMemoryVector(ctx, "m2", "ws", "legacy-provider", []float32{1, 0, 0}); err != nil {
+		t.Fatalf("rewrite m2 vector with legacy provider: %v", err)
+	}
+	legacyFiltered, err := store.SearchMemoryVectorsSQL(ctx, "ws", "test-provider", []float32{1, 0, 0}, 5, nil, nil)
+	if err != nil {
+		t.Fatalf("search vectors sql with provider filter: %v", err)
+	}
+	if len(legacyFiltered) != 1 || legacyFiltered[0].MemoryID != "m1" {
+		t.Fatalf("expected provider-filtered result to exclude legacy rows, got %+v", legacyFiltered)
 	}
 }

@@ -119,6 +119,60 @@ func TestVectorSearcherFiltersByTypeAndTier(t *testing.T) {
 	}
 }
 
+func TestVectorSearcherRefreshesLegacyProviderVectors(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "memory-legacy-vectors.db")
+	store, err := sqlite.Open(context.Background(), dbPath)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	entry := &core.MemoryEntry{
+		ID:          "m1",
+		Workspace:   "ws",
+		Type:        core.SemanticMemory,
+		Content:     "orders service publishes order.created event",
+		Source:      core.MemorySource{Type: core.SourceCodeAnalysis},
+		StorageTier: core.TierVector,
+		Confidence:  0.9,
+	}
+	if err := store.UpsertMemory(context.Background(), entry); err != nil {
+		t.Fatalf("upsert memory: %v", err)
+	}
+	if err := store.UpsertMemoryVector(context.Background(), entry.ID, entry.Workspace, "legacy-provider", []float32{1, 0, 0}); err != nil {
+		t.Fatalf("seed legacy vector: %v", err)
+	}
+
+	modelDir := filepath.Join(t.TempDir(), "model")
+	if err := ensureEmbeddingsDir(modelDir); err != nil {
+		t.Fatalf("mkdir model: %v", err)
+	}
+	provider, err := embeddings.NewLocalProvider(modelDir)
+	if err != nil {
+		t.Fatalf("new provider: %v", err)
+	}
+
+	searcher := NewVectorSearcher(store, provider)
+	hits, err := searcher.Search(context.Background(), "ws", "orders event publisher", 1)
+	if err != nil {
+		t.Fatalf("search failed: %v", err)
+	}
+	if len(hits) != 1 || hits[0].Memory.ID != entry.ID {
+		t.Fatalf("expected refreshed hit for %s, got %+v", entry.ID, hits)
+	}
+
+	rows, err := store.ListMemoryVectorRowsByWorkspace(context.Background(), "ws")
+	if err != nil {
+		t.Fatalf("list vector rows: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected one vector row, got %d", len(rows))
+	}
+	if rows[0].EmbeddingProvider != provider.Name() {
+		t.Fatalf("expected provider refresh to %s, got %s", provider.Name(), rows[0].EmbeddingProvider)
+	}
+}
+
 func ensureEmbeddingsDir(path string) error {
 	return os.MkdirAll(path, 0o755)
 }

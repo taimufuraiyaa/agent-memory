@@ -33,9 +33,8 @@ func TestReembedCommandBackfillsVectorsWithProvider(t *testing.T) {
 	}
 
 	modelDir := filepath.Join(t.TempDir(), "model")
-	if err := os.MkdirAll(modelDir, 0o755); err != nil {
-		t.Fatalf("mkdir model dir: %v", err)
-	}
+	t.Setenv("AGENT_MEMORY_TEST_FAKE_ONNX_RUNTIME", "1")
+	writeReembedMiniLMTestModel(t, modelDir)
 
 	cmd := NewRootCommand()
 	var out bytes.Buffer
@@ -76,5 +75,46 @@ func TestReembedCommandBackfillsVectorsWithProvider(t *testing.T) {
 	}
 	if rows[0].EmbeddingProvider == "" {
 		t.Fatalf("expected provider provenance on vector row, got %+v", rows[0])
+	}
+}
+
+func writeReembedMiniLMTestModel(t *testing.T, modelDir string) {
+	t.Helper()
+	if err := os.MkdirAll(modelDir, 0o755); err != nil {
+		t.Fatalf("mkdir model dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(modelDir, "model.onnx"), []byte("onnx"), 0o644); err != nil {
+		t.Fatalf("write model.onnx: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(modelDir, "tokenizer.json"), []byte(`{
+  "truncation": {"max_length": 8},
+  "normalizer": {
+    "type": "BertNormalizer",
+    "clean_text": true,
+    "handle_chinese_chars": true,
+    "strip_accents": null,
+    "lowercase": true
+  },
+  "model": {
+    "type": "WordPiece",
+    "unk_token": "[UNK]",
+    "continuing_subword_prefix": "##",
+    "max_input_chars_per_word": 100,
+    "vocab": {
+      "[PAD]": 0,
+      "[UNK]": 100,
+      "[CLS]": 101,
+      "[SEP]": 102,
+      "orders": 2001,
+      "service": 2002,
+      "emits": 2003,
+      "order": 2004,
+      ".": 2005,
+      "created": 2006,
+      "event": 2007
+    }
+  }
+}`), 0o644); err != nil {
+		t.Fatalf("write tokenizer.json: %v", err)
 	}
 }
