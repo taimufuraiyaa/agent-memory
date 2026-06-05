@@ -697,16 +697,20 @@ func NewMux(svc *Service) *http.ServeMux {
 			if task == "" {
 				task = strings.TrimSpace(req.Task)
 			}
-			if assets, err := svc.resolve(r.Context(), ws); err == nil && assets.Store != nil {
-				_ = assets.Store.AddTokenMetricV2(r.Context(), ws, "recall", 0, 0, engine.RunLabel(), false)
-			}
 			contextBlock := engine.AssembleRecallSections(task, nil)
+			disabledTokens := len(strings.Fields(contextBlock))
+			if assets, err := svc.resolve(r.Context(), ws); err == nil && assets.Store != nil {
+				_ = assets.Store.AddTokenMetricV2(r.Context(), ws, "recall", disabledTokens, disabledTokens, engine.RunLabel(), false)
+			}
 			data := map[string]any{
-				"disabled":      true,
-				"context_block": contextBlock,
-				"tokens_used":   0,
-				"tokens_budget": 0,
-				"memories_used": []any{},
+				"disabled":           true,
+				"context_block":      contextBlock,
+				"tokens_used":        disabledTokens,
+				"baseline_tokens":    disabledTokens,
+				"tokens_budget":      disabledTokens,
+				"memories_used":      []any{},
+				"hits":               []any{},
+				"observation_tokens": 0,
 			}
 			if strings.EqualFold(strings.TrimSpace(req.Format), "raw") {
 				data["text"] = contextBlock
@@ -750,12 +754,49 @@ func NewMux(svc *Service) *http.ServeMux {
 		if topK <= 0 {
 			topK = 50
 		}
-		retrieved, err := assets.Retrieval.Retrieve(r.Context(), engine.RetrievalOptions{
-			Workspace: ws,
-			Query:     task,
-			TopK:      topK,
-			Mode:      engine.ModeRecall,
-		})
+		var (
+			retrieved *engine.RetrievalResult
+			decision  engine.RecallGateDecision
+		)
+		if engine.IsContinuationPrompt(task) {
+			decision = engine.DecideRecallGate(task, nil)
+			retrieved, err = assets.Retrieval.Retrieve(r.Context(), engine.RetrievalOptions{
+				Workspace: ws,
+				Query:     task,
+				TopK:      topK,
+				Mode:      engine.ModeRecall,
+			})
+		} else {
+			searchProbe, searchErr := assets.Retrieval.Retrieve(r.Context(), engine.RetrievalOptions{
+				Workspace: ws,
+				Query:     task,
+				TopK:      topK,
+				Mode:      engine.ModeSearch,
+			})
+			if searchErr != nil {
+				writeErr(w, http.StatusBadRequest, "runtime", searchErr.Error())
+				return
+			}
+			decision = engine.DecideRecallGate(task, searchProbe)
+			if decision.SearchSufficient {
+				retrieved = &engine.RetrievalResult{
+					Mode:           engine.ModeSearch,
+					Weights:        searchProbe.Weights,
+					Policy:         searchProbe.Policy,
+					Hits:           append([]engine.RetrievalHit(nil), searchProbe.StrongHits...),
+					StrongHits:     append([]engine.RetrievalHit(nil), searchProbe.StrongHits...),
+					WeakHits:       append([]engine.RetrievalHit(nil), searchProbe.WeakHits...),
+					SuppressedHits: append([]engine.RetrievalHit(nil), searchProbe.SuppressedHits...),
+				}
+			} else {
+				retrieved, err = assets.Retrieval.Retrieve(r.Context(), engine.RetrievalOptions{
+					Workspace: ws,
+					Query:     task,
+					TopK:      topK,
+					Mode:      engine.ModeRecall,
+				})
+			}
+		}
 		if err != nil {
 			writeErr(w, http.StatusBadRequest, "runtime", err.Error())
 			return
@@ -783,6 +824,13 @@ func NewMux(svc *Service) *http.ServeMux {
 			"observation_session_id": observationSessionID,
 			"observation_count":      observationCount,
 			"observation_tokens":     observationTokens,
+			"retrieval_mode":         retrieved.Mode,
+			"retrieved_hit_count":    len(retrieved.Hits),
+			"retrieval_strategy":     decision.Strategy,
+			"recall_trigger":         decision.Trigger,
+			"search_sufficient":      decision.SearchSufficient,
+			"search_probe":           decision.Probe,
+			"deep_recall_used":       decision.Strategy != engine.RecallStrategySearchSatisfied,
 		}
 		if strings.EqualFold(strings.TrimSpace(req.Format), "raw") {
 			data["text"] = contextBlock
@@ -872,12 +920,49 @@ func NewMux(svc *Service) *http.ServeMux {
 		if topK <= 0 {
 			topK = 50
 		}
-		retrieved, err := assets.Retrieval.Retrieve(r.Context(), engine.RetrievalOptions{
-			Workspace: ws,
-			Query:     task,
-			TopK:      topK,
-			Mode:      engine.ModeRecall,
-		})
+		var (
+			retrieved *engine.RetrievalResult
+			decision  engine.RecallGateDecision
+		)
+		if engine.IsContinuationPrompt(task) {
+			decision = engine.DecideRecallGate(task, nil)
+			retrieved, err = assets.Retrieval.Retrieve(r.Context(), engine.RetrievalOptions{
+				Workspace: ws,
+				Query:     task,
+				TopK:      topK,
+				Mode:      engine.ModeRecall,
+			})
+		} else {
+			searchProbe, searchErr := assets.Retrieval.Retrieve(r.Context(), engine.RetrievalOptions{
+				Workspace: ws,
+				Query:     task,
+				TopK:      topK,
+				Mode:      engine.ModeSearch,
+			})
+			if searchErr != nil {
+				writeErr(w, http.StatusBadRequest, "runtime", searchErr.Error())
+				return
+			}
+			decision = engine.DecideRecallGate(task, searchProbe)
+			if decision.SearchSufficient {
+				retrieved = &engine.RetrievalResult{
+					Mode:           engine.ModeSearch,
+					Weights:        searchProbe.Weights,
+					Policy:         searchProbe.Policy,
+					Hits:           append([]engine.RetrievalHit(nil), searchProbe.StrongHits...),
+					StrongHits:     append([]engine.RetrievalHit(nil), searchProbe.StrongHits...),
+					WeakHits:       append([]engine.RetrievalHit(nil), searchProbe.WeakHits...),
+					SuppressedHits: append([]engine.RetrievalHit(nil), searchProbe.SuppressedHits...),
+				}
+			} else {
+				retrieved, err = assets.Retrieval.Retrieve(r.Context(), engine.RetrievalOptions{
+					Workspace: ws,
+					Query:     task,
+					TopK:      topK,
+					Mode:      engine.ModeRecall,
+				})
+			}
+		}
 		if err != nil {
 			writeErr(w, http.StatusBadRequest, "runtime", err.Error())
 			return
@@ -931,6 +1016,11 @@ func NewMux(svc *Service) *http.ServeMux {
 			"retrieval_weights":      retrieved.Weights,
 			"retrieval_policy":       retrieved.Policy,
 			"retrieved_hit_count":    len(retrieved.Hits),
+			"retrieval_strategy":     decision.Strategy,
+			"recall_trigger":         decision.Trigger,
+			"search_sufficient":      decision.SearchSufficient,
+			"search_probe":           decision.Probe,
+			"deep_recall_used":       decision.Strategy != engine.RecallStrategySearchSatisfied,
 		}
 		if assets.Store != nil {
 			_ = assets.Store.AddTokenMetricV2(r.Context(), ws, "recall", meta.UsedTokens+observationTokens, recallBaselineTokens(rebalanced, observationTokens), engine.RunLabel(), engine.MemoryEnabled())

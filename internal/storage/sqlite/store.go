@@ -267,6 +267,23 @@ func (s *Store) Migrate(ctx context.Context) error {
 			off_returned_tokens INTEGER NOT NULL DEFAULT 0,
 			off_baseline_tokens INTEGER NOT NULL DEFAULT 0,
 			off_saved_tokens INTEGER NOT NULL DEFAULT 0,
+			task_success_rate REAL NOT NULL DEFAULT 0,
+			off_task_success_rate REAL NOT NULL DEFAULT 0,
+			task_success_delta REAL NOT NULL DEFAULT 0,
+			answer_fact_coverage REAL NOT NULL DEFAULT 0,
+			off_answer_fact_coverage REAL NOT NULL DEFAULT 0,
+			answer_fact_coverage_delta REAL NOT NULL DEFAULT 0,
+			answer_completeness REAL NOT NULL DEFAULT 0,
+			off_answer_completeness REAL NOT NULL DEFAULT 0,
+			answer_completeness_delta REAL NOT NULL DEFAULT 0,
+			avg_on_runtime_ms REAL NOT NULL DEFAULT 0,
+			avg_off_runtime_ms REAL NOT NULL DEFAULT 0,
+			runtime_delta_ms REAL NOT NULL DEFAULT 0,
+			avg_on_investigation_effort REAL NOT NULL DEFAULT 0,
+			avg_off_investigation_effort REAL NOT NULL DEFAULT 0,
+			investigation_effort_delta REAL NOT NULL DEFAULT 0,
+			continuation_score REAL NOT NULL DEFAULT 0,
+			continuation_verdict TEXT NOT NULL DEFAULT '',
 			generator_manifest_json TEXT NOT NULL DEFAULT '{}',
 			run_manifest_json TEXT NOT NULL DEFAULT '{}',
 			clusters_json TEXT NOT NULL DEFAULT '[]',
@@ -347,6 +364,57 @@ func (s *Store) Migrate(ctx context.Context) error {
 		return err
 	}
 	if err := s.ensureColumn(ctx, "token_metrics", "memory_enabled", `ALTER TABLE token_metrics ADD COLUMN memory_enabled INTEGER NOT NULL DEFAULT 1`); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "benchmark_runs", "task_success_rate", `ALTER TABLE benchmark_runs ADD COLUMN task_success_rate REAL NOT NULL DEFAULT 0`); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "benchmark_runs", "off_task_success_rate", `ALTER TABLE benchmark_runs ADD COLUMN off_task_success_rate REAL NOT NULL DEFAULT 0`); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "benchmark_runs", "task_success_delta", `ALTER TABLE benchmark_runs ADD COLUMN task_success_delta REAL NOT NULL DEFAULT 0`); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "benchmark_runs", "answer_fact_coverage", `ALTER TABLE benchmark_runs ADD COLUMN answer_fact_coverage REAL NOT NULL DEFAULT 0`); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "benchmark_runs", "off_answer_fact_coverage", `ALTER TABLE benchmark_runs ADD COLUMN off_answer_fact_coverage REAL NOT NULL DEFAULT 0`); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "benchmark_runs", "answer_fact_coverage_delta", `ALTER TABLE benchmark_runs ADD COLUMN answer_fact_coverage_delta REAL NOT NULL DEFAULT 0`); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "benchmark_runs", "answer_completeness", `ALTER TABLE benchmark_runs ADD COLUMN answer_completeness REAL NOT NULL DEFAULT 0`); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "benchmark_runs", "off_answer_completeness", `ALTER TABLE benchmark_runs ADD COLUMN off_answer_completeness REAL NOT NULL DEFAULT 0`); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "benchmark_runs", "answer_completeness_delta", `ALTER TABLE benchmark_runs ADD COLUMN answer_completeness_delta REAL NOT NULL DEFAULT 0`); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "benchmark_runs", "avg_on_runtime_ms", `ALTER TABLE benchmark_runs ADD COLUMN avg_on_runtime_ms REAL NOT NULL DEFAULT 0`); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "benchmark_runs", "avg_off_runtime_ms", `ALTER TABLE benchmark_runs ADD COLUMN avg_off_runtime_ms REAL NOT NULL DEFAULT 0`); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "benchmark_runs", "runtime_delta_ms", `ALTER TABLE benchmark_runs ADD COLUMN runtime_delta_ms REAL NOT NULL DEFAULT 0`); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "benchmark_runs", "avg_on_investigation_effort", `ALTER TABLE benchmark_runs ADD COLUMN avg_on_investigation_effort REAL NOT NULL DEFAULT 0`); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "benchmark_runs", "avg_off_investigation_effort", `ALTER TABLE benchmark_runs ADD COLUMN avg_off_investigation_effort REAL NOT NULL DEFAULT 0`); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "benchmark_runs", "investigation_effort_delta", `ALTER TABLE benchmark_runs ADD COLUMN investigation_effort_delta REAL NOT NULL DEFAULT 0`); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "benchmark_runs", "continuation_score", `ALTER TABLE benchmark_runs ADD COLUMN continuation_score REAL NOT NULL DEFAULT 0`); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "benchmark_runs", "continuation_verdict", `ALTER TABLE benchmark_runs ADD COLUMN continuation_verdict TEXT NOT NULL DEFAULT ''`); err != nil {
 		return err
 	}
 	return nil

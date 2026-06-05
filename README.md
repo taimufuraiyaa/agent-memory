@@ -28,7 +28,7 @@ At a high level, `agent-memory` treats recall as a ranked retrieval problem unde
 
 ### 1) Search vs Recall
 - `search` is for interactive inspection: find relevant memories for a query.
-- `recall` is for session start: assemble a compact context block that fits the budget.
+- `recall` is for session start and continuation: it now probes `search` first for non-continuation tasks and only escalates to deep recall when search is empty, weak, ambiguous, or not confident enough.
 
 ### 2) Retrieval signals (explainable)
 Retrieval starts with a semantic candidate set, then re-ranks with multiple signals:

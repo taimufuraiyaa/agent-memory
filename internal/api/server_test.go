@@ -87,6 +87,9 @@ func TestServerWriteSearchRecall(t *testing.T) {
 	if _, ok := recallResp["clipping"]; !ok {
 		t.Fatalf("expected clipping metadata")
 	}
+	if strategy, _ := recallResp["retrieval_strategy"].(string); strategy == "" {
+		t.Fatalf("expected retrieval strategy metadata")
+	}
 	rawResp := postJSON(t, ts.URL+"/api/v1/memories/recall", map[string]any{"task": "investigate order event", "top_k": 2, "budget": 20, "format": "raw"})
 	if _, ok := rawResp["text"]; !ok {
 		t.Fatalf("expected raw recall text")
@@ -104,6 +107,9 @@ func TestServerWriteSearchRecall(t *testing.T) {
 	if _, ok := previewResp["memories_included"]; !ok {
 		t.Fatalf("expected recall preview included memories")
 	}
+	if strategy, _ := previewResp["retrieval_strategy"].(string); strategy == "" {
+		t.Fatalf("expected preview retrieval strategy metadata")
+	}
 	if _, ok := previewResp["tier_distribution"]; !ok {
 		t.Fatalf("expected recall preview tier distribution")
 	}
@@ -116,6 +122,20 @@ func TestServerWriteSearchRecall(t *testing.T) {
 	})
 	if _, ok := previewFull["memories_included_full"]; !ok {
 		t.Fatalf("expected recall preview full included memories when include_memories is true")
+	}
+	continueResp := postJSON(t, ts.URL+"/api/v1/memories/recall", map[string]any{"task": "continue previous work on order event", "top_k": 2, "budget": 20})
+	if got, _ := continueResp["retrieval_strategy"].(string); got != "direct_recall" {
+		t.Fatalf("expected direct_recall for continuation prompt, got %+v", continueResp)
+	}
+	if got, _ := continueResp["recall_trigger"].(string); got != "continuation_prompt" {
+		t.Fatalf("expected continuation trigger, got %+v", continueResp)
+	}
+	emptyResp := postJSON(t, ts.URL+"/api/v1/memories/recall", map[string]any{"task": "investigate zebra quantum archive", "top_k": 2, "budget": 20})
+	if got, _ := emptyResp["retrieval_strategy"].(string); got != "escalated_recall" {
+		t.Fatalf("expected escalated_recall for empty search probe, got %+v", emptyResp)
+	}
+	if got, _ := emptyResp["recall_trigger"].(string); got != "search_empty" && got != "weak_results" {
+		t.Fatalf("expected empty/weak recall trigger, got %+v", emptyResp)
 	}
 	searchBandResp := postJSON(t, ts.URL+"/api/v1/memories/search", map[string]any{
 		"query":     "order event",
@@ -351,14 +371,36 @@ func TestServerBenchmarkRunsAPI(t *testing.T) {
 		"off_cases":           10000,
 		"off_disabled_count":  10000,
 		"off_all_disabled":    true,
+		"task_success_rate":   0.7,
+		"off_task_success_rate": 0.2,
+		"task_success_delta":  0.5,
+		"answer_fact_coverage": 0.8,
+		"off_answer_fact_coverage": 0.25,
+		"answer_fact_coverage_delta": 0.55,
+		"answer_completeness": 0.65,
+		"off_answer_completeness": 0.1,
+		"answer_completeness_delta": 0.55,
+		"avg_on_runtime_ms":   900,
+		"avg_off_runtime_ms":  1500,
+		"runtime_delta_ms":    600,
+		"avg_on_investigation_effort": 3,
+		"avg_off_investigation_effort": 5,
+		"investigation_effort_delta": 2,
+		"continuation_score":  0.48,
+		"continuation_verdict": "GOOD BENEFIT",
 		"clusters": []map[string]any{
 			{
-				"cluster_id":     "retrieval-engine",
-				"cluster_title":  "Retrieval Engine",
-				"cases":          400,
-				"precision":      0.7,
-				"combined_score": 0.68,
-				"verdict":        "GOOD BENEFIT",
+				"cluster_id":              "api_server",
+				"cluster_title":           "API Server",
+				"cases":                   400,
+				"task_success_delta":      0.5,
+				"answer_fact_coverage":    0.8,
+				"answer_completeness":     0.7,
+				"continuation_score":      0.52,
+				"continuation_verdict":    "GOOD BENEFIT",
+				"precision":               0.7,
+				"combined_score":          0.68,
+				"verdict":                 "GOOD BENEFIT",
 			},
 		},
 		"generator_manifest": map[string]any{"test_case_count": 10000},
@@ -378,6 +420,9 @@ func TestServerBenchmarkRunsAPI(t *testing.T) {
 	first, _ := runs[0].(map[string]any)
 	if combined, _ := first["combined_score"].(float64); combined <= 0 {
 		t.Fatalf("expected combined score in response, got %+v", first)
+	}
+	if continuation, _ := first["continuation_score"].(float64); continuation <= 0 {
+		t.Fatalf("expected continuation score in response, got %+v", first)
 	}
 	clusters, _ := first["clusters"].([]any)
 	if len(clusters) != 1 {

@@ -222,6 +222,23 @@ export type BenchmarkClusterSummary = {
   cluster_id: string
   cluster_title: string
   cases: number
+  task_success_rate: number
+  off_task_success_rate: number
+  task_success_delta: number
+  answer_fact_coverage: number
+  off_answer_fact_coverage: number
+  answer_fact_coverage_delta: number
+  answer_completeness: number
+  off_answer_completeness: number
+  answer_completeness_delta: number
+  avg_on_runtime_ms: number
+  avg_off_runtime_ms: number
+  runtime_delta_ms: number
+  avg_on_investigation_effort: number
+  avg_off_investigation_effort: number
+  investigation_effort_delta: number
+  continuation_score: number
+  continuation_verdict: string
   precision: number
   recall: number
   gold_recall: number
@@ -274,6 +291,23 @@ export type BenchmarkRun = {
   off_returned_tokens: number
   off_baseline_tokens: number
   off_saved_tokens: number
+  task_success_rate: number
+  off_task_success_rate: number
+  task_success_delta: number
+  answer_fact_coverage: number
+  off_answer_fact_coverage: number
+  answer_fact_coverage_delta: number
+  answer_completeness: number
+  off_answer_completeness: number
+  answer_completeness_delta: number
+  avg_on_runtime_ms: number
+  avg_off_runtime_ms: number
+  runtime_delta_ms: number
+  avg_on_investigation_effort: number
+  avg_off_investigation_effort: number
+  investigation_effort_delta: number
+  continuation_score: number
+  continuation_verdict: string
   generator_manifest?: Record<string, unknown>
   run_manifest?: Record<string, unknown>
   clusters: BenchmarkClusterSummary[]

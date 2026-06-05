@@ -46,29 +46,6 @@ func addCommonFlags(cmd *cobra.Command, f *commonFlags) {
 	cmd.Flags().StringVar(&f.apiURL, "api", "", "HTTP API base URL (overrides in-process mode)")
 }
 
-func openDeps(ctx context.Context, cfg runtimeConfig) (*sqlite.Store, embeddings.Provider, error) {
-	if strings.TrimSpace(cfg.dbPath) == "" || strings.TrimSpace(cfg.workspace) == "" {
-		return nil, nil, errors.New("db path and workspace are required")
-	}
-	if err := os.MkdirAll(filepath.Dir(cfg.dbPath), 0o755); err != nil {
-		return nil, nil, err
-	}
-	store, err := sqlite.Open(ctx, cfg.dbPath)
-	if err != nil {
-		return nil, nil, err
-	}
-	if err := os.MkdirAll(cfg.modelDir, 0o755); err != nil {
-		_ = store.Close()
-		return nil, nil, err
-	}
-	provider, err := embeddings.NewProvider(cfg.modelDir)
-	if err != nil {
-		_ = store.Close()
-		return nil, nil, err
-	}
-	return store, provider, nil
-}
-
 func newWriteCommand() *cobra.Command {
 	var flags commonFlags
 	var mType, content string
@@ -366,16 +343,21 @@ func newRecallCommand() *cobra.Command {
 					return err
 				}
 				defer func() { _ = store.Close() }()
-				_ = store.AddTokenMetricV2(ctx, cfg.workspace, "recall", 0, 0, engine.RunLabel(), false)
 				contextBlock := engine.AssembleRecallSections(task, nil)
+				disabledTokens := len(strings.Fields(contextBlock))
+				_ = store.AddTokenMetricV2(ctx, cfg.workspace, "recall", disabledTokens, disabledTokens, engine.RunLabel(), false)
 				if strings.EqualFold(flags.format, formatRaw) {
 					_, err := fmt.Fprint(cmd.OutOrStdout(), contextBlock)
 					return err
 				}
 				return writeSuccessEnvelope(cmd.OutOrStdout(), "recall", map[string]any{
-					"disabled":      true,
-					"workspace":     cfg.workspace,
-					"context_block": contextBlock,
+					"disabled":           true,
+					"workspace":          cfg.workspace,
+					"context_block":      contextBlock,
+					"hits":               []any{},
+					"tokens_used":        disabledTokens,
+					"baseline_tokens":    disabledTokens,
+					"observation_tokens": 0,
 				})
 			}
 			if cfg.apiURL != "" {
@@ -406,52 +388,32 @@ func newRecallCommand() *cobra.Command {
 				}
 				return writeSuccessEnvelope(cmd.OutOrStdout(), "recall", out)
 			}
-			store, provider, err := openDeps(ctx, cfg)
+			request := recallRequest{
+				Task:                 task,
+				TopK:                 topK,
+				Budget:               budget,
+				IncludeObservations:  includeObservations,
+				ObservationLimit:     observationLimit,
+				ObservationSessionID: observationSessionID,
+			}
+			memoryEnabled := engine.MemoryEnabled()
+			var store *sqlite.Store
+			var provider embeddings.Provider
+			if memoryEnabled {
+				store, provider, err = openDeps(ctx, cfg)
+			} else {
+				store, err = openStore(ctx, cfg)
+			}
 			if err != nil {
 				return err
 			}
 			defer func() { _ = store.Close() }()
-
-			observationBlock := ""
-			observationTokens := 0
-			originalBudget := budget
-			if includeObservations {
-				block, _, _ := buildRecentObservationBlockCLI(ctx, store, cfg.workspace, strings.TrimSpace(observationSessionID), observationLimit)
-				observationBlock = block
-				observationTokens = len(strings.Fields(observationBlock)) + len(strings.Fields("## Recent Observations"))
-				if budget-observationTokens > 0 {
-					budget = budget - observationTokens
-				} else {
-					budget = 0
-				}
-			}
-
-			searcher := engine.NewVectorSearcher(store, provider)
-			retrieval := engine.NewRetrievalEngine(searcher)
-			retrieved, err := retrieval.Retrieve(ctx, engine.RetrievalOptions{
-				Workspace: cfg.workspace,
-				Query:     task,
-				TopK:      topK,
-				Mode:      engine.ModeRecall,
-			})
+			payload, contextBlock, err := executeRecall(ctx, cfg, store, provider, memoryEnabled, request)
 			if err != nil {
 				return err
 			}
-			clipper := engine.NewTokenClipper(nil)
-			rebalanced := engine.RebalanceRecallHits(task, retrieved.Hits)
-			included, meta := clipper.Clip(rebalanced, budget)
-			_ = store.AddTokenMetricV2(ctx, cfg.workspace, "recall", meta.UsedTokens+observationTokens, recallBaselineTokens(rebalanced, observationTokens), engine.RunLabel(), true)
-			payload := map[string]any{
-				"mode":               retrieved.Mode,
-				"weights":            retrieved.Weights,
-				"hits":               included,
-				"clipping":           meta,
-				"workspace":          cfg.workspace,
-				"requested_budget":   originalBudget,
-				"observation_tokens": observationTokens,
-			}
 			if strings.EqualFold(flags.format, formatRaw) {
-				_, err := fmt.Fprint(cmd.OutOrStdout(), engine.AssembleRecallSectionsWithObservations(task, observationBlock, included))
+				_, err := fmt.Fprint(cmd.OutOrStdout(), contextBlock)
 				return err
 			}
 			return writeSuccessEnvelope(cmd.OutOrStdout(), "recall", payload)

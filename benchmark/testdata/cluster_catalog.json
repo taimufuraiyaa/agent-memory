@@ -1,152 +1,202 @@
 [
   {
-    "id": "retrieval-engine",
-    "title": "Retrieval Engine",
-    "keywords": ["query planning", "ranking", "cutoffs", "policy"],
-    "adjacent_clusters": ["vector-search", "adaptive-tuning"]
-  },
-  {
-    "id": "vector-search",
-    "title": "Vector Search",
-    "keywords": ["embeddings", "similarity", "neighbors", "scores"],
-    "adjacent_clusters": ["retrieval-engine", "embeddings"]
-  },
-  {
-    "id": "embeddings",
-    "title": "Embeddings",
-    "keywords": ["model dir", "provider", "tokenizer", "onnx"],
-    "adjacent_clusters": ["vector-search", "study-mode"]
-  },
-  {
-    "id": "sqlite-storage",
-    "title": "SQLite Storage",
-    "keywords": ["schema", "wal mode", "queries", "migrations"],
-    "adjacent_clusters": ["write-pipeline", "token-metrics"]
-  },
-  {
-    "id": "cli-recall",
-    "title": "CLI Recall",
-    "keywords": ["budget", "context block", "top k", "clipping"],
-    "adjacent_clusters": ["retrieval-engine", "cli-search"]
-  },
-  {
-    "id": "cli-search",
-    "title": "CLI Search",
-    "keywords": ["query", "filters", "relevance", "preview"],
-    "adjacent_clusters": ["cli-recall", "api-server"]
-  },
-  {
-    "id": "dashboard",
-    "title": "Dashboard",
-    "keywords": ["metric cards", "history", "clusters", "responsive layout"],
-    "adjacent_clusters": ["api-server", "token-metrics"]
-  },
-  {
-    "id": "api-server",
+    "id": "api_server",
     "title": "API Server",
-    "keywords": ["routes", "handlers", "json", "http"],
-    "adjacent_clusters": ["dashboard", "cli-search"]
+    "keywords": ["routes", "handlers", "json", "workspace"],
+    "adjacent_clusters": ["dashboard", "mcp_server"],
+    "files": ["internal/api/server.go", "internal/api/server_test.go"],
+    "commands": ["rtk go test ./internal/api", "rtk agent-memory recall --api http://localhost:8080"]
   },
   {
-    "id": "workspace-init",
-    "title": "Workspace Init",
-    "keywords": ["workspace", "rules", "project root", "reuse"],
-    "adjacent_clusters": ["lifecycle", "study-mode"]
+    "id": "cli_flags",
+    "title": "CLI Flags",
+    "keywords": ["flags", "cobra", "validation", "defaults"],
+    "adjacent_clusters": ["run_labels", "recall_lifecycle"],
+    "files": ["internal/cli/commands.go", "cmd/agent-memory/main.go"],
+    "commands": ["rtk agent-memory recall --help", "rtk agent-memory search --help"]
   },
   {
-    "id": "write-pipeline",
-    "title": "Write Pipeline",
-    "keywords": ["sources", "normalization", "confidence", "storage tier"],
-    "adjacent_clusters": ["sqlite-storage", "observations"]
-  },
-  {
-    "id": "session-end",
-    "title": "Session End",
-    "keywords": ["transcript", "summary", "capture", "session timeline"],
-    "adjacent_clusters": ["observations", "lifecycle"]
-  },
-  {
-    "id": "observations",
-    "title": "Observations",
-    "keywords": ["agent observation", "promotion", "signals", "evidence"],
-    "adjacent_clusters": ["write-pipeline", "session-end"]
-  },
-  {
-    "id": "outcomes",
-    "title": "Outcomes",
-    "keywords": ["success", "failure", "approach", "reason"],
-    "adjacent_clusters": ["observations", "feedback"]
-  },
-  {
-    "id": "token-metrics",
-    "title": "Token Metrics",
-    "keywords": ["baseline tokens", "returned tokens", "saved tokens", "aggregation"],
-    "adjacent_clusters": ["dashboard", "llm-usage"]
-  },
-  {
-    "id": "llm-usage",
-    "title": "LLM Usage",
-    "keywords": ["prompt tokens", "completion tokens", "totals", "run label"],
-    "adjacent_clusters": ["token-metrics", "dashboard"]
-  },
-  {
-    "id": "diagrams",
-    "title": "Diagrams",
-    "keywords": ["mermaid", "viewer", "rendering", "theme"],
-    "adjacent_clusters": ["dashboard", "api-server"]
-  },
-  {
-    "id": "study-mode",
-    "title": "Study Mode",
-    "keywords": ["bootstrap", "files", "directories", "discovery"],
-    "adjacent_clusters": ["workspace-init", "embeddings"]
-  },
-  {
-    "id": "export-import",
-    "title": "Export Import",
-    "keywords": ["export", "import", "payload", "snapshot"],
-    "adjacent_clusters": ["lifecycle", "sqlite-storage"]
-  },
-  {
-    "id": "lifecycle",
-    "title": "Lifecycle",
-    "keywords": ["init", "archive", "upgrade", "toggle"],
-    "adjacent_clusters": ["workspace-init", "export-import"]
-  },
-  {
-    "id": "security",
-    "title": "Security",
-    "keywords": ["redaction", "secrets", "pii", "filters"],
-    "adjacent_clusters": ["write-pipeline", "study-mode"]
-  },
-  {
-    "id": "adaptive-tuning",
-    "title": "Adaptive Tuning",
-    "keywords": ["policy override", "cooldown", "runtime config", "feedback"],
-    "adjacent_clusters": ["retrieval-engine", "feedback"]
-  },
-  {
-    "id": "reconstruction",
-    "title": "Reconstruction",
-    "keywords": ["lineage", "timeline", "rebuild", "history"],
-    "adjacent_clusters": ["session-end", "consolidation"]
-  },
-  {
-    "id": "decay-scoring",
-    "title": "Decay Scoring",
-    "keywords": ["recency", "salience", "decay", "familiarity"],
-    "adjacent_clusters": ["retrieval-engine", "feedback"]
-  },
-  {
-    "id": "feedback",
-    "title": "Feedback",
-    "keywords": ["retrieval feedback", "useful", "rejected", "cooldown"],
-    "adjacent_clusters": ["adaptive-tuning", "decay-scoring"]
+    "id": "confidence_scoring",
+    "title": "Confidence Scoring",
+    "keywords": ["confidence", "weights", "thresholds", "signals"],
+    "adjacent_clusters": ["search_ranking", "decay_scoring"],
+    "files": ["internal/engine/retrieval.go", "internal/storage/sqlite/retrieval_feedback.go"],
+    "commands": ["rtk go test ./internal/engine", "rtk agent-memory search --query confidence"]
   },
   {
     "id": "consolidation",
     "title": "Consolidation",
-    "keywords": ["merge", "deduplication", "promotion", "study"],
-    "adjacent_clusters": ["reconstruction", "observations"]
+    "keywords": ["merge", "dedupe", "promotion", "study"],
+    "adjacent_clusters": ["session_observations", "memory_types"],
+    "files": ["internal/storage/sqlite/lifecycle.go", "internal/storage/sqlite/reconstruction_lineage.go"],
+    "commands": ["rtk go test ./internal/storage/sqlite", "rtk agent-memory session-end --help"]
+  },
+  {
+    "id": "dashboard",
+    "title": "Dashboard",
+    "keywords": ["metric cards", "history", "clusters", "responsive"],
+    "adjacent_clusters": ["api_server", "token_clipper"],
+    "files": ["tools/agent-memory/dashboard/src/ui/App.tsx", "tools/agent-memory/dashboard/src/ui/styles.css"],
+    "commands": ["rtk npm run typecheck", "rtk npm run dev"]
+  },
+  {
+    "id": "database_migrations",
+    "title": "Database Migrations",
+    "keywords": ["schema", "alter table", "indices", "idempotent"],
+    "adjacent_clusters": ["storage_sqlite", "reembed"],
+    "files": ["internal/storage/sqlite/store.go", "internal/storage/sqlite/store_test.go"],
+    "commands": ["rtk go test ./internal/storage/sqlite", "rtk sqlite3 ~/.agent-memory/agent-memory.db '.schema'"]
+  },
+  {
+    "id": "decay_scoring",
+    "title": "Decay Scoring",
+    "keywords": ["recency", "salience", "decay", "familiarity"],
+    "adjacent_clusters": ["confidence_scoring", "search_ranking"],
+    "files": ["internal/storage/sqlite/retrieval_feedback.go", "internal/engine/retrieval.go"],
+    "commands": ["rtk go test ./internal/storage/sqlite", "rtk agent-memory search --query decay"]
+  },
+  {
+    "id": "embedding_model",
+    "title": "Embedding Model",
+    "keywords": ["model dir", "provider", "tokenizer", "onnx"],
+    "adjacent_clusters": ["vector_search", "reembed"],
+    "files": ["internal/embeddings/provider.go", "internal/storage/sqlite/vectors.go"],
+    "commands": ["rtk go test ./internal/embeddings", "rtk agent-memory init --help"]
+  },
+  {
+    "id": "entity_extraction",
+    "title": "Entity Extraction",
+    "keywords": ["entities", "normalization", "tags", "extraction"],
+    "adjacent_clusters": ["write_pipeline", "memory_types"],
+    "files": ["internal/engine/write_pipeline.go", "internal/core/memory.go"],
+    "commands": ["rtk go test ./internal/engine", "rtk agent-memory write --type semantic --content test"]
+  },
+  {
+    "id": "error_handling",
+    "title": "Error Handling",
+    "keywords": ["runtime", "validation", "stderr", "status"],
+    "adjacent_clusters": ["api_server", "cli_flags"],
+    "files": ["internal/api/server.go", "internal/cli/commands.go"],
+    "commands": ["rtk go test ./internal/api ./internal/cli", "rtk agent-memory recall --task fail"]
+  },
+  {
+    "id": "export_import",
+    "title": "Export Import",
+    "keywords": ["export", "import", "snapshot", "payload"],
+    "adjacent_clusters": ["storage_sqlite", "workspace_resolution"],
+    "files": ["internal/api/server.go", "internal/storage/sqlite/store.go"],
+    "commands": ["rtk agent-memory export --help", "rtk agent-memory import --help"]
+  },
+  {
+    "id": "mcp_server",
+    "title": "MCP Server",
+    "keywords": ["mcp", "transport", "tooling", "protocol"],
+    "adjacent_clusters": ["api_server", "workspace_resolution"],
+    "files": ["cmd/agent-memory/main.go", "internal/api/server.go"],
+    "commands": ["rtk go test ./cmd/agent-memory", "rtk agent-memory --help"]
+  },
+  {
+    "id": "memory_types",
+    "title": "Memory Types",
+    "keywords": ["semantic", "procedural", "episodic", "outcome"],
+    "adjacent_clusters": ["entity_extraction", "pin_delete"],
+    "files": ["internal/core/memory.go", "internal/engine/write_pipeline.go"],
+    "commands": ["rtk agent-memory write --help", "rtk agent-memory search --type semantic --query memory"]
+  },
+  {
+    "id": "pin_delete",
+    "title": "Pin Delete",
+    "keywords": ["pin", "delete", "tombstone", "cooldown"],
+    "adjacent_clusters": ["memory_types", "storage_tiers"],
+    "files": ["internal/storage/sqlite/tombstones.go", "internal/api/server.go"],
+    "commands": ["rtk agent-memory pin --help", "rtk agent-memory delete --help"]
+  },
+  {
+    "id": "recall_lifecycle",
+    "title": "Recall Lifecycle",
+    "keywords": ["recall", "context block", "top k", "budget"],
+    "adjacent_clusters": ["cli_flags", "token_clipper"],
+    "files": ["internal/cli/commands.go", "internal/engine/recall_assembly.go"],
+    "commands": ["rtk agent-memory recall --help", "rtk agent-memory recall --task \"test\""]
+  },
+  {
+    "id": "reembed",
+    "title": "Reembed",
+    "keywords": ["reembed", "vectors", "backfill", "provider"],
+    "adjacent_clusters": ["embedding_model", "database_migrations"],
+    "files": ["internal/storage/sqlite/vectors.go", "internal/embeddings/provider.go"],
+    "commands": ["rtk agent-memory reembed --help", "rtk go test ./internal/storage/sqlite ./internal/embeddings"]
+  },
+  {
+    "id": "run_labels",
+    "title": "Run Labels",
+    "keywords": ["run label", "benchmark", "grouping", "metrics"],
+    "adjacent_clusters": ["cli_flags", "session_observations"],
+    "files": ["internal/storage/sqlite/llm_usage.go", "internal/storage/sqlite/store.go"],
+    "commands": ["rtk agent-memory recall --task test", "rtk sqlite3 ~/.agent-memory/agent-memory.db 'select run_label from token_metrics limit 5'"]
+  },
+  {
+    "id": "search_ranking",
+    "title": "Search Ranking",
+    "keywords": ["ranking", "query planning", "cutoffs", "policy"],
+    "adjacent_clusters": ["confidence_scoring", "vector_search"],
+    "files": ["internal/engine/retrieval.go", "internal/engine/recall_assembly.go"],
+    "commands": ["rtk go test ./internal/engine", "rtk agent-memory search --query ranking"]
+  },
+  {
+    "id": "session_observations",
+    "title": "Session Observations",
+    "keywords": ["observations", "promotion", "timeline", "signals"],
+    "adjacent_clusters": ["consolidation", "run_labels"],
+    "files": ["internal/storage/sqlite/observations.go", "tools/agent-memory/dashboard/src/ui/App.tsx"],
+    "commands": ["rtk agent-memory session-end --help", "rtk go test ./internal/storage/sqlite"]
+  },
+  {
+    "id": "storage_sqlite",
+    "title": "Storage SQLite",
+    "keywords": ["sqlite", "wal mode", "queries", "persistence"],
+    "adjacent_clusters": ["database_migrations", "storage_tiers"],
+    "files": ["internal/storage/sqlite/store.go", "internal/storage/sqlite/benchmark.go"],
+    "commands": ["rtk go test ./internal/storage/sqlite", "rtk sqlite3 ~/.agent-memory/agent-memory.db '.tables'"]
+  },
+  {
+    "id": "storage_tiers",
+    "title": "Storage Tiers",
+    "keywords": ["storage tier", "vector", "markdown", "document"],
+    "adjacent_clusters": ["storage_sqlite", "pin_delete"],
+    "files": ["internal/core/memory.go", "internal/storage/sqlite/store.go"],
+    "commands": ["rtk agent-memory search --query tiers", "rtk go test ./internal/storage/sqlite"]
+  },
+  {
+    "id": "token_clipper",
+    "title": "Token Clipper",
+    "keywords": ["token budget", "clipping", "baseline tokens", "used tokens"],
+    "adjacent_clusters": ["recall_lifecycle", "dashboard"],
+    "files": ["internal/cli/commands.go", "internal/api/server.go"],
+    "commands": ["rtk agent-memory recall --task token --budget 400", "rtk go test ./internal/cli ./internal/api"]
+  },
+  {
+    "id": "vector_search",
+    "title": "Vector Search",
+    "keywords": ["embeddings", "similarity", "neighbors", "scores"],
+    "adjacent_clusters": ["embedding_model", "search_ranking"],
+    "files": ["internal/engine/retrieval.go", "internal/storage/sqlite/vectors.go"],
+    "commands": ["rtk agent-memory search --query vector", "rtk go test ./internal/engine ./internal/storage/sqlite"]
+  },
+  {
+    "id": "workspace_resolution",
+    "title": "Workspace Resolution",
+    "keywords": ["workspace", "rules", "base dir", "resolution"],
+    "adjacent_clusters": ["mcp_server", "export_import"],
+    "files": ["internal/api/server.go", "internal/cli/commands.go"],
+    "commands": ["rtk agent-memory init", "rtk agent-memory recall --workspace agent-memory --task workspace"]
+  },
+  {
+    "id": "write_pipeline",
+    "title": "Write Pipeline",
+    "keywords": ["sources", "normalization", "confidence", "entities"],
+    "adjacent_clusters": ["entity_extraction", "memory_types"],
+    "files": ["internal/engine/write_pipeline.go", "internal/core/memory.go"],
+    "commands": ["rtk agent-memory write --type semantic --content sample", "rtk go test ./internal/engine"]
   }
 ]

@@ -170,6 +170,84 @@ func TestRecallPreviewParityWithRawRecall(t *testing.T) {
 	}
 }
 
+func TestRecallParityHTTPVsCLIWithStagedGating(t *testing.T) {
+	baseDir := t.TempDir()
+	dbPath := filepath.Join(baseDir, "ws.db")
+	store, err := sqlite.Open(context.Background(), dbPath)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	modelDir := filepath.Join(t.TempDir(), "model")
+	if err := os.MkdirAll(modelDir, 0o755); err != nil {
+		t.Fatalf("mkdir model: %v", err)
+	}
+	provider, err := embeddings.NewLocalProvider(modelDir)
+	if err != nil {
+		t.Fatalf("provider: %v", err)
+	}
+
+	pipe := engine.NewWritePipeline(store)
+	_, _ = pipe.Write(context.Background(), engine.WriteInput{Workspace: "ws", Type: core.SemanticMemory, Content: "redis config path is config/redis.conf", Source: core.MemorySource{Type: core.SourceUserInput}})
+
+	svc := &apipkg.Service{Workspace: "ws", BaseDir: baseDir, EmbeddingProvider: provider}
+	ts := httptest.NewServer(apipkg.NewMux(svc))
+	defer ts.Close()
+
+	cmd := clicmd.NewRootCommand()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(io.Discard)
+	cmd.SetArgs([]string{
+		"recall",
+		"--db", dbPath,
+		"--workspace", "ws",
+		"--model-dir", modelDir,
+		"--task", "find redis config path",
+		"--top-k", "2",
+		"--budget", "50",
+		"--format", "json",
+	})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("cli recall execute: %v", err)
+	}
+	var cliEnv map[string]any
+	if err := json.Unmarshal(out.Bytes(), &cliEnv); err != nil {
+		t.Fatalf("decode cli recall envelope: %v raw=%q", err, out.String())
+	}
+	cliData, _ := cliEnv["data"].(map[string]any)
+
+	body, _ := json.Marshal(map[string]any{
+		"task":   "find redis config path",
+		"top_k":  2,
+		"budget": 50,
+	})
+	resp, err := http.Post(ts.URL+"/api/v1/memories/recall", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("http post: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	var apiEnv map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&apiEnv); err != nil {
+		t.Fatalf("decode api recall envelope: %v", err)
+	}
+	apiData, _ := apiEnv["data"].(map[string]any)
+
+	if cliData["retrieval_strategy"] != apiData["retrieval_strategy"] {
+		t.Fatalf("strategy mismatch cli=%v api=%v", cliData["retrieval_strategy"], apiData["retrieval_strategy"])
+	}
+	if cliData["recall_trigger"] != apiData["recall_trigger"] {
+		t.Fatalf("trigger mismatch cli=%v api=%v", cliData["recall_trigger"], apiData["recall_trigger"])
+	}
+	if cliData["retrieval_mode"] != apiData["retrieval_mode"] {
+		t.Fatalf("retrieval mode mismatch cli=%v api=%v", cliData["retrieval_mode"], apiData["retrieval_mode"])
+	}
+	if cliData["context_block"] != apiData["context_block"] {
+		t.Fatalf("context mismatch cli=%v api=%v", cliData["context_block"], apiData["context_block"])
+	}
+}
+
 func TestSearchParityHTTPVsCLI(t *testing.T) {
 	baseDir := t.TempDir()
 	dbPath := filepath.Join(baseDir, "ws.db")
