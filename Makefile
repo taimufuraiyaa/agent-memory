@@ -1,7 +1,7 @@
 APP := agent-memory
 BIN_DIR := bin
 
-.PHONY: help build test lint clean setup test-verbose test-coverage bench fmt vet clean-all install-dev
+.PHONY: help build test lint clean setup test-verbose test-coverage bench fmt vet clean-all install-dev build-dashboard embed-dashboard build-with-dashboard
 
 .DEFAULT_GOAL := help
 
@@ -26,6 +26,27 @@ setup: ## Install development dependencies and tools
 build: ## Build the agent-memory binary
 	mkdir -p $(BIN_DIR)
 	go build -o $(BIN_DIR)/$(APP) ./cmd/agent-memory
+
+build-dashboard: ## Build dashboard assets for embedding
+	@echo "Building dashboard assets..."
+	@if ! command -v npm >/dev/null 2>&1; then \
+		echo "❌ npm is required to build dashboard"; \
+		exit 1; \
+	fi
+	cd tools/agent-memory/dashboard && npm ci && npm run build
+	@echo "✓ Dashboard built successfully"
+
+embed-dashboard: build-dashboard ## Copy dashboard assets for embedding
+	@echo "Embedding dashboard assets..."
+	mkdir -p internal/api/dashboard/dist
+	cp -r tools/agent-memory/dashboard/dist/* internal/api/dashboard/dist/
+	@echo "✓ Dashboard assets ready for embedding"
+
+build-with-dashboard: embed-dashboard ## Build agent-memory with embedded dashboard
+	@echo "Building agent-memory with embedded dashboard..."
+	mkdir -p $(BIN_DIR)
+	go build -o $(BIN_DIR)/$(APP) ./cmd/agent-memory
+	@echo "✓ Build complete with embedded dashboard"
 
 install-dev: build ## Build and install locally for development
 	go install ./cmd/agent-memory

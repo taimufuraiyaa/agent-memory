@@ -52,6 +52,34 @@ func newWriteCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "write",
 		Short: "Write one memory entry",
+		Long: `Write a memory entry to the workspace.
+
+Memory types:
+  episodic   - Raw observations and conversation turns (7 day half-life)
+  semantic   - Facts and knowledge (30 day half-life)
+  procedural - Checklists and workflows (90 day half-life)
+  outcome    - Records of what worked or failed (60 day half-life)
+
+The memory will be automatically:
+  - Validated for safety and size limits
+  - Embedded for semantic search
+  - Routed to appropriate storage tier
+  - Available for retrieval in future queries`,
+		Example: `  # Write a semantic fact
+  agent-memory write --workspace my-project --type semantic \
+    --content "The API uses JWT tokens for authentication"
+
+  # Write a procedural checklist
+  agent-memory write --workspace my-project --type procedural \
+    --content "Run 'make test' before committing changes"
+
+  # Write an outcome record
+  agent-memory write --workspace my-project --type outcome \
+    --content "Database migration failed due to lock timeout"
+
+  # Write to default workspace (from current directory)
+  agent-memory write --type semantic \
+    --content "Redis is used for session caching"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 			if !engine.MemoryEnabled() {
@@ -126,6 +154,35 @@ func newSearchCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "search",
 		Short: "Semantic multi-signal search",
+		Long: `Search workspace memories using semantic similarity and multi-signal ranking.
+
+The search uses multiple signals to rank results:
+  - Semantic similarity (embedding-based)
+  - Recency (recently updated items)
+  - Outcome signal (successful outcomes boosted)
+  - Decay penalty (old items fade)
+  - Tier bias (markdown tier preferred)
+
+Use --explain to see per-signal score breakdowns.`,
+		Example: `  # Basic semantic search
+  agent-memory search --workspace my-project \
+    --query "how does authentication work"
+
+  # Search with explanation of scores
+  agent-memory search --workspace my-project \
+    --query "database configuration" --explain
+
+  # Filter by memory type
+  agent-memory search --workspace my-project \
+    --query "deployment process" --type procedural
+
+  # Search for successful outcomes only
+  agent-memory search --workspace my-project \
+    --query "migration" --outcome-result success
+
+  # Recall mode for session start (higher quality threshold)
+  agent-memory search --workspace my-project \
+    --query "continue previous work" --mode recall --top-k 5`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 			cfg, err := resolveRuntime(flags)
@@ -328,6 +385,33 @@ func newRecallCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "recall",
 		Short: "Session-start recall block",
+		Long: `Generate a context block for session start or continuation.
+
+Recall assembles relevant memories within a token budget, perfect for
+including in agent system prompts. It prioritizes:
+  - Procedural knowledge (how-to)
+  - Recent successful outcomes
+  - Relevant semantic facts
+  - Task-specific context
+
+The output is formatted as a structured context block ready to paste
+into your agent's system prompt or context.`,
+		Example: `  # Basic recall for continuing work
+  agent-memory recall --workspace my-project \
+    --task "continue working on authentication feature" --budget 1000
+
+  # Quick recall with smaller budget
+  agent-memory recall --workspace my-project \
+    --task "fix database migration bug" --budget 500
+
+  # Recall with observations from current session
+  agent-memory recall --workspace my-project \
+    --task "implement API endpoint" --budget 800 \
+    --include-observations --observation-limit 5
+
+  # Raw format (for piping to other tools)
+  agent-memory recall --workspace my-project \
+    --task "deploy to production" --format raw --budget 1000`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 			cfg, err := resolveRuntime(flags)
@@ -1011,6 +1095,42 @@ func dashboardSourceDir(override string) (string, error) {
 	return dir, nil
 }
 
+func tryServeEmbeddedDashboard(cmd *cobra.Command, ctx context.Context, cfg runtimeConfig, ln net.Listener, apiURL string, noOpen bool) error {
+	// Import the dashboard package to access embedded assets
+	embeddedDashboard := &embeddedDashboardWrapper{}
+	
+	if !embeddedDashboard.hasAssets() {
+		return errors.New("embedded assets not available")
+	}
+
+	// Log that we're using embedded assets
+	_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "using embedded dashboard assets (npm not required)\n")
+
+	// Get the dashboard URL - embedded assets are served from the API server
+	dashURL := strings.TrimRight(apiURL, "/") + "/dashboard/"
+
+	if noOpen {
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s\n", dashURL)
+	} else {
+		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "opening %s\n", dashURL)
+		_ = openInBrowser(dashURL)
+	}
+
+	// Wait for cancellation
+	<-ctx.Done()
+	return nil
+}
+
+// embeddedDashboardWrapper is a temporary wrapper to check for embedded assets
+// This will be replaced with direct dashboard package import once it's properly integrated
+type embeddedDashboardWrapper struct{}
+
+func (w *embeddedDashboardWrapper) hasAssets() bool {
+	// For now, return false to maintain existing behavior
+	// This will be updated to call dashboard.HasEmbeddedAssets() once fully integrated
+	return false
+}
+
 func newDashboardCommand() *cobra.Command {
 	var flags commonFlags
 	var addr string
@@ -1216,6 +1336,12 @@ func newDashboardCommand() *cobra.Command {
 			apiURL := apiURLForListenerAddr(ln.Addr().String())
 			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "api serving on %s\n", apiURL)
 
+			// Try embedded dashboard assets first (no npm required)
+			if err := tryServeEmbeddedDashboard(cmd, ctx, cfg, ln, apiURL, noOpen); err == nil {
+				return nil
+			}
+
+			// Fall back to npm-based development mode
 			dashDir, err := dashboardSourceDir(dashDirFlag)
 			if err != nil {
 				_ = server.Shutdown(context.Background())
@@ -1223,7 +1349,7 @@ func newDashboardCommand() *cobra.Command {
 			}
 			if _, err := exec.LookPath("npm"); err != nil {
 				_ = server.Shutdown(context.Background())
-				return errors.New("npm is required to run the standalone dashboard")
+				return errors.New("npm is required to run the standalone dashboard (embedded assets not available)")
 			}
 			port, err := pickFreeLocalPort()
 			if err != nil {
@@ -1409,7 +1535,34 @@ func newExportCommand() *cobra.Command {
 	var outFile string
 	cmd := &cobra.Command{
 		Use:   "export",
-		Short: "Export workspace memories to json or markdown",
+		Short: "Export workspace memories to json, markdown, or csv",
+		Long: `Export all workspace memories to a file for backup, analysis, or migration.
+
+Export formats:
+  json     - Complete data with all fields (default)
+  markdown - Human-readable grouped by memory type
+  csv      - Tabular format for spreadsheet analysis (16 columns)
+
+The export includes all memory metadata: content, type, confidence,
+storage tier, access counts, decay scores, outcomes, and timestamps.`,
+		Example: `  # Export to JSON (complete backup)
+  agent-memory export --workspace my-project \
+    --export-format json --out backup.json
+
+  # Export to Markdown (human-readable)
+  agent-memory export --workspace my-project \
+    --export-format markdown --out memories.md
+
+  # Export to CSV (for Excel/Google Sheets)
+  agent-memory export --workspace my-project \
+    --export-format csv --out data.csv
+
+  # Print JSON to stdout
+  agent-memory export --workspace my-project
+
+  # Export from specific database file
+  agent-memory export --workspace my-project \
+    --db /path/to/memories.db --export-format json --out export.json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 			cfg, err := resolveRuntime(flags)
@@ -1417,8 +1570,8 @@ func newExportCommand() *cobra.Command {
 				return err
 			}
 			format = strings.ToLower(strings.TrimSpace(format))
-			if format != "json" && format != "markdown" {
-				return errors.New("invalid export format: json|markdown")
+			if format != "json" && format != "markdown" && format != "csv" {
+				return errors.New("invalid export format: json|markdown|csv")
 			}
 			var payload any
 			if cfg.apiURL != "" {
@@ -1438,6 +1591,12 @@ func newExportCommand() *cobra.Command {
 				}
 				if format == "markdown" {
 					payload = map[string]any{"markdown": engine.BuildMarkdownExport(cfg.workspace, memories)}
+				} else if format == "csv" {
+					csvData, err := engine.BuildCSVExport(cfg.workspace, memories)
+					if err != nil {
+						return fmt.Errorf("failed to build CSV export: %w", err)
+					}
+					payload = map[string]any{"csv": csvData}
 				} else {
 					payload = engine.BuildExportBundle(cfg.workspace, memories)
 				}
@@ -1455,6 +1614,12 @@ func newExportCommand() *cobra.Command {
 						b = []byte(md)
 					}
 				}
+			} else if format == "csv" {
+				if obj, ok := payload.(map[string]any); ok {
+					if csvData, ok := obj["csv"].(string); ok {
+						b = []byte(csvData)
+					}
+				}
 			}
 			if err := os.WriteFile(outFile, b, 0o644); err != nil {
 				return err
@@ -1463,7 +1628,7 @@ func newExportCommand() *cobra.Command {
 		},
 	}
 	addCommonFlags(cmd, &flags)
-	cmd.Flags().StringVar(&format, "export-format", "json", "Export format: json|markdown")
+	cmd.Flags().StringVar(&format, "export-format", "json", "Export format: json|markdown|csv")
 	cmd.Flags().StringVar(&outFile, "out", "", "Output file path (optional)")
 	return cmd
 }

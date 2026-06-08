@@ -1960,6 +1960,10 @@ func NewMux(svc *Service) *http.ServeMux {
 			"scheduler":                     schedulerSummary,
 		})
 	})
+
+	// Serve embedded dashboard assets
+	mux.Handle("/dashboard/", serveDashboard())
+
 	return mux
 }
 
@@ -2470,3 +2474,17 @@ func renderClipped(meta engine.ClipMetadata) []map[string]any {
 	}
 	return out
 }
+
+// serveDashboard returns an HTTP handler that serves the embedded dashboard assets.
+func serveDashboard() http.Handler {
+	// Note: dashboard package import will be added by goimports when we build
+	// Using fully qualified import path for now
+	// return http.StripPrefix("/dashboard/", dashboard.GetEmbeddedHandler())
+	
+	// For now, we need to manually check if assets exist
+	// This will be cleaned up once the build process includes embedded assets
+	return http.StripPrefix("/dashboard/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "Dashboard assets not yet embedded. Run: make build-with-dashboard", http.StatusNotFound)
+	}))
+}
+

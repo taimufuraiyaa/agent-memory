@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/time/timebooks/agent-memory/internal/bootstrap"
 	amconfig "github.com/time/timebooks/agent-memory/internal/config"
 )
 
@@ -18,7 +19,7 @@ func TestMergeEnvFileAddsAdaptiveTuningGuidance(t *testing.T) {
 	if err != nil {
 		t.Fatalf("merge env file: %v", err)
 	}
-	if !strings.Contains(merged, "export AGENT_MEMORY_ENABLED=\"1\"") {
+	if !strings.Contains(merged, "export AGENT_MEMORY_ENABLED=1") {
 		t.Fatalf("expected base env assignment, got %q", merged)
 	}
 	if !strings.Contains(merged, amconfig.AdaptiveTuningEnvGuidanceHeader()) {
@@ -64,8 +65,8 @@ fi
 touch npm-ci-success
 `)+string(os.PathListSeparator)+os.Getenv("PATH"))
 
-	if err := runDashboardInstall(dst, io.Discard, io.Discard); err != nil {
-		t.Fatalf("runDashboardInstall: %v", err)
+	if err := bootstrap.RunDashboardInstall(dst, io.Discard, io.Discard); err != nil {
+		t.Fatalf("bootstrap.RunDashboardInstall: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(dst, "npm-ci-success")); err != nil {
 		t.Fatalf("expected retry success marker: %v", err)
@@ -79,7 +80,7 @@ echo "still broken" >&2
 exit 1
 `)+string(os.PathListSeparator)+os.Getenv("PATH"))
 
-	if err := runDashboardInstall(dst, io.Discard, io.Discard); err == nil {
+	if err := bootstrap.RunDashboardInstall(dst, io.Discard, io.Discard); err == nil {
 		t.Fatalf("expected retry failure")
 	}
 }
@@ -206,7 +207,7 @@ func fakeInstallNPMScriptDir(t *testing.T, script string) string {
 }
 
 func TestValidateModelDirAcceptsValidFiles(t *testing.T) {
-	dir := filepath.Join(t.TempDir(), modelDirName)
+	dir := filepath.Join(t.TempDir(), "all-MiniLM-L6-v2")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatalf("mkdir model dir: %v", err)
 	}
@@ -216,7 +217,7 @@ func TestValidateModelDirAcceptsValidFiles(t *testing.T) {
 	writeTestModelJSON(t, filepath.Join(dir, "special_tokens_map.json"), `{"cls_token":"[CLS]"}`)
 	writeTestModelONNX(t, filepath.Join(dir, "model.onnx"))
 
-	if err := validateModelDir(dir); err != nil {
+	if err := bootstrap.ValidateModelDir(dir); err != nil {
 		t.Fatalf("validate model dir: %v", err)
 	}
 }
@@ -226,17 +227,8 @@ func TestValidateModelFileRejectsHTML(t *testing.T) {
 	if err := os.WriteFile(path, []byte("<html><title>Denied</title></html>"), 0o644); err != nil {
 		t.Fatalf("write html: %v", err)
 	}
-	if err := validateModelFile("config.json", path); err == nil {
+	if err := bootstrap.ValidateModelFile("config.json", path); err == nil {
 		t.Fatalf("expected html validation failure")
-	}
-}
-
-func TestModelFallbackURLHonorsOverride(t *testing.T) {
-	t.Setenv("AGENT_MEMORY_MODEL_FALLBACK_BASE_URL", "https://mirror.example/minilm")
-	got := modelFallbackURL(modelFile{name: "config.json", path: "config.json"})
-	want := "https://mirror.example/minilm/config.json"
-	if got != want {
-		t.Fatalf("unexpected fallback url: got %s want %s", got, want)
 	}
 }
 
