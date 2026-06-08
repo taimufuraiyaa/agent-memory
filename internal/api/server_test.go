@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -9,10 +10,30 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
+	"github.com/time/timebooks/agent-memory/internal/core"
 	"github.com/time/timebooks/agent-memory/internal/embeddings"
 	"github.com/time/timebooks/agent-memory/internal/engine"
 )
+
+type fakeScheduler struct {
+	status  *SchedulerStatus
+	history []SchedulerRun
+	run     *SchedulerRun
+}
+
+func (f *fakeScheduler) Status(context.Context) (*SchedulerStatus, error) {
+	return f.status, nil
+}
+
+func (f *fakeScheduler) History(context.Context, string, int) ([]SchedulerRun, error) {
+	return f.history, nil
+}
+
+func (f *fakeScheduler) RunNow(context.Context, string, bool) (*SchedulerRun, error) {
+	return f.run, nil
+}
 
 func TestServerWriteSearchRecall(t *testing.T) {
 	baseDir := t.TempDir()
@@ -90,6 +111,9 @@ func TestServerWriteSearchRecall(t *testing.T) {
 	if strategy, _ := recallResp["retrieval_strategy"].(string); strategy == "" {
 		t.Fatalf("expected retrieval strategy metadata")
 	}
+	if _, ok := recallResp["reconstruction"]; !ok {
+		t.Fatalf("expected reconstruction metadata in recall response")
+	}
 	rawResp := postJSON(t, ts.URL+"/api/v1/memories/recall", map[string]any{"task": "investigate order event", "top_k": 2, "budget": 20, "format": "raw"})
 	if _, ok := rawResp["text"]; !ok {
 		t.Fatalf("expected raw recall text")
@@ -109,6 +133,9 @@ func TestServerWriteSearchRecall(t *testing.T) {
 	}
 	if strategy, _ := previewResp["retrieval_strategy"].(string); strategy == "" {
 		t.Fatalf("expected preview retrieval strategy metadata")
+	}
+	if _, ok := previewResp["reconstruction"]; !ok {
+		t.Fatalf("expected preview reconstruction metadata")
 	}
 	if _, ok := previewResp["tier_distribution"]; !ok {
 		t.Fatalf("expected recall preview tier distribution")
@@ -204,6 +231,12 @@ func TestServerWriteSearchRecall(t *testing.T) {
 	sessionResp := postJSON(t, ts.URL+"/api/v1/memories/session-end", map[string]any{"transcript": "we should always run migrations\nresult was success"})
 	if _, ok := sessionResp["total_extracted"]; !ok {
 		t.Fatalf("expected session-end extraction response")
+	}
+	if lifecycleRan, _ := sessionResp["lifecycle_ran"].(bool); !lifecycleRan {
+		t.Fatalf("expected session-end lifecycle to run, got %+v", sessionResp)
+	}
+	if _, ok := sessionResp["lifecycle_metrics"]; !ok {
+		t.Fatalf("expected session-end lifecycle metrics")
 	}
 
 	exportJSON := getJSON(t, ts.URL+"/api/v1/memories/export?format=json")
@@ -346,61 +379,61 @@ func TestServerBenchmarkRunsAPI(t *testing.T) {
 	defer ts.Close()
 
 	ingest := postJSON(t, ts.URL+"/api/v1/benchmark/ingest", map[string]any{
-		"workspace":           "ws",
-		"run_id":              "benchmark-001",
-		"seed_count":          200,
-		"case_count":          10000,
-		"top_k":               20,
-		"budget":              400,
-		"precision":           0.61,
-		"recall":              0.58,
-		"gold_recall":         0.52,
-		"keyword_coverage":    0.67,
-		"ndcg":                0.72,
-		"f1":                  0.59,
-		"token_efficiency":    0.44,
-		"baseline_tokens":     9000,
-		"returned_tokens":     5000,
-		"saved_tokens":        4000,
-		"cost_with_memory":    0.15,
-		"cost_without_memory": 0.27,
-		"cost_saved":          0.12,
-		"cost_saved_pct":      0.4444,
-		"combined_score":      0.63,
-		"verdict":             "GOOD BENEFIT",
-		"off_cases":           10000,
-		"off_disabled_count":  10000,
-		"off_all_disabled":    true,
-		"task_success_rate":   0.7,
-		"off_task_success_rate": 0.2,
-		"task_success_delta":  0.5,
-		"answer_fact_coverage": 0.8,
-		"off_answer_fact_coverage": 0.25,
-		"answer_fact_coverage_delta": 0.55,
-		"answer_completeness": 0.65,
-		"off_answer_completeness": 0.1,
-		"answer_completeness_delta": 0.55,
-		"avg_on_runtime_ms":   900,
-		"avg_off_runtime_ms":  1500,
-		"runtime_delta_ms":    600,
-		"avg_on_investigation_effort": 3,
+		"workspace":                    "ws",
+		"run_id":                       "benchmark-001",
+		"seed_count":                   200,
+		"case_count":                   10000,
+		"top_k":                        20,
+		"budget":                       400,
+		"precision":                    0.61,
+		"recall":                       0.58,
+		"gold_recall":                  0.52,
+		"keyword_coverage":             0.67,
+		"ndcg":                         0.72,
+		"f1":                           0.59,
+		"token_efficiency":             0.44,
+		"baseline_tokens":              9000,
+		"returned_tokens":              5000,
+		"saved_tokens":                 4000,
+		"cost_with_memory":             0.15,
+		"cost_without_memory":          0.27,
+		"cost_saved":                   0.12,
+		"cost_saved_pct":               0.4444,
+		"combined_score":               0.63,
+		"verdict":                      "GOOD BENEFIT",
+		"off_cases":                    10000,
+		"off_disabled_count":           10000,
+		"off_all_disabled":             true,
+		"task_success_rate":            0.7,
+		"off_task_success_rate":        0.2,
+		"task_success_delta":           0.5,
+		"answer_fact_coverage":         0.8,
+		"off_answer_fact_coverage":     0.25,
+		"answer_fact_coverage_delta":   0.55,
+		"answer_completeness":          0.65,
+		"off_answer_completeness":      0.1,
+		"answer_completeness_delta":    0.55,
+		"avg_on_runtime_ms":            900,
+		"avg_off_runtime_ms":           1500,
+		"runtime_delta_ms":             600,
+		"avg_on_investigation_effort":  3,
 		"avg_off_investigation_effort": 5,
-		"investigation_effort_delta": 2,
-		"continuation_score":  0.48,
-		"continuation_verdict": "GOOD BENEFIT",
+		"investigation_effort_delta":   2,
+		"continuation_score":           0.48,
+		"continuation_verdict":         "GOOD BENEFIT",
 		"clusters": []map[string]any{
 			{
-				"cluster_id":              "api_server",
-				"cluster_title":           "API Server",
-				"cases":                   400,
-				"task_success_delta":      0.5,
-				"answer_fact_coverage":    0.8,
-				"answer_completeness":     0.7,
-				"continuation_score":      0.52,
-				"continuation_verdict":    "GOOD BENEFIT",
-				"precision":               0.7,
-				"combined_score":          0.68,
-				"verdict":                 "GOOD BENEFIT",
+				"cluster_id":           "api_server",
+				"cluster_title":        "API Server",
+				"cases":                400,
+				"task_success_delta":   0.5,
+				"answer_fact_coverage": 0.8,
+				"answer_completeness":  0.7,
+				"continuation_score":   0.52,
+				"continuation_verdict": "GOOD BENEFIT",
+				"precision":            0.7,
+				"combined_score":       0.68,
+				"verdict":              "GOOD BENEFIT",
 			},
 		},
 		"generator_manifest": map[string]any{"test_case_count": 10000},
@@ -427,6 +460,234 @@ func TestServerBenchmarkRunsAPI(t *testing.T) {
 	clusters, _ := first["clusters"].([]any)
 	if len(clusters) != 1 {
 		t.Fatalf("expected cluster breakdown in response, got %+v", first)
+	}
+}
+
+func TestServerSchedulerAPIAndStatsSurface(t *testing.T) {
+	baseDir := t.TempDir()
+	modelDir := filepath.Join(t.TempDir(), "model")
+	if err := os.MkdirAll(modelDir, 0o755); err != nil {
+		t.Fatalf("mkdir model: %v", err)
+	}
+	provider, err := embeddings.NewLocalProvider(modelDir)
+	if err != nil {
+		t.Fatalf("provider: %v", err)
+	}
+	startedAt := time.Date(2026, 6, 8, 9, 0, 0, 0, time.UTC)
+	lastTickAt := startedAt.Add(10 * time.Minute)
+	nextTickAt := startedAt.Add(24 * time.Hour)
+	run := SchedulerRun{
+		ID:           "ws-daily-1",
+		Workspace:    "ws",
+		StartedAt:    lastTickAt,
+		CompletedAt:  lastTickAt.Add(2 * time.Second),
+		Trigger:      "daily_tick",
+		Result:       "completed",
+		DurationMS:   2000,
+		DecayUpdated: 1,
+	}
+	svc := &Service{
+		Workspace:         "ws",
+		BaseDir:           baseDir,
+		EmbeddingProvider: provider,
+		Scheduler: &fakeScheduler{
+			status: &SchedulerStatus{
+				Enabled:    true,
+				StartedAt:  startedAt,
+				LastTickAt: lastTickAt,
+				NextTickAt: nextTickAt,
+				Workspaces: []SchedulerWorkspaceStatus{{
+					Workspace:       "ws",
+					MemoryCount:     1,
+					LastActivityAt:  startedAt.Add(-time.Hour),
+					LastScheduledAt: lastTickAt,
+					LastCompletedAt: run.CompletedAt,
+					LastResult:      "completed",
+					LastDurationMS:  2000,
+					EligibleDaily:   false,
+					HygieneOverdue:  false,
+				}},
+			},
+			history: []SchedulerRun{run},
+			run:     &run,
+		},
+	}
+	ts := httptest.NewServer(NewMux(svc))
+	defer ts.Close()
+
+	postJSON(t, ts.URL+"/api/v1/memories/write", map[string]any{"workspace": "ws", "type": "semantic", "content": "scheduler status is visible"})
+
+	status := getJSON(t, ts.URL+"/api/v1/scheduler/status")
+	if enabled, _ := status["enabled"].(bool); !enabled {
+		t.Fatalf("expected scheduler enabled, got %+v", status)
+	}
+	workspaces, _ := status["workspaces"].([]any)
+	if len(workspaces) != 1 {
+		t.Fatalf("expected 1 scheduler workspace, got %+v", status)
+	}
+
+	history := getJSON(t, ts.URL+"/api/v1/scheduler/history?workspace=ws&limit=5")
+	runs, _ := history["runs"].([]any)
+	if len(runs) != 1 {
+		t.Fatalf("expected 1 scheduler run, got %+v", history)
+	}
+
+	manual := postJSON(t, ts.URL+"/api/v1/scheduler/run?workspace=ws&force=1", map[string]any{})
+	if result, _ := manual["result"].(string); result != "completed" {
+		t.Fatalf("expected manual scheduler run result, got %+v", manual)
+	}
+
+	stats := getJSON(t, ts.URL+"/api/v1/stats?workspace=ws")
+	scheduler, ok := stats["scheduler"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected scheduler summary in stats, got %+v", stats)
+	}
+	if enabled, _ := scheduler["enabled"].(bool); !enabled {
+		t.Fatalf("expected scheduler summary enabled, got %+v", scheduler)
+	}
+	if _, ok := scheduler["workspace"].(map[string]any); !ok {
+		t.Fatalf("expected workspace-specific scheduler summary, got %+v", scheduler)
+	}
+}
+
+func TestServerStatsFallbackToExternalServeProcess(t *testing.T) {
+	baseDir := t.TempDir()
+	modelDir := filepath.Join(t.TempDir(), "model")
+	if err := os.MkdirAll(modelDir, 0o755); err != nil {
+		t.Fatalf("mkdir model: %v", err)
+	}
+	provider, err := embeddings.NewLocalProvider(modelDir)
+	if err != nil {
+		t.Fatalf("provider: %v", err)
+	}
+	startedAt := time.Date(2026, 6, 8, 9, 0, 0, 0, time.UTC)
+	lastTickAt := startedAt.Add(10 * time.Minute)
+	nextTickAt := startedAt.Add(24 * time.Hour)
+	statusServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/scheduler/status" {
+			http.NotFound(w, r)
+			return
+		}
+		writeOK(w, http.StatusOK, &SchedulerStatus{
+			Enabled:    true,
+			StartedAt:  startedAt,
+			LastTickAt: lastTickAt,
+			NextTickAt: nextTickAt,
+			Workspaces: []SchedulerWorkspaceStatus{{
+				Workspace:       "agent-memory",
+				LastCompletedAt: lastTickAt.Add(2 * time.Second),
+				LastResult:      "completed",
+				LastDurationMS:  2000,
+			}},
+		})
+	}))
+	defer statusServer.Close()
+
+	pidPayload := map[string]any{
+		"pid":  os.Getpid(),
+		"url":  statusServer.URL,
+		"addr": ":3211",
+	}
+	b, err := json.Marshal(pidPayload)
+	if err != nil {
+		t.Fatalf("marshal pid payload: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(baseDir, "serve.pid"), b, 0o644); err != nil {
+		t.Fatalf("write serve pid: %v", err)
+	}
+
+	svc := &Service{
+		Workspace:         "agent-memory",
+		BaseDir:           baseDir,
+		EmbeddingProvider: provider,
+	}
+	ts := httptest.NewServer(NewMux(svc))
+	defer ts.Close()
+
+	postJSON(t, ts.URL+"/api/v1/memories/write", map[string]any{"workspace": "agent-memory", "type": "semantic", "content": "scheduler fallback is visible"})
+
+	stats := getJSON(t, ts.URL+"/api/v1/stats?workspace=agent-memory")
+	scheduler, ok := stats["scheduler"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected scheduler summary from external serve fallback, got %+v", stats)
+	}
+	if enabled, _ := scheduler["enabled"].(bool); !enabled {
+		t.Fatalf("expected external scheduler fallback enabled, got %+v", scheduler)
+	}
+	workspaceSummary, ok := scheduler["workspace"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected workspace-specific external scheduler summary, got %+v", scheduler)
+	}
+	if result, _ := workspaceSummary["last_result"].(string); result != "completed" {
+		t.Fatalf("expected last_result=completed from external scheduler, got %+v", workspaceSummary)
+	}
+}
+
+func TestServerRecallAutoReconstruction(t *testing.T) {
+	baseDir := t.TempDir()
+	modelDir := filepath.Join(t.TempDir(), "model")
+	if err := os.MkdirAll(modelDir, 0o755); err != nil {
+		t.Fatalf("mkdir model: %v", err)
+	}
+	provider, err := embeddings.NewLocalProvider(modelDir)
+	if err != nil {
+		t.Fatalf("provider: %v", err)
+	}
+	svc := &Service{
+		Workspace:         "ws",
+		BaseDir:           baseDir,
+		EmbeddingProvider: provider,
+	}
+	assets, err := svc.resolve(context.Background(), "ws")
+	if err != nil {
+		t.Fatalf("resolve assets: %v", err)
+	}
+	if err := assets.Store.AddTombstone(context.Background(), core.MemoryEntry{
+		ID:        "m1",
+		Workspace: "ws",
+		Type:      core.SemanticMemory,
+		Content:   "legacy old-topic timeout config details",
+	}, "evict", ""); err != nil {
+		t.Fatalf("add tombstone 1: %v", err)
+	}
+	if err := assets.Store.AddTombstone(context.Background(), core.MemoryEntry{
+		ID:        "m2",
+		Workspace: "ws",
+		Type:      core.SemanticMemory,
+		Content:   "legacy old-topic retry strategy details",
+	}, "evict", ""); err != nil {
+		t.Fatalf("add tombstone 2: %v", err)
+	}
+
+	ts := httptest.NewServer(NewMux(svc))
+	defer ts.Close()
+
+	recallResp := postJSON(t, ts.URL+"/api/v1/memories/recall", map[string]any{
+		"workspace": "ws",
+		"task":      "old-topic",
+		"top_k":     4,
+		"budget":    200,
+	})
+	reconstruction, _ := recallResp["reconstruction"].(map[string]any)
+	if triggered, _ := reconstruction["triggered"].(bool); !triggered {
+		t.Fatalf("expected reconstruction to trigger, got %+v", recallResp)
+	}
+	if included, _ := reconstruction["included"].(bool); !included {
+		t.Fatalf("expected reconstructed memory to be included, got %+v", recallResp)
+	}
+	if block, _ := recallResp["context_block"].(string); block == "" || !bytes.Contains([]byte(block), []byte("Reconstructed memory")) {
+		t.Fatalf("expected reconstructed memory in context block, got %q", block)
+	}
+
+	previewResp := postJSON(t, ts.URL+"/api/v1/memories/recall/preview", map[string]any{
+		"workspace":        "ws",
+		"task_description": "old-topic",
+		"top_k":            4,
+		"token_budget":     200,
+	})
+	previewRecon, _ := previewResp["reconstruction"].(map[string]any)
+	if included, _ := previewRecon["included"].(bool); !included {
+		t.Fatalf("expected preview reconstruction inclusion, got %+v", previewResp)
 	}
 }
 

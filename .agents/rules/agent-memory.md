@@ -18,4 +18,3 @@ Commands:
 - `agent-memory write --type procedural --content "<repeatable steps/checklist>"`
 - `agent-memory write --type outcome --content "<what you tried>" --outcome-result success|failure|partial --outcome-approach "<how>" --outcome-reason "<why>"`
 - `agent-memory session-end --transcript "<session summary or transcript>" --format json`
-

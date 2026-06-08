@@ -1,17 +1,26 @@
+# Build artifacts
 bin/
 dist/
 build/
+
+# Test artifacts
 *.db
 *.db-shm
 *.db-wal
-*.exe
-*.exe~
-*.out
 *.test
 *.prof
 *.coverprofile
+coverage.out
+coverage.html
 coverage/
 .coverage/
+
+# Binaries
+*.exe
+*.exe~
+*.out
+
+# Node.js / Dashboard
 node_modules/
 .npm/
 .pnpm-store/
@@ -21,10 +30,30 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+
+# Environment
 .env
 .env.local
 .env.*.local
+
+# Model artifacts
+*.tgz
+*.onnx
+all-MiniLM-L6-v2/
+models/
+
+# Kiro specs (project-specific)
 .kiro/specs/
+
+# OS files
 .DS_Store
 Thumbs.db
-*.tgz
+
+# Editor directories
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+.build

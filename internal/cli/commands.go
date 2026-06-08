@@ -631,8 +631,7 @@ func newSessionEndCommand() *cobra.Command {
 			}
 			defer func() { _ = store.Close() }()
 			pipeline := engine.NewWritePipelineWithEmbedder(store, provider)
-			extractor := engine.NewSessionEndExtractor(pipeline)
-			out, err := extractor.ExtractAndStore(ctx, cfg.workspace, transcript)
+			out, err := engine.RunSessionEndLifecycle(ctx, cfg.workspace, transcript, store, pipeline)
 			if err != nil {
 				return err
 			}
@@ -705,6 +704,106 @@ func dashboardPIDPath(cfg runtimeConfig) string {
 		name = fmt.Sprintf("dashboard.%s.pid", ws)
 	}
 	return filepath.Join(base, name)
+}
+
+func dashboardPIDPaths(cfg runtimeConfig, pidFile string) []string {
+	if explicit := strings.TrimSpace(pidFile); explicit != "" {
+		return []string{explicit}
+	}
+	paths := make([]string, 0, 2)
+	seen := map[string]struct{}{}
+	add := func(path string) {
+		if _, ok := seen[path]; ok {
+			return
+		}
+		seen[path] = struct{}{}
+		paths = append(paths, path)
+	}
+	add(dashboardPIDPath(cfg))
+	if strings.TrimSpace(cfg.workspace) != "" {
+		add(filepath.Join(filepath.Dir(cfg.dbPath), "dashboard.pid"))
+	}
+	return paths
+}
+
+func inferDashboardPIDByAddr(addr string) (dashboardPID, error) {
+	pid, err := listenerPIDForAddr(addr)
+	if err != nil {
+		return dashboardPID{}, err
+	}
+	cmdline, err := processCommandLine(pid)
+	if err != nil {
+		return dashboardPID{}, err
+	}
+	if !looksLikeDashboardCommandLine(cmdline) {
+		return dashboardPID{}, fmt.Errorf("listener on %s is not an agent-memory dashboard process", addr)
+	}
+	return dashboardPID{
+		PID:  pid,
+		Addr: addr,
+	}, nil
+}
+
+func listenerPIDForAddr(addr string) (int, error) {
+	port, err := listenerPort(addr)
+	if err != nil {
+		return 0, err
+	}
+	if runtime.GOOS == "windows" {
+		return 0, errors.New("listener pid fallback is unsupported on windows")
+	}
+	out, err := exec.Command("lsof", "-nP", "-iTCP:"+port, "-sTCP:LISTEN", "-t").Output()
+	if err != nil {
+		return 0, err
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		pid, err := strconv.Atoi(line)
+		if err == nil && pid > 0 {
+			return pid, nil
+		}
+	}
+	return 0, fmt.Errorf("no listening pid found for %s", addr)
+}
+
+func listenerPort(addr string) (string, error) {
+	host, port, err := net.SplitHostPort(addr)
+	if err == nil {
+		_ = host
+		if strings.TrimSpace(port) == "" || port == "0" {
+			return "", fmt.Errorf("invalid addr: %s", addr)
+		}
+		return port, nil
+	}
+	if strings.HasPrefix(addr, ":") && len(addr) > 1 {
+		return strings.TrimPrefix(addr, ":"), nil
+	}
+	return "", fmt.Errorf("invalid addr: %s", addr)
+}
+
+func processCommandLine(pid int) (string, error) {
+	if pid <= 0 {
+		return "", errors.New("pid is required")
+	}
+	if runtime.GOOS == "windows" {
+		return "", errors.New("process command lookup is unsupported on windows")
+	}
+	out, err := exec.Command("ps", "-ww", "-p", strconv.Itoa(pid), "-o", "command=").Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+func looksLikeDashboardCommandLine(cmdline string) bool {
+	cmdline = strings.TrimSpace(cmdline)
+	if cmdline == "" {
+		return false
+	}
+	return strings.Contains(cmdline, "agent-memory") && strings.Contains(cmdline, " dashboard ")
 }
 
 func readDashboardPID(path string) (dashboardPID, error) {
@@ -890,10 +989,15 @@ func dashboardSourceDir(override string) (string, error) {
 		return dashboardSourceDir(v)
 	}
 	cwd, err := os.Getwd()
-	if err != nil {
-		return "", err
+	var root string
+	if err == nil {
+		root = findSourceRoot(cwd)
 	}
-	root := findSourceRoot(cwd)
+	if strings.TrimSpace(root) == "" {
+		if exe, err := os.Executable(); err == nil {
+			root = findSourceRoot(filepath.Dir(exe))
+		}
+	}
 	if strings.TrimSpace(root) == "" {
 		return "", errors.New("standalone dashboard sources not found (run from the repository)")
 	}
@@ -915,6 +1019,7 @@ func newDashboardCommand() *cobra.Command {
 	var stop bool
 	var dashDirFlag string
 	var pidFile string
+	var status bool
 	cmd := &cobra.Command{
 		Use:     "dashboard",
 		Short:   "Open the local dashboard (starts Go API + React dev server)",
@@ -925,6 +1030,38 @@ func newDashboardCommand() *cobra.Command {
 			cfg, err := resolveDashboardRuntime(flags)
 			if err != nil {
 				return err
+			}
+			pidPaths := dashboardPIDPaths(cfg, pidFile)
+			pidPath := pidPaths[0]
+			if status {
+				for _, candidate := range pidPaths {
+					v, err := readDashboardPID(candidate)
+					if err != nil || !isProcessAlive(v.PID) {
+						continue
+					}
+					url := strings.TrimSpace(v.URL)
+					return writeSuccessEnvelope(cmd.OutOrStdout(), "dashboard-status", map[string]any{
+						"running":   true,
+						"healthy":   url != "",
+						"pid":       v.PID,
+						"vite_pid":  v.VitePID,
+						"workspace": v.Workspace,
+						"addr":      v.Addr,
+						"url":       url,
+					})
+				}
+				if v, err := inferDashboardPIDByAddr(addr); err == nil && isProcessAlive(v.PID) {
+					return writeSuccessEnvelope(cmd.OutOrStdout(), "dashboard-status", map[string]any{
+						"running": true,
+						"healthy": true,
+						"pid":     v.PID,
+						"addr":    v.Addr,
+					})
+				}
+				return writeSuccessEnvelope(cmd.OutOrStdout(), "dashboard-status", map[string]any{
+					"running": false,
+					"healthy": false,
+				})
 			}
 			if cfg.apiURL != "" {
 				url := strings.TrimRight(cfg.apiURL, "/") + "/dashboard/"
@@ -938,14 +1075,30 @@ func newDashboardCommand() *cobra.Command {
 			if start && stop {
 				return errors.New("only one of --start or --stop can be set")
 			}
-			pidPath := strings.TrimSpace(pidFile)
-			if pidPath == "" {
-				pidPath = dashboardPIDPath(cfg)
-			}
 			if stop {
-				v, err := readDashboardPID(pidPath)
-				if err != nil {
-					return fmt.Errorf("dashboard stop: %w", err)
+				var (
+					v      dashboardPID
+					stopOK bool
+				)
+				for _, candidate := range pidPaths {
+					var readErr error
+					v, readErr = readDashboardPID(candidate)
+					if readErr != nil {
+						continue
+					}
+					pidPath = candidate
+					stopOK = true
+					break
+				}
+				if !stopOK {
+					inferred, inferErr := inferDashboardPIDByAddr(addr)
+					if inferErr != nil {
+						_, err := readDashboardPID(pidPath)
+						if err != nil {
+							return fmt.Errorf("dashboard stop: %w", err)
+						}
+					}
+					v = inferred
 				}
 				if v.VitePID > 0 {
 					_ = stopProcess(v.VitePID)
@@ -961,22 +1114,36 @@ func newDashboardCommand() *cobra.Command {
 				if err := validateDashboardStartAddr(addr); err != nil {
 					return err
 				}
-				if v, err := readDashboardPID(pidPath); err == nil && isProcessAlive(v.PID) {
-					url := strings.TrimSpace(v.URL)
-					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "dashboard already running (pid=%d)\n", v.PID)
-					if noOpen {
+				for _, candidate := range pidPaths {
+					if v, err := readDashboardPID(candidate); err == nil && isProcessAlive(v.PID) {
+						url := strings.TrimSpace(v.URL)
+						_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "dashboard already running (pid=%d)\n", v.PID)
+						if noOpen {
+							if url != "" {
+								_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s\n", url)
+							}
+							return nil
+						}
 						if url != "" {
-							_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s\n", url)
+							_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "opening %s\n", url)
+							return openInBrowser(url)
 						}
 						return nil
 					}
-					if url != "" {
-						_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "opening %s\n", url)
-						return openInBrowser(url)
-					}
+				}
+				if v, err := inferDashboardPIDByAddr(addr); err == nil && isProcessAlive(v.PID) {
+					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "dashboard already running (pid=%d)\n", v.PID)
 					return nil
 				}
-				_ = os.Remove(pidPath)
+				for _, candidate := range pidPaths {
+					_ = os.Remove(candidate)
+				}
+
+				if ln, err := net.Listen("tcp", addr); err == nil {
+					_ = ln.Close()
+				} else {
+					return fmt.Errorf("cannot start dashboard: address %s is already in use by another process", addr)
+				}
 
 				pid, err := startDashboardProcess(cfg, addr, dashDirFlag, pidPath)
 				if err != nil {
@@ -991,7 +1158,7 @@ func newDashboardCommand() *cobra.Command {
 				})
 
 				url := ""
-				for i := 0; i < 40; i++ {
+				for i := 0; i < 120; i++ {
 					time.Sleep(125 * time.Millisecond)
 					v, err := readDashboardPID(pidPath)
 					if err != nil {
@@ -1134,6 +1301,7 @@ func newDashboardCommand() *cobra.Command {
 	cmd.Flags().BoolVar(&noOpen, "no-open", false, "Do not open a browser; just print the URL")
 	cmd.Flags().BoolVar(&start, "start", false, "Start dashboard server in the background and exit")
 	cmd.Flags().BoolVar(&stop, "stop", false, "Stop the background dashboard server (started via --start)")
+	cmd.Flags().BoolVar(&status, "status", false, "Show background dashboard server status")
 	cmd.Flags().StringVar(&dashDirFlag, "dashboard-dir", "", "Path to standalone dashboard folder (tools/agent-memory/dashboard)")
 	cmd.Flags().StringVar(&pidFile, "pid-file", "", "Internal: pid file path")
 	_ = cmd.Flags().MarkHidden("pid-file")

@@ -1,12 +1,8 @@
 package main
 
 import (
-	"archive/tar"
-	"archive/zip"
 	"bytes"
-	"compress/gzip"
 	"crypto/sha256"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -20,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/time/timebooks/agent-memory/internal/bootstrap"
 	amconfig "github.com/time/timebooks/agent-memory/internal/config"
 )
 
@@ -136,13 +133,13 @@ func runInstall(cfg config) {
 		die("build/install failed: %v", err)
 	}
 	ok(cfg, "installed: %s", installed)
-	checkPATH(cfg, filepath.Dir(installed))
+	checkPATHAdvice(cfg, filepath.Dir(installed))
 
 	runtimePath := ""
 	step(cfg, "3/6 onnx runtime")
 	if cfg.skipONNXRuntime {
 		info(cfg, "skipped (--skip-onnx-runtime)")
-	} else if p, err := ensureONNXRuntime(cfg); err != nil {
+	} else if p, err := bootstrap.EnsureONNXRuntime(cfg.dataDir, cfg.quiet); err != nil {
 		warn(cfg, "onnx runtime install failed: %v", err)
 		warn(cfg, "semantic embeddings will stay unavailable until this succeeds")
 	} else {
@@ -153,7 +150,7 @@ func runInstall(cfg config) {
 	step(cfg, "4/6 local embedding model")
 	if cfg.skipModel {
 		info(cfg, "skipped (--no-model)")
-	} else if err := ensureModel(cfg); err != nil {
+	} else if err := bootstrap.EnsureModel(cfg.dataDir, cfg.quiet); err != nil {
 		warn(cfg, "model download failed: %v", err)
 		warn(cfg, "agent-memory will work for everything except local embeddings until this succeeds")
 	} else {
@@ -164,7 +161,7 @@ func runInstall(cfg config) {
 	dashInstalled := ""
 	if cfg.noDashboard {
 		info(cfg, "skipped (--no-dashboard)")
-	} else if err := ensureDashboard(cfg); err != nil {
+	} else if err := bootstrap.EnsureDashboard(cfg.dashboardSrc, cfg.dashboardDir, streamOrDiscard(cfg), streamOrDiscard(cfg)); err != nil {
 		warn(cfg, "dashboard setup failed: %v", err)
 		warn(cfg, "re-run with --no-dashboard to skip, or install Node/npm and try again")
 	} else {
@@ -190,8 +187,9 @@ func runInstall(cfg config) {
 		if err := writeEnv(cfg, vars); err != nil {
 			warn(cfg, "env file write failed: %v", err)
 		}
+		envPath := filepath.Join(cfg.dataDir, "agent-memory.env")
 		if runtime.GOOS != "windows" {
-			if err := ensureShellAutoload(cfg); err != nil {
+			if err := ensureShellAutoload(cfg, envPath); err != nil {
 				warn(cfg, "shell setup skipped: %v", err)
 			}
 		}
@@ -211,10 +209,11 @@ func runInstall(cfg config) {
 func runStatus(cfg config) {
 	header(cfg, "agent-memory installer - status")
 	binPath := filepath.Join(cfg.binDir, binNameWithExt())
-	runtimePath := runtimeLibraryPath(cfg.dataDir)
-	modelStatus := existsLabel(filepath.Join(cfg.dataDir, "models", modelDirName, "model.onnx"))
-	if err := validateModelDir(filepath.Join(cfg.dataDir, "models", modelDirName)); err == nil {
-		modelStatus = "✓ validated " + filepath.Join(cfg.dataDir, "models", modelDirName)
+	runtimePath := bootstrap.RuntimeLibraryPath(cfg.dataDir)
+	modelDir := filepath.Join(cfg.dataDir, "models", modelDirName)
+	modelStatus := existsLabel(filepath.Join(modelDir, "model.onnx"))
+	if err := bootstrap.ValidateModelDir(modelDir); err == nil {
+		modelStatus = "✓ validated " + modelDir
 	}
 	fmt.Fprintf(os.Stderr, "  binary      : %s\n", existsLabel(binPath))
 	fmt.Fprintf(os.Stderr, "  data dir    : %s\n", existsLabel(cfg.dataDir))
@@ -311,772 +310,6 @@ func buildAndInstall(cfg config) (string, error) {
 	return finalBin, nil
 }
 
-func ensureModel(cfg config) error {
-	target := filepath.Join(cfg.dataDir, "models", modelDirName)
-	if err := os.MkdirAll(filepath.Join(target, "onnx"), 0755); err != nil {
-		return err
-	}
-	if err := validateModelDir(target); err == nil {
-		info(cfg, "model files already validated")
-		return nil
-	}
-	for _, mf := range modelFiles {
-		var local string
-		if strings.HasPrefix(mf.path, "onnx/") {
-			local = filepath.Join(target, "model.onnx")
-		} else {
-			local = filepath.Join(target, mf.name)
-		}
-		if fileExists(local) {
-			info(cfg, "%s (cached)", mf.name)
-			continue
-		}
-		url := modelBaseURL + "/" + mf.path
-		info(cfg, "%s ↓", mf.name)
-		if err := downloadFile(url, local); err == nil {
-			if err := validateModelFile(mf.name, local); err == nil {
-				continue
-			}
-			_ = os.Remove(local)
-		}
-
-		info(cfg, "%s fallback ↓", mf.name)
-		if err := downloadModelFallback(cfg, mf, local); err != nil {
-			_ = os.Remove(local)
-			return fmt.Errorf("download %s: %w", mf.name, err)
-		}
-		if err := validateModelFile(mf.name, local); err != nil {
-			_ = os.Remove(local)
-			return fmt.Errorf("validate %s: %w", mf.name, err)
-		}
-	}
-	return validateModelDir(target)
-}
-
-func ensureONNXRuntime(cfg config) (string, error) {
-	target := filepath.Join(cfg.dataDir, "onnxruntime")
-	if existing := runtimeLibraryPath(cfg.dataDir); fileExists(existing) {
-		return existing, nil
-	}
-	url, archiveType, err := runtimeDownloadSpec()
-	if err != nil {
-		return "", err
-	}
-
-	archivePath := filepath.Join(target, "onnxruntime-"+onnxRuntimeVersion+archiveSuffix(archiveType))
-	if !fileExists(archivePath) {
-		info(cfg, "runtime archive ↓")
-		if err := downloadFile(url, archivePath); err != nil {
-			return "", err
-		}
-	}
-
-	extractDir := filepath.Join(target, "dist")
-	_ = os.RemoveAll(extractDir)
-	if err := os.MkdirAll(extractDir, 0o755); err != nil {
-		return "", err
-	}
-	if err := extractArchive(archivePath, extractDir, archiveType); err != nil {
-		return "", err
-	}
-	p := runtimeLibraryPath(cfg.dataDir)
-	if !fileExists(p) {
-		return "", fmt.Errorf("runtime library missing after extraction: %s", p)
-	}
-	return p, nil
-}
-
-func runtimeDownloadSpec() (string, string, error) {
-	if override := strings.TrimSpace(os.Getenv("AGENT_MEMORY_ONNX_RUNTIME_URL")); override != "" {
-		switch {
-		case strings.HasSuffix(override, ".zip"):
-			return override, "zip", nil
-		case strings.HasSuffix(override, ".tgz"), strings.HasSuffix(override, ".tar.gz"):
-			return override, "tgz", nil
-		default:
-			return "", "", fmt.Errorf("unsupported runtime archive: %s", override)
-		}
-	}
-
-	switch runtime.GOOS {
-	case "darwin":
-		switch runtime.GOARCH {
-		case "arm64":
-			return fmt.Sprintf("https://github.com/microsoft/onnxruntime/releases/download/v%s/onnxruntime-osx-arm64-%s.tgz", onnxRuntimeVersion, onnxRuntimeVersion), "tgz", nil
-		case "amd64":
-			return fmt.Sprintf("https://github.com/microsoft/onnxruntime/releases/download/v%s/onnxruntime-osx-x86_64-%s.tgz", onnxRuntimeVersion, onnxRuntimeVersion), "tgz", nil
-		}
-	case "linux":
-		switch runtime.GOARCH {
-		case "amd64":
-			return fmt.Sprintf("https://github.com/microsoft/onnxruntime/releases/download/v%s/onnxruntime-linux-x64-%s.tgz", onnxRuntimeVersion, onnxRuntimeVersion), "tgz", nil
-		case "arm64":
-			return fmt.Sprintf("https://github.com/microsoft/onnxruntime/releases/download/v%s/onnxruntime-linux-aarch64-%s.tgz", onnxRuntimeVersion, onnxRuntimeVersion), "tgz", nil
-		}
-	case "windows":
-		switch runtime.GOARCH {
-		case "amd64":
-			return fmt.Sprintf("https://github.com/microsoft/onnxruntime/releases/download/v%s/onnxruntime-win-x64-%s.zip", onnxRuntimeVersion, onnxRuntimeVersion), "zip", nil
-		case "386":
-			return fmt.Sprintf("https://github.com/microsoft/onnxruntime/releases/download/v%s/onnxruntime-win-x86-%s.zip", onnxRuntimeVersion, onnxRuntimeVersion), "zip", nil
-		case "arm64":
-			return fmt.Sprintf("https://github.com/microsoft/onnxruntime/releases/download/v%s/onnxruntime-win-arm64-%s.zip", onnxRuntimeVersion, onnxRuntimeVersion), "zip", nil
-		}
-	}
-	return "", "", fmt.Errorf("unsupported runtime platform %s/%s", runtime.GOOS, runtime.GOARCH)
-}
-
-func runtimeLibraryPath(dataDir string) string {
-	base := filepath.Join(dataDir, "onnxruntime", "dist")
-	switch runtime.GOOS {
-	case "windows":
-		return firstExistingPath(
-			filepath.Join(base, "lib", "onnxruntime.dll"),
-			filepath.Join(base, "lib64", "onnxruntime.dll"),
-			filepath.Join(base, "onnxruntime.dll"),
-		)
-	case "darwin":
-		return firstExistingPath(
-			filepath.Join(base, "lib", "libonnxruntime.dylib"),
-			filepath.Join(base, "lib64", "libonnxruntime.dylib"),
-			filepath.Join(base, "libonnxruntime.dylib"),
-		)
-	default:
-		return firstExistingPath(
-			filepath.Join(base, "lib", "libonnxruntime.so"),
-			filepath.Join(base, "lib64", "libonnxruntime.so"),
-			filepath.Join(base, "libonnxruntime.so"),
-		)
-	}
-}
-
-func modelFallbackURL(mf modelFile) string {
-	if base := strings.TrimSpace(os.Getenv("AGENT_MEMORY_MODEL_FALLBACK_BASE_URL")); base != "" {
-		return strings.TrimRight(base, "/") + "/" + mf.path
-	}
-	return modelMirrorBaseURL + "/" + mf.path
-}
-
-func downloadModelFallback(cfg config, mf modelFile, dest string) error {
-	if err := downloadModelFallbackFromNPM(cfg, mf, dest); err == nil {
-		return nil
-	}
-	return downloadFile(modelFallbackURL(mf), dest)
-}
-
-func downloadModelFallbackFromNPM(cfg config, mf modelFile, dest string) error {
-	pkg := strings.TrimSpace(os.Getenv("AGENT_MEMORY_MODEL_NPM_PACKAGE"))
-	tarballURL := strings.TrimSpace(os.Getenv("AGENT_MEMORY_MODEL_NPM_TARBALL_URL"))
-	if pkg == "" && tarballURL == "" {
-		return errors.New("npm fallback not configured")
-	}
-
-	tmpDir, err := os.MkdirTemp("", "agent-memory-model-npm-*")
-	if err != nil {
-		return err
-	}
-	defer func() { _ = os.RemoveAll(tmpDir) }()
-
-	tarballPath := filepath.Join(tmpDir, "model-fallback.tgz")
-	switch {
-	case tarballURL != "":
-		if err := downloadFile(tarballURL, tarballPath); err != nil {
-			return err
-		}
-	case pkg != "":
-		cmd := exec.Command("npm", "pack", pkg, "--silent")
-		cmd.Dir = tmpDir
-		out, err := cmd.Output()
-		if err != nil {
-			return err
-		}
-		name := strings.TrimSpace(string(out))
-		if name == "" {
-			return errors.New("npm pack produced no tarball name")
-		}
-		tarballPath = filepath.Join(tmpDir, filepath.Base(name))
-	}
-
-	extractDir := filepath.Join(tmpDir, "extract")
-	if err := os.MkdirAll(extractDir, 0o755); err != nil {
-		return err
-	}
-	if err := extractTarGzArchive(tarballPath, extractDir); err != nil {
-		return err
-	}
-
-	prefix := strings.Trim(strings.TrimSpace(os.Getenv("AGENT_MEMORY_MODEL_NPM_PREFIX")), "/")
-	if prefix == "" {
-		prefix = "package"
-	}
-	source := filepath.Join(extractDir, prefix, mf.path)
-	if mf.name == "model.onnx" && !fileExists(source) {
-		source = filepath.Join(extractDir, prefix, "model.onnx")
-	}
-	if !fileExists(source) {
-		return fmt.Errorf("npm fallback asset missing: %s", source)
-	}
-	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
-		return err
-	}
-	in, err := os.Open(source)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = in.Close() }()
-	out, err := os.OpenFile(dest, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
-	if err != nil {
-		return err
-	}
-	if _, err := io.Copy(out, in); err != nil {
-		_ = out.Close()
-		return err
-	}
-	return out.Close()
-}
-
-func validateModelDir(dir string) error {
-	for _, mf := range modelFiles {
-		local := filepath.Join(dir, mf.name)
-		if mf.name == "model.onnx" {
-			local = filepath.Join(dir, "model.onnx")
-		}
-		if err := validateModelFile(mf.name, local); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func validateModelFile(name, path string) error {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return err
-	}
-	if len(data) == 0 {
-		return fmt.Errorf("%s is empty", name)
-	}
-	snippet := strings.TrimSpace(strings.ToLower(string(data[:min(len(data), 256)])))
-	if strings.HasPrefix(snippet, "<!doctype") || strings.HasPrefix(snippet, "<html") || strings.Contains(snippet, "<title>") {
-		return fmt.Errorf("%s looks like HTML, not a model asset", name)
-	}
-	switch filepath.Ext(name) {
-	case ".json":
-		var v any
-		if err := json.Unmarshal(data, &v); err != nil {
-			return fmt.Errorf("invalid json: %w", err)
-		}
-	case ".onnx":
-		if len(data) < 1024*1024 {
-			return fmt.Errorf("onnx file too small: %d bytes", len(data))
-		}
-		if bytes.Contains(bytes.ToLower(data[:min(len(data), 4096)]), []byte("<html")) {
-			return fmt.Errorf("onnx file looks like html")
-		}
-	}
-	return nil
-}
-
-func extractArchive(archivePath, destDir, archiveType string) error {
-	switch archiveType {
-	case "zip":
-		return extractZipArchive(archivePath, destDir)
-	case "tgz":
-		return extractTarGzArchive(archivePath, destDir)
-	default:
-		return fmt.Errorf("unsupported archive type: %s", archiveType)
-	}
-}
-
-func extractZipArchive(path, destDir string) error {
-	r, err := zip.OpenReader(path)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = r.Close() }()
-
-	for _, f := range r.File {
-		target := filepath.Join(destDir, f.Name)
-		if !strings.HasPrefix(target, filepath.Clean(destDir)+string(os.PathSeparator)) {
-			return fmt.Errorf("zip entry escapes target dir: %s", f.Name)
-		}
-		if f.FileInfo().IsDir() {
-			if err := os.MkdirAll(target, 0o755); err != nil {
-				return err
-			}
-			continue
-		}
-		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-			return err
-		}
-		in, err := f.Open()
-		if err != nil {
-			return err
-		}
-		out, err := os.OpenFile(target, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
-		if err != nil {
-			_ = in.Close()
-			return err
-		}
-		_, copyErr := io.Copy(out, in)
-		closeErr := out.Close()
-		_ = in.Close()
-		if copyErr != nil {
-			return copyErr
-		}
-		if closeErr != nil {
-			return closeErr
-		}
-	}
-	return nil
-}
-
-func extractTarGzArchive(path, destDir string) error {
-	f, err := os.Open(path)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = f.Close() }()
-	gzr, err := gzip.NewReader(f)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = gzr.Close() }()
-	tr := tar.NewReader(gzr)
-	for {
-		hdr, err := tr.Next()
-		if errors.Is(err, io.EOF) {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-		target := filepath.Join(destDir, hdr.Name)
-		if !strings.HasPrefix(target, filepath.Clean(destDir)+string(os.PathSeparator)) {
-			return fmt.Errorf("tar entry escapes target dir: %s", hdr.Name)
-		}
-		switch hdr.Typeflag {
-		case tar.TypeDir:
-			if err := os.MkdirAll(target, 0o755); err != nil {
-				return err
-			}
-		case tar.TypeReg:
-			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-				return err
-			}
-			out, err := os.OpenFile(target, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
-			if err != nil {
-				return err
-			}
-			if _, err := io.Copy(out, tr); err != nil {
-				_ = out.Close()
-				return err
-			}
-			if err := out.Close(); err != nil {
-				return err
-			}
-		}
-	}
-}
-
-func archiveSuffix(archiveType string) string {
-	if archiveType == "zip" {
-		return ".zip"
-	}
-	return ".tgz"
-}
-
-func firstExistingPath(paths ...string) string {
-	for _, p := range paths {
-		if fileExists(p) {
-			return p
-		}
-	}
-	if len(paths) == 0 {
-		return ""
-	}
-	return paths[0]
-}
-
-func ensureDashboard(cfg config) error {
-	src := cfg.dashboardSrc
-	if !dirExists(src) {
-		return fmt.Errorf("dashboard source not found: %s", src)
-	}
-	if !fileExists(filepath.Join(src, "package.json")) {
-		return fmt.Errorf("dashboard package.json not found: %s", src)
-	}
-	if _, err := exec.LookPath("npm"); err != nil {
-		return errors.New("npm not found (install Node.js to use the standalone dashboard)")
-	}
-
-	dst := cfg.dashboardDir
-	if strings.TrimSpace(dst) == "" {
-		return errors.New("dashboard dir is required")
-	}
-	if err := os.MkdirAll(dst, 0755); err != nil {
-		return err
-	}
-	if err := copyDir(dst, src); err != nil {
-		return err
-	}
-	if err := runDashboardInstall(dst, streamOrDiscard(cfg), streamOrDiscard(cfg)); err != nil {
-		return err
-	}
-	return nil
-}
-
-func runDashboardInstall(dst string, stdout, stderr io.Writer) error {
-	if strings.TrimSpace(dst) == "" {
-		return errors.New("dashboard dir is required")
-	}
-	run := func() error {
-		cmd := exec.Command("npm", "ci")
-		cmd.Stdout = stdout
-		cmd.Stderr = stderr
-		cmd.Dir = dst
-		return cmd.Run()
-	}
-	if err := run(); err == nil {
-		return nil
-	}
-
-	// Recover from partial/corrupt dashboard installs left by interrupted setup.
-	for _, sub := range []string{"node_modules", "package-lock.json.tmp", ".package-lock.json"} {
-		_ = os.RemoveAll(filepath.Join(dst, sub))
-	}
-	if err := run(); err != nil {
-		return err
-	}
-	return nil
-}
-
-func detectRepoRoot(cfg config) string {
-	cwd, err := os.Getwd()
-	if err == nil && fileExists(filepath.Join(cwd, "go.mod")) && fileExists(filepath.Join(cwd, "cmd", "agent-memory", "main.go")) {
-		if abs, err := filepath.Abs(cwd); err == nil {
-			return abs
-		}
-		return cwd
-	}
-	if strings.TrimSpace(cfg.src) == "" {
-		return ""
-	}
-	src := cfg.src
-	if abs, err := filepath.Abs(src); err == nil {
-		src = abs
-	}
-	if filepath.Base(src) == "agent-memory" && filepath.Base(filepath.Dir(src)) == "cmd" {
-		return filepath.Dir(filepath.Dir(src))
-	}
-	return ""
-}
-
-func writeEnv(cfg config, vars map[string]string) error {
-	envPath := filepath.Join(cfg.dataDir, "agent-memory.env")
-	merged, err := mergeEnvFile(envPath, vars)
-	if err != nil {
-		return err
-	}
-	if strings.TrimSpace(merged) == "" {
-		return nil
-	}
-	return os.WriteFile(envPath, []byte(merged), 0644)
-}
-
-func mergeEnvFile(path string, vars map[string]string) (string, error) {
-	existing := ""
-	if b, err := os.ReadFile(path); err == nil {
-		existing = string(b)
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return "", err
-	}
-
-	lines := []string{}
-	if existing != "" {
-		lines = strings.Split(strings.ReplaceAll(existing, "\r\n", "\n"), "\n")
-	}
-
-	index := map[string]int{}
-	for i, ln := range lines {
-		k, _, ok := parseEnvAssignment(ln)
-		if !ok {
-			continue
-		}
-		if _, exists := index[k]; !exists {
-			index[k] = i
-		}
-	}
-
-	for k, v := range vars {
-		k = strings.TrimSpace(k)
-		v = strings.TrimSpace(v)
-		if k == "" || v == "" {
-			continue
-		}
-		newLine := formatEnvAssignment(k, v)
-		if at, ok := index[k]; ok {
-			lines[at] = newLine
-		} else {
-			lines = append(lines, newLine)
-			index[k] = len(lines) - 1
-		}
-	}
-
-	out := strings.TrimRight(strings.Join(lines, "\n"), "\n") + "\n"
-	out = amconfig.EnsureAdaptiveTuningEnvGuidance(out)
-	return out, nil
-}
-
-func parseEnvAssignment(line string) (string, string, bool) {
-	ln := strings.TrimSpace(line)
-	if ln == "" {
-		return "", "", false
-	}
-	if strings.HasPrefix(ln, "#") {
-		return "", "", false
-	}
-	if strings.HasPrefix(ln, "export ") {
-		ln = strings.TrimSpace(strings.TrimPrefix(ln, "export "))
-	}
-	if strings.HasPrefix(strings.ToLower(ln), "set ") {
-		ln = strings.TrimSpace(ln[4:])
-	}
-	parts := strings.SplitN(ln, "=", 2)
-	if len(parts) != 2 {
-		return "", "", false
-	}
-	k := strings.TrimSpace(parts[0])
-	v := strings.TrimSpace(parts[1])
-	if k == "" {
-		return "", "", false
-	}
-	v = strings.Trim(v, `"'`)
-	return k, v, true
-}
-
-func formatEnvAssignment(k, v string) string {
-	if runtime.GOOS == "windows" {
-		return "set " + k + "=" + v
-	}
-	return "export " + k + "=" + strconv.Quote(v)
-}
-
-func ensureShellAutoload(cfg config) error {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return err
-	}
-	envPath := filepath.Join(cfg.dataDir, "agent-memory.env")
-	if !fileExists(envPath) {
-		return errors.New("env file not found")
-	}
-	shell := strings.TrimSpace(os.Getenv("SHELL"))
-	var rc string
-	switch {
-	case strings.Contains(shell, "zsh"):
-		rc = filepath.Join(home, ".zshrc")
-	case strings.Contains(shell, "bash"):
-		rc = filepath.Join(home, ".bashrc")
-	default:
-		rc = filepath.Join(home, ".zshrc")
-	}
-
-	snippet := fmt.Sprintf("\n# agent-memory (managed)\nif [ -f %q ]; then\n  source %q\nfi\n", envPath, envPath)
-	if b, err := os.ReadFile(rc); err == nil {
-		if strings.Contains(string(b), "agent-memory (managed)") || strings.Contains(string(b), envPath) {
-			return nil
-		}
-		f, err := os.OpenFile(rc, os.O_APPEND|os.O_WRONLY, 0o644)
-		if err != nil {
-			return err
-		}
-		defer func() { _ = f.Close() }()
-		_, err = f.WriteString(snippet)
-		return err
-	}
-
-	f, err := os.OpenFile(rc, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = f.Close() }()
-	_, err = f.WriteString(snippet)
-	return err
-}
-
-func runInitHere(cfg config, binPath string) error {
-	cwd, err := os.Getwd()
-	if err != nil {
-		return err
-	}
-	name := cfg.projectName
-	if strings.TrimSpace(name) == "" {
-		name = filepath.Base(cwd)
-	}
-	if err := runProjectSetupCommand(cfg, cwd, binPath, projectSetupArgs(cfg, "init", name)...); err == nil {
-		return nil
-	} else if strings.Contains(err.Error(), "project already exists") {
-		info(cfg, "project already exists; running reinstall to repair IDE files")
-		args := append(projectSetupArgs(cfg, "reinstall", name), "--force=true")
-		return runProjectSetupCommand(cfg, cwd, binPath, args...)
-	} else {
-		return err
-	}
-}
-
-func projectSetupArgs(cfg config, command, name string) []string {
-	args := []string{command, "--base-dir", cfg.dataDir, "--project-name", name}
-	for _, ide := range cfg.ideTargets {
-		args = append(args, "--ide", ide)
-	}
-	return args
-}
-
-func runProjectSetupCommand(cfg config, cwd, binPath string, args ...string) error {
-	cmd := exec.Command(binPath, args...)
-	cmd.Stdout = streamOrDiscard(cfg)
-	var stderr bytes.Buffer
-	if cfg.quiet {
-		cmd.Stderr = &stderr
-	} else {
-		cmd.Stderr = io.MultiWriter(os.Stderr, &stderr)
-	}
-	cmd.Dir = cwd
-	if err := cmd.Run(); err != nil {
-		msg := strings.TrimSpace(stderr.String())
-		if msg == "" {
-			return err
-		}
-		return fmt.Errorf("%s: %w", msg, err)
-	}
-	return nil
-}
-
-func defaultBinDir() string {
-	if runtime.GOOS == "windows" {
-		if v := os.Getenv("LOCALAPPDATA"); v != "" {
-			return filepath.Join(v, "Programs", "agent-memory")
-		}
-	}
-	if v := os.Getenv("HOME"); v != "" {
-		return filepath.Join(v, ".local", "bin")
-	}
-	cwd, _ := os.Getwd()
-	return cwd
-}
-
-func defaultDataDir() string {
-	if runtime.GOOS == "windows" {
-		if v := os.Getenv("LOCALAPPDATA"); v != "" {
-			return filepath.Join(v, "agent-memory")
-		}
-	}
-	if v := os.Getenv("HOME"); v != "" {
-		return filepath.Join(v, ".agent-memory")
-	}
-	cwd, _ := os.Getwd()
-	return filepath.Join(cwd, ".agent-memory")
-}
-
-func binNameWithExt() string {
-	if runtime.GOOS == "windows" {
-		return binName + ".exe"
-	}
-	return binName
-}
-
-func isOnPath(dir string) bool {
-	abs, err := filepath.Abs(dir)
-	if err != nil {
-		return false
-	}
-	for _, p := range filepath.SplitList(os.Getenv("PATH")) {
-		pAbs, err := filepath.Abs(p)
-		if err == nil && pAbs == abs {
-			return true
-		}
-	}
-	return false
-}
-
-func checkPATH(cfg config, dir string) {
-	if isOnPath(dir) {
-		return
-	}
-	warn(cfg, "%s is not on $PATH", dir)
-	switch runtime.GOOS {
-	case "windows":
-		warn(cfg, "add it via: System Properties -> Environment Variables -> User PATH")
-	default:
-		warn(cfg, "add to your shell rc: export PATH=\"%s:$PATH\"", dir)
-	}
-}
-
-func fileExists(p string) bool {
-	st, err := os.Stat(p)
-	return err == nil && !st.IsDir()
-}
-
-func dirExists(p string) bool {
-	st, err := os.Stat(p)
-	return err == nil && st.IsDir()
-}
-
-func removeIfExists(p string) error {
-	if !fileExists(p) {
-		return nil
-	}
-	return os.Remove(p)
-}
-
-func copyDir(dst, src string) error {
-	dst = filepath.Clean(dst)
-	src = filepath.Clean(src)
-	return filepath.WalkDir(src, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		rel, err := filepath.Rel(src, path)
-		if err != nil {
-			return err
-		}
-		if rel == "." {
-			return nil
-		}
-		if d.IsDir() {
-			name := d.Name()
-			if name == "node_modules" || name == "dist" || name == ".git" {
-				return filepath.SkipDir
-			}
-			return os.MkdirAll(filepath.Join(dst, rel), 0755)
-		}
-		in, err := os.Open(path)
-		if err != nil {
-			return err
-		}
-		defer func() { _ = in.Close() }()
-		outPath := filepath.Join(dst, rel)
-		if err := os.MkdirAll(filepath.Dir(outPath), 0755); err != nil {
-			return err
-		}
-		out, err := os.OpenFile(outPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
-		if err != nil {
-			return err
-		}
-		_, copyErr := io.Copy(out, in)
-		closeErr := out.Close()
-		if copyErr != nil {
-			_ = os.Remove(outPath)
-			return copyErr
-		}
-		if closeErr != nil {
-			_ = os.Remove(outPath)
-			return closeErr
-		}
-		return nil
-	})
-}
 
 func existsLabel(p string) string {
 	if fileExists(p) || dirExists(p) {
@@ -1204,4 +437,187 @@ func printNextSteps(cfg config, binPath string) {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "  4) Inspect adaptive runtime tuning:")
 	fmt.Fprintln(os.Stderr, "       agent-memory tuning")
+}
+
+func detectRepoRoot(cfg config) string {
+	cwd, err := os.Getwd()
+	if err == nil && fileExists(filepath.Join(cwd, "go.mod")) && fileExists(filepath.Join(cwd, "cmd", "agent-memory", "main.go")) {
+		if abs, err := filepath.Abs(cwd); err == nil {
+			return abs
+		}
+		return cwd
+	}
+	if strings.TrimSpace(cfg.src) == "" {
+		return ""
+	}
+	src := cfg.src
+	if abs, err := filepath.Abs(src); err == nil {
+		src = abs
+	}
+	if filepath.Base(src) == "agent-memory" && filepath.Base(filepath.Dir(src)) == "cmd" {
+		return filepath.Dir(filepath.Dir(src))
+	}
+	return ""
+}
+
+func writeEnv(cfg config, vars map[string]string) error {
+	envPath := filepath.Join(cfg.dataDir, "agent-memory.env")
+	merged, err := mergeEnvFile(envPath, vars)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(merged) == "" {
+		return nil
+	}
+	return os.WriteFile(envPath, []byte(merged), 0644)
+}
+
+func mergeEnvFile(path string, vars map[string]string) (string, error) {
+	existing := ""
+	if b, err := os.ReadFile(path); err == nil {
+		existing = string(b)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return "", err
+	}
+
+	lines := []string{}
+	if existing != "" {
+		lines = strings.Split(strings.ReplaceAll(existing, "\r\n", "\n"), "\n")
+	}
+
+	index := map[string]int{}
+	for i, ln := range lines {
+		k, _, ok := parseEnvAssignment(ln)
+		if !ok {
+			continue
+		}
+		if _, exists := index[k]; !exists {
+			index[k] = i
+		}
+	}
+
+	for k, v := range vars {
+		k = strings.TrimSpace(k)
+		v = strings.TrimSpace(v)
+		if k == "" || v == "" {
+			continue
+		}
+		newLine := formatEnvAssignment(k, v)
+		if at, ok := index[k]; ok {
+			lines[at] = newLine
+		} else {
+			lines = append(lines, newLine)
+			index[k] = len(lines) - 1
+		}
+	}
+
+	out := strings.TrimRight(strings.Join(lines, "\n"), "\n") + "\n"
+	out = amconfig.EnsureAdaptiveTuningEnvGuidance(out)
+	return out, nil
+}
+
+func parseEnvAssignment(line string) (string, string, bool) {
+	ln := strings.TrimSpace(line)
+	if ln == "" {
+		return "", "", false
+	}
+	if strings.HasPrefix(ln, "#") {
+		return "", "", false
+	}
+	if strings.HasPrefix(ln, "export ") {
+		ln = strings.TrimSpace(strings.TrimPrefix(ln, "export "))
+	}
+	if strings.HasPrefix(strings.ToLower(ln), "set ") {
+		ln = strings.TrimSpace(ln[4:])
+	}
+	parts := strings.SplitN(ln, "=", 2)
+	if len(parts) != 2 {
+		return "", "", false
+	}
+	k := strings.TrimSpace(parts[0])
+	v := strings.TrimSpace(parts[1])
+	if k == "" {
+		return "", "", false
+	}
+	v = strings.Trim(v, `"'`)
+	return k, v, true
+}
+
+func runInitHere(cfg config, binPath string) error {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+	name := cfg.projectName
+	if strings.TrimSpace(name) == "" {
+		name = filepath.Base(cwd)
+	}
+	if err := runProjectSetupCommand(cfg, cwd, binPath, projectSetupArgs(cfg, "init", name)...); err == nil {
+		return nil
+	} else if strings.Contains(err.Error(), "project already exists") {
+		info(cfg, "project already exists; running reinstall to repair IDE files")
+		args := append(projectSetupArgs(cfg, "reinstall", name), "--force=true")
+		return runProjectSetupCommand(cfg, cwd, binPath, args...)
+	} else {
+		return err
+	}
+}
+
+func projectSetupArgs(cfg config, command, name string) []string {
+	args := []string{command, "--base-dir", cfg.dataDir, "--project-name", name}
+	for _, ide := range cfg.ideTargets {
+		args = append(args, "--ide", ide)
+	}
+	return args
+}
+
+func runProjectSetupCommand(cfg config, cwd, binPath string, args ...string) error {
+	cmd := exec.Command(binPath, args...)
+	cmd.Stdout = streamOrDiscard(cfg)
+	var stderr bytes.Buffer
+	if cfg.quiet {
+		cmd.Stderr = &stderr
+	} else {
+		cmd.Stderr = io.MultiWriter(os.Stderr, &stderr)
+	}
+	cmd.Dir = cwd
+	if err := cmd.Run(); err != nil {
+		msg := strings.TrimSpace(stderr.String())
+		if msg == "" {
+			return err
+		}
+		return fmt.Errorf("%s: %w", msg, err)
+	}
+	return nil
+}
+
+func isOnPath(dir string) bool {
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return false
+	}
+	for _, p := range filepath.SplitList(os.Getenv("PATH")) {
+		pAbs, err := filepath.Abs(p)
+		if err == nil && pAbs == abs {
+			return true
+		}
+	}
+	return false
+}
+
+func removeIfExists(p string) error {
+	if !fileExists(p) {
+		return nil
+	}
+	return os.Remove(p)
+}
+
+func fileExists(p string) bool {
+	st, err := os.Stat(p)
+	return err == nil && !st.IsDir()
+}
+
+func dirExists(p string) bool {
+	st, err := os.Stat(p)
+	return err == nil && st.IsDir()
 }

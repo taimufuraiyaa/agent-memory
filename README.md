@@ -106,7 +106,11 @@ Or use the installer (also downloads the local embedding model):
 
 ```bash
 cd agent-memory
-go run install.go
+# Unix/Linux/macOS:
+go run install.go install_unix.go
+
+# Windows:
+go run install.go install_windows.go
 ```
 
 This installs `agent-memory` into your Go bin directory (usually `$(go env GOPATH)/bin`). Ensure that directory is on your `PATH`.
@@ -128,7 +132,11 @@ agent-memory init
 If you want a one-shot install + initialize-the-current-folder flow, run:
 
 ```bash
-go run install.go --init-here
+# Unix/Linux/macOS:
+go run install.go install_unix.go --init-here
+
+# Windows:
+go run install.go install_windows.go --init-here
 ```
 
 Common options:
@@ -138,7 +146,7 @@ agent-memory init --project-name my-project
 agent-memory init --project-name my-project --ide trae
 agent-memory reinstall --project-name my-project
 agent-memory reinstall --project-name my-project --ide trae
-go run install.go --init-here --ide trae
+go run install.go install_unix.go --init-here --ide trae  # or install_windows.go on Windows
 agent-memory init --study
 agent-memory init --reuse
 agent-memory init --force
@@ -294,6 +302,28 @@ Per project:
 - External connectors (Confluence/Jira/Notion), shared/team memory, cross-workspace recall
 
 ## Privacy / Security
-- Local-first by default (`~/.agent-memory/`).
-- Write pipeline includes secret/PII filtering controls.
-- Data leaves local machine only when explicitly configured in future remote modes.
+
+agent-memory follows a **local-first** security model:
+- **Local-first by default** - All data stored in `~/.agent-memory/` on your machine
+- **No telemetry** - We don't collect usage data
+- **Secret/PII filtering** - Automatic detection and filtering of API keys, passwords, credentials
+- **Optional cloud services** - External APIs (OpenAI embeddings) are opt-in only
+- **Transparent operation** - All storage locations documented
+
+### Security Features
+
+- ✅ Automatic secret detection (API keys, tokens, private keys)
+- ✅ PII filtering (credit cards, SSNs, emails in sensitive contexts)
+- ✅ Localhost-only dashboard binding by default
+- ✅ Input validation and sanitization
+- ✅ Parameterized SQL queries (injection prevention)
+- ✅ Path traversal protection
+
+### For More Information
+
+- **Report vulnerabilities**: See [SECURITY.md](SECURITY.md) for responsible disclosure
+- **Security guide**: See [docs/security.md](docs/security.md) for comprehensive security documentation
+- **Best practices**: Use full-disk encryption, review stored content periodically, use local embeddings for sensitive data
+
+Data leaves local machine only when explicitly configured (e.g., OpenAI embeddings provider).
+

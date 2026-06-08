@@ -386,6 +386,7 @@ body.light .navItem:hover:not(:disabled) {
 
 .chatFeed {
   flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   position: relative;
@@ -395,6 +396,7 @@ body.light .navItem:hover:not(:disabled) {
 
 .thread {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: 36px 36px 240px; /* Ample room for composer */
   max-width: 960px;
@@ -1090,6 +1092,86 @@ body.light .diagramSvg {
   background: rgba(0, 0, 0, 0.01);
 }
 
+.diagramSvg svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.diagramSvgLight {
+  --diagram-mermaid-fg: #172033;
+  --diagram-mermaid-line: #334155;
+  --diagram-mermaid-border: #475569;
+  --diagram-mermaid-node-bg: #ffffff;
+  --diagram-mermaid-cluster-bg: #e2e8f0;
+  --diagram-mermaid-label-bg: #f8fafc;
+}
+
+.diagramSvgDark {
+  --diagram-mermaid-fg: #f8fafc;
+  --diagram-mermaid-line: #94a3b8;
+  --diagram-mermaid-border: #64748b;
+  --diagram-mermaid-node-bg: #0f172a;
+  --diagram-mermaid-cluster-bg: #0b1220;
+  --diagram-mermaid-label-bg: #111827;
+}
+
+.diagramSvg svg .label,
+.diagramSvg svg .label text,
+.diagramSvg svg .nodeLabel,
+.diagramSvg svg .cluster-label text,
+.diagramSvg svg .edgeLabel,
+.diagramSvg svg .edgeLabel text,
+.diagramSvg svg .edgeLabel span,
+.diagramSvg svg .edgeLabel p,
+.diagramSvg svg .messageText,
+.diagramSvg svg .loopText,
+.diagramSvg svg .noteText {
+  color: var(--diagram-mermaid-fg) !important;
+  fill: var(--diagram-mermaid-fg) !important;
+}
+
+.diagramSvg svg .node rect,
+.diagramSvg svg .node circle,
+.diagramSvg svg .node ellipse,
+.diagramSvg svg .node polygon,
+.diagramSvg svg .node path,
+.diagramSvg svg .label-container {
+  fill: var(--diagram-mermaid-node-bg) !important;
+  stroke: var(--diagram-mermaid-border) !important;
+}
+
+.diagramSvg svg .cluster rect,
+.diagramSvg svg .cluster polygon {
+  fill: var(--diagram-mermaid-cluster-bg) !important;
+  stroke: var(--diagram-mermaid-border) !important;
+}
+
+.diagramSvg svg .edgePath .path,
+.diagramSvg svg .flowchart-link,
+.diagramSvg svg .relationshipLine,
+.diagramSvg svg .messageLine0,
+.diagramSvg svg .messageLine1,
+.diagramSvg svg .loopLine,
+.diagramSvg svg .activation0,
+.diagramSvg svg .activation1 {
+  stroke: var(--diagram-mermaid-line) !important;
+}
+
+.diagramSvg svg .arrowheadPath,
+.diagramSvg svg marker path {
+  fill: var(--diagram-mermaid-line) !important;
+  stroke: var(--diagram-mermaid-line) !important;
+}
+
+.diagramSvg svg .edgeLabel rect,
+.diagramSvg svg .labelBkg,
+.diagramSvg svg .label-container rect {
+  fill: var(--diagram-mermaid-label-bg) !important;
+  background-color: var(--diagram-mermaid-label-bg) !important;
+  opacity: 1 !important;
+}
+
 .diagramSvgFullscreen svg {
   max-width: 100%;
   max-height: 75vh;
@@ -1114,6 +1196,11 @@ body.light .diagramSvg {
 
 .composerDockCollapsed {
   padding-bottom: 14px;
+}
+
+.composerDockLauncher {
+  padding: 12px 36px 20px;
+  align-items: center;
 }
 
 .composer {
@@ -1170,6 +1257,25 @@ body.light .diagramSvg {
 .composerInput::placeholder {
   color: var(--text-subtle);
   font-weight: 400;
+}
+
+.composerWikiLauncherBtn {
+  pointer-events: auto;
+  border: none;
+  background: transparent;
+  color: var(--text-main);
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  padding: 4px 8px;
+}
+
+.composerWikiLauncherBtn:hover,
+.composerWikiLauncherBtn:focus-visible {
+  color: var(--accent-primary);
+  outline: none;
 }
 
 .composerToolbar {
@@ -2093,6 +2199,108 @@ body.light .starterCard {
   gap: 16px;
 }
 
+.benchmarkStatsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+}
+
+.benchmarkColumns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.benchmarkClusterGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+.benchmarkClusterCard {
+  min-height: 100%;
+}
+
+.benchmarkClusterCardReference {
+  gap: 10px;
+}
+
+.benchmarkClusterMetrics {
+  margin-top: 6px;
+}
+
+.benchmarkPanelMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.benchmarkHistoryList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.benchmarkHistoryRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px dashed var(--border);
+}
+
+.benchmarkHistoryRow:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.benchmarkHistoryMain,
+.benchmarkHistorySide {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.benchmarkHistoryMain {
+  flex: 1;
+  flex-wrap: wrap;
+}
+
+.benchmarkHistoryIndex {
+  color: var(--text-subtle);
+  font-size: 11px;
+  flex: 0 0 auto;
+}
+
+.benchmarkHistoryLead {
+  color: var(--accent-primary);
+  font-size: 12px;
+  flex: 0 0 auto;
+}
+
+.benchmarkHistoryRun {
+  color: var(--text-main);
+  font-weight: 700;
+  min-width: 0;
+  word-break: break-word;
+}
+
+.benchmarkHistoryMeta {
+  color: var(--text-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.benchmarkHistoryScore {
+  font-family: var(--font-display);
+  font-size: 22px;
+  color: var(--text-main);
+  white-space: nowrap;
+}
+
 .breakdownHeader,
 .comparisonHeader {
   display: flex;
@@ -2744,8 +2952,13 @@ body.light .timelineCard {
 @media (max-width: 960px) {
   .overviewHero,
   .overviewColumns,
-  .diagnosticsGrid {
+  .diagnosticsGrid,
+  .benchmarkColumns {
     grid-template-columns: 1fr;
+  }
+
+  .benchmarkStatsGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .diagnosticsHero {
@@ -2756,9 +2969,20 @@ body.light .timelineCard {
 
 @media (max-width: 720px) {
   .statsGrid,
+  .benchmarkStatsGrid,
   .starterStrip,
   .overviewActions {
     grid-template-columns: 1fr;
+  }
+
+  .benchmarkClusterGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .benchmarkHistoryRow,
+  .benchmarkHistorySide {
+    flex-direction: column;
+    align-items: flex-start;
   }
 
   .overviewHero,
@@ -3797,4 +4021,862 @@ body.light {
     width: 100%;
     overflow-x: auto;
   }
+}
+
+.wikiSurface {
+  flex: 1 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.shellWikiMode .thread {
+  max-width: 1120px;
+  padding-top: 18px;
+  padding-bottom: 260px;
+}
+
+.wikiCanvas {
+  flex: 1 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.wikiUtilityCluster {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.wikiModeRail,
+.wikiUtilityActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.wikiModePill {
+  min-width: 92px;
+  justify-content: center;
+  padding: 10px 14px;
+  border-radius: 999px;
+  border: 1px dashed var(--border);
+  background: var(--bg-input);
+  color: var(--text-main);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  text-transform: lowercase;
+}
+
+.wikiModePill:hover,
+.wikiModePill:focus-visible {
+  border-color: var(--border-hover);
+  background: var(--bg-card-hover);
+  outline: none;
+}
+
+.wikiModePill.memPillAccent {
+  background: var(--accent-primary);
+  color: #f7fbff !important;
+  border-style: solid;
+  border-color: var(--accent-primary);
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.28);
+}
+
+body.light .wikiModePill {
+  background: #f3efe7;
+  color: #17120d;
+  border-color: rgba(43, 34, 24, 0.34);
+}
+
+body.light .wikiModePill:hover,
+body.light .wikiModePill:focus-visible {
+  background: #ece5da;
+  border-color: rgba(43, 34, 24, 0.54);
+}
+
+body.light .wikiModePill.memPillAccent {
+  color: #101010 !important;
+  text-shadow: none;
+}
+
+.wikiHero,
+.wikiResultSurface,
+.wikiConsolidatedFragment {
+  border: 1px dashed var(--border);
+  background: var(--bg-surface);
+}
+
+.wikiHero {
+  min-height: 58vh;
+  padding: 48px 28px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 14px;
+}
+
+.wikiHeroMark,
+.wikiSectionLead {
+  color: var(--accent-primary);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: lowercase;
+}
+
+.wikiHeroTitle {
+  font-size: clamp(24px, 4vw, 36px);
+  line-height: 1.1;
+  text-transform: lowercase;
+}
+
+.wikiHeroText {
+  max-width: 760px;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+.wikiSuggestionRow,
+.wikiMetaRow,
+.wikiFragmentBadges,
+.wikiSelectionSummary,
+.wikiSelectionActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.wikiSuggestion {
+  border: 1px dotted var(--border);
+  background: var(--bg-input);
+  color: var(--text-main);
+  padding: 8px 10px;
+  cursor: pointer;
+  font: inherit;
+}
+
+.wikiSuggestion:hover,
+.wikiSuggestion:focus-visible {
+  border-color: var(--border-hover);
+  background: var(--bg-card-hover);
+  outline: none;
+}
+
+.wikiResultSurface {
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  flex-shrink: 0;
+}
+
+.wikiResultHeader {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  padding-bottom: 12px;
+}
+
+.wikiResultHeader::after,
+.wikiDockAdvanced::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background-image: var(--rule-dashed);
+  background-repeat: repeat-x;
+  background-size: auto 1px;
+}
+
+.wikiResultHeaderCopy {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.wikiRecallCard {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  border: 1px dashed var(--border);
+  background: var(--bg-card);
+}
+
+.wikiRecallContext {
+  margin: 0;
+  padding: 12px;
+  border: 1px dotted var(--border);
+  background: var(--bg-input);
+  color: var(--text-main);
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.wikiLoadingCard {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border: 1px dashed var(--border);
+  background: linear-gradient(180deg, var(--bg-card) 0%, var(--bg-surface) 100%);
+}
+
+.wikiLoadingTopline,
+.wikiLoadingPulseRow,
+.wikiDockBusyDots {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.wikiLoadingTrack {
+  position: relative;
+  overflow: hidden;
+  height: 8px;
+  border: 1px dotted var(--border);
+  background: var(--bg-input);
+}
+
+.wikiLoadingTrackFill {
+  position: absolute;
+  inset: 0 auto 0 -32%;
+  width: 32%;
+  background: linear-gradient(90deg, transparent 0%, var(--accent-primary) 35%, transparent 100%);
+  animation: wikiScan 1.15s linear infinite;
+  opacity: 0.9;
+}
+
+.wikiLoadingPulse {
+  width: 28px;
+  height: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  opacity: 0.28;
+  animation: wikiPulse 1s ease-in-out infinite;
+}
+
+.wikiLoadingPulseA {
+  animation-delay: 0s;
+}
+
+.wikiLoadingPulseB {
+  animation-delay: 0.14s;
+}
+
+.wikiLoadingPulseC {
+  animation-delay: 0.28s;
+}
+
+.wikiSendBtnBusy {
+  gap: 6px;
+}
+
+.wikiDockBusyDots span {
+  display: inline-block;
+  min-width: 4px;
+  animation: wikiDotBlink 1s ease-in-out infinite;
+}
+
+.wikiDockBusyDots span:nth-child(2) {
+  animation-delay: 0.14s;
+}
+
+.wikiDockBusyDots span:nth-child(3) {
+  animation-delay: 0.28s;
+}
+
+.wikiSelectionBadge {
+  align-self: flex-start;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.wikiSelectionMenu {
+  position: relative;
+}
+
+.wikiSelectionSummary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+}
+
+.wikiSelectionSummary::-webkit-details-marker {
+  display: none;
+}
+
+.wikiSelectionActions {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  min-width: 180px;
+  padding: 10px;
+  border: 1px dashed var(--border);
+  background: var(--bg-surface);
+  justify-content: flex-end;
+  z-index: 3;
+}
+
+.wikiDeleteAction {
+  color: var(--danger);
+}
+
+.wikiDeleteAction:hover:not(:disabled) {
+  background: var(--danger-bg) !important;
+  border-color: rgba(244, 63, 94, 0.28) !important;
+  color: var(--danger) !important;
+}
+
+.wikiPinnedRail,
+.wikiWeakTail {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.wikiWeakTail {
+  padding-top: 4px;
+}
+
+.wikiWeakTailToggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px dashed var(--border);
+  background: var(--bg-surface);
+  color: var(--text-main);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.wikiWeakTailToggle:hover,
+.wikiWeakTailToggle:focus-visible {
+  border-color: var(--border-hover);
+  background: var(--bg-card-hover);
+  outline: none;
+}
+
+.wikiWeakTailToggleText {
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.wikiArticleList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.wikiArticleListRaw {
+  gap: 14px;
+}
+
+.wikiFragment {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border: 1px dashed var(--border);
+  background: var(--bg-card);
+  cursor: pointer;
+}
+
+.wikiFragment:hover {
+  border-color: var(--border-hover);
+  background: var(--bg-card-hover);
+}
+
+.wikiFragmentRaw {
+  background: var(--bg-surface);
+}
+
+.wikiFragmentTop {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.wikiFragmentBadges {
+  flex: 1;
+}
+
+.wikiSelect {
+  min-width: 44px;
+  height: 34px;
+  border: 1px dashed var(--border);
+  background: var(--bg-input);
+  color: var(--text-main);
+  cursor: pointer;
+  font: inherit;
+}
+
+.wikiSelectOn {
+  background: var(--accent-primary);
+  color: var(--bg0);
+  border-color: var(--accent-primary);
+}
+
+.wikiPinButton {
+  min-width: 78px;
+}
+
+.wikiDiagramButton {
+  min-width: 96px;
+}
+
+.wikiPinButton:disabled {
+  opacity: 1;
+  cursor: default;
+}
+
+.wikiFragmentBody {
+  color: var(--text-main);
+}
+
+.wikiFragmentDiagram {
+  margin-top: 4px;
+}
+
+.wikiQuietBadge {
+  color: var(--text-muted);
+  border-color: var(--border);
+  background: var(--bg-input);
+}
+
+.wikiDock {
+  position: fixed;
+  left: 50%;
+  bottom: 0;
+  z-index: 40;
+  width: min(1120px, calc(100vw - 48px));
+  transform: translateX(-50%);
+  padding: 18px 0 12px;
+  background: linear-gradient(to top, var(--bg0) 78%, transparent);
+}
+
+.wikiDockShell {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  border: 1px dashed var(--border);
+  background: var(--bg-surface);
+  box-shadow: 0 -18px 40px rgba(0, 0, 0, 0.16);
+  transition: border-color 180ms ease, transform 220ms ease, background-color 180ms ease, padding 220ms ease, box-shadow 220ms ease;
+}
+
+.wikiDockRow {
+  display: flex;
+  gap: 10px;
+}
+
+.wikiDockRowPrimary {
+  align-items: stretch;
+  width: 100%;
+}
+
+.wikiDockRowActions {
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  transition: gap 220ms ease, transform 220ms ease;
+}
+
+.wikiDockControlGroup,
+.wikiDockButtonGroup {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.wikiDockControlGroup {
+  position: relative;
+  padding-right: 14px;
+}
+
+.wikiDockControlGroup::after {
+  content: "";
+  position: absolute;
+  top: 8px;
+  right: 0;
+  bottom: 8px;
+  width: 1px;
+  background-image: var(--rule-dashed);
+  background-repeat: repeat-y;
+  background-size: 1px auto;
+  opacity: 0.78;
+}
+
+.wikiDockButtonGroup {
+  margin-left: auto;
+  justify-content: flex-end;
+}
+
+.wikiSearchInput {
+  flex: 1;
+  min-width: 0;
+  border: 1px dashed var(--border);
+  background: var(--bg-input);
+  color: var(--text-main);
+  padding: 10px 12px;
+  font: inherit;
+  transition: flex-basis 220ms ease, padding 220ms ease, opacity 180ms ease, border-color 180ms ease, background-color 180ms ease;
+}
+
+.wikiSearchInput:focus {
+  outline: none;
+  border-color: var(--border-hover);
+}
+
+.wikiInlineSelect {
+  min-width: 138px;
+}
+
+.wikiDockAdvanced {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-top: 14px;
+  max-height: 520px;
+  opacity: 1;
+  overflow: hidden;
+  transform: translateY(0);
+  transition: max-height 240ms ease, opacity 180ms ease, transform 220ms ease, padding-top 200ms ease;
+}
+
+@keyframes wikiScan {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(420%);
+  }
+}
+
+@keyframes wikiPulse {
+  0%,
+  100% {
+    opacity: 0.24;
+    transform: scaleY(1);
+  }
+  50% {
+    opacity: 0.95;
+    transform: scaleY(1.2);
+  }
+}
+
+@keyframes wikiDotBlink {
+  0%,
+  100% {
+    opacity: 0.25;
+    transform: translateY(0);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(-1px);
+  }
+}
+
+.wikiFilterGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.wikiDockFooter {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.wikiConsolidatedModal {
+  width: min(980px, calc(100vw - 48px));
+}
+
+.wikiDiagramModal {
+  width: min(1100px, calc(100vw - 48px));
+}
+
+.wikiDiagramModalBody {
+  gap: 16px;
+}
+
+.wikiConsolidatedBody {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-height: min(72vh, 820px);
+  overflow: auto;
+}
+
+.wikiConsolidatedFragment {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.wikiDock:not(.wikiDockOpen) .wikiDockShell {
+  transform: translateY(0);
+}
+
+.wikiDock:not(.wikiDockOpen) .wikiDockAdvanced {
+  max-height: 0;
+  opacity: 0;
+  padding-top: 0;
+  transform: translateY(12px);
+  pointer-events: none;
+}
+
+.wikiDockCollapsed .wikiDockShell {
+  padding: 10px 12px;
+  transform: translateY(8px) scale(0.988);
+  box-shadow: 0 -10px 24px rgba(0, 0, 0, 0.12);
+}
+
+.wikiDockCollapsed .wikiDockRowPrimary {
+  gap: 8px;
+}
+
+.wikiDockCollapsed .wikiDockRowActions {
+  gap: 8px;
+}
+
+.wikiDockFocused .wikiDockShell {
+  transform: translateY(0) scale(1);
+  box-shadow: 0 -20px 44px rgba(0, 0, 0, 0.18);
+}
+
+@media (max-width: 960px) {
+  .wikiResultHeader,
+  .wikiDockRowPrimary,
+  .wikiDockRowActions,
+  .wikiDockControlGroup,
+  .wikiDockButtonGroup,
+  .wikiDockFooter,
+  .wikiWeakTailToggle {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .wikiSelectionBadge {
+    width: 100%;
+  }
+
+  .wikiSelectionActions {
+    position: static;
+    min-width: 0;
+  }
+
+  .wikiUtilityCluster {
+    justify-content: stretch;
+    flex-direction: column;
+  }
+
+  .wikiModeRail,
+  .wikiUtilityActions {
+    width: 100%;
+  }
+
+  .wikiFilterGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .wikiDock {
+    width: calc(100vw - 24px);
+    padding: 12px 0 8px;
+  }
+
+  .wikiInlineSelect,
+  .wikiPinButton,
+  .wikiSelect,
+  .wikiUtilityCluster .btn,
+  .wikiDockButtonGroup .btn,
+  .wikiDockButtonGroup .sendBtn {
+    width: 100%;
+  }
+
+  .wikiDockControlGroup {
+    padding-right: 0;
+  }
+
+  .wikiDockControlGroup::after {
+    display: none;
+  }
+
+  .wikiDockButtonGroup {
+    margin-left: 0;
+  }
+
+  .wikiFragmentTop {
+    flex-direction: column;
+  }
+}
+
+/* Wiki rounded refresh */
+.wikiSurface {
+  --wiki-radius-xl: 20px;
+  --wiki-radius-lg: 16px;
+  --wiki-radius-md: 12px;
+  --wiki-radius-sm: 10px;
+  --wiki-radius-pill: 999px;
+}
+
+.wikiHero,
+.wikiResultSurface,
+.wikiConsolidatedFragment {
+  border-radius: var(--wiki-radius-xl);
+  overflow: hidden;
+}
+
+.wikiRecallCard,
+.wikiLoadingCard,
+.wikiFragment,
+.wikiWeakTailToggle,
+.wikiSelectionActions,
+.wikiDockShell {
+  border-radius: var(--wiki-radius-lg);
+  overflow: hidden;
+}
+
+.wikiRecallContext,
+.wikiSearchInput,
+.wikiDock .wikiInlineSelect,
+.wikiDock .btnGhost,
+.wikiDock .sendBtn,
+.wikiSelect {
+  border-radius: var(--wiki-radius-md);
+}
+
+.wikiSurface .memPill,
+.wikiDock .memPill,
+.wikiSuggestion,
+.wikiModePill {
+  border-radius: var(--wiki-radius-pill);
+}
+
+.wikiSuggestion {
+  padding: 8px 12px;
+}
+
+.wikiSelectionActions {
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.14);
+}
+
+.wikiWeakTailToggle,
+.wikiFragment,
+.wikiRecallCard,
+.wikiLoadingCard,
+.wikiConsolidatedFragment {
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.08);
+}
+
+.wikiLoadingTrack,
+.wikiLoadingPulse {
+  border-radius: var(--wiki-radius-pill);
+}
+
+.wikiDockShell {
+  padding: 12px;
+}
+
+.wikiDockRowPrimary {
+  align-items: stretch;
+}
+
+.wikiDockRowActions {
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: space-between;
+}
+
+.wikiSearchInput {
+  display: block;
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 46px;
+  max-height: 168px;
+  padding: 11px 14px;
+  font-size: 14px;
+  line-height: 1.45;
+  resize: none;
+  overflow-y: auto;
+}
+
+.wikiSearchInput::placeholder {
+  color: var(--text-subtle);
+}
+
+.wikiDock .wikiInlineSelect,
+.wikiDock .btnGhost,
+.wikiDock .sendBtn,
+.wikiSelect {
+  min-height: 42px;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.wikiDockFocused .wikiDockShell,
+.wikiDockOpen .wikiDockShell {
+  padding: 14px 14px 16px;
+  border-radius: 20px;
+  box-shadow: 0 -18px 40px rgba(0, 0, 0, 0.16);
+}
+
+.wikiDockFocused .wikiSearchInput,
+.wikiDockOpen .wikiSearchInput {
+  min-height: 58px;
+  max-height: 188px;
+  padding: 14px 16px;
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.wikiDockCollapsed .wikiDockShell {
+  border-radius: 18px;
+}
+
+.wikiDockCollapsed .wikiSearchInput {
+  min-height: 40px;
+  padding-left: 8px;
+  padding-right: 8px;
+  padding-top: 9px;
+  padding-bottom: 9px;
+  opacity: 0.9;
+}
+
+body.light .wikiSelectionActions,
+body.light .wikiWeakTailToggle,
+body.light .wikiFragment,
+body.light .wikiRecallCard,
+body.light .wikiLoadingCard,
+body.light .wikiConsolidatedFragment {
+  box-shadow: 0 10px 24px rgba(30, 27, 24, 0.08);
+}
+
+.wikiDockControlGroup .wikiInlineSelect,
+.wikiDockButtonGroup .btn,
+.wikiDockButtonGroup .sendBtn {
+  flex: 0 0 auto;
 }

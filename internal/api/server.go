@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/time/timebooks/agent-memory/internal/core"
@@ -29,6 +30,7 @@ type Service struct {
 	Workspace         string
 	BaseDir           string
 	EmbeddingProvider embeddings.Provider
+	Scheduler         Scheduler
 
 	mu     sync.RWMutex
 	stores map[string]*workspaceAssets
@@ -129,6 +131,69 @@ func NewMux(svc *Service) *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		writeOK(w, http.StatusOK, map[string]any{"status": "ok"})
+	})
+	mux.HandleFunc("/api/v1/scheduler/status", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			writeErr(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+			return
+		}
+		if svc.Scheduler == nil {
+			writeOK(w, http.StatusOK, &SchedulerStatus{Enabled: false, Workspaces: []SchedulerWorkspaceStatus{}})
+			return
+		}
+		status, err := svc.Scheduler.Status(r.Context())
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
+			return
+		}
+		writeOK(w, http.StatusOK, status)
+	})
+	mux.HandleFunc("/api/v1/scheduler/history", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			writeErr(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+			return
+		}
+		if svc.Scheduler == nil {
+			writeOK(w, http.StatusOK, map[string]any{
+				"workspace": strings.TrimSpace(r.URL.Query().Get("workspace")),
+				"limit":     clamp(parseIntOrDefault(r.URL.Query().Get("limit"), 30), 1, 200),
+				"runs":      []SchedulerRun{},
+			})
+			return
+		}
+		workspace := strings.TrimSpace(r.URL.Query().Get("workspace"))
+		limit := clamp(parseIntOrDefault(r.URL.Query().Get("limit"), 30), 1, 200)
+		runs, err := svc.Scheduler.History(r.Context(), workspace, limit)
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
+			return
+		}
+		writeOK(w, http.StatusOK, map[string]any{
+			"workspace": workspace,
+			"limit":     limit,
+			"runs":      runs,
+		})
+	})
+	mux.HandleFunc("/api/v1/scheduler/run", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeErr(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+			return
+		}
+		if svc.Scheduler == nil {
+			writeErr(w, http.StatusNotFound, "not_found", "scheduler not available")
+			return
+		}
+		workspace := strings.TrimSpace(r.URL.Query().Get("workspace"))
+		if workspace == "" {
+			workspace = workspaceFromRequest(r, svc.Workspace)
+		}
+		force := strings.TrimSpace(r.URL.Query().Get("force"))
+		run, err := svc.Scheduler.RunNow(r.Context(), workspace, force == "1" || strings.EqualFold(force, "true"))
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
+			return
+		}
+		writeOK(w, http.StatusOK, run)
 	})
 
 	writeMemoryHandler := func(w http.ResponseWriter, r *http.Request) {
@@ -801,6 +866,11 @@ func NewMux(svc *Service) *http.ServeMux {
 			writeErr(w, http.StatusBadRequest, "runtime", err.Error())
 			return
 		}
+		retrieved, reconstruction, err := engine.AugmentRecallWithReconstruction(r.Context(), ws, task, retrieved, assets.Retrieval, assets.Store, assets.Writer, topK)
+		if err != nil {
+			writeErr(w, http.StatusBadRequest, "runtime", err.Error())
+			return
+		}
 		rebalanced := engine.RebalanceRecallHits(task, retrieved.Hits)
 		included, meta := assets.Clipper.Clip(rebalanced, budget)
 		contextBlock := engine.AssembleRecallSectionsWithObservations(task, observationBlock, included)
@@ -831,6 +901,7 @@ func NewMux(svc *Service) *http.ServeMux {
 			"search_sufficient":      decision.SearchSufficient,
 			"search_probe":           decision.Probe,
 			"deep_recall_used":       decision.Strategy != engine.RecallStrategySearchSatisfied,
+			"reconstruction":         reconstruction,
 		}
 		if strings.EqualFold(strings.TrimSpace(req.Format), "raw") {
 			data["text"] = contextBlock
@@ -967,6 +1038,11 @@ func NewMux(svc *Service) *http.ServeMux {
 			writeErr(w, http.StatusBadRequest, "runtime", err.Error())
 			return
 		}
+		retrieved, reconstruction, err := engine.AugmentRecallWithReconstruction(r.Context(), ws, task, retrieved, assets.Retrieval, assets.Store, assets.Writer, topK)
+		if err != nil {
+			writeErr(w, http.StatusBadRequest, "runtime", err.Error())
+			return
+		}
 		rebalanced := engine.RebalanceRecallHits(task, retrieved.Hits)
 		included, meta := assets.Clipper.Clip(rebalanced, budget)
 		tierDist := make(map[string]int)
@@ -1021,6 +1097,7 @@ func NewMux(svc *Service) *http.ServeMux {
 			"search_sufficient":      decision.SearchSufficient,
 			"search_probe":           decision.Probe,
 			"deep_recall_used":       decision.Strategy != engine.RecallStrategySearchSatisfied,
+			"reconstruction":         reconstruction,
 		}
 		if assets.Store != nil {
 			_ = assets.Store.AddTokenMetricV2(r.Context(), ws, "recall", meta.UsedTokens+observationTokens, recallBaselineTokens(rebalanced, observationTokens), engine.RunLabel(), engine.MemoryEnabled())
@@ -1052,8 +1129,7 @@ func NewMux(svc *Service) *http.ServeMux {
 			writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
 			return
 		}
-		extractor := engine.NewSessionEndExtractor(assets.Writer)
-		out, err := extractor.ExtractAndStore(r.Context(), ws, req.Transcript)
+		out, err := engine.RunSessionEndLifecycle(r.Context(), ws, req.Transcript, assets.Store, assets.Writer)
 		if err != nil {
 			writeErr(w, http.StatusBadRequest, "runtime", err.Error())
 			return
@@ -1078,8 +1154,7 @@ func NewMux(svc *Service) *http.ServeMux {
 			writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
 			return
 		}
-		extractor := engine.NewSessionEndExtractor(assets.Writer)
-		out, err := extractor.ExtractAndStore(r.Context(), ws, req.Transcript)
+		out, err := engine.RunSessionEndLifecycle(r.Context(), ws, req.Transcript, assets.Store, assets.Writer)
 		if err != nil {
 			writeErr(w, http.StatusBadRequest, "runtime", err.Error())
 			return
@@ -1839,6 +1914,16 @@ func NewMux(svc *Service) *http.ServeMux {
 		lowReachPercentile := 25
 		lowReachThreshold, lowReachMemoryCount := computeLowReachStats(memories, lowReachPercentile)
 		topRetrievedMemories := buildTopRetrievedMemories(memories, 5)
+
+		var schedulerSummary any
+		if svc.Scheduler != nil {
+			if status, err := svc.Scheduler.Status(r.Context()); err == nil && status != nil {
+				schedulerSummary = schedulerSummaryForWorkspace(status, workspace)
+			}
+		} else {
+			schedulerSummary = externalSchedulerSummary(r.Context(), svc.BaseDir, workspace)
+		}
+
 		writeOK(w, http.StatusOK, map[string]any{
 			"workspace":                     workspace,
 			"memory_count":                  len(memories),
@@ -1872,9 +1957,117 @@ func NewMux(svc *Service) *http.ServeMux {
 			"overall_token_savings_percent": percentSaved(tokenTotals.BaselineTokens, tokenTotals.SavedTokens),
 			"recall_token_savings_percent":  percentSaved(recallTokenTotals.BaselineTokens, recallTokenTotals.SavedTokens),
 			"token_savings_percent":         percentSaved(recallTokenTotals.BaselineTokens, recallTokenTotals.SavedTokens),
+			"scheduler":                     schedulerSummary,
 		})
 	})
 	return mux
+}
+
+func schedulerSummaryForWorkspace(status *SchedulerStatus, workspace string) map[string]any {
+	if status == nil {
+		return nil
+	}
+	summary := map[string]any{
+		"enabled":      status.Enabled,
+		"started_at":   status.StartedAt,
+		"last_tick_at": status.LastTickAt,
+		"next_tick_at": status.NextTickAt,
+	}
+	for _, item := range status.Workspaces {
+		if item.Workspace != workspace {
+			continue
+		}
+		summary["workspace"] = item
+		break
+	}
+	return summary
+}
+
+func externalSchedulerSummary(ctx context.Context, baseDir, workspace string) map[string]any {
+	for _, pidPath := range externalServePIDCandidates(baseDir, workspace) {
+		data, err := os.ReadFile(pidPath)
+		if err != nil {
+			continue
+		}
+		var st struct {
+			PID int    `json:"pid"`
+			URL string `json:"url"`
+		}
+		if err := json.Unmarshal(data, &st); err != nil || st.PID <= 0 {
+			continue
+		}
+		process, err := os.FindProcess(st.PID)
+		if err != nil || process.Signal(syscall.Signal(0)) != nil {
+			continue
+		}
+		if status := fetchExternalSchedulerStatus(ctx, strings.TrimSpace(st.URL), workspace); status != nil {
+			return status
+		}
+		return map[string]any{"enabled": true}
+	}
+	return nil
+}
+
+func externalServePIDCandidates(baseDir, workspace string) []string {
+	baseDir = strings.TrimSpace(baseDir)
+	if baseDir == "" {
+		return nil
+	}
+	paths := make([]string, 0, 4)
+	seen := map[string]struct{}{}
+	add := func(path string) {
+		path = strings.TrimSpace(path)
+		if path == "" {
+			return
+		}
+		if _, ok := seen[path]; ok {
+			return
+		}
+		seen[path] = struct{}{}
+		paths = append(paths, path)
+	}
+	names := []string{}
+	if ws := strings.TrimSpace(workspace); ws != "" {
+		names = append(names, "serve."+ws+".pid")
+	}
+	names = append(names, "serve.pid")
+	for _, name := range names {
+		add(filepath.Join(baseDir, name))
+		add(filepath.Join(baseDir, ".agent-memory", name))
+	}
+	return paths
+}
+
+func fetchExternalSchedulerStatus(ctx context.Context, baseURL, workspace string) map[string]any {
+	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	if baseURL == "" {
+		return nil
+	}
+	reqCtx, cancel := context.WithTimeout(ctx, 1500*time.Millisecond)
+	defer cancel()
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, baseURL+"/api/v1/scheduler/status", nil)
+	if err != nil {
+		return nil
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return nil
+	}
+	var env struct {
+		OK   bool             `json:"ok"`
+		Data *SchedulerStatus `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&env); err != nil {
+		return nil
+	}
+	if !env.OK || env.Data == nil {
+		return nil
+	}
+	return schedulerSummaryForWorkspace(env.Data, workspace)
 }
 
 func buildRecentObservationBlock(ctx context.Context, store *sqlite.Store, workspace string, preferredSessionID string, limit int) (string, string, int) {

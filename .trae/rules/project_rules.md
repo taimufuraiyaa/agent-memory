@@ -1,30 +1,21 @@
 ## IDE / Codebase Agent Rules (ENFORCED)
 
-### 1) Specs-First (forced)
+## Specs-First (FORCED)
+- For any non-trivial feature/bugfix, consult the relevant spec in `.kiro/specs/<feature>/` and derive the plan from `requirements.md` → `design.md` → `tasks.md`.
+- If no relevant spec exists, create it (requirements first, then design, then tasks) before implementing code changes.
+- If implementation maps to `.kiro/specs/**/tasks.md`, update the relevant checkbox items before finishing the work.
 
-For any non-trivial feature/bugfix, the agent MUST consult the relevant Kiro spec(s) and derive the implementation plan from `requirements.md` → `design.md` → `tasks.md` (under `.kiro/specs/<feature>/`).
-
-If no relevant spec exists for the requested work, the agent MUST create a requirements-first spec (requirements/design/tasks) before implementing changes.
-
-### 2) Solution Architect Depth (forced)
-
-For any Kiro `design.md` and `tasks.md` the agent MUST write as a Solution Architect:
-- Consider multiple approaches and alternatives.
-- Document trade-offs, drawbacks, risks, and edge cases.
-- Specify data contracts, failure modes, performance/scalability considerations, and rollout strategy where relevant.
+## Design Depth (FORCED)
+- Write `design.md` and `tasks.md` as a Solution Architect: alternatives, trade-offs, risks, edge cases, data contracts, failure modes, performance/scaling, and rollout strategy.
 - Do NOT include example code in `design.md`.
 
-### 3) Kiro Specs: Architecture Flowchart (forced)
+## Mermaid Safety (ENFORCED)
+- For any Mermaid diagram, ALWAYS enclose node labels in double quotes.
+  - Correct: `Node["Process (step 1)"]`
+  - Incorrect: `Node[Process (step 1)]`
 
-When creating or updating any Kiro spec `design.md`, the agent MUST include an architecture/system design flowchart section using a Mermaid diagram.
-
-Mermaid safety rule: ALWAYS enclose node labels in double quotes to avoid syntax errors with special characters.
-
-### 4) Task Progress Updates (forced)
-
-If the agent is implementing work that maps to a defined Kiro spec task list (`.kiro/specs/**/tasks.md`), the agent MUST update the relevant checkbox items in that `tasks.md` to reflect completion before finishing the implementation.
-
----
+## Truthfulness (ENFORCED)
+- Do not guess or fabricate details. If information is missing, explicitly say what's missing and then proceed by inspecting the repo.
 
 ## agent-memory (MANDATORY)
 

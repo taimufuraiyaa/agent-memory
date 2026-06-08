@@ -7,6 +7,7 @@ import {
   listSessions,
   listProjects,
   listRecentMemories,
+  listSchedulerHistory,
   promoteObservations,
   recallPreview,
   searchMemories,
@@ -23,6 +24,8 @@ import {
   type OutcomeResult,
   type ProjectListItem,
   type RecallPreviewResponse,
+  type SchedulerRunHistory,
+  type SchedulerSummary,
   type SearchResponse,
   type SessionEntry,
   type StorageTier,
@@ -34,7 +37,7 @@ import { DiagramViewer, renderDiagramMarkupForExport } from './DiagramViewer'
 import { MarkdownView } from './MarkdownView'
 
 type ChatMode = 'search' | 'recall'
-type Surface = 'overview' | 'search' | 'recall' | 'diagnostics' | 'sessions' | 'benchmark' | 'wiki'
+type Surface = 'overview' | 'search' | 'recall' | 'diagnostics' | 'sessions' | 'benchmark' | 'wiki' | 'lifecycle'
 type WikiViewMode = 'article' | 'raw'
 type WikiMode = 'search' | 'recall' | 'recents'
 
@@ -386,6 +389,9 @@ export function App() {
   const [benchmarkRuns, setBenchmarkRuns] = useState<BenchmarkRun[]>([])
   const [benchmarkBusy, setBenchmarkBusy] = useState<boolean>(false)
   const [benchmarkErr, setBenchmarkErr] = useState<string>('')
+  const [schedulerHistory, setSchedulerHistory] = useState<SchedulerRunHistory[]>([])
+  const [schedulerBusy, setSchedulerBusy] = useState<boolean>(false)
+  const [schedulerErr, setSchedulerErr] = useState<string>('')
   const [sessions, setSessions] = useState<SessionEntry[]>([])
   const [sessionsBusy, setSessionsBusy] = useState<boolean>(false)
   const [sessionsErr, setSessionsErr] = useState<string>('')
@@ -583,6 +589,29 @@ export function App() {
       cancelled = true
     }
   }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    if (!workspace || surface !== 'lifecycle') return
+    setSchedulerBusy(true)
+    listSchedulerHistory({ workspace, limit: 100 })
+      .then((res) => {
+        if (cancelled) return
+        setSchedulerHistory(res.history || [])
+        setSchedulerErr('')
+      })
+      .catch((err) => {
+        if (cancelled) return
+        setSchedulerErr((err as Error).message)
+      })
+      .finally(() => {
+        if (cancelled) return
+        setSchedulerBusy(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [workspace, surface])
 
   useEffect(() => {
     let cancelled = false
@@ -1133,8 +1162,12 @@ export function App() {
             <span className="navKey">[04]</span>
             <span className="navLabel">Benchmark</span>
           </button>
-          <button className="navItem" onClick={() => openWiki()} type="button" aria-label="Wiki">
+          <button className={surface === 'lifecycle' ? 'navItem navItemOn' : 'navItem'} onClick={() => setSurface('lifecycle')} type="button" aria-label="Lifecycle">
             <span className="navKey">[05]</span>
+            <span className="navLabel">Lifecycle</span>
+          </button>
+          <button className="navItem" onClick={() => openWiki()} type="button" aria-label="Wiki">
+            <span className="navKey">[06]</span>
             <span className="navLabel">Wiki</span>
           </button>
         </nav>
@@ -1233,6 +1266,16 @@ export function App() {
                   runs={benchmarkRuns}
                   busy={benchmarkBusy}
                   error={benchmarkErr}
+                />
+              ) : null}
+
+              {surface === 'lifecycle' ? (
+                <LifecyclePanel
+                  workspace={workspace}
+                  scheduler={stats?.scheduler}
+                  history={schedulerHistory}
+                  busy={schedulerBusy}
+                  error={schedulerErr}
                 />
               ) : null}
 
@@ -1939,6 +1982,15 @@ function OverviewPanel({
   const lowReachThreshold = stats?.low_reach_threshold ?? 0
   const lowReachMemoryCount = stats?.low_reach_memory_count ?? 0
   const topRetrievedMemories = stats?.top_retrieved_memories ?? []
+  const scheduler = stats?.scheduler
+  const schedulerWorkspace = scheduler?.workspace
+  const schedulerState = scheduler?.enabled
+    ? schedulerWorkspace?.run_in_progress
+      ? 'running'
+      : schedulerWorkspace?.last_error
+        ? 'failed'
+        : schedulerWorkspace?.last_result || 'idle'
+    : 'disabled'
   const experimentsRef = useRef<HTMLElement>(null)
 
   useEffect(() => {
@@ -2045,6 +2097,18 @@ function OverviewPanel({
             <DiagnosticRow label="Last Accessed" value={formatTS(stats?.last_memory_accessed_at) || 'n/a'} />
           </div>
         </BreakdownCard>
+
+        <BreakdownCard title="Scheduler" subtitle={scheduler?.enabled ? `Next tick ${formatTS(scheduler?.next_tick_at) || 'n/a'}` : 'Background lifecycle disabled'}>
+          <div className="diagnosticsList">
+            <DiagnosticRow label="State" value={schedulerState} />
+            <DiagnosticRow label="Last Tick" value={formatTS(scheduler?.last_tick_at) || 'n/a'} />
+            <DiagnosticRow label="Last Completed" value={formatTS(schedulerWorkspace?.last_completed_at) || 'n/a'} />
+            <DiagnosticRow label="Last Skip" value={schedulerWorkspace?.last_skip_reason || schedulerWorkspace?.current_skip_reason || '-'} />
+            <DiagnosticRow label="Hygiene Overdue" value={schedulerWorkspace?.hygiene_overdue ? 'yes' : 'no'} />
+            <DiagnosticRow label="Last Duration" value={formatDuration(schedulerWorkspace?.last_duration_ms)} />
+            <DiagnosticRow label="Last Impacts" value={schedulerWorkspace?.last_impacts != null ? String(schedulerWorkspace.last_impacts) : '-'} />
+          </div>
+        </BreakdownCard>
       </div>
 
       <section className="comparisonSection">
@@ -2097,6 +2161,125 @@ function benchmarkEconomicNumber(run: BenchmarkRun | undefined, key: string, fal
   const summary = benchmarkEconomicSummary(run)
   const value = summary?.[key]
   return typeof value === 'number' ? value : fallback
+}
+
+function LifecyclePanel({
+  workspace,
+  scheduler,
+  history,
+  busy,
+  error,
+}: {
+  workspace: string
+  scheduler?: SchedulerSummary
+  history: SchedulerRunHistory[]
+  busy: boolean
+  error: string
+}) {
+  if (!workspace) {
+    return (
+      <div className="surfacePanel">
+        <div className="emptyState">
+          <div className="emptyTitle">No Workspace Selected</div>
+          <div className="emptyBody">Select a workspace to view its memory lifecycle history.</div>
+        </div>
+      </div>
+    )
+  }
+  return (
+    <div className="surfacePanel">
+      <div className="panelHeader">
+        <h2 className="panelTitle">Memory Lifecycle</h2>
+        <p className="panelSubtitle">Background scheduler state and run history.</p>
+      </div>
+
+      {scheduler?.enabled ? (
+        <div className="panelSection">
+          <h3 className="sectionTitle">Scheduler State</h3>
+          <div className="metricGrid">
+            <div className="metricCard">
+              <div className="metricLabel">Status</div>
+              <div className="metricValue">
+                {scheduler.workspace?.run_in_progress ? (
+                  <span className="tone-good">Running</span>
+                ) : (
+                  <span className="tone-neutral">Idle</span>
+                )}
+              </div>
+            </div>
+            <div className="metricCard">
+              <div className="metricLabel">Next Tick</div>
+              <div className="metricValue">{formatTS(scheduler.next_tick_at)}</div>
+            </div>
+            <div className="metricCard">
+              <div className="metricLabel">Last Scheduled</div>
+              <div className="metricValue">{formatTS(scheduler.workspace?.last_scheduled_at)}</div>
+            </div>
+            <div className="metricCard">
+              <div className="metricLabel">Last Completed</div>
+              <div className="metricValue">{formatTS(scheduler.workspace?.last_completed_at)}</div>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="panelSection">
+          <div className="emptyState">
+            <div className="emptyBody">Scheduler is disabled. Enable it from the agent-memory menubar.</div>
+          </div>
+        </div>
+      )}
+
+      {error ? (
+        <div className="errAlert">Failed to load lifecycle history: {error}</div>
+      ) : busy && history.length === 0 ? (
+        <div className="emptyState">
+          <div className="emptyBody">Loading history...</div>
+        </div>
+      ) : history.length === 0 ? (
+        <div className="emptyState">
+          <div className="emptyBody">No lifecycle runs recorded yet for this workspace.</div>
+        </div>
+      ) : (
+        <div className="panelSection">
+          <h3 className="sectionTitle">Recent Runs</h3>
+          <table className="dataTable">
+            <thead>
+              <tr>
+                <th>Started</th>
+                <th>Result</th>
+                <th>Duration</th>
+                <th>Decay Updated</th>
+                <th>Promoted</th>
+                <th>Evicted</th>
+              </tr>
+            </thead>
+            <tbody>
+              {history.map((run) => (
+                <tr key={run.id}>
+                  <td>{formatTS(run.started_at)}</td>
+                  <td>
+                    {run.result === 'success' ? (
+                      <span className="tone-good">Success</span>
+                    ) : run.result === 'skipped' ? (
+                      <span className="tone-neutral">Skipped ({run.skip_reason})</span>
+                    ) : run.result === 'failed' ? (
+                      <span className="tone-bad">Failed</span>
+                    ) : (
+                      <span className="tone-warn">{run.result}</span>
+                    )}
+                  </td>
+                  <td>{formatDuration(run.duration_ms)}</td>
+                  <td>{run.decay_updated > 0 ? formatNumber(run.decay_updated) : <span className="muted">-</span>}</td>
+                  <td>{run.promoted > 0 ? <span className="tone-good">+{formatNumber(run.promoted)}</span> : <span className="muted">-</span>}</td>
+                  <td>{run.evicted > 0 ? <span className="tone-bad">-{formatNumber(run.evicted)}</span> : <span className="muted">-</span>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
 }
 
 function BenchmarkPanel({

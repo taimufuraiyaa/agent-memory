@@ -1,0 +1,38 @@
+{
+  "name": "agent-memory",
+  "image": "golang:1.26",
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "20"
+    },
+    "ghcr.io/devcontainers/features/python:1": {
+      "version": "3.11"
+    },
+    "ghcr.io/devcontainers/features/git:1": {}
+  },
+  "postCreateCommand": "make setup",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "golang.go",
+        "ms-python.python",
+        "esbenp.prettier-vscode",
+        "dbaeumer.vscode-eslint",
+        "bradlc.vscode-tailwindcss"
+      ],
+      "settings": {
+        "go.useLanguageServer": true,
+        "go.lintOnSave": "workspace",
+        "go.formatTool": "gofmt",
+        "editor.formatOnSave": true,
+        "[go]": {
+          "editor.defaultFormatter": "golang.go"
+        }
+      }
+    }
+  },
+  "mounts": [
+    "source=${localEnv:HOME}/.agent-memory,target=/home/vscode/.agent-memory,type=bind,consistency=cached"
+  ],
+  "remoteUser": "vscode"
+}

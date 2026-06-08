@@ -4024,10 +4024,9 @@ body.light {
 }
 
 .wikiSurface {
-  flex: 1;
+  flex: 1 0 auto;
   display: flex;
   flex-direction: column;
-  min-height: 0;
   gap: 18px;
 }
 
@@ -4038,10 +4037,9 @@ body.light {
 }
 
 .wikiCanvas {
-  flex: 1;
+  flex: 1 0 auto;
   display: flex;
   flex-direction: column;
-  min-height: 0;
   gap: 18px;
 }
 
@@ -4175,6 +4173,7 @@ body.light .wikiModePill.memPillAccent {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  flex-shrink: 0;
 }
 
 .wikiResultHeader {
@@ -4635,6 +4634,7 @@ body.light .wikiModePill.memPillAccent {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  flex-shrink: 0;
 }
 
 .wikiDock:not(.wikiDockOpen) .wikiDockShell {

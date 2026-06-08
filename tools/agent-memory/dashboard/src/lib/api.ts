@@ -103,6 +103,49 @@ export type RetrievalReachMemory = {
   preview: string
 }
 
+export type SchedulerWorkspaceSummary = {
+  workspace: string
+  memory_count: number
+  last_activity_at?: string
+  last_scheduled_at?: string
+  last_completed_at?: string
+  last_result?: string
+  last_skip_reason?: string
+  last_duration_ms?: number
+  last_impacts?: number
+  last_error?: string
+  hygiene_overdue: boolean
+  eligible_daily: boolean
+  current_skip_reason?: string
+  run_in_progress: boolean
+}
+
+export type SchedulerRunHistory = {
+  id: string
+  workspace: string
+  started_at: string
+  completed_at?: string
+  trigger: string
+  result: string
+  skip_reason?: string
+  duration_ms: number
+  decay_updated: number
+  consolidated: number
+  conflicts_found: number
+  evicted: number
+  promoted: number
+  demoted: number
+  error?: string
+}
+
+export type SchedulerSummary = {
+  enabled: boolean
+  started_at?: string
+  last_tick_at?: string
+  next_tick_at?: string
+  workspace?: SchedulerWorkspaceSummary
+}
+
 export type DashboardStats = {
   workspace: string
   memory_count: number
@@ -136,6 +179,7 @@ export type DashboardStats = {
   overall_token_savings_percent?: number
   recall_token_savings_percent?: number
   token_savings_percent: number
+  scheduler?: SchedulerSummary
 }
 
 export type SessionEntry = {
@@ -355,6 +399,13 @@ export function listProjects(): Promise<{ projects: ProjectListItem[] }> {
 export function getStats(workspace?: string): Promise<DashboardStats> {
   const qs = workspace ? `?workspace=${encodeURIComponent(workspace)}` : ''
   return api(`/api/v1/stats${qs}`, { method: 'GET' })
+}
+
+export function listSchedulerHistory(input: { workspace: string; limit?: number }): Promise<{ workspace: string; limit: number; history: SchedulerRunHistory[] }> {
+  const qs = new URLSearchParams()
+  qs.set('workspace', input.workspace)
+  if (typeof input.limit === 'number') qs.set('limit', String(input.limit))
+  return api(`/api/v1/scheduler/history?${qs.toString()}`, { method: 'GET' })
 }
 
 export function listSessions(input: { workspace: string; limit?: number }): Promise<{ workspace: string; limit: number; sessions: SessionEntry[] }> {

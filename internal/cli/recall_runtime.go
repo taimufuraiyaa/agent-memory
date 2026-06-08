@@ -107,6 +107,7 @@ func executeRecall(
 
 	searcher := engine.NewVectorSearcher(store, provider)
 	retrieval := engine.NewRetrievalEngine(searcher)
+	pipeline := engine.NewWritePipelineWithEmbedder(store, provider)
 	var (
 		retrieved *engine.RetrievalResult
 		decision  engine.RecallGateDecision
@@ -153,6 +154,10 @@ func executeRecall(
 	if err != nil {
 		return nil, "", err
 	}
+	retrieved, reconstruction, err := engine.AugmentRecallWithReconstruction(ctx, cfg.workspace, task, retrieved, retrieval, store, pipeline, req.TopK)
+	if err != nil {
+		return nil, "", err
+	}
 	clipper := engine.NewTokenClipper(nil)
 	rebalanced := engine.RebalanceRecallHits(task, retrieved.Hits)
 	included, meta := clipper.Clip(rebalanced, budget)
@@ -183,6 +188,7 @@ func executeRecall(
 		"search_sufficient":      decision.SearchSufficient,
 		"search_probe":           decision.Probe,
 		"deep_recall_used":       decision.Strategy != engine.RecallStrategySearchSatisfied,
+		"reconstruction":         reconstruction,
 	}
 	return payload, contextBlock, nil
 }

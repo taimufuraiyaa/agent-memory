@@ -291,11 +291,43 @@ func (s *Store) Migrate(ctx context.Context) error {
 			UNIQUE(workspace, run_id)
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_benchmark_runs_workspace_created ON benchmark_runs(workspace, created_at DESC)`,
+		`CREATE TABLE IF NOT EXISTS scheduler_workspace_state (
+			workspace TEXT PRIMARY KEY,
+			last_scheduled_at TEXT NOT NULL DEFAULT '',
+			last_completed_at TEXT NOT NULL DEFAULT '',
+			last_result TEXT NOT NULL DEFAULT '',
+			last_skip_reason TEXT NOT NULL DEFAULT '',
+			last_duration_ms INTEGER NOT NULL DEFAULT 0,
+			last_error TEXT NOT NULL DEFAULT '',
+			updated_at TEXT NOT NULL
+		)`,
+		`CREATE TABLE IF NOT EXISTS scheduler_run_history (
+			id TEXT PRIMARY KEY,
+			workspace TEXT NOT NULL,
+			started_at TEXT NOT NULL,
+			completed_at TEXT NOT NULL DEFAULT '',
+			trigger TEXT NOT NULL,
+			result TEXT NOT NULL,
+			skip_reason TEXT NOT NULL DEFAULT '',
+			duration_ms INTEGER NOT NULL DEFAULT 0,
+			decay_updated INTEGER NOT NULL DEFAULT 0,
+			consolidated INTEGER NOT NULL DEFAULT 0,
+			conflicts_found INTEGER NOT NULL DEFAULT 0,
+			evicted INTEGER NOT NULL DEFAULT 0,
+			promoted INTEGER NOT NULL DEFAULT 0,
+			demoted INTEGER NOT NULL DEFAULT 0,
+			error TEXT NOT NULL DEFAULT ''
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_scheduler_run_history_workspace_started ON scheduler_run_history(workspace, started_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_scheduler_run_history_started ON scheduler_run_history(started_at DESC)`,
 	}
 	for _, stmt := range stmts {
 		if _, err := s.db.ExecContext(ctx, stmt); err != nil {
 			return fmt.Errorf("migration failed: %w", err)
 		}
+	}
+	if err := s.ensureColumn(ctx, "scheduler_workspace_state", "last_impacts", `ALTER TABLE scheduler_workspace_state ADD COLUMN last_impacts INTEGER NOT NULL DEFAULT 0`); err != nil {
+		return err
 	}
 	hasContentHash, err := s.hasColumn(ctx, "memories", "content_hash")
 	if err != nil {
