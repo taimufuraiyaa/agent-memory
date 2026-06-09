@@ -139,7 +139,7 @@ func TestVectorSearcherRefreshesLegacyProviderVectors(t *testing.T) {
 	if err := store.UpsertMemory(context.Background(), entry); err != nil {
 		t.Fatalf("upsert memory: %v", err)
 	}
-	if err := store.UpsertMemoryVector(context.Background(), entry.ID, entry.Workspace, "legacy-provider", []float32{1, 0, 0}); err != nil {
+	if err := store.UpsertMemoryVector(context.Background(), entry.ID, entry.Workspace, "legacy-provider", "legacy-v1", []float32{1, 0, 0}); err != nil {
 		t.Fatalf("seed legacy vector: %v", err)
 	}
 

@@ -67,10 +67,19 @@ func (s *Service) resolve(ctx context.Context, ws string) (*workspaceAssets, err
 	if err != nil {
 		return nil, err
 	}
+	
+	// Create shared cache for efficient query reuse
+	cache := engine.NewQueryCache(engine.DefaultQueryCacheConfig())
+	searcher := engine.NewVectorSearcher(store, s.EmbeddingProvider)
+	retrieval := engine.NewRetrievalEngineWithCache(searcher, engine.DefaultQueryCacheConfig())
+	
 	assets = &workspaceAssets{
 		Store:     store,
-		Writer:    engine.NewWritePipelineWithEmbedder(store, s.EmbeddingProvider),
-		Retrieval: engine.NewRetrievalEngine(engine.NewVectorSearcher(store, s.EmbeddingProvider)),
+		Writer:    engine.NewWritePipelineWithOptions(store, engine.WritePipelineOptions{
+			Embedder: s.EmbeddingProvider,
+			Cache:    cache,
+		}),
+		Retrieval: retrieval,
 		Clipper:   engine.NewTokenClipper(nil),
 	}
 	if s.stores == nil {

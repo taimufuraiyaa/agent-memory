@@ -59,12 +59,14 @@ type WritePipeline struct {
 	router     HybridRouter
 	markdown   *markdown.Adapter
 	embedder   embeddings.Provider
+	cache      *QueryCache
 }
 
 // WritePipelineOptions customizes pipeline behavior for production entry points.
 type WritePipelineOptions struct {
 	MarkdownFilePath string
 	Embedder         embeddings.Provider
+	Cache            *QueryCache
 }
 
 // Extractor performs extraction/transformation of input content.
@@ -120,6 +122,7 @@ func NewWritePipelineWithOptions(store *sqlite.Store, opt WritePipelineOptions) 
 		},
 	}
 	p.embedder = opt.Embedder
+	p.cache = opt.Cache
 	if strings.TrimSpace(opt.MarkdownFilePath) != "" {
 		p.markdown = markdown.NewAdapter(opt.MarkdownFilePath, 4000)
 	}
@@ -271,7 +274,7 @@ func (p *WritePipeline) Write(ctx context.Context, in WriteInput) (*WriteResult,
 				_ = p.store.DeleteByIDs(ctx, []string{entry.ID})
 				return nil, fmt.Errorf("persist eager vector: embed memory %s: %w", entry.ID, err)
 			}
-			if err := p.store.UpsertMemoryVector(ctx, entry.ID, entry.Workspace, p.embedder.Name(), vec); err != nil {
+			if err := p.store.UpsertMemoryVector(ctx, entry.ID, entry.Workspace, p.embedder.Name(), p.embedder.ModelVersion(), vec); err != nil {
 				_ = p.store.DeleteByIDs(ctx, []string{entry.ID})
 				return nil, fmt.Errorf("persist eager vector: upsert memory %s: %w", entry.ID, err)
 			}
@@ -282,6 +285,11 @@ func (p *WritePipeline) Write(ctx context.Context, in WriteInput) (*WriteResult,
 			_ = p.store.DeleteByIDs(ctx, []string{entry.ID})
 			return nil, err
 		}
+	}
+
+	// Invalidate query cache after successful write to ensure fresh results
+	if p.cache != nil {
+		p.cache.InvalidateWorkspace(entry.Workspace)
 	}
 
 	return &WriteResult{

@@ -124,6 +124,7 @@ type SignalWeights struct {
 // RetrievalEngine combines semantic search and additional ranking signals.
 type RetrievalEngine struct {
 	vector *VectorSearcher
+	cache  *QueryCache
 	clock  func() time.Time
 }
 
@@ -131,12 +132,38 @@ type RetrievalEngine struct {
 func NewRetrievalEngine(vector *VectorSearcher) *RetrievalEngine {
 	return &RetrievalEngine{
 		vector: vector,
+		cache:  NewQueryCache(DefaultQueryCacheConfig()),
+		clock:  func() time.Time { return time.Now().UTC() },
+	}
+}
+
+// NewRetrievalEngineWithCache creates a retrieval engine with custom cache config.
+func NewRetrievalEngineWithCache(vector *VectorSearcher, cacheConfig QueryCacheConfig) *RetrievalEngine {
+	return &RetrievalEngine{
+		vector: vector,
+		cache:  NewQueryCache(cacheConfig),
 		clock:  func() time.Time { return time.Now().UTC() },
 	}
 }
 
 // Retrieve computes mode-aware weighted ranking with explain output.
+// Results are cached to reduce latency for repeated queries.
 func (e *RetrievalEngine) Retrieve(ctx context.Context, opt RetrievalOptions) (*RetrievalResult, error) {
+	// Check result cache first
+	if cachedHits := e.cache.GetResults(ctx, opt); cachedHits != nil {
+		weights := modeWeights(opt.Mode)
+		policy := policyForMode(opt.Mode, opt.Policy)
+		
+		return &RetrievalResult{
+			Mode:       opt.Mode,
+			Weights:    weights,
+			Policy:     policy,
+			Hits:       cachedHits,
+			StrongHits: filterStrongHits(cachedHits),
+			WeakHits:   filterWeakHits(cachedHits),
+		}, nil
+	}
+	
 	if opt.TopK <= 0 {
 		opt.TopK = 10
 	}
@@ -234,6 +261,10 @@ func (e *RetrievalEngine) Retrieve(ctx context.Context, opt RetrievalOptions) (*
 	if opt.Mode != ModeRecall {
 		visible = append(append([]RetrievalHit{}, strong...), weak...)
 	}
+	
+	// Store results in cache for future queries
+	e.cache.SetResults(ctx, opt, visible)
+	
 	return &RetrievalResult{
 		Mode:           opt.Mode,
 		Weights:        weights,
@@ -243,6 +274,36 @@ func (e *RetrievalEngine) Retrieve(ctx context.Context, opt RetrievalOptions) (*
 		WeakHits:       weak,
 		SuppressedHits: suppressed,
 	}, nil
+}
+
+// InvalidateCache clears cached results for a workspace after writes.
+func (e *RetrievalEngine) InvalidateCache(workspace string) {
+	e.cache.InvalidateWorkspace(workspace)
+}
+
+// CacheStats returns cache performance metrics.
+func (e *RetrievalEngine) CacheStats() CacheStats {
+	return e.cache.Stats()
+}
+
+func filterStrongHits(hits []RetrievalHit) []RetrievalHit {
+	strong := make([]RetrievalHit, 0, len(hits))
+	for _, h := range hits {
+		if h.Band == BandStrongRecall {
+			strong = append(strong, h)
+		}
+	}
+	return strong
+}
+
+func filterWeakHits(hits []RetrievalHit) []RetrievalHit {
+	weak := make([]RetrievalHit, 0, len(hits))
+	for _, h := range hits {
+		if h.Band == BandWeakFamiliarity {
+			weak = append(weak, h)
+		}
+	}
+	return weak
 }
 
 func matchRetrievalFilters(m core.MemoryEntry, f RetrievalFilters) bool {
@@ -511,3 +572,4 @@ func max(a, b int) int {
 	}
 	return b
 }
+

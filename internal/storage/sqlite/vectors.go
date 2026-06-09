@@ -12,31 +12,36 @@ import (
 )
 
 type MemoryVectorRow struct {
-	MemoryID          string
-	Workspace         string
-	Embedding         []float32
-	EmbeddingProvider string
-	UpdatedAt         time.Time
+	MemoryID              string
+	Workspace             string
+	Embedding             []float32
+	EmbeddingProvider     string
+	EmbeddingModelVersion string
+	UpdatedAt             time.Time
 }
 
 // UpsertMemoryVector writes or updates an embedding for a memory row.
-func (s *Store) UpsertMemoryVector(ctx context.Context, memoryID, workspace, provider string, embedding []float32) error {
+func (s *Store) UpsertMemoryVector(ctx context.Context, memoryID, workspace, provider, modelVersion string, embedding []float32) error {
 	if strings.TrimSpace(provider) == "" {
 		return errors.New("embedding provider is required")
+	}
+	if strings.TrimSpace(modelVersion) == "" {
+		modelVersion = "unknown"
 	}
 	b, err := json.Marshal(embedding)
 	if err != nil {
 		return err
 	}
 	_, err = s.db.ExecContext(ctx, `
-INSERT INTO memory_vectors (memory_id, workspace, embedding_json, embedding_provider, updated_at)
-VALUES (?, ?, ?, ?, ?)
+INSERT INTO memory_vectors (memory_id, workspace, embedding_json, embedding_provider, embedding_model_version, updated_at)
+VALUES (?, ?, ?, ?, ?, ?)
 ON CONFLICT(memory_id) DO UPDATE SET
 	workspace=excluded.workspace,
 	embedding_json=excluded.embedding_json,
 	embedding_provider=excluded.embedding_provider,
+	embedding_model_version=excluded.embedding_model_version,
 	updated_at=excluded.updated_at
-`, memoryID, workspace, string(b), strings.TrimSpace(provider), time.Now().UTC().Format(time.RFC3339Nano))
+`, memoryID, workspace, string(b), strings.TrimSpace(provider), strings.TrimSpace(modelVersion), time.Now().UTC().Format(time.RFC3339Nano))
 	return err
 }
 
@@ -56,7 +61,7 @@ func (s *Store) ListMemoryVectorsByWorkspace(ctx context.Context, workspace stri
 // ListMemoryVectorRowsByWorkspace returns cached embeddings plus provenance data.
 func (s *Store) ListMemoryVectorRowsByWorkspace(ctx context.Context, workspace string) ([]MemoryVectorRow, error) {
 	rows, err := s.db.QueryContext(ctx, `
-SELECT memory_id, workspace, embedding_json, embedding_provider, updated_at
+SELECT memory_id, workspace, embedding_json, embedding_provider, embedding_model_version, updated_at
 FROM memory_vectors
 WHERE workspace = ?
 `, workspace)
@@ -69,7 +74,7 @@ WHERE workspace = ?
 		var row MemoryVectorRow
 		var embJSON string
 		var updatedAtRaw string
-		if err := rows.Scan(&row.MemoryID, &row.Workspace, &embJSON, &row.EmbeddingProvider, &updatedAtRaw); err != nil {
+		if err := rows.Scan(&row.MemoryID, &row.Workspace, &embJSON, &row.EmbeddingProvider, &row.EmbeddingModelVersion, &updatedAtRaw); err != nil {
 			return nil, err
 		}
 		if err := json.Unmarshal([]byte(embJSON), &row.Embedding); err != nil {

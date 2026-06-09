@@ -16,13 +16,14 @@ import (
 )
 
 type reembedWorkspaceResult struct {
-	Workspace     string         `json:"workspace"`
-	DBPath        string         `json:"db_path"`
-	TotalMemories int            `json:"total_memories"`
-	ReEmbedded    int            `json:"re_embedded"`
-	Skipped       int            `json:"skipped"`
-	SkipReasons   map[string]int `json:"skip_reasons,omitempty"`
-	Provider      string         `json:"provider"`
+	Workspace            string            `json:"workspace"`
+	DBPath               string            `json:"db_path"`
+	TotalMemories        int               `json:"total_memories"`
+	ReEmbedded           int               `json:"re_embedded"`
+	Skipped              int               `json:"skipped"`
+	SkipReasons          map[string]int    `json:"skip_reasons,omitempty"`
+	Provider             string            `json:"provider"`
+	ProviderDistribution map[string]int    `json:"provider_distribution,omitempty"`
 }
 
 type reembedResult struct {
@@ -37,9 +38,19 @@ type reembedResult struct {
 func newReembedCommand() *cobra.Command {
 	var flags commonFlags
 	var all bool
+	var dryRun bool
 	cmd := &cobra.Command{
 		Use:   "re-embed",
 		Short: "Rebuild stored memory vectors for one workspace or all workspaces",
+		Long: `Re-embed memories using the current embedding provider.
+
+This command regenerates embeddings for memories, useful when:
+- Switching to a new embedding provider (e.g., from local-hash to ONNX)
+- Upgrading embedding models
+- Fixing corpus consistency issues
+
+The command automatically skips memories that already use the target provider
+and model version, making it safe to run multiple times.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 			if err := validateOutputFormat(flags.format, false); err != nil {
@@ -65,7 +76,7 @@ func newReembedCommand() *cobra.Command {
 				Workspaces: make([]reembedWorkspaceResult, 0, len(targets)),
 			}
 			for _, target := range targets {
-				item, err := runReembedWorkspace(ctx, target.workspace, target.dbPath, provider)
+				item, err := runReembedWorkspace(ctx, target.workspace, target.dbPath, provider, dryRun)
 				if err != nil {
 					return err
 				}
@@ -85,6 +96,7 @@ func newReembedCommand() *cobra.Command {
 	cmd.Flags().StringVar(&flags.modelDir, "model-dir", embeddings.DefaultModelDir(home), "Path to local embedding model directory")
 	cmd.Flags().StringVarP(&flags.format, "format", "f", formatJSON, "Output format: json")
 	cmd.Flags().BoolVar(&all, "all", false, "Re-embed every workspace database under ~/.agent-memory")
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Report what would be re-embedded without modifying the database")
 	return cmd
 }
 
@@ -131,7 +143,7 @@ func reembedTargets(flags commonFlags, all bool) ([]reembedTarget, error) {
 	}}, nil
 }
 
-func runReembedWorkspace(ctx context.Context, workspace, dbPath string, provider embeddings.Provider) (reembedWorkspaceResult, error) {
+func runReembedWorkspace(ctx context.Context, workspace, dbPath string, provider embeddings.Provider, dryRun bool) (reembedWorkspaceResult, error) {
 	store, err := sqlite.Open(ctx, dbPath)
 	if err != nil {
 		return reembedWorkspaceResult{}, err
@@ -143,27 +155,68 @@ func runReembedWorkspace(ctx context.Context, workspace, dbPath string, provider
 		return reembedWorkspaceResult{}, err
 	}
 
+	// Get existing vector provenance to check if re-embedding is needed
+	vectorRows, err := store.ListMemoryVectorRowsByWorkspace(ctx, workspace)
+	if err != nil {
+		return reembedWorkspaceResult{}, err
+	}
+	
+	// Build map of memory_id -> (provider, model_version)
+	vectorProvenance := make(map[string]struct {
+		provider     string
+		modelVersion string
+	})
+	for _, row := range vectorRows {
+		vectorProvenance[row.MemoryID] = struct {
+			provider     string
+			modelVersion string
+		}{
+			provider:     row.EmbeddingProvider,
+			modelVersion: row.EmbeddingModelVersion,
+		}
+	}
+
+	targetProvider := provider.Name()
+	targetModelVersion := provider.ModelVersion()
+
 	result := reembedWorkspaceResult{
 		Workspace:     workspace,
 		DBPath:        dbPath,
 		TotalMemories: len(memories),
 		SkipReasons:   map[string]int{},
-		Provider:      provider.Name(),
+		Provider:      targetProvider,
 	}
+	
 	for _, memory := range memories {
+		// Check if memory already has correct provider and model version
+		if prov, ok := vectorProvenance[memory.ID]; ok {
+			if prov.provider == targetProvider && prov.modelVersion == targetModelVersion {
+				result.Skipped++
+				result.SkipReasons["already_correct_provider"]++
+				continue
+			}
+		}
+		
 		text := memoryVectorText(memory)
 		if strings.TrimSpace(text) == "" {
 			result.Skipped++
 			result.SkipReasons["empty_content"]++
 			continue
 		}
+		
+		// In dry-run mode, skip actual embedding and database writes
+		if dryRun {
+			result.ReEmbedded++
+			continue
+		}
+		
 		vec, err := provider.Embed(ctx, text)
 		if err != nil {
 			result.Skipped++
 			result.SkipReasons["embed_error"]++
 			continue
 		}
-		if err := store.UpsertMemoryVector(ctx, memory.ID, memory.Workspace, provider.Name(), vec); err != nil {
+		if err := store.UpsertMemoryVector(ctx, memory.ID, memory.Workspace, targetProvider, targetModelVersion, vec); err != nil {
 			return reembedWorkspaceResult{}, err
 		}
 		result.ReEmbedded++
@@ -171,6 +224,13 @@ func runReembedWorkspace(ctx context.Context, workspace, dbPath string, provider
 	if len(result.SkipReasons) == 0 {
 		result.SkipReasons = nil
 	}
+	
+	// Add final provider distribution after re-embedding (or dry-run preview)
+	providerDist, err := store.CountMemoryVectorsByProvider(ctx, workspace)
+	if err == nil && len(providerDist) > 0 {
+		result.ProviderDistribution = providerDist
+	}
+	
 	return result, nil
 }
 

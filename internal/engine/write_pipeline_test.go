@@ -380,6 +380,10 @@ func (p *stubProvider) Name() string {
 	return p.name
 }
 
+func (p *stubProvider) ModelVersion() string {
+	return "stub-v1"
+}
+
 func (p *stubProvider) Dimension() int {
 	return len(p.vector)
 }

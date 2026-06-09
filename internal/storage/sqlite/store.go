@@ -24,13 +24,21 @@ var ErrDuplicateContent = errors.New("duplicate content hash")
 
 // Open creates a SQLite store, applies pragmas, and runs migrations.
 func Open(ctx context.Context, dbPath string) (*Store, error) {
-	db, err := sql.Open("sqlite", dbPath)
+	// Add query parameters for WAL mode and busy timeout
+	// These need to be in the connection string for modernc.org/sqlite
+	connStr := dbPath + "?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(10000)"
+	
+	db, err := sql.Open("sqlite", connStr)
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite: %w", err)
 	}
-	// Keep one writer connection by default to reduce SQLITE_BUSY in local-first mode.
-	db.SetMaxOpenConns(1)
-	db.SetMaxIdleConns(1)
+	
+	// Connection pool configuration for concurrent access
+	// WAL mode allows multiple readers + one writer concurrently
+	db.SetMaxOpenConns(10)             // Allow up to 10 concurrent connections
+	db.SetMaxIdleConns(5)              // Keep 5 warm connections in pool
+	db.SetConnMaxLifetime(time.Hour)   // Rotate connections every hour
+	
 	if err := ping(ctx, db); err != nil {
 		_ = db.Close()
 		return nil, err
@@ -61,7 +69,8 @@ func applyPragmas(ctx context.Context, db *sql.DB) error {
 		"PRAGMA foreign_keys = ON",
 		"PRAGMA journal_mode = WAL",
 		"PRAGMA synchronous = NORMAL",
-		"PRAGMA busy_timeout = 5000",
+		"PRAGMA busy_timeout = 10000",  // 10 seconds for concurrent operations
+		"PRAGMA cache_size = -64000",    // 64MB cache
 	}
 	for _, stmt := range pragmas {
 		if _, err := db.ExecContext(ctx, stmt); err != nil {
@@ -392,6 +401,9 @@ func (s *Store) Migrate(ctx context.Context) error {
 	if err := s.ensureColumn(ctx, "memory_vectors", "embedding_provider", `ALTER TABLE memory_vectors ADD COLUMN embedding_provider TEXT NOT NULL DEFAULT ''`); err != nil {
 		return err
 	}
+	if err := s.ensureColumn(ctx, "memory_vectors", "embedding_model_version", `ALTER TABLE memory_vectors ADD COLUMN embedding_model_version TEXT NOT NULL DEFAULT 'unknown'`); err != nil {
+		return err
+	}
 	if err := s.ensureColumn(ctx, "token_metrics", "run_label", `ALTER TABLE token_metrics ADD COLUMN run_label TEXT NOT NULL DEFAULT ''`); err != nil {
 		return err
 	}
@@ -448,6 +460,13 @@ func (s *Store) Migrate(ctx context.Context) error {
 	}
 	if err := s.ensureColumn(ctx, "benchmark_runs", "continuation_verdict", `ALTER TABLE benchmark_runs ADD COLUMN continuation_verdict TEXT NOT NULL DEFAULT ''`); err != nil {
 		return err
+	}
+	// Add indexes for vector provenance columns
+	if _, err := s.db.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_memory_vectors_provider ON memory_vectors(embedding_provider)`); err != nil {
+		return fmt.Errorf("create embedding_provider index: %w", err)
+	}
+	if _, err := s.db.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_memory_vectors_model_version ON memory_vectors(embedding_model_version)`); err != nil {
+		return fmt.Errorf("create embedding_model_version index: %w", err)
 	}
 	return nil
 }

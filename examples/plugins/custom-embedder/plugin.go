@@ -95,6 +95,11 @@ func (e *SimpleHashEmbedder) Name() string {
 	return e.model
 }
 
+// ModelVersion returns the model version.
+func (e *SimpleHashEmbedder) ModelVersion() string {
+	return "simple-hash-v1"
+}
+
 // CustomEmbedderPlugin wraps the hash embedder as a plugin.
 type CustomEmbedderPlugin struct {
 	*plugin.BaseEmbeddingPlugin
@@ -200,6 +205,11 @@ func (e *RealWorldEmbedder) Dimension() int {
 // Name returns the model name.
 func (e *RealWorldEmbedder) Name() string {
 	return e.model
+}
+
+// ModelVersion returns the model version.
+func (e *RealWorldEmbedder) ModelVersion() string {
+	return "external-api-v1"
 }
 
 // Ensure interfaces are implemented

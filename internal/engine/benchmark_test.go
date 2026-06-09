@@ -270,3 +270,7 @@ func (m *mockEmbeddingProvider) Dimension() int {
 func (m *mockEmbeddingProvider) Name() string {
 	return "mock-embeddings-v1"
 }
+
+func (m *mockEmbeddingProvider) ModelVersion() string {
+	return "mock-v1"
+}
