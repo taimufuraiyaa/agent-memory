@@ -46,35 +46,40 @@ func addCommonFlags(cmd *cobra.Command, f *commonFlags) {
 	cmd.Flags().StringVar(&f.apiURL, "api", "", "HTTP API base URL (overrides in-process mode)")
 }
 
-func openDeps(ctx context.Context, cfg runtimeConfig) (*sqlite.Store, embeddings.Provider, error) {
-	if strings.TrimSpace(cfg.dbPath) == "" || strings.TrimSpace(cfg.workspace) == "" {
-		return nil, nil, errors.New("db path and workspace are required")
-	}
-	if err := os.MkdirAll(filepath.Dir(cfg.dbPath), 0o755); err != nil {
-		return nil, nil, err
-	}
-	store, err := sqlite.Open(ctx, cfg.dbPath)
-	if err != nil {
-		return nil, nil, err
-	}
-	if err := os.MkdirAll(cfg.modelDir, 0o755); err != nil {
-		_ = store.Close()
-		return nil, nil, err
-	}
-	provider, err := embeddings.NewProvider(cfg.modelDir)
-	if err != nil {
-		_ = store.Close()
-		return nil, nil, err
-	}
-	return store, provider, nil
-}
-
 func newWriteCommand() *cobra.Command {
 	var flags commonFlags
 	var mType, content string
 	cmd := &cobra.Command{
 		Use:   "write",
 		Short: "Write one memory entry",
+		Long: `Write a memory entry to the workspace.
+
+Memory types:
+  episodic   - Raw observations and conversation turns (7 day half-life)
+  semantic   - Facts and knowledge (30 day half-life)
+  procedural - Checklists and workflows (90 day half-life)
+  outcome    - Records of what worked or failed (60 day half-life)
+
+The memory will be automatically:
+  - Validated for safety and size limits
+  - Embedded for semantic search
+  - Routed to appropriate storage tier
+  - Available for retrieval in future queries`,
+		Example: `  # Write a semantic fact
+  agent-memory write --workspace my-project --type semantic \
+    --content "The API uses JWT tokens for authentication"
+
+  # Write a procedural checklist
+  agent-memory write --workspace my-project --type procedural \
+    --content "Run 'make test' before committing changes"
+
+  # Write an outcome record
+  agent-memory write --workspace my-project --type outcome \
+    --content "Database migration failed due to lock timeout"
+
+  # Write to default workspace (from current directory)
+  agent-memory write --type semantic \
+    --content "Redis is used for session caching"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 			if !engine.MemoryEnabled() {
@@ -149,6 +154,35 @@ func newSearchCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "search",
 		Short: "Semantic multi-signal search",
+		Long: `Search workspace memories using semantic similarity and multi-signal ranking.
+
+The search uses multiple signals to rank results:
+  - Semantic similarity (embedding-based)
+  - Recency (recently updated items)
+  - Outcome signal (successful outcomes boosted)
+  - Decay penalty (old items fade)
+  - Tier bias (markdown tier preferred)
+
+Use --explain to see per-signal score breakdowns.`,
+		Example: `  # Basic semantic search
+  agent-memory search --workspace my-project \
+    --query "how does authentication work"
+
+  # Search with explanation of scores
+  agent-memory search --workspace my-project \
+    --query "database configuration" --explain
+
+  # Filter by memory type
+  agent-memory search --workspace my-project \
+    --query "deployment process" --type procedural
+
+  # Search for successful outcomes only
+  agent-memory search --workspace my-project \
+    --query "migration" --outcome-result success
+
+  # Recall mode for session start (higher quality threshold)
+  agent-memory search --workspace my-project \
+    --query "continue previous work" --mode recall --top-k 5`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 			cfg, err := resolveRuntime(flags)
@@ -351,6 +385,33 @@ func newRecallCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "recall",
 		Short: "Session-start recall block",
+		Long: `Generate a context block for session start or continuation.
+
+Recall assembles relevant memories within a token budget, perfect for
+including in agent system prompts. It prioritizes:
+  - Procedural knowledge (how-to)
+  - Recent successful outcomes
+  - Relevant semantic facts
+  - Task-specific context
+
+The output is formatted as a structured context block ready to paste
+into your agent's system prompt or context.`,
+		Example: `  # Basic recall for continuing work
+  agent-memory recall --workspace my-project \
+    --task "continue working on authentication feature" --budget 1000
+
+  # Quick recall with smaller budget
+  agent-memory recall --workspace my-project \
+    --task "fix database migration bug" --budget 500
+
+  # Recall with observations from current session
+  agent-memory recall --workspace my-project \
+    --task "implement API endpoint" --budget 800 \
+    --include-observations --observation-limit 5
+
+  # Raw format (for piping to other tools)
+  agent-memory recall --workspace my-project \
+    --task "deploy to production" --format raw --budget 1000`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 			cfg, err := resolveRuntime(flags)
@@ -366,16 +427,21 @@ func newRecallCommand() *cobra.Command {
 					return err
 				}
 				defer func() { _ = store.Close() }()
-				_ = store.AddTokenMetricV2(ctx, cfg.workspace, "recall", 0, 0, engine.RunLabel(), false)
 				contextBlock := engine.AssembleRecallSections(task, nil)
+				disabledTokens := len(strings.Fields(contextBlock))
+				_ = store.AddTokenMetricV2(ctx, cfg.workspace, "recall", disabledTokens, disabledTokens, engine.RunLabel(), false)
 				if strings.EqualFold(flags.format, formatRaw) {
 					_, err := fmt.Fprint(cmd.OutOrStdout(), contextBlock)
 					return err
 				}
 				return writeSuccessEnvelope(cmd.OutOrStdout(), "recall", map[string]any{
-					"disabled":      true,
-					"workspace":     cfg.workspace,
-					"context_block": contextBlock,
+					"disabled":           true,
+					"workspace":          cfg.workspace,
+					"context_block":      contextBlock,
+					"hits":               []any{},
+					"tokens_used":        disabledTokens,
+					"baseline_tokens":    disabledTokens,
+					"observation_tokens": 0,
 				})
 			}
 			if cfg.apiURL != "" {
@@ -406,52 +472,32 @@ func newRecallCommand() *cobra.Command {
 				}
 				return writeSuccessEnvelope(cmd.OutOrStdout(), "recall", out)
 			}
-			store, provider, err := openDeps(ctx, cfg)
+			request := recallRequest{
+				Task:                 task,
+				TopK:                 topK,
+				Budget:               budget,
+				IncludeObservations:  includeObservations,
+				ObservationLimit:     observationLimit,
+				ObservationSessionID: observationSessionID,
+			}
+			memoryEnabled := engine.MemoryEnabled()
+			var store *sqlite.Store
+			var provider embeddings.Provider
+			if memoryEnabled {
+				store, provider, err = openDeps(ctx, cfg)
+			} else {
+				store, err = openStore(ctx, cfg)
+			}
 			if err != nil {
 				return err
 			}
 			defer func() { _ = store.Close() }()
-
-			observationBlock := ""
-			observationTokens := 0
-			originalBudget := budget
-			if includeObservations {
-				block, _, _ := buildRecentObservationBlockCLI(ctx, store, cfg.workspace, strings.TrimSpace(observationSessionID), observationLimit)
-				observationBlock = block
-				observationTokens = len(strings.Fields(observationBlock)) + len(strings.Fields("## Recent Observations"))
-				if budget-observationTokens > 0 {
-					budget = budget - observationTokens
-				} else {
-					budget = 0
-				}
-			}
-
-			searcher := engine.NewVectorSearcher(store, provider)
-			retrieval := engine.NewRetrievalEngine(searcher)
-			retrieved, err := retrieval.Retrieve(ctx, engine.RetrievalOptions{
-				Workspace: cfg.workspace,
-				Query:     task,
-				TopK:      topK,
-				Mode:      engine.ModeRecall,
-			})
+			payload, contextBlock, err := executeRecall(ctx, cfg, store, provider, memoryEnabled, request)
 			if err != nil {
 				return err
 			}
-			clipper := engine.NewTokenClipper(nil)
-			rebalanced := engine.RebalanceRecallHits(task, retrieved.Hits)
-			included, meta := clipper.Clip(rebalanced, budget)
-			_ = store.AddTokenMetricV2(ctx, cfg.workspace, "recall", meta.UsedTokens+observationTokens, recallBaselineTokens(rebalanced, observationTokens), engine.RunLabel(), true)
-			payload := map[string]any{
-				"mode":               retrieved.Mode,
-				"weights":            retrieved.Weights,
-				"hits":               included,
-				"clipping":           meta,
-				"workspace":          cfg.workspace,
-				"requested_budget":   originalBudget,
-				"observation_tokens": observationTokens,
-			}
 			if strings.EqualFold(flags.format, formatRaw) {
-				_, err := fmt.Fprint(cmd.OutOrStdout(), engine.AssembleRecallSectionsWithObservations(task, observationBlock, included))
+				_, err := fmt.Fprint(cmd.OutOrStdout(), contextBlock)
 				return err
 			}
 			return writeSuccessEnvelope(cmd.OutOrStdout(), "recall", payload)
@@ -669,8 +715,7 @@ func newSessionEndCommand() *cobra.Command {
 			}
 			defer func() { _ = store.Close() }()
 			pipeline := engine.NewWritePipelineWithEmbedder(store, provider)
-			extractor := engine.NewSessionEndExtractor(pipeline)
-			out, err := extractor.ExtractAndStore(ctx, cfg.workspace, transcript)
+			out, err := engine.RunSessionEndLifecycle(ctx, cfg.workspace, transcript, store, pipeline)
 			if err != nil {
 				return err
 			}
@@ -743,6 +788,106 @@ func dashboardPIDPath(cfg runtimeConfig) string {
 		name = fmt.Sprintf("dashboard.%s.pid", ws)
 	}
 	return filepath.Join(base, name)
+}
+
+func dashboardPIDPaths(cfg runtimeConfig, pidFile string) []string {
+	if explicit := strings.TrimSpace(pidFile); explicit != "" {
+		return []string{explicit}
+	}
+	paths := make([]string, 0, 2)
+	seen := map[string]struct{}{}
+	add := func(path string) {
+		if _, ok := seen[path]; ok {
+			return
+		}
+		seen[path] = struct{}{}
+		paths = append(paths, path)
+	}
+	add(dashboardPIDPath(cfg))
+	if strings.TrimSpace(cfg.workspace) != "" {
+		add(filepath.Join(filepath.Dir(cfg.dbPath), "dashboard.pid"))
+	}
+	return paths
+}
+
+func inferDashboardPIDByAddr(addr string) (dashboardPID, error) {
+	pid, err := listenerPIDForAddr(addr)
+	if err != nil {
+		return dashboardPID{}, err
+	}
+	cmdline, err := processCommandLine(pid)
+	if err != nil {
+		return dashboardPID{}, err
+	}
+	if !looksLikeDashboardCommandLine(cmdline) {
+		return dashboardPID{}, fmt.Errorf("listener on %s is not an agent-memory dashboard process", addr)
+	}
+	return dashboardPID{
+		PID:  pid,
+		Addr: addr,
+	}, nil
+}
+
+func listenerPIDForAddr(addr string) (int, error) {
+	port, err := listenerPort(addr)
+	if err != nil {
+		return 0, err
+	}
+	if runtime.GOOS == "windows" {
+		return 0, errors.New("listener pid fallback is unsupported on windows")
+	}
+	out, err := exec.Command("lsof", "-nP", "-iTCP:"+port, "-sTCP:LISTEN", "-t").Output()
+	if err != nil {
+		return 0, err
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		pid, err := strconv.Atoi(line)
+		if err == nil && pid > 0 {
+			return pid, nil
+		}
+	}
+	return 0, fmt.Errorf("no listening pid found for %s", addr)
+}
+
+func listenerPort(addr string) (string, error) {
+	host, port, err := net.SplitHostPort(addr)
+	if err == nil {
+		_ = host
+		if strings.TrimSpace(port) == "" || port == "0" {
+			return "", fmt.Errorf("invalid addr: %s", addr)
+		}
+		return port, nil
+	}
+	if strings.HasPrefix(addr, ":") && len(addr) > 1 {
+		return strings.TrimPrefix(addr, ":"), nil
+	}
+	return "", fmt.Errorf("invalid addr: %s", addr)
+}
+
+func processCommandLine(pid int) (string, error) {
+	if pid <= 0 {
+		return "", errors.New("pid is required")
+	}
+	if runtime.GOOS == "windows" {
+		return "", errors.New("process command lookup is unsupported on windows")
+	}
+	out, err := exec.Command("ps", "-ww", "-p", strconv.Itoa(pid), "-o", "command=").Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+func looksLikeDashboardCommandLine(cmdline string) bool {
+	cmdline = strings.TrimSpace(cmdline)
+	if cmdline == "" {
+		return false
+	}
+	return strings.Contains(cmdline, "agent-memory") && strings.Contains(cmdline, " dashboard ")
 }
 
 func readDashboardPID(path string) (dashboardPID, error) {
@@ -928,10 +1073,15 @@ func dashboardSourceDir(override string) (string, error) {
 		return dashboardSourceDir(v)
 	}
 	cwd, err := os.Getwd()
-	if err != nil {
-		return "", err
+	var root string
+	if err == nil {
+		root = findSourceRoot(cwd)
 	}
-	root := findSourceRoot(cwd)
+	if strings.TrimSpace(root) == "" {
+		if exe, err := os.Executable(); err == nil {
+			root = findSourceRoot(filepath.Dir(exe))
+		}
+	}
 	if strings.TrimSpace(root) == "" {
 		return "", errors.New("standalone dashboard sources not found (run from the repository)")
 	}
@@ -945,6 +1095,42 @@ func dashboardSourceDir(override string) (string, error) {
 	return dir, nil
 }
 
+func tryServeEmbeddedDashboard(cmd *cobra.Command, ctx context.Context, cfg runtimeConfig, ln net.Listener, apiURL string, noOpen bool) error {
+	// Import the dashboard package to access embedded assets
+	embeddedDashboard := &embeddedDashboardWrapper{}
+	
+	if !embeddedDashboard.hasAssets() {
+		return errors.New("embedded assets not available")
+	}
+
+	// Log that we're using embedded assets
+	_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "using embedded dashboard assets (npm not required)\n")
+
+	// Get the dashboard URL - embedded assets are served from the API server
+	dashURL := strings.TrimRight(apiURL, "/") + "/dashboard/"
+
+	if noOpen {
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s\n", dashURL)
+	} else {
+		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "opening %s\n", dashURL)
+		_ = openInBrowser(dashURL)
+	}
+
+	// Wait for cancellation
+	<-ctx.Done()
+	return nil
+}
+
+// embeddedDashboardWrapper is a temporary wrapper to check for embedded assets
+// This will be replaced with direct dashboard package import once it's properly integrated
+type embeddedDashboardWrapper struct{}
+
+func (w *embeddedDashboardWrapper) hasAssets() bool {
+	// For now, return false to maintain existing behavior
+	// This will be updated to call dashboard.HasEmbeddedAssets() once fully integrated
+	return false
+}
+
 func newDashboardCommand() *cobra.Command {
 	var flags commonFlags
 	var addr string
@@ -953,6 +1139,7 @@ func newDashboardCommand() *cobra.Command {
 	var stop bool
 	var dashDirFlag string
 	var pidFile string
+	var status bool
 	cmd := &cobra.Command{
 		Use:     "dashboard",
 		Short:   "Open the local dashboard (starts Go API + React dev server)",
@@ -963,6 +1150,38 @@ func newDashboardCommand() *cobra.Command {
 			cfg, err := resolveDashboardRuntime(flags)
 			if err != nil {
 				return err
+			}
+			pidPaths := dashboardPIDPaths(cfg, pidFile)
+			pidPath := pidPaths[0]
+			if status {
+				for _, candidate := range pidPaths {
+					v, err := readDashboardPID(candidate)
+					if err != nil || !isProcessAlive(v.PID) {
+						continue
+					}
+					url := strings.TrimSpace(v.URL)
+					return writeSuccessEnvelope(cmd.OutOrStdout(), "dashboard-status", map[string]any{
+						"running":   true,
+						"healthy":   url != "",
+						"pid":       v.PID,
+						"vite_pid":  v.VitePID,
+						"workspace": v.Workspace,
+						"addr":      v.Addr,
+						"url":       url,
+					})
+				}
+				if v, err := inferDashboardPIDByAddr(addr); err == nil && isProcessAlive(v.PID) {
+					return writeSuccessEnvelope(cmd.OutOrStdout(), "dashboard-status", map[string]any{
+						"running": true,
+						"healthy": true,
+						"pid":     v.PID,
+						"addr":    v.Addr,
+					})
+				}
+				return writeSuccessEnvelope(cmd.OutOrStdout(), "dashboard-status", map[string]any{
+					"running": false,
+					"healthy": false,
+				})
 			}
 			if cfg.apiURL != "" {
 				url := strings.TrimRight(cfg.apiURL, "/") + "/dashboard/"
@@ -976,14 +1195,30 @@ func newDashboardCommand() *cobra.Command {
 			if start && stop {
 				return errors.New("only one of --start or --stop can be set")
 			}
-			pidPath := strings.TrimSpace(pidFile)
-			if pidPath == "" {
-				pidPath = dashboardPIDPath(cfg)
-			}
 			if stop {
-				v, err := readDashboardPID(pidPath)
-				if err != nil {
-					return fmt.Errorf("dashboard stop: %w", err)
+				var (
+					v      dashboardPID
+					stopOK bool
+				)
+				for _, candidate := range pidPaths {
+					var readErr error
+					v, readErr = readDashboardPID(candidate)
+					if readErr != nil {
+						continue
+					}
+					pidPath = candidate
+					stopOK = true
+					break
+				}
+				if !stopOK {
+					inferred, inferErr := inferDashboardPIDByAddr(addr)
+					if inferErr != nil {
+						_, err := readDashboardPID(pidPath)
+						if err != nil {
+							return fmt.Errorf("dashboard stop: %w", err)
+						}
+					}
+					v = inferred
 				}
 				if v.VitePID > 0 {
 					_ = stopProcess(v.VitePID)
@@ -999,22 +1234,36 @@ func newDashboardCommand() *cobra.Command {
 				if err := validateDashboardStartAddr(addr); err != nil {
 					return err
 				}
-				if v, err := readDashboardPID(pidPath); err == nil && isProcessAlive(v.PID) {
-					url := strings.TrimSpace(v.URL)
-					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "dashboard already running (pid=%d)\n", v.PID)
-					if noOpen {
+				for _, candidate := range pidPaths {
+					if v, err := readDashboardPID(candidate); err == nil && isProcessAlive(v.PID) {
+						url := strings.TrimSpace(v.URL)
+						_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "dashboard already running (pid=%d)\n", v.PID)
+						if noOpen {
+							if url != "" {
+								_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s\n", url)
+							}
+							return nil
+						}
 						if url != "" {
-							_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s\n", url)
+							_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "opening %s\n", url)
+							return openInBrowser(url)
 						}
 						return nil
 					}
-					if url != "" {
-						_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "opening %s\n", url)
-						return openInBrowser(url)
-					}
+				}
+				if v, err := inferDashboardPIDByAddr(addr); err == nil && isProcessAlive(v.PID) {
+					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "dashboard already running (pid=%d)\n", v.PID)
 					return nil
 				}
-				_ = os.Remove(pidPath)
+				for _, candidate := range pidPaths {
+					_ = os.Remove(candidate)
+				}
+
+				if ln, err := net.Listen("tcp", addr); err == nil {
+					_ = ln.Close()
+				} else {
+					return fmt.Errorf("cannot start dashboard: address %s is already in use by another process", addr)
+				}
 
 				pid, err := startDashboardProcess(cfg, addr, dashDirFlag, pidPath)
 				if err != nil {
@@ -1029,7 +1278,7 @@ func newDashboardCommand() *cobra.Command {
 				})
 
 				url := ""
-				for i := 0; i < 40; i++ {
+				for i := 0; i < 120; i++ {
 					time.Sleep(125 * time.Millisecond)
 					v, err := readDashboardPID(pidPath)
 					if err != nil {
@@ -1087,6 +1336,12 @@ func newDashboardCommand() *cobra.Command {
 			apiURL := apiURLForListenerAddr(ln.Addr().String())
 			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "api serving on %s\n", apiURL)
 
+			// Try embedded dashboard assets first (no npm required)
+			if err := tryServeEmbeddedDashboard(cmd, ctx, cfg, ln, apiURL, noOpen); err == nil {
+				return nil
+			}
+
+			// Fall back to npm-based development mode
 			dashDir, err := dashboardSourceDir(dashDirFlag)
 			if err != nil {
 				_ = server.Shutdown(context.Background())
@@ -1094,7 +1349,7 @@ func newDashboardCommand() *cobra.Command {
 			}
 			if _, err := exec.LookPath("npm"); err != nil {
 				_ = server.Shutdown(context.Background())
-				return errors.New("npm is required to run the standalone dashboard")
+				return errors.New("npm is required to run the standalone dashboard (embedded assets not available)")
 			}
 			port, err := pickFreeLocalPort()
 			if err != nil {
@@ -1172,6 +1427,7 @@ func newDashboardCommand() *cobra.Command {
 	cmd.Flags().BoolVar(&noOpen, "no-open", false, "Do not open a browser; just print the URL")
 	cmd.Flags().BoolVar(&start, "start", false, "Start dashboard server in the background and exit")
 	cmd.Flags().BoolVar(&stop, "stop", false, "Stop the background dashboard server (started via --start)")
+	cmd.Flags().BoolVar(&status, "status", false, "Show background dashboard server status")
 	cmd.Flags().StringVar(&dashDirFlag, "dashboard-dir", "", "Path to standalone dashboard folder (tools/agent-memory/dashboard)")
 	cmd.Flags().StringVar(&pidFile, "pid-file", "", "Internal: pid file path")
 	_ = cmd.Flags().MarkHidden("pid-file")
@@ -1279,7 +1535,34 @@ func newExportCommand() *cobra.Command {
 	var outFile string
 	cmd := &cobra.Command{
 		Use:   "export",
-		Short: "Export workspace memories to json or markdown",
+		Short: "Export workspace memories to json, markdown, or csv",
+		Long: `Export all workspace memories to a file for backup, analysis, or migration.
+
+Export formats:
+  json     - Complete data with all fields (default)
+  markdown - Human-readable grouped by memory type
+  csv      - Tabular format for spreadsheet analysis (16 columns)
+
+The export includes all memory metadata: content, type, confidence,
+storage tier, access counts, decay scores, outcomes, and timestamps.`,
+		Example: `  # Export to JSON (complete backup)
+  agent-memory export --workspace my-project \
+    --export-format json --out backup.json
+
+  # Export to Markdown (human-readable)
+  agent-memory export --workspace my-project \
+    --export-format markdown --out memories.md
+
+  # Export to CSV (for Excel/Google Sheets)
+  agent-memory export --workspace my-project \
+    --export-format csv --out data.csv
+
+  # Print JSON to stdout
+  agent-memory export --workspace my-project
+
+  # Export from specific database file
+  agent-memory export --workspace my-project \
+    --db /path/to/memories.db --export-format json --out export.json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 			cfg, err := resolveRuntime(flags)
@@ -1287,8 +1570,8 @@ func newExportCommand() *cobra.Command {
 				return err
 			}
 			format = strings.ToLower(strings.TrimSpace(format))
-			if format != "json" && format != "markdown" {
-				return errors.New("invalid export format: json|markdown")
+			if format != "json" && format != "markdown" && format != "csv" {
+				return errors.New("invalid export format: json|markdown|csv")
 			}
 			var payload any
 			if cfg.apiURL != "" {
@@ -1308,6 +1591,12 @@ func newExportCommand() *cobra.Command {
 				}
 				if format == "markdown" {
 					payload = map[string]any{"markdown": engine.BuildMarkdownExport(cfg.workspace, memories)}
+				} else if format == "csv" {
+					csvData, err := engine.BuildCSVExport(cfg.workspace, memories)
+					if err != nil {
+						return fmt.Errorf("failed to build CSV export: %w", err)
+					}
+					payload = map[string]any{"csv": csvData}
 				} else {
 					payload = engine.BuildExportBundle(cfg.workspace, memories)
 				}
@@ -1325,6 +1614,12 @@ func newExportCommand() *cobra.Command {
 						b = []byte(md)
 					}
 				}
+			} else if format == "csv" {
+				if obj, ok := payload.(map[string]any); ok {
+					if csvData, ok := obj["csv"].(string); ok {
+						b = []byte(csvData)
+					}
+				}
 			}
 			if err := os.WriteFile(outFile, b, 0o644); err != nil {
 				return err
@@ -1333,7 +1628,7 @@ func newExportCommand() *cobra.Command {
 		},
 	}
 	addCommonFlags(cmd, &flags)
-	cmd.Flags().StringVar(&format, "export-format", "json", "Export format: json|markdown")
+	cmd.Flags().StringVar(&format, "export-format", "json", "Export format: json|markdown|csv")
 	cmd.Flags().StringVar(&outFile, "out", "", "Output file path (optional)")
 	return cmd
 }

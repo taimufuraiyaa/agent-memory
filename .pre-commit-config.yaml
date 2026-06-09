@@ -1,0 +1,79 @@
+repos:
+  - repo: local
+    hooks:
+      # IDE Rules Generation
+      - id: generate-ide-rules
+        name: Generate IDE Rules
+        entry: python3 scripts/generate-ide-rules.py
+        language: system
+        files: ^\.kiro/templates/ide-rules-template\.md$
+        pass_filenames: false
+
+      # Go Formatting
+      - id: go-fmt
+        name: Go Format
+        entry: gofmt -w -s
+        language: system
+        files: \.go$
+        pass_filenames: true
+
+      - id: go-mod-tidy
+        name: Go Mod Tidy
+        entry: go mod tidy
+        language: system
+        files: go\.(mod|sum)$
+        pass_filenames: false
+
+      # Go Linting and Vetting
+      - id: go-vet
+        name: Go Vet
+        entry: go vet
+        language: system
+        files: \.go$
+        pass_filenames: false
+        args: ['./...']
+
+      - id: go-test
+        name: Go Test (Fast)
+        entry: go test -short
+        language: system
+        files: \.go$
+        pass_filenames: false
+        args: ['./...']
+
+      # General Text Cleanup
+      - id: trailing-whitespace
+        name: Trim Trailing Whitespace
+        entry: sed -i 's/[[:space:]]*$//'
+        language: system
+        types: [text]
+        exclude: ^(\.git/|\.kiro/specs/)
+
+      - id: end-of-file-fixer
+        name: Fix End of Files
+        entry: bash -c 'for file in "$@"; do [ -s "$file" ] && [ -z "$(tail -c 1 "$file")" ] || echo >> "$file"; done' --
+        language: system
+        types: [text]
+        exclude: ^(\.git/|\.kiro/specs/)
+
+  # Standard Pre-commit Hooks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: check-yaml
+        exclude: ^(\.kiro/specs/)
+      - id: check-json
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ['--maxkb=500']
+      - id: detect-private-key
+      - id: mixed-line-ending
+        args: ['--fix=lf']
+
+  # Markdown Linting
+  - repo: https://github.com/markdownlint/markdownlint
+    rev: v0.12.0
+    hooks:
+      - id: markdownlint
+        args: ['--fix', '--disable', 'MD013,MD024,MD033,MD041']
+        exclude: ^(\.kiro/specs/|CHANGELOG\.md)

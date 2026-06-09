@@ -10,6 +10,23 @@ type BenchmarkClusterSummary struct {
 	ClusterID         string  `json:"cluster_id"`
 	ClusterTitle      string  `json:"cluster_title"`
 	Cases             int     `json:"cases"`
+	TaskSuccessRate   float64 `json:"task_success_rate"`
+	OffTaskSuccessRate float64 `json:"off_task_success_rate"`
+	TaskSuccessDelta  float64 `json:"task_success_delta"`
+	AnswerFactCoverage float64 `json:"answer_fact_coverage"`
+	OffAnswerFactCoverage float64 `json:"off_answer_fact_coverage"`
+	AnswerFactCoverageDelta float64 `json:"answer_fact_coverage_delta"`
+	AnswerCompleteness float64 `json:"answer_completeness"`
+	OffAnswerCompleteness float64 `json:"off_answer_completeness"`
+	AnswerCompletenessDelta float64 `json:"answer_completeness_delta"`
+	AvgOnRuntimeMs    float64 `json:"avg_on_runtime_ms"`
+	AvgOffRuntimeMs   float64 `json:"avg_off_runtime_ms"`
+	RuntimeDeltaMs    float64 `json:"runtime_delta_ms"`
+	AvgOnInvestigationEffort float64 `json:"avg_on_investigation_effort"`
+	AvgOffInvestigationEffort float64 `json:"avg_off_investigation_effort"`
+	InvestigationEffortDelta float64 `json:"investigation_effort_delta"`
+	ContinuationScore float64 `json:"continuation_score"`
+	ContinuationVerdict string `json:"continuation_verdict"`
 	Precision         float64 `json:"precision"`
 	Recall            float64 `json:"recall"`
 	GoldRecall        float64 `json:"gold_recall"`
@@ -62,6 +79,23 @@ type BenchmarkRun struct {
 	OffReturnedTokens int                       `json:"off_returned_tokens"`
 	OffBaselineTokens int                       `json:"off_baseline_tokens"`
 	OffSavedTokens    int                       `json:"off_saved_tokens"`
+	TaskSuccessRate   float64                   `json:"task_success_rate"`
+	OffTaskSuccessRate float64                  `json:"off_task_success_rate"`
+	TaskSuccessDelta  float64                   `json:"task_success_delta"`
+	AnswerFactCoverage float64                  `json:"answer_fact_coverage"`
+	OffAnswerFactCoverage float64               `json:"off_answer_fact_coverage"`
+	AnswerFactCoverageDelta float64             `json:"answer_fact_coverage_delta"`
+	AnswerCompleteness float64                  `json:"answer_completeness"`
+	OffAnswerCompleteness float64               `json:"off_answer_completeness"`
+	AnswerCompletenessDelta float64             `json:"answer_completeness_delta"`
+	AvgOnRuntimeMs    float64                   `json:"avg_on_runtime_ms"`
+	AvgOffRuntimeMs   float64                   `json:"avg_off_runtime_ms"`
+	RuntimeDeltaMs    float64                   `json:"runtime_delta_ms"`
+	AvgOnInvestigationEffort float64            `json:"avg_on_investigation_effort"`
+	AvgOffInvestigationEffort float64           `json:"avg_off_investigation_effort"`
+	InvestigationEffortDelta float64            `json:"investigation_effort_delta"`
+	ContinuationScore float64                   `json:"continuation_score"`
+	ContinuationVerdict string                  `json:"continuation_verdict"`
 	GeneratorManifest map[string]any            `json:"generator_manifest,omitempty"`
 	RunManifest       map[string]any            `json:"run_manifest,omitempty"`
 	Clusters          []BenchmarkClusterSummary `json:"clusters,omitempty"`
@@ -112,8 +146,14 @@ INSERT INTO benchmark_runs (
   cost_with_memory, cost_without_memory, cost_saved, cost_saved_pct,
   combined_score, verdict,
   off_cases, off_disabled_count, off_all_disabled, off_returned_tokens, off_baseline_tokens, off_saved_tokens,
+  task_success_rate, off_task_success_rate, task_success_delta,
+  answer_fact_coverage, off_answer_fact_coverage, answer_fact_coverage_delta,
+  answer_completeness, off_answer_completeness, answer_completeness_delta,
+  avg_on_runtime_ms, avg_off_runtime_ms, runtime_delta_ms,
+  avg_on_investigation_effort, avg_off_investigation_effort, investigation_effort_delta,
+  continuation_score, continuation_verdict,
   generator_manifest_json, run_manifest_json, clusters_json, created_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(workspace, run_id) DO UPDATE SET
   seed_count = excluded.seed_count,
   case_count = excluded.case_count,
@@ -145,6 +185,23 @@ ON CONFLICT(workspace, run_id) DO UPDATE SET
   off_returned_tokens = excluded.off_returned_tokens,
   off_baseline_tokens = excluded.off_baseline_tokens,
   off_saved_tokens = excluded.off_saved_tokens,
+  task_success_rate = excluded.task_success_rate,
+  off_task_success_rate = excluded.off_task_success_rate,
+  task_success_delta = excluded.task_success_delta,
+  answer_fact_coverage = excluded.answer_fact_coverage,
+  off_answer_fact_coverage = excluded.off_answer_fact_coverage,
+  answer_fact_coverage_delta = excluded.answer_fact_coverage_delta,
+  answer_completeness = excluded.answer_completeness,
+  off_answer_completeness = excluded.off_answer_completeness,
+  answer_completeness_delta = excluded.answer_completeness_delta,
+  avg_on_runtime_ms = excluded.avg_on_runtime_ms,
+  avg_off_runtime_ms = excluded.avg_off_runtime_ms,
+  runtime_delta_ms = excluded.runtime_delta_ms,
+  avg_on_investigation_effort = excluded.avg_on_investigation_effort,
+  avg_off_investigation_effort = excluded.avg_off_investigation_effort,
+  investigation_effort_delta = excluded.investigation_effort_delta,
+  continuation_score = excluded.continuation_score,
+  continuation_verdict = excluded.continuation_verdict,
   generator_manifest_json = excluded.generator_manifest_json,
   run_manifest_json = excluded.run_manifest_json,
   clusters_json = excluded.clusters_json,
@@ -182,6 +239,23 @@ ON CONFLICT(workspace, run_id) DO UPDATE SET
 		in.OffReturnedTokens,
 		in.OffBaselineTokens,
 		in.OffSavedTokens,
+		in.TaskSuccessRate,
+		in.OffTaskSuccessRate,
+		in.TaskSuccessDelta,
+		in.AnswerFactCoverage,
+		in.OffAnswerFactCoverage,
+		in.AnswerFactCoverageDelta,
+		in.AnswerCompleteness,
+		in.OffAnswerCompleteness,
+		in.AnswerCompletenessDelta,
+		in.AvgOnRuntimeMs,
+		in.AvgOffRuntimeMs,
+		in.RuntimeDeltaMs,
+		in.AvgOnInvestigationEffort,
+		in.AvgOffInvestigationEffort,
+		in.InvestigationEffortDelta,
+		in.ContinuationScore,
+		in.ContinuationVerdict,
 		mustJSON(in.GeneratorManifest, "{}"),
 		mustJSON(in.RunManifest, "{}"),
 		mustJSON(in.Clusters, "[]"),
@@ -200,6 +274,12 @@ SELECT
   cost_with_memory, cost_without_memory, cost_saved, cost_saved_pct,
   combined_score, verdict,
   off_cases, off_disabled_count, off_all_disabled, off_returned_tokens, off_baseline_tokens, off_saved_tokens,
+  task_success_rate, off_task_success_rate, task_success_delta,
+  answer_fact_coverage, off_answer_fact_coverage, answer_fact_coverage_delta,
+  answer_completeness, off_answer_completeness, answer_completeness_delta,
+  avg_on_runtime_ms, avg_off_runtime_ms, runtime_delta_ms,
+  avg_on_investigation_effort, avg_off_investigation_effort, investigation_effort_delta,
+  continuation_score, continuation_verdict,
   generator_manifest_json, run_manifest_json, clusters_json, created_at
 FROM benchmark_runs
 WHERE workspace = ? AND run_id = ?`,
@@ -221,6 +301,12 @@ SELECT
   cost_with_memory, cost_without_memory, cost_saved, cost_saved_pct,
   combined_score, verdict,
   off_cases, off_disabled_count, off_all_disabled, off_returned_tokens, off_baseline_tokens, off_saved_tokens,
+  task_success_rate, off_task_success_rate, task_success_delta,
+  answer_fact_coverage, off_answer_fact_coverage, answer_fact_coverage_delta,
+  answer_completeness, off_answer_completeness, answer_completeness_delta,
+  avg_on_runtime_ms, avg_off_runtime_ms, runtime_delta_ms,
+  avg_on_investigation_effort, avg_off_investigation_effort, investigation_effort_delta,
+  continuation_score, continuation_verdict,
   generator_manifest_json, run_manifest_json, clusters_json, created_at
 FROM benchmark_runs
 WHERE workspace = ?
@@ -288,6 +374,23 @@ func scanBenchmarkRun(scanner benchmarkScanner) (BenchmarkRun, error) {
 		&run.OffReturnedTokens,
 		&run.OffBaselineTokens,
 		&run.OffSavedTokens,
+		&run.TaskSuccessRate,
+		&run.OffTaskSuccessRate,
+		&run.TaskSuccessDelta,
+		&run.AnswerFactCoverage,
+		&run.OffAnswerFactCoverage,
+		&run.AnswerFactCoverageDelta,
+		&run.AnswerCompleteness,
+		&run.OffAnswerCompleteness,
+		&run.AnswerCompletenessDelta,
+		&run.AvgOnRuntimeMs,
+		&run.AvgOffRuntimeMs,
+		&run.RuntimeDeltaMs,
+		&run.AvgOnInvestigationEffort,
+		&run.AvgOffInvestigationEffort,
+		&run.InvestigationEffortDelta,
+		&run.ContinuationScore,
+		&run.ContinuationVerdict,
 		&generatorRaw,
 		&manifestRaw,
 		&clustersRaw,

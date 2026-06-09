@@ -1,0 +1,26 @@
+FROM golang:1.26
+
+# Install Node.js and Python
+RUN apt-get update && apt-get install -y \
+    curl \
+    build-essential \
+    python3 \
+    python3-pip \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Node.js 20.x
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs
+
+# Install development tools
+RUN go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8
+
+# Set up workspace
+WORKDIR /workspace
+
+# Copy go.mod and go.sum for dependency caching
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Default command
+CMD ["bash"]

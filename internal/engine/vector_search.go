@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/time/timebooks/agent-memory/internal/core"
@@ -54,6 +55,7 @@ func (s *VectorSearcher) SearchWithOptions(ctx context.Context, opt VectorSearch
 	if err != nil {
 		return nil, err
 	}
+	activeProvider := strings.TrimSpace(s.provider.Name())
 	memories, err := s.store.ListMemoriesByWorkspace(ctx, opt.Workspace)
 	if err != nil {
 		return nil, err
@@ -62,7 +64,7 @@ func (s *VectorSearcher) SearchWithOptions(ctx context.Context, opt VectorSearch
 	for _, m := range memories {
 		memoryByID[m.ID] = m
 	}
-	sqlScores, err := s.store.SearchMemoryVectorsSQL(ctx, opt.Workspace, qv, opt.TopK, opt.Types, opt.Tiers)
+	sqlScores, err := s.store.SearchMemoryVectorsSQL(ctx, opt.Workspace, activeProvider, qv, opt.TopK, opt.Types, opt.Tiers)
 	if err == nil && len(sqlScores) > 0 {
 		out := make([]SearchHit, 0, len(sqlScores))
 		for _, sc := range sqlScores {
@@ -76,24 +78,29 @@ func (s *VectorSearcher) SearchWithOptions(ctx context.Context, opt VectorSearch
 			return out, nil
 		}
 	}
-	cachedVectors, err := s.store.ListMemoryVectorsByWorkspace(ctx, opt.Workspace)
+	cachedRows, err := s.store.ListMemoryVectorRowsByWorkspace(ctx, opt.Workspace)
 	if err != nil {
 		return nil, err
+	}
+	cachedByID := make(map[string]sqlite.MemoryVectorRow, len(cachedRows))
+	for _, row := range cachedRows {
+		cachedByID[row.MemoryID] = row
 	}
 	hits := make([]SearchHit, 0, len(memories))
 	for _, m := range memories {
 		if !matchMemoryFilters(m, opt.Types, opt.Tiers) {
 			continue
 		}
-		mv := cachedVectors[m.ID]
-		if len(mv) == 0 {
+		row, ok := cachedByID[m.ID]
+		mv := row.Embedding
+		if !ok || len(mv) == 0 || strings.TrimSpace(row.EmbeddingProvider) != activeProvider {
 			text := memoryVectorText(m)
 			mv, err = s.provider.Embed(ctx, text)
 			if err != nil {
 				return nil, err
 			}
 			// Best-effort cache write; retrieval should still succeed without cache.
-			_ = s.store.UpsertMemoryVector(ctx, m.ID, m.Workspace, s.provider.Name(), mv)
+			_ = s.store.UpsertMemoryVector(ctx, m.ID, m.Workspace, activeProvider, mv)
 		}
 		score, err := embeddings.Cosine(qv, mv)
 		if err != nil {

@@ -14,6 +14,7 @@ import (
 	"github.com/time/timebooks/agent-memory/internal/embeddings"
 	"github.com/time/timebooks/agent-memory/internal/storage/markdown"
 	"github.com/time/timebooks/agent-memory/internal/storage/sqlite"
+	"github.com/time/timebooks/agent-memory/internal/validation"
 )
 
 // ExtractMode selects extraction strategy.
@@ -132,6 +133,23 @@ func NewWritePipelineWithMarkdown(store *sqlite.Store, markdownFilePath string) 
 
 // Write executes stages: security -> extract -> dedup -> route/store.
 func (p *WritePipeline) Write(ctx context.Context, in WriteInput) (*WriteResult, error) {
+	// Validate workspace name
+	if err := validation.ValidateWorkspaceName(in.Workspace); err != nil {
+		return nil, fmt.Errorf("invalid workspace: %w", err)
+	}
+	
+	// Validate content length
+	if err := validation.ValidateContentLength(in.Content); err != nil {
+		return nil, fmt.Errorf("invalid content: %w", err)
+	}
+	
+	// Validate diagram code if present
+	if in.Diagram != nil && in.Diagram.Code != "" {
+		if err := validation.ValidateDiagramCode(in.Diagram.Code); err != nil {
+			return nil, fmt.Errorf("invalid diagram: %w", err)
+		}
+	}
+	
 	if strings.TrimSpace(in.Workspace) == "" {
 		return nil, errors.New("workspace is required")
 	}

@@ -1,0 +1,35 @@
+package engine
+
+import (
+	"context"
+	"path/filepath"
+	"testing"
+
+	"github.com/time/timebooks/agent-memory/internal/storage/sqlite"
+)
+
+func TestRunSessionEndLifecycleRunsLifecycle(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "session-end-lifecycle.db")
+	store, err := sqlite.Open(context.Background(), dbPath)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	out, err := RunSessionEndLifecycle(context.Background(), "ws", "always run migrations\nresult was success", store, NewWritePipeline(store))
+	if err != nil {
+		t.Fatalf("run session-end lifecycle: %v", err)
+	}
+	if !out.LifecycleRan {
+		t.Fatalf("expected lifecycle to run")
+	}
+	if out.TotalExtracted == 0 {
+		t.Fatalf("expected extracted memories")
+	}
+	if out.LifecycleMetrics == nil {
+		t.Fatalf("expected lifecycle metrics")
+	}
+	if out.LifecycleMetrics.DecayUpdated == 0 {
+		t.Fatalf("expected lifecycle to update decay metrics")
+	}
+}

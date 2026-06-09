@@ -498,13 +498,16 @@ func (m *Manager) readRegistry() (*Registry, error) {
 func (m *Manager) writeRegistry(reg *Registry) error {
 	b, err := json.MarshalIndent(reg, "", "  ")
 	if err != nil {
-		return err
+		return fmt.Errorf("marshal registry: %w", err)
 	}
 	tmp := m.registryPath() + ".tmp"
 	if err := os.WriteFile(tmp, b, 0o644); err != nil {
-		return err
+		return fmt.Errorf("write temp registry %s: %w", tmp, err)
 	}
-	return os.Rename(tmp, m.registryPath())
+	if err := os.Rename(tmp, m.registryPath()); err != nil {
+		return fmt.Errorf("rename registry temp to %s: %w", m.registryPath(), err)
+	}
+	return nil
 }
 
 func findProject(reg *Registry, name string) *Project {
@@ -627,14 +630,17 @@ func detectDefaultRuleTargets(cwd string) []string {
 
 func writeRuleFile(path, content string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
+		return fmt.Errorf("create rule directory for %s: %w", path, err)
 	}
-	return os.WriteFile(path, []byte(content), 0o644)
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		return fmt.Errorf("write rule file %s: %w", path, err)
+	}
+	return nil
 }
 
 func appendRuleSectionIfMissing(path, marker, section string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
+		return fmt.Errorf("create directory for %s: %w", path, err)
 	}
 	b, err := os.ReadFile(path)
 	if err == nil {
@@ -644,13 +650,19 @@ func appendRuleSectionIfMissing(path, marker, section string) error {
 		existing := strings.TrimRight(string(b), "\n")
 		add := strings.TrimLeft(section, "\n")
 		out := existing + "\n\n---\n\n" + add + "\n"
-		return os.WriteFile(path, []byte(out), 0o644)
+		if err := os.WriteFile(path, []byte(out), 0o644); err != nil {
+			return fmt.Errorf("append to rule file %s: %w", path, err)
+		}
+		return nil
 	}
 	if !errors.Is(err, os.ErrNotExist) {
-		return err
+		return fmt.Errorf("read rule file %s: %w", path, err)
 	}
 	base := "# AI Agent Rules\n\n" + strings.TrimLeft(section, "\n") + "\n"
-	return os.WriteFile(path, []byte(base), 0o644)
+	if err := os.WriteFile(path, []byte(base), 0o644); err != nil {
+		return fmt.Errorf("write new rule file %s: %w", path, err)
+	}
+	return nil
 }
 
 func antigravityRuleContent(workspace string) string {

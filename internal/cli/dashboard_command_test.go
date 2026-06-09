@@ -48,3 +48,67 @@ func TestResolveDashboardRuntimeAllowsMissingWorkspace(t *testing.T) {
 		t.Fatalf("expected placeholder db path, got %q", got)
 	}
 }
+
+func TestDashboardPIDPathsFallbackOrder(t *testing.T) {
+	cfg := runtimeConfig{
+		workspace: "agent-memory",
+		dbPath:    filepath.Join("/tmp", ".dashboard-placeholder.db"),
+	}
+	got := dashboardPIDPaths(cfg, "")
+	want := []string{
+		filepath.Join("/tmp", "dashboard.agent-memory.pid"),
+		filepath.Join("/tmp", "dashboard.pid"),
+	}
+	if len(got) != len(want) {
+		t.Fatalf("expected %d pid paths, got %d (%v)", len(want), len(got), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("expected pid path %d to be %q, got %q", i, want[i], got[i])
+		}
+	}
+}
+
+func TestDashboardPIDPathsUsesExplicitPath(t *testing.T) {
+	cfg := runtimeConfig{
+		workspace: "agent-memory",
+		dbPath:    filepath.Join("/tmp", ".dashboard-placeholder.db"),
+	}
+	got := dashboardPIDPaths(cfg, "/tmp/custom-dashboard.pid")
+	if len(got) != 1 || got[0] != "/tmp/custom-dashboard.pid" {
+		t.Fatalf("expected explicit pid path only, got %v", got)
+	}
+}
+
+func TestListenerPort(t *testing.T) {
+	tests := []struct {
+		addr string
+		want string
+		ok   bool
+	}{
+		{addr: ":3210", want: "3210", ok: true},
+		{addr: "127.0.0.1:3210", want: "3210", ok: true},
+		{addr: "bad-addr", ok: false},
+	}
+	for _, tt := range tests {
+		got, err := listenerPort(tt.addr)
+		if tt.ok && err != nil {
+			t.Fatalf("listenerPort(%q) unexpected error: %v", tt.addr, err)
+		}
+		if !tt.ok && err == nil {
+			t.Fatalf("listenerPort(%q) expected error", tt.addr)
+		}
+		if tt.ok && got != tt.want {
+			t.Fatalf("listenerPort(%q) = %q, want %q", tt.addr, got, tt.want)
+		}
+	}
+}
+
+func TestLooksLikeDashboardCommandLine(t *testing.T) {
+	if !looksLikeDashboardCommandLine("/path/agent-memory dashboard --no-open --addr :3210") {
+		t.Fatalf("expected dashboard command line to match")
+	}
+	if looksLikeDashboardCommandLine("/path/agent-memory serve --no-open --addr :3211") {
+		t.Fatalf("expected serve command line not to match dashboard detector")
+	}
+}

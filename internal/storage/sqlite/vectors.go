@@ -121,6 +121,7 @@ type VectorScore struct {
 func (s *Store) SearchMemoryVectorsSQL(
 	ctx context.Context,
 	workspace string,
+	provider string,
 	queryVec []float32,
 	topK int,
 	types []core.MemoryType,
@@ -144,8 +145,9 @@ candidate AS (
 	SELECT mv.memory_id, mv.embedding_json
 	FROM memory_vectors mv
 	JOIN memories m ON m.id = mv.memory_id
-	WHERE mv.workspace = ?`)
-	args = append(args, string(qb), workspace)
+	WHERE mv.workspace = ?
+	  AND mv.embedding_provider = ?`)
+	args = append(args, string(qb), workspace, strings.TrimSpace(provider))
 	if len(types) > 0 {
 		b.WriteString(" AND m.type IN (")
 		for i, t := range types {

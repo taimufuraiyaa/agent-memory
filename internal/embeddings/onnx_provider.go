@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 )
@@ -21,7 +22,11 @@ type ONNXMiniLMProvider struct {
 
 // NewONNXMiniLMProvider creates a real ONNX-backed MiniLM provider.
 func NewONNXMiniLMProvider(modelDir string, opt ModelLifecycleOptions) (*ONNXMiniLMProvider, error) {
-	return newONNXMiniLMProviderWithRuntime(modelDir, opt, newORTMiniLMRuntime)
+	runtimeFactory := newORTMiniLMRuntime
+	if parseBoolEnv(os.Getenv("AGENT_MEMORY_TEST_FAKE_ONNX_RUNTIME")) {
+		runtimeFactory = newFakeMiniLMRuntime
+	}
+	return newONNXMiniLMProviderWithRuntime(modelDir, opt, runtimeFactory)
 }
 
 func newONNXMiniLMProviderWithRuntime(modelDir string, opt ModelLifecycleOptions, runtimeFactory func(string) (miniLMRuntime, error)) (*ONNXMiniLMProvider, error) {

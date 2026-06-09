@@ -267,6 +267,23 @@ func (s *Store) Migrate(ctx context.Context) error {
 			off_returned_tokens INTEGER NOT NULL DEFAULT 0,
 			off_baseline_tokens INTEGER NOT NULL DEFAULT 0,
 			off_saved_tokens INTEGER NOT NULL DEFAULT 0,
+			task_success_rate REAL NOT NULL DEFAULT 0,
+			off_task_success_rate REAL NOT NULL DEFAULT 0,
+			task_success_delta REAL NOT NULL DEFAULT 0,
+			answer_fact_coverage REAL NOT NULL DEFAULT 0,
+			off_answer_fact_coverage REAL NOT NULL DEFAULT 0,
+			answer_fact_coverage_delta REAL NOT NULL DEFAULT 0,
+			answer_completeness REAL NOT NULL DEFAULT 0,
+			off_answer_completeness REAL NOT NULL DEFAULT 0,
+			answer_completeness_delta REAL NOT NULL DEFAULT 0,
+			avg_on_runtime_ms REAL NOT NULL DEFAULT 0,
+			avg_off_runtime_ms REAL NOT NULL DEFAULT 0,
+			runtime_delta_ms REAL NOT NULL DEFAULT 0,
+			avg_on_investigation_effort REAL NOT NULL DEFAULT 0,
+			avg_off_investigation_effort REAL NOT NULL DEFAULT 0,
+			investigation_effort_delta REAL NOT NULL DEFAULT 0,
+			continuation_score REAL NOT NULL DEFAULT 0,
+			continuation_verdict TEXT NOT NULL DEFAULT '',
 			generator_manifest_json TEXT NOT NULL DEFAULT '{}',
 			run_manifest_json TEXT NOT NULL DEFAULT '{}',
 			clusters_json TEXT NOT NULL DEFAULT '[]',
@@ -274,11 +291,43 @@ func (s *Store) Migrate(ctx context.Context) error {
 			UNIQUE(workspace, run_id)
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_benchmark_runs_workspace_created ON benchmark_runs(workspace, created_at DESC)`,
+		`CREATE TABLE IF NOT EXISTS scheduler_workspace_state (
+			workspace TEXT PRIMARY KEY,
+			last_scheduled_at TEXT NOT NULL DEFAULT '',
+			last_completed_at TEXT NOT NULL DEFAULT '',
+			last_result TEXT NOT NULL DEFAULT '',
+			last_skip_reason TEXT NOT NULL DEFAULT '',
+			last_duration_ms INTEGER NOT NULL DEFAULT 0,
+			last_error TEXT NOT NULL DEFAULT '',
+			updated_at TEXT NOT NULL
+		)`,
+		`CREATE TABLE IF NOT EXISTS scheduler_run_history (
+			id TEXT PRIMARY KEY,
+			workspace TEXT NOT NULL,
+			started_at TEXT NOT NULL,
+			completed_at TEXT NOT NULL DEFAULT '',
+			trigger TEXT NOT NULL,
+			result TEXT NOT NULL,
+			skip_reason TEXT NOT NULL DEFAULT '',
+			duration_ms INTEGER NOT NULL DEFAULT 0,
+			decay_updated INTEGER NOT NULL DEFAULT 0,
+			consolidated INTEGER NOT NULL DEFAULT 0,
+			conflicts_found INTEGER NOT NULL DEFAULT 0,
+			evicted INTEGER NOT NULL DEFAULT 0,
+			promoted INTEGER NOT NULL DEFAULT 0,
+			demoted INTEGER NOT NULL DEFAULT 0,
+			error TEXT NOT NULL DEFAULT ''
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_scheduler_run_history_workspace_started ON scheduler_run_history(workspace, started_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_scheduler_run_history_started ON scheduler_run_history(started_at DESC)`,
 	}
 	for _, stmt := range stmts {
 		if _, err := s.db.ExecContext(ctx, stmt); err != nil {
 			return fmt.Errorf("migration failed: %w", err)
 		}
+	}
+	if err := s.ensureColumn(ctx, "scheduler_workspace_state", "last_impacts", `ALTER TABLE scheduler_workspace_state ADD COLUMN last_impacts INTEGER NOT NULL DEFAULT 0`); err != nil {
+		return err
 	}
 	hasContentHash, err := s.hasColumn(ctx, "memories", "content_hash")
 	if err != nil {
@@ -347,6 +396,57 @@ func (s *Store) Migrate(ctx context.Context) error {
 		return err
 	}
 	if err := s.ensureColumn(ctx, "token_metrics", "memory_enabled", `ALTER TABLE token_metrics ADD COLUMN memory_enabled INTEGER NOT NULL DEFAULT 1`); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "benchmark_runs", "task_success_rate", `ALTER TABLE benchmark_runs ADD COLUMN task_success_rate REAL NOT NULL DEFAULT 0`); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "benchmark_runs", "off_task_success_rate", `ALTER TABLE benchmark_runs ADD COLUMN off_task_success_rate REAL NOT NULL DEFAULT 0`); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "benchmark_runs", "task_success_delta", `ALTER TABLE benchmark_runs ADD COLUMN task_success_delta REAL NOT NULL DEFAULT 0`); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "benchmark_runs", "answer_fact_coverage", `ALTER TABLE benchmark_runs ADD COLUMN answer_fact_coverage REAL NOT NULL DEFAULT 0`); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "benchmark_runs", "off_answer_fact_coverage", `ALTER TABLE benchmark_runs ADD COLUMN off_answer_fact_coverage REAL NOT NULL DEFAULT 0`); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "benchmark_runs", "answer_fact_coverage_delta", `ALTER TABLE benchmark_runs ADD COLUMN answer_fact_coverage_delta REAL NOT NULL DEFAULT 0`); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "benchmark_runs", "answer_completeness", `ALTER TABLE benchmark_runs ADD COLUMN answer_completeness REAL NOT NULL DEFAULT 0`); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "benchmark_runs", "off_answer_completeness", `ALTER TABLE benchmark_runs ADD COLUMN off_answer_completeness REAL NOT NULL DEFAULT 0`); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "benchmark_runs", "answer_completeness_delta", `ALTER TABLE benchmark_runs ADD COLUMN answer_completeness_delta REAL NOT NULL DEFAULT 0`); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "benchmark_runs", "avg_on_runtime_ms", `ALTER TABLE benchmark_runs ADD COLUMN avg_on_runtime_ms REAL NOT NULL DEFAULT 0`); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "benchmark_runs", "avg_off_runtime_ms", `ALTER TABLE benchmark_runs ADD COLUMN avg_off_runtime_ms REAL NOT NULL DEFAULT 0`); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "benchmark_runs", "runtime_delta_ms", `ALTER TABLE benchmark_runs ADD COLUMN runtime_delta_ms REAL NOT NULL DEFAULT 0`); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "benchmark_runs", "avg_on_investigation_effort", `ALTER TABLE benchmark_runs ADD COLUMN avg_on_investigation_effort REAL NOT NULL DEFAULT 0`); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "benchmark_runs", "avg_off_investigation_effort", `ALTER TABLE benchmark_runs ADD COLUMN avg_off_investigation_effort REAL NOT NULL DEFAULT 0`); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "benchmark_runs", "investigation_effort_delta", `ALTER TABLE benchmark_runs ADD COLUMN investigation_effort_delta REAL NOT NULL DEFAULT 0`); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "benchmark_runs", "continuation_score", `ALTER TABLE benchmark_runs ADD COLUMN continuation_score REAL NOT NULL DEFAULT 0`); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "benchmark_runs", "continuation_verdict", `ALTER TABLE benchmark_runs ADD COLUMN continuation_verdict TEXT NOT NULL DEFAULT ''`); err != nil {
 		return err
 	}
 	return nil

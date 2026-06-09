@@ -7,6 +7,7 @@ import {
   listSessions,
   listProjects,
   listRecentMemories,
+  listSchedulerHistory,
   promoteObservations,
   recallPreview,
   searchMemories,
@@ -23,6 +24,8 @@ import {
   type OutcomeResult,
   type ProjectListItem,
   type RecallPreviewResponse,
+  type SchedulerRunHistory,
+  type SchedulerSummary,
   type SearchResponse,
   type SessionEntry,
   type StorageTier,
@@ -34,7 +37,7 @@ import { DiagramViewer, renderDiagramMarkupForExport } from './DiagramViewer'
 import { MarkdownView } from './MarkdownView'
 
 type ChatMode = 'search' | 'recall'
-type Surface = 'overview' | 'search' | 'recall' | 'diagnostics' | 'sessions' | 'benchmark' | 'wiki'
+type Surface = 'overview' | 'search' | 'recall' | 'diagnostics' | 'sessions' | 'benchmark' | 'wiki' | 'lifecycle'
 type WikiViewMode = 'article' | 'raw'
 type WikiMode = 'search' | 'recall' | 'recents'
 
@@ -100,6 +103,11 @@ function formatPercent(value?: number): string {
 function formatUnitPercent(value?: number): string {
   if (typeof value !== 'number' || Number.isNaN(value)) return '0.0%'
   return `${(value * 100).toFixed(1)}%`
+}
+
+function formatMoney(value?: number): string {
+  if (typeof value !== 'number' || Number.isNaN(value)) return '$0.00'
+  return `$${value.toFixed(4)}`
 }
 
 function formatDuration(ms?: number): string {
@@ -381,6 +389,9 @@ export function App() {
   const [benchmarkRuns, setBenchmarkRuns] = useState<BenchmarkRun[]>([])
   const [benchmarkBusy, setBenchmarkBusy] = useState<boolean>(false)
   const [benchmarkErr, setBenchmarkErr] = useState<string>('')
+  const [schedulerHistory, setSchedulerHistory] = useState<SchedulerRunHistory[]>([])
+  const [schedulerBusy, setSchedulerBusy] = useState<boolean>(false)
+  const [schedulerErr, setSchedulerErr] = useState<string>('')
   const [sessions, setSessions] = useState<SessionEntry[]>([])
   const [sessionsBusy, setSessionsBusy] = useState<boolean>(false)
   const [sessionsErr, setSessionsErr] = useState<string>('')
@@ -578,6 +589,29 @@ export function App() {
       cancelled = true
     }
   }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    if (!workspace || surface !== 'lifecycle') return
+    setSchedulerBusy(true)
+    listSchedulerHistory({ workspace, limit: 100 })
+      .then((res) => {
+        if (cancelled) return
+        setSchedulerHistory(res.history || [])
+        setSchedulerErr('')
+      })
+      .catch((err) => {
+        if (cancelled) return
+        setSchedulerErr((err as Error).message)
+      })
+      .finally(() => {
+        if (cancelled) return
+        setSchedulerBusy(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [workspace, surface])
 
   useEffect(() => {
     let cancelled = false
@@ -1128,8 +1162,12 @@ export function App() {
             <span className="navKey">[04]</span>
             <span className="navLabel">Benchmark</span>
           </button>
-          <button className="navItem" onClick={() => openWiki()} type="button" aria-label="Wiki">
+          <button className={surface === 'lifecycle' ? 'navItem navItemOn' : 'navItem'} onClick={() => setSurface('lifecycle')} type="button" aria-label="Lifecycle">
             <span className="navKey">[05]</span>
+            <span className="navLabel">Lifecycle</span>
+          </button>
+          <button className="navItem" onClick={() => openWiki()} type="button" aria-label="Wiki">
+            <span className="navKey">[06]</span>
             <span className="navLabel">Wiki</span>
           </button>
         </nav>
@@ -1228,6 +1266,16 @@ export function App() {
                   runs={benchmarkRuns}
                   busy={benchmarkBusy}
                   error={benchmarkErr}
+                />
+              ) : null}
+
+              {surface === 'lifecycle' ? (
+                <LifecyclePanel
+                  workspace={workspace}
+                  scheduler={stats?.scheduler}
+                  history={schedulerHistory}
+                  busy={schedulerBusy}
+                  error={schedulerErr}
                 />
               ) : null}
 
@@ -1934,6 +1982,15 @@ function OverviewPanel({
   const lowReachThreshold = stats?.low_reach_threshold ?? 0
   const lowReachMemoryCount = stats?.low_reach_memory_count ?? 0
   const topRetrievedMemories = stats?.top_retrieved_memories ?? []
+  const scheduler = stats?.scheduler
+  const schedulerWorkspace = scheduler?.workspace
+  const schedulerState = scheduler?.enabled
+    ? schedulerWorkspace?.run_in_progress
+      ? 'running'
+      : schedulerWorkspace?.last_error
+        ? 'failed'
+        : schedulerWorkspace?.last_result || 'idle'
+    : 'disabled'
   const experimentsRef = useRef<HTMLElement>(null)
 
   useEffect(() => {
@@ -2040,6 +2097,18 @@ function OverviewPanel({
             <DiagnosticRow label="Last Accessed" value={formatTS(stats?.last_memory_accessed_at) || 'n/a'} />
           </div>
         </BreakdownCard>
+
+        <BreakdownCard title="Scheduler" subtitle={scheduler?.enabled ? `Next tick ${formatTS(scheduler?.next_tick_at) || 'n/a'}` : 'Background lifecycle disabled'}>
+          <div className="diagnosticsList">
+            <DiagnosticRow label="State" value={schedulerState} />
+            <DiagnosticRow label="Last Tick" value={formatTS(scheduler?.last_tick_at) || 'n/a'} />
+            <DiagnosticRow label="Last Completed" value={formatTS(schedulerWorkspace?.last_completed_at) || 'n/a'} />
+            <DiagnosticRow label="Last Skip" value={schedulerWorkspace?.last_skip_reason || schedulerWorkspace?.current_skip_reason || '-'} />
+            <DiagnosticRow label="Hygiene Overdue" value={schedulerWorkspace?.hygiene_overdue ? 'yes' : 'no'} />
+            <DiagnosticRow label="Last Duration" value={formatDuration(schedulerWorkspace?.last_duration_ms)} />
+            <DiagnosticRow label="Last Impacts" value={schedulerWorkspace?.last_impacts != null ? String(schedulerWorkspace.last_impacts) : '-'} />
+          </div>
+        </BreakdownCard>
       </div>
 
       <section className="comparisonSection">
@@ -2081,6 +2150,138 @@ function OverviewPanel({
   )
 }
 
+function benchmarkEconomicSummary(run?: BenchmarkRun): Record<string, unknown> | null {
+  const manifest = run?.run_manifest
+  if (!manifest || typeof manifest !== 'object') return null
+  const value = (manifest as Record<string, unknown>).economic_summary
+  return value && typeof value === 'object' ? (value as Record<string, unknown>) : null
+}
+
+function benchmarkEconomicNumber(run: BenchmarkRun | undefined, key: string, fallback = 0): number {
+  const summary = benchmarkEconomicSummary(run)
+  const value = summary?.[key]
+  return typeof value === 'number' ? value : fallback
+}
+
+function LifecyclePanel({
+  workspace,
+  scheduler,
+  history,
+  busy,
+  error,
+}: {
+  workspace: string
+  scheduler?: SchedulerSummary
+  history: SchedulerRunHistory[]
+  busy: boolean
+  error: string
+}) {
+  if (!workspace) {
+    return (
+      <div className="surfacePanel">
+        <div className="emptyState">
+          <div className="emptyTitle">No Workspace Selected</div>
+          <div className="emptyBody">Select a workspace to view its memory lifecycle history.</div>
+        </div>
+      </div>
+    )
+  }
+  return (
+    <div className="surfacePanel">
+      <div className="panelHeader">
+        <h2 className="panelTitle">Memory Lifecycle</h2>
+        <p className="panelSubtitle">Background scheduler state and run history.</p>
+      </div>
+
+      {scheduler?.enabled ? (
+        <div className="panelSection">
+          <h3 className="sectionTitle">Scheduler State</h3>
+          <div className="metricGrid">
+            <div className="metricCard">
+              <div className="metricLabel">Status</div>
+              <div className="metricValue">
+                {scheduler.workspace?.run_in_progress ? (
+                  <span className="tone-good">Running</span>
+                ) : (
+                  <span className="tone-neutral">Idle</span>
+                )}
+              </div>
+            </div>
+            <div className="metricCard">
+              <div className="metricLabel">Next Tick</div>
+              <div className="metricValue">{formatTS(scheduler.next_tick_at)}</div>
+            </div>
+            <div className="metricCard">
+              <div className="metricLabel">Last Scheduled</div>
+              <div className="metricValue">{formatTS(scheduler.workspace?.last_scheduled_at)}</div>
+            </div>
+            <div className="metricCard">
+              <div className="metricLabel">Last Completed</div>
+              <div className="metricValue">{formatTS(scheduler.workspace?.last_completed_at)}</div>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="panelSection">
+          <div className="emptyState">
+            <div className="emptyBody">Scheduler is disabled. Enable it from the agent-memory menubar.</div>
+          </div>
+        </div>
+      )}
+
+      {error ? (
+        <div className="errAlert">Failed to load lifecycle history: {error}</div>
+      ) : busy && history.length === 0 ? (
+        <div className="emptyState">
+          <div className="emptyBody">Loading history...</div>
+        </div>
+      ) : history.length === 0 ? (
+        <div className="emptyState">
+          <div className="emptyBody">No lifecycle runs recorded yet for this workspace.</div>
+        </div>
+      ) : (
+        <div className="panelSection">
+          <h3 className="sectionTitle">Recent Runs</h3>
+          <table className="dataTable">
+            <thead>
+              <tr>
+                <th>Started</th>
+                <th>Result</th>
+                <th>Duration</th>
+                <th>Decay Updated</th>
+                <th>Promoted</th>
+                <th>Evicted</th>
+              </tr>
+            </thead>
+            <tbody>
+              {history.map((run) => (
+                <tr key={run.id}>
+                  <td>{formatTS(run.started_at)}</td>
+                  <td>
+                    {run.result === 'success' ? (
+                      <span className="tone-good">Success</span>
+                    ) : run.result === 'skipped' ? (
+                      <span className="tone-neutral">Skipped ({run.skip_reason})</span>
+                    ) : run.result === 'failed' ? (
+                      <span className="tone-bad">Failed</span>
+                    ) : (
+                      <span className="tone-warn">{run.result}</span>
+                    )}
+                  </td>
+                  <td>{formatDuration(run.duration_ms)}</td>
+                  <td>{run.decay_updated > 0 ? formatNumber(run.decay_updated) : <span className="muted">-</span>}</td>
+                  <td>{run.promoted > 0 ? <span className="tone-good">+{formatNumber(run.promoted)}</span> : <span className="muted">-</span>}</td>
+                  <td>{run.evicted > 0 ? <span className="tone-bad">-{formatNumber(run.evicted)}</span> : <span className="muted">-</span>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function BenchmarkPanel({
   workspace,
   runs,
@@ -2093,6 +2294,22 @@ function BenchmarkPanel({
   error: string
 }) {
   const latest = runs[0]
+  const clusterCount = latest?.clusters.length ?? 0
+  const primaryVerdict = latest?.continuation_verdict || latest?.verdict || ''
+  const locatorSuccessDelta = benchmarkEconomicNumber(latest, 'locator_success_delta')
+  const locatorSuccessRate = benchmarkEconomicNumber(latest, 'locator_success_rate')
+  const offLocatorSuccessRate = benchmarkEconomicNumber(latest, 'off_locator_success_rate')
+  const verificationEffortDelta = benchmarkEconomicNumber(latest, 'verification_effort_delta')
+  const avgOnVerificationEffort = benchmarkEconomicNumber(latest, 'avg_on_verification_effort')
+  const avgOffVerificationEffort = benchmarkEconomicNumber(latest, 'avg_off_verification_effort')
+  const avgOnRediscoveryEffort = benchmarkEconomicNumber(latest, 'avg_on_rediscovery_effort')
+  const avgOffRediscoveryEffort = benchmarkEconomicNumber(latest, 'avg_off_rediscovery_effort')
+  const operationalCostSaved = benchmarkEconomicNumber(latest, 'operational_cost_saved')
+  const operationalCostSavedPct = benchmarkEconomicNumber(latest, 'operational_cost_saved_pct')
+  const operationalCostWithMemory = benchmarkEconomicNumber(latest, 'operational_cost_with_memory')
+  const operationalCostWithoutMemory = benchmarkEconomicNumber(latest, 'operational_cost_without_memory')
+  const amortizedAcquisitionCost = benchmarkEconomicNumber(latest, 'amortized_acquisition_cost')
+  const memoryROI = benchmarkEconomicNumber(latest, 'memory_roi')
 
   return (
     <section className="surfaceStack">
@@ -2100,11 +2317,11 @@ function BenchmarkPanel({
         <div>
           <div className="overviewEyebrow">Benchmark</div>
           <h2 className="sectionTitle">{workspace || 'Workspace'} Quality Benchmark</h2>
-          <p className="sectionText">Review memory ON/OFF benchmark quality, token efficiency, cluster-level coverage, and recent run history.</p>
+          <p className="sectionText">Measure the latest ON/OFF delta first, then use diagnostic signals to understand where memory helps, where it hurts, and what should improve.</p>
         </div>
         {latest ? (
           <div className="diagnosticsHeroSide">
-            <span className="statusBadge statusBadgeGood">{latest.verdict}</span>
+            <span className="statusBadge statusBadgeGood">{primaryVerdict}</span>
             <span className="muted small">{formatTS(latest.created_at) || 'n/a'}</span>
           </div>
         ) : null}
@@ -2122,35 +2339,66 @@ function BenchmarkPanel({
 
       {latest ? (
         <>
-          <div className="benchmarkStatsGrid">
-            <MetricCard title="Combined Score" value={latest.combined_score.toFixed(3)} detail={latest.verdict} />
-            <MetricCard title="Cases" value={formatNumber(latest.case_count)} detail={`${formatNumber(latest.seed_count)} seeds`} />
-            <MetricCard title="Precision" value={formatUnitPercent(latest.precision)} detail={`Gold recall ${formatUnitPercent(latest.gold_recall)}`} />
-            <MetricCard title="NDCG" value={latest.ndcg.toFixed(3)} detail={`F1 ${latest.f1.toFixed(3)}`} />
-            <MetricCard title="Token Efficiency" value={formatUnitPercent(latest.token_efficiency)} detail={`${formatNumber(latest.saved_tokens)} tokens saved`} />
-            <MetricCard title="Cost Saved" value={formatUnitPercent(latest.cost_saved_pct)} detail={`$${latest.cost_saved.toFixed(2)} saved`} />
-          </div>
+          <section className="comparisonSection">
+            <div className="comparisonHeader">
+              <div>
+                <div className="breakdownTitle">Benefit</div>
+                <div className="breakdownSubtitle">Primary ON/OFF deltas from the latest persisted run</div>
+              </div>
+            </div>
+            <div className="benchmarkStatsGrid">
+              <MetricCard title="Verdict" value={primaryVerdict.toLowerCase()} detail={`Latest run: ${formatTS(latest.created_at) || 'n/a'}`} />
+              <MetricCard title="Task Success" value={formatUnitPercent(latest.task_success_delta)} detail={`${formatUnitPercent(latest.task_success_rate)} ON vs ${formatUnitPercent(latest.off_task_success_rate)} OFF`} />
+              <MetricCard title="Fact Coverage" value={formatUnitPercent(latest.answer_fact_coverage_delta)} detail={`${formatUnitPercent(latest.answer_fact_coverage)} ON vs ${formatUnitPercent(latest.off_answer_fact_coverage)} OFF`} />
+              <MetricCard title="Completeness" value={formatUnitPercent(latest.answer_completeness_delta)} detail={`${formatUnitPercent(latest.answer_completeness)} ON vs ${formatUnitPercent(latest.off_answer_completeness)} OFF`} />
+              <MetricCard title="Locator Success" value={formatUnitPercent(locatorSuccessDelta)} detail={`${formatUnitPercent(locatorSuccessRate)} ON vs ${formatUnitPercent(offLocatorSuccessRate)} OFF`} />
+              <MetricCard title="Verification Effort" value={verificationEffortDelta.toFixed(2)} detail={`${avgOnVerificationEffort.toFixed(2)} ON vs ${avgOffVerificationEffort.toFixed(2)} OFF`} />
+              <MetricCard title="Operational Cost" value={formatMoney(operationalCostSaved)} detail={`${formatUnitPercent(operationalCostSavedPct)} vs OFF estimate`} />
+              <MetricCard title="Primary Score" value={latest.continuation_score.toFixed(3)} detail="Continuation benefit score" />
+            </div>
+          </section>
 
           <div className="benchmarkColumns">
-            <BreakdownCard title="Quality Metrics" subtitle={`Latest run ${latest.run_id}`}>
+            <BreakdownCard title="Benefit Details" subtitle="Raw ON/OFF values for the primary continuation metrics">
+              <div className="benchmarkPanelMeta">
+                <span className="overviewMetaItem">run {latest.run_id}</span>
+                <span className="overviewMetaItem">cases {formatNumber(latest.case_count)}</span>
+                <span className="overviewMetaItem">top_k {formatNumber(latest.top_k)}</span>
+                <span className="overviewMetaItem">budget {formatNumber(latest.budget)}</span>
+                <span className="overviewMetaItem">clusters {formatNumber(clusterCount)}</span>
+              </div>
               <div className="diagnosticsList">
-                <DiagnosticRow label="Precision" value={formatUnitPercent(latest.precision)} />
-                <DiagnosticRow label="Recall" value={formatUnitPercent(latest.recall)} />
-                <DiagnosticRow label="Gold Recall" value={formatUnitPercent(latest.gold_recall)} />
-                <DiagnosticRow label="Keyword Coverage" value={formatUnitPercent(latest.keyword_coverage)} />
-                <DiagnosticRow label="NDCG" value={latest.ndcg.toFixed(3)} />
-                <DiagnosticRow label="F1" value={latest.f1.toFixed(3)} />
+                <DiagnosticRow label="Task Success ON" value={formatUnitPercent(latest.task_success_rate)} />
+                <DiagnosticRow label="Task Success OFF" value={formatUnitPercent(latest.off_task_success_rate)} />
+                <DiagnosticRow label="Fact Coverage ON" value={formatUnitPercent(latest.answer_fact_coverage)} />
+                <DiagnosticRow label="Fact Coverage OFF" value={formatUnitPercent(latest.off_answer_fact_coverage)} />
+                <DiagnosticRow label="Completeness ON" value={formatUnitPercent(latest.answer_completeness)} />
+                <DiagnosticRow label="Completeness OFF" value={formatUnitPercent(latest.off_answer_completeness)} />
+                <DiagnosticRow label="Locator Success ON" value={formatUnitPercent(locatorSuccessRate)} />
+                <DiagnosticRow label="Locator Success OFF" value={formatUnitPercent(offLocatorSuccessRate)} />
+                <DiagnosticRow label="Avg ON Verification Effort" value={avgOnVerificationEffort.toFixed(2)} />
+                <DiagnosticRow label="Avg OFF Verification Effort" value={avgOffVerificationEffort.toFixed(2)} />
+                <DiagnosticRow label="Avg ON Rediscovery Effort" value={avgOnRediscoveryEffort.toFixed(2)} />
+                <DiagnosticRow label="Avg OFF Rediscovery Effort" value={avgOffRediscoveryEffort.toFixed(2)} />
+                <DiagnosticRow label="Avg ON Runtime" value={formatDuration(Math.round(latest.avg_on_runtime_ms))} />
+                <DiagnosticRow label="Avg OFF Runtime" value={formatDuration(Math.round(latest.avg_off_runtime_ms))} />
+                <DiagnosticRow label="Estimated OFF Operational Cost" value={formatMoney(operationalCostWithoutMemory)} />
+                <DiagnosticRow label="Estimated ON Operational Cost" value={formatMoney(operationalCostWithMemory)} />
+                <DiagnosticRow label="Amortized Acquisition Cost" value={formatMoney(amortizedAcquisitionCost)} />
+                <DiagnosticRow label="Memory ROI" value={formatMoney(memoryROI)} />
               </div>
             </BreakdownCard>
 
-            <BreakdownCard title="Efficiency And Runtime" subtitle={`top_k ${latest.top_k} | budget ${latest.budget}`}>
+            <BreakdownCard title="Improvement Signals" subtitle="Compact secondary diagnostics and retrieval-context drift">
               <div className="diagnosticsList">
-                <DiagnosticRow label="Baseline Tokens" value={formatNumber(latest.baseline_tokens)} />
-                <DiagnosticRow label="Returned Tokens" value={formatNumber(latest.returned_tokens)} />
-                <DiagnosticRow label="Saved Tokens" value={formatNumber(latest.saved_tokens)} />
-                <DiagnosticRow label="Seed Duration" value={formatDuration(latest.seed_duration_ms)} />
-                <DiagnosticRow label="ON Duration" value={formatDuration(latest.on_duration_ms)} />
-                <DiagnosticRow label="OFF Duration" value={formatDuration(latest.off_duration_ms)} />
+                <DiagnosticRow label="Precision@K" value={latest.precision.toFixed(3)} />
+                <DiagnosticRow label="Gold Recall" value={latest.gold_recall.toFixed(3)} />
+                <DiagnosticRow label="NDCG@K" value={latest.ndcg.toFixed(3)} />
+                <DiagnosticRow label="Keyword Coverage" value={formatUnitPercent(latest.keyword_coverage)} />
+                <DiagnosticRow label="ON Retrieval Context Tokens" value={formatNumber(latest.returned_tokens)} />
+                <DiagnosticRow label="OFF Retrieval Context Tokens" value={formatNumber(latest.off_returned_tokens)} />
+                <DiagnosticRow label="Retrieval Context Delta" value={formatNumber(latest.saved_tokens)} />
+                <DiagnosticRow label="Retrieval Context Cost Delta" value={formatMoney(latest.cost_saved)} />
               </div>
             </BreakdownCard>
           </div>
@@ -2158,8 +2406,8 @@ function BenchmarkPanel({
           <section className="comparisonSection">
             <div className="comparisonHeader">
               <div>
-                <div className="breakdownTitle">Cluster Breakdown</div>
-                <div className="breakdownSubtitle">Per-cluster quality and efficiency summaries for the latest benchmark run.</div>
+                <div className="breakdownTitle">Per-Cluster Breakdown</div>
+                <div className="breakdownSubtitle">Diagnostic rollups by topic cluster ({formatNumber(clusterCount)} clusters)</div>
               </div>
             </div>
             <div className="benchmarkClusterGrid">
@@ -2173,15 +2421,15 @@ function BenchmarkPanel({
             <div className="comparisonHeader">
               <div>
                 <div className="breakdownTitle">Run History</div>
-                <div className="breakdownSubtitle">Newest benchmark runs first, grouped in the same workspace.</div>
+                <div className="breakdownSubtitle">Secondary combined-score trend over time ({formatNumber(runs.length)} runs)</div>
               </div>
             </div>
-            <div className="diagnosticsList">
-              {runs.map((run) => (
-                <DiagnosticRow
+            <div className="benchmarkHistoryList">
+              {runs.map((run, index) => (
+                <BenchmarkHistoryRow
                   key={run.run_id}
-                  label={`${run.run_id} | ${formatTS(run.created_at) || 'n/a'} | ${formatNumber(run.case_count)} cases | ${run.verdict}`}
-                  value={`${run.combined_score.toFixed(3)} / ${formatUnitPercent(run.token_efficiency)}`}
+                  run={run}
+                  index={index}
                 />
               ))}
             </div>
@@ -2194,25 +2442,43 @@ function BenchmarkPanel({
 
 function BenchmarkClusterCard({ cluster, index }: { cluster: BenchmarkClusterSummary; index: number }) {
   return (
-    <article className="groupCard benchmarkClusterCard">
+    <article className="groupCard benchmarkClusterCard benchmarkClusterCardReference">
       <div className="groupCardTop">
         <div className="groupHeading">
           <span className="groupIndex">{formatLegendIndex(index)}</span>
           <span className="groupLead">.-</span>
           <div className="groupTitle">{cluster.cluster_title}</div>
         </div>
-        <span className="groupBadge groupBadgeOn">{cluster.verdict}</span>
+        <span className="groupBadge groupBadgeOn">{formatNumber(cluster.cases)} cases</span>
       </div>
-      <div className="groupMeta mono">cluster:{cluster.cluster_id}</div>
-      <div className="diagnosticsList" style={{ marginTop: 14 }}>
-        <DiagnosticRow label="Cases" value={formatNumber(cluster.cases)} />
-        <DiagnosticRow label="Combined Score" value={cluster.combined_score.toFixed(3)} />
-        <DiagnosticRow label="Precision" value={formatUnitPercent(cluster.precision)} />
-        <DiagnosticRow label="Gold Recall" value={formatUnitPercent(cluster.gold_recall)} />
-        <DiagnosticRow label="Keyword Coverage" value={formatUnitPercent(cluster.keyword_coverage)} />
-        <DiagnosticRow label="Token Efficiency" value={formatUnitPercent(cluster.token_efficiency)} />
+      <div className="groupMetric">{cluster.continuation_score.toFixed(3)}</div>
+      <div className="groupSub">{(cluster.continuation_verdict || cluster.verdict).toLowerCase()} primary score</div>
+      <div className="diagnosticsList benchmarkClusterMetrics">
+        <DiagnosticRow label="Success" value={formatUnitPercent(cluster.task_success_delta)} />
+        <DiagnosticRow label="Facts" value={formatUnitPercent(cluster.answer_fact_coverage_delta)} />
+        <DiagnosticRow label="Runtime" value={formatDuration(Math.round(cluster.runtime_delta_ms))} />
       </div>
     </article>
+  )
+}
+
+function BenchmarkHistoryRow({ run, index }: { run: BenchmarkRun; index: number }) {
+  return (
+    <div className="benchmarkHistoryRow">
+      <div className="benchmarkHistoryMain">
+        <span className="benchmarkHistoryIndex">{formatLegendIndex(index)}</span>
+        <span className="benchmarkHistoryLead">--</span>
+        <span className="benchmarkHistoryRun">{run.run_id}</span>
+        <span className="benchmarkHistoryMeta">{formatTS(run.created_at) || 'n/a'}</span>
+        <span className="benchmarkHistoryMeta">{formatNumber(run.case_count)} cases</span>
+      </div>
+      <div className="benchmarkHistorySide">
+        <span className="benchmarkHistoryScore">{run.continuation_score.toFixed(3)}</span>
+        <span className={`statusBadge ${run.continuation_score >= 0.2 ? 'statusBadgeGood' : run.continuation_score > 0 ? 'statusBadgeWarn' : 'statusBadgeBad'}`}>
+          {(run.continuation_verdict || run.verdict).toLowerCase()}
+        </span>
+      </div>
+    </div>
   )
 }
 

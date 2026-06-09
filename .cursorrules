@@ -1,21 +1,21 @@
 # AI Agent Rules - agent-memory
 
-## 1) Specs-First (FORCED)
+## Specs-First (FORCED)
 - For any non-trivial feature/bugfix, consult the relevant spec in `.kiro/specs/<feature>/` and derive the plan from `requirements.md` → `design.md` → `tasks.md`.
 - If no relevant spec exists, create it (requirements first, then design, then tasks) before implementing code changes.
 - If implementation maps to `.kiro/specs/**/tasks.md`, update the relevant checkbox items before finishing the work.
 
-## 2) Design Depth (FORCED)
+## Design Depth (FORCED)
 - Write `design.md` and `tasks.md` as a Solution Architect: alternatives, trade-offs, risks, edge cases, data contracts, failure modes, performance/scaling, and rollout strategy.
 - Do NOT include example code in `design.md`.
 
-## 3) Mermaid Safety (ENFORCED)
+## Mermaid Safety (ENFORCED)
 - For any Mermaid diagram, ALWAYS enclose node labels in double quotes.
   - Correct: `Node["Process (step 1)"]`
   - Incorrect: `Node[Process (step 1)]`
 
-## 4) Truthfulness (ENFORCED)
-- Do not guess or fabricate details. If information is missing, explicitly say what’s missing and then proceed by inspecting the repo.
+## Truthfulness (ENFORCED)
+- Do not guess or fabricate details. If information is missing, explicitly say what's missing and then proceed by inspecting the repo.
 
 ## agent-memory (MANDATORY)
 

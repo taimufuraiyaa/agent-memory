@@ -7,19 +7,18 @@ import (
 	"strings"
 )
 
-// NewProvider resolves the shared production embedding provider selection chain.
-// It prefers the real ONNX-backed provider and falls back to the local scaffold
-// only when ONNX setup is unavailable.
+// NewProvider resolves the shared production embedding provider.
+// Production flows require the real ONNX-backed provider and fail explicitly
+// when ONNX setup is unavailable or not ready.
 func NewProvider(modelDir string) (Provider, error) {
-	return newProviderWithFactories(modelDir, NewONNXMiniLMProvider, onnxProviderReady, NewLocalProvider)
+	return newProviderWithFactories(modelDir, NewONNXMiniLMProvider, onnxProviderReady)
 }
 
 func newProviderWithFactories(
 	modelDir string,
 	onnxFactory func(string, ModelLifecycleOptions) (*ONNXMiniLMProvider, error),
 	onnxReady func(*ONNXMiniLMProvider) error,
-	localFactory func(string) (*LocalProvider, error),
-) (Provider, error) {
+) (*ONNXMiniLMProvider, error) {
 	if strings.TrimSpace(modelDir) == "" {
 		return nil, fmt.Errorf("resolve embedding provider: model dir is required")
 	}
@@ -36,23 +35,16 @@ func newProviderWithFactories(
 	}
 
 	onnxProvider, onnxErr := onnxFactory(modelDir, opt)
-	if onnxErr == nil {
-		if onnxReady == nil {
-			return nil, fmt.Errorf("resolve embedding provider: onnx readiness check is required")
-		}
-		if err := onnxReady(onnxProvider); err == nil {
-			return onnxProvider, nil
-		} else {
-			onnxErr = err
-		}
+	if onnxErr != nil {
+		return nil, fmt.Errorf("resolve embedding provider: onnx provider unavailable: %w", onnxErr)
 	}
-
-	localProvider, localErr := localFactory(modelDir)
-	if localErr == nil {
-		return localProvider, nil
+	if onnxReady == nil {
+		return nil, fmt.Errorf("resolve embedding provider: onnx readiness check is required")
 	}
-
-	return nil, fmt.Errorf("resolve embedding provider: onnx: %w; local: %v", onnxErr, localErr)
+	if err := onnxReady(onnxProvider); err != nil {
+		return nil, fmt.Errorf("resolve embedding provider: onnx provider not ready: %w", err)
+	}
+	return onnxProvider, nil
 }
 
 func onnxProviderReady(provider *ONNXMiniLMProvider) error {

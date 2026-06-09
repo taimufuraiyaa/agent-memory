@@ -49,17 +49,40 @@ func TestInsertAndListBenchmarkRuns(t *testing.T) {
 		OffReturnedTokens: 0,
 		OffBaselineTokens: 0,
 		OffSavedTokens:    0,
+		TaskSuccessRate:   0.7,
+		OffTaskSuccessRate: 0.2,
+		TaskSuccessDelta:  0.5,
+		AnswerFactCoverage: 0.8,
+		OffAnswerFactCoverage: 0.25,
+		AnswerFactCoverageDelta: 0.55,
+		AnswerCompleteness: 0.65,
+		OffAnswerCompleteness: 0.1,
+		AnswerCompletenessDelta: 0.55,
+		AvgOnRuntimeMs:    900,
+		AvgOffRuntimeMs:   1500,
+		RuntimeDeltaMs:    600,
+		AvgOnInvestigationEffort: 3,
+		AvgOffInvestigationEffort: 5,
+		InvestigationEffortDelta: 2,
+		ContinuationScore: 0.48,
+		ContinuationVerdict: "GOOD BENEFIT",
 		GeneratorManifest: map[string]any{"test_case_count": 10000},
 		RunManifest:       map[string]any{"run_id": "run-001"},
 		Clusters: []BenchmarkClusterSummary{
 			{
-				ClusterID:       "retrieval-engine",
-				ClusterTitle:    "Retrieval Engine",
-				Cases:           400,
-				Precision:       0.7,
-				CombinedScore:   0.68,
-				TokenEfficiency: 0.4,
-				Verdict:         "GOOD BENEFIT",
+				ClusterID:             "api_server",
+				ClusterTitle:          "API Server",
+				Cases:                 400,
+				TaskSuccessRate:       0.75,
+				TaskSuccessDelta:      0.5,
+				AnswerFactCoverage:    0.8,
+				AnswerCompleteness:    0.7,
+				ContinuationScore:     0.52,
+				ContinuationVerdict:   "GOOD BENEFIT",
+				Precision:             0.7,
+				CombinedScore:         0.68,
+				TokenEfficiency:       0.4,
+				Verdict:               "GOOD BENEFIT",
 			},
 		},
 		CreatedAt: "2026-05-28T17:00:00Z",
@@ -78,8 +101,11 @@ func TestInsertAndListBenchmarkRuns(t *testing.T) {
 	if !stored.OffAllDisabled {
 		t.Fatalf("expected off_all_disabled to round-trip")
 	}
-	if len(stored.Clusters) != 1 || stored.Clusters[0].ClusterID != "retrieval-engine" {
+	if len(stored.Clusters) != 1 || stored.Clusters[0].ClusterID != "api_server" {
 		t.Fatalf("unexpected cluster payload: %+v", stored.Clusters)
+	}
+	if stored.ContinuationScore != input.ContinuationScore || stored.ContinuationVerdict != input.ContinuationVerdict {
+		t.Fatalf("unexpected continuation payload: %+v", stored)
 	}
 	if stored.GeneratorManifest["test_case_count"] != float64(10000) {
 		t.Fatalf("unexpected generator manifest: %+v", stored.GeneratorManifest)
@@ -94,5 +120,8 @@ func TestInsertAndListBenchmarkRuns(t *testing.T) {
 	}
 	if listed[0].CombinedScore != input.CombinedScore {
 		t.Fatalf("expected combined score %f, got %f", input.CombinedScore, listed[0].CombinedScore)
+	}
+	if listed[0].ContinuationScore != input.ContinuationScore {
+		t.Fatalf("expected continuation score %f, got %f", input.ContinuationScore, listed[0].ContinuationScore)
 	}
 }

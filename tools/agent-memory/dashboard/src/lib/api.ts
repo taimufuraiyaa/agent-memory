@@ -103,6 +103,49 @@ export type RetrievalReachMemory = {
   preview: string
 }
 
+export type SchedulerWorkspaceSummary = {
+  workspace: string
+  memory_count: number
+  last_activity_at?: string
+  last_scheduled_at?: string
+  last_completed_at?: string
+  last_result?: string
+  last_skip_reason?: string
+  last_duration_ms?: number
+  last_impacts?: number
+  last_error?: string
+  hygiene_overdue: boolean
+  eligible_daily: boolean
+  current_skip_reason?: string
+  run_in_progress: boolean
+}
+
+export type SchedulerRunHistory = {
+  id: string
+  workspace: string
+  started_at: string
+  completed_at?: string
+  trigger: string
+  result: string
+  skip_reason?: string
+  duration_ms: number
+  decay_updated: number
+  consolidated: number
+  conflicts_found: number
+  evicted: number
+  promoted: number
+  demoted: number
+  error?: string
+}
+
+export type SchedulerSummary = {
+  enabled: boolean
+  started_at?: string
+  last_tick_at?: string
+  next_tick_at?: string
+  workspace?: SchedulerWorkspaceSummary
+}
+
 export type DashboardStats = {
   workspace: string
   memory_count: number
@@ -136,6 +179,7 @@ export type DashboardStats = {
   overall_token_savings_percent?: number
   recall_token_savings_percent?: number
   token_savings_percent: number
+  scheduler?: SchedulerSummary
 }
 
 export type SessionEntry = {
@@ -222,6 +266,23 @@ export type BenchmarkClusterSummary = {
   cluster_id: string
   cluster_title: string
   cases: number
+  task_success_rate: number
+  off_task_success_rate: number
+  task_success_delta: number
+  answer_fact_coverage: number
+  off_answer_fact_coverage: number
+  answer_fact_coverage_delta: number
+  answer_completeness: number
+  off_answer_completeness: number
+  answer_completeness_delta: number
+  avg_on_runtime_ms: number
+  avg_off_runtime_ms: number
+  runtime_delta_ms: number
+  avg_on_investigation_effort: number
+  avg_off_investigation_effort: number
+  investigation_effort_delta: number
+  continuation_score: number
+  continuation_verdict: string
   precision: number
   recall: number
   gold_recall: number
@@ -274,6 +335,23 @@ export type BenchmarkRun = {
   off_returned_tokens: number
   off_baseline_tokens: number
   off_saved_tokens: number
+  task_success_rate: number
+  off_task_success_rate: number
+  task_success_delta: number
+  answer_fact_coverage: number
+  off_answer_fact_coverage: number
+  answer_fact_coverage_delta: number
+  answer_completeness: number
+  off_answer_completeness: number
+  answer_completeness_delta: number
+  avg_on_runtime_ms: number
+  avg_off_runtime_ms: number
+  runtime_delta_ms: number
+  avg_on_investigation_effort: number
+  avg_off_investigation_effort: number
+  investigation_effort_delta: number
+  continuation_score: number
+  continuation_verdict: string
   generator_manifest?: Record<string, unknown>
   run_manifest?: Record<string, unknown>
   clusters: BenchmarkClusterSummary[]
@@ -321,6 +399,13 @@ export function listProjects(): Promise<{ projects: ProjectListItem[] }> {
 export function getStats(workspace?: string): Promise<DashboardStats> {
   const qs = workspace ? `?workspace=${encodeURIComponent(workspace)}` : ''
   return api(`/api/v1/stats${qs}`, { method: 'GET' })
+}
+
+export function listSchedulerHistory(input: { workspace: string; limit?: number }): Promise<{ workspace: string; limit: number; history: SchedulerRunHistory[] }> {
+  const qs = new URLSearchParams()
+  qs.set('workspace', input.workspace)
+  if (typeof input.limit === 'number') qs.set('limit', String(input.limit))
+  return api(`/api/v1/scheduler/history?${qs.toString()}`, { method: 'GET' })
 }
 
 export function listSessions(input: { workspace: string; limit?: number }): Promise<{ workspace: string; limit: number; sessions: SessionEntry[] }> {

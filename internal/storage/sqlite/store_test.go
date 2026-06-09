@@ -187,6 +187,91 @@ func TestMarkAccessedDoesNotRefreshUpdatedAt(t *testing.T) {
 	}
 }
 
+func TestWorkspaceActivitySummaryAndSchedulerRetention(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "scheduler.db")
+	ctx := context.Background()
+
+	store, err := Open(ctx, dbPath)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	entry := &core.MemoryEntry{
+		ID:          "scheduler-memory",
+		Type:        core.SemanticMemory,
+		Content:     "scheduler status uses lightweight workspace activity",
+		Workspace:   "ws",
+		Source:      core.MemorySource{Type: core.SourceAgentObservation},
+		Confidence:  0.9,
+		StorageTier: core.TierVector,
+	}
+	if err := store.UpsertMemory(ctx, entry); err != nil {
+		t.Fatalf("upsert: %v", err)
+	}
+	accessedAt := time.Date(2026, 6, 8, 10, 30, 0, 0, time.UTC)
+	if err := store.MarkAccessed(ctx, []string{entry.ID}, accessedAt); err != nil {
+		t.Fatalf("mark accessed: %v", err)
+	}
+
+	summary, err := store.GetWorkspaceActivitySummary(ctx, "ws")
+	if err != nil {
+		t.Fatalf("summary: %v", err)
+	}
+	if summary.MemoryCount != 1 {
+		t.Fatalf("expected 1 memory, got %+v", summary)
+	}
+	if !summary.LastAccessedAt.Equal(accessedAt) {
+		t.Fatalf("expected last accessed %s, got %s", accessedAt, summary.LastAccessedAt)
+	}
+
+	completedAt := time.Date(2026, 6, 8, 11, 0, 0, 0, time.UTC)
+	if err := store.UpsertSchedulerWorkspaceState(ctx, SchedulerWorkspaceState{
+		Workspace:       "ws",
+		LastScheduledAt: completedAt.Add(-2 * time.Minute),
+		LastCompletedAt: completedAt,
+		LastResult:      "completed",
+		LastDurationMS:  1234,
+		UpdatedAt:       completedAt,
+	}); err != nil {
+		t.Fatalf("upsert scheduler state: %v", err)
+	}
+	state, err := store.GetSchedulerWorkspaceState(ctx, "ws")
+	if err != nil {
+		t.Fatalf("get scheduler state: %v", err)
+	}
+	if state == nil || state.LastResult != "completed" || !state.LastCompletedAt.Equal(completedAt) {
+		t.Fatalf("unexpected scheduler state: %+v", state)
+	}
+
+	for i := 0; i < 35; i++ {
+		started := completedAt.Add(time.Duration(i) * time.Minute)
+		if err := store.InsertSchedulerRunRecord(ctx, SchedulerRunRecord{
+			ID:          fmt.Sprintf("run-%02d", i),
+			Workspace:   "ws",
+			StartedAt:   started,
+			CompletedAt: started.Add(2 * time.Second),
+			Trigger:     "daily_tick",
+			Result:      "completed",
+			DurationMS:  2000,
+		}, 30); err != nil {
+			t.Fatalf("insert scheduler run %d: %v", i, err)
+		}
+	}
+	runs, err := store.ListSchedulerRunHistory(ctx, "ws", 100)
+	if err != nil {
+		t.Fatalf("list scheduler run history: %v", err)
+	}
+	if len(runs) != 30 {
+		t.Fatalf("expected 30 retained scheduler runs, got %d", len(runs))
+	}
+	if runs[0].ID != "run-34" || runs[len(runs)-1].ID != "run-05" {
+		t.Fatalf("unexpected retained run window: first=%s last=%s", runs[0].ID, runs[len(runs)-1].ID)
+	}
+}
+
 func TestApplyRetrievalFeedbackAndReconsolidation(t *testing.T) {
 	t.Parallel()
 
