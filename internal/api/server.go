@@ -1961,6 +1961,11 @@ func NewMux(svc *Service) *http.ServeMux {
 		})
 	})
 
+	// Visualization endpoints
+	mux.HandleFunc("/api/v1/visualizations/graph", handleMemoryGraph(svc))
+	mux.HandleFunc("/api/v1/visualizations/decay-timeline", handleDecayTimeline(svc))
+	mux.HandleFunc("/api/v1/visualizations/entity-network", handleEntityNetwork(svc))
+
 	// Serve embedded dashboard assets
 	mux.Handle("/dashboard/", serveDashboard())
 

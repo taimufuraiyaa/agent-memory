@@ -20,6 +20,7 @@ coverage.out
 coverage.html
 coverage/
 .coverage/
+.profiles/
 
 # Binaries
 *.exe

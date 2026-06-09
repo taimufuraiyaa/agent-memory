@@ -1,7 +1,7 @@
 APP := agent-memory
 BIN_DIR := bin
 
-.PHONY: help build test lint clean setup test-verbose test-coverage bench fmt vet clean-all install-dev build-dashboard embed-dashboard build-with-dashboard
+.PHONY: help build test lint clean setup test-verbose test-coverage bench bench-mem bench-cpu fmt vet clean-all install-dev build-dashboard embed-dashboard build-with-dashboard
 
 .DEFAULT_GOAL := help
 
@@ -63,7 +63,19 @@ test-coverage: ## Generate test coverage report
 	@echo "Coverage report generated: coverage.html"
 
 bench: ## Run benchmarks
-	go test -bench=. -benchmem ./...
+	go test -bench=. -benchmem -benchtime=100ms ./...
+
+bench-mem: ## Run benchmarks with memory profiling
+	@mkdir -p .profiles
+	go test -bench=. -benchmem -memprofile=.profiles/mem.prof ./internal/engine
+	@echo "Memory profile saved to .profiles/mem.prof"
+	@echo "View with: go tool pprof .profiles/mem.prof"
+
+bench-cpu: ## Run benchmarks with CPU profiling
+	@mkdir -p .profiles
+	go test -bench=. -benchmem -cpuprofile=.profiles/cpu.prof ./internal/engine
+	@echo "CPU profile saved to .profiles/cpu.prof"
+	@echo "View with: go tool pprof .profiles/cpu.prof"
 
 fmt: ## Format Go code
 	gofmt -s -w .
