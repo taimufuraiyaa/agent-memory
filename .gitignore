@@ -22,6 +22,10 @@ coverage/
 .coverage/
 .profiles/
 
+# Benchmark results (can be large)
+benchmark/results/*/
+!benchmark/results/.gitkeep
+
 # Binaries
 *.exe
 *.exe~
