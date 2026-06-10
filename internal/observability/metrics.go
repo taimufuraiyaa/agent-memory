@@ -46,6 +46,11 @@ type MetricsRegistry struct {
 	MemoryAccessCount *prometheus.CounterVec
 	DecayScoreAvg     *prometheus.GaugeVec
 	
+	// Cache metrics
+	CacheHits   *prometheus.CounterVec
+	CacheMisses *prometheus.CounterVec
+	CacheSize   *prometheus.GaugeVec
+
 	// API metrics
 	HTTPRequestsTotal    *prometheus.CounterVec
 	HTTPRequestDuration  *prometheus.HistogramVec
@@ -287,6 +292,29 @@ func newMetricsRegistry() *MetricsRegistry {
 				Name: "agent_memory_http_requests_in_flight",
 				Help: "Current number of HTTP requests being processed",
 			}),
+
+		// Cache metrics
+		CacheHits: promauto.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "agent_memory_cache_hits_total",
+				Help: "Total number of query cache hits",
+			},
+			[]string{"cache_type"},
+		),
+		CacheMisses: promauto.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "agent_memory_cache_misses_total",
+				Help: "Total number of query cache misses",
+			},
+			[]string{"cache_type"},
+		),
+		CacheSize: promauto.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Name: "agent_memory_cache_size_entries",
+				Help: "Current number of entries in query cache",
+			},
+			[]string{"cache_type"},
+		),
 	}
 }
 

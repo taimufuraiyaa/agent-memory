@@ -78,6 +78,134 @@ func TestReembedCommandBackfillsVectorsWithProvider(t *testing.T) {
 	}
 }
 
+func TestReembedCommandDryRun(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "reembed.db")
+	store, err := sqlite.Open(context.Background(), dbPath)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	if err := store.UpsertMemory(context.Background(), &core.MemoryEntry{
+		ID:          "m1",
+		Type:        core.SemanticMemory,
+		Content:     "orders service emits order.created event",
+		Workspace:   "ws",
+		Source:      core.MemorySource{Type: core.SourceUserInput},
+		Confidence:  0.9,
+		StorageTier: core.TierVector,
+	}); err != nil {
+		t.Fatalf("upsert memory: %v", err)
+	}
+
+	modelDir := filepath.Join(t.TempDir(), "model")
+	t.Setenv("AGENT_MEMORY_TEST_FAKE_ONNX_RUNTIME", "1")
+	writeReembedMiniLMTestModel(t, modelDir)
+
+	cmd := NewRootCommand()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{
+		"re-embed",
+		"--db", dbPath,
+		"--workspace", "ws",
+		"--model-dir", modelDir,
+		"--format", "json",
+		"--dry-run",
+	})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("re-embed execute: %v output=%s", err, out.String())
+	}
+
+	var env map[string]any
+	if err := json.Unmarshal(out.Bytes(), &env); err != nil {
+		t.Fatalf("decode envelope: %v raw=%q", err, out.String())
+	}
+	data, _ := env["data"].(map[string]any)
+	if reembedded, _ := data["re_embedded"].(float64); int(reembedded) != 1 {
+		t.Fatalf("expected one re-embedded reported, got %+v", data)
+	}
+
+	// Verify no vector is actually in the db
+	rows, err := store.ListMemoryVectorRowsByWorkspace(context.Background(), "ws")
+	if err != nil {
+		t.Fatalf("list vector rows: %v", err)
+	}
+	if len(rows) != 0 {
+		t.Fatalf("expected zero vector rows (dry-run), got %+v", rows)
+	}
+}
+
+func TestReembedCommandSkipMatching(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "reembed.db")
+	store, err := sqlite.Open(context.Background(), dbPath)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	if err := store.UpsertMemory(context.Background(), &core.MemoryEntry{
+		ID:          "m1",
+		Type:        core.SemanticMemory,
+		Content:     "orders service emits order.created event",
+		Workspace:   "ws",
+		Source:      core.MemorySource{Type: core.SourceUserInput},
+		Confidence:  0.9,
+		StorageTier: core.TierVector,
+	}); err != nil {
+		t.Fatalf("upsert memory: %v", err)
+	}
+
+	modelDir := filepath.Join(t.TempDir(), "model")
+	t.Setenv("AGENT_MEMORY_TEST_FAKE_ONNX_RUNTIME", "1")
+	writeReembedMiniLMTestModel(t, modelDir)
+
+	// Run 1: backfills the vector
+	cmd1 := NewRootCommand()
+	var out1 bytes.Buffer
+	cmd1.SetOut(&out1)
+	cmd1.SetErr(&out1)
+	cmd1.SetArgs([]string{
+		"re-embed",
+		"--db", dbPath,
+		"--workspace", "ws",
+		"--model-dir", modelDir,
+		"--format", "json",
+	})
+	if err := cmd1.Execute(); err != nil {
+		t.Fatalf("re-embed execute 1: %v", err)
+	}
+
+	// Run 2: should skip since it already matches
+	cmd2 := NewRootCommand()
+	var out2 bytes.Buffer
+	cmd2.SetOut(&out2)
+	cmd2.SetErr(&out2)
+	cmd2.SetArgs([]string{
+		"re-embed",
+		"--db", dbPath,
+		"--workspace", "ws",
+		"--model-dir", modelDir,
+		"--format", "json",
+	})
+	if err := cmd2.Execute(); err != nil {
+		t.Fatalf("re-embed execute 2: %v", err)
+	}
+
+	var env2 map[string]any
+	if err := json.Unmarshal(out2.Bytes(), &env2); err != nil {
+		t.Fatalf("decode envelope 2: %v", err)
+	}
+	data2, _ := env2["data"].(map[string]any)
+	if reembedded, _ := data2["re_embedded"].(float64); int(reembedded) != 0 {
+		t.Fatalf("expected 0 re-embedded (already matching), got %v", reembedded)
+	}
+	if skipped, _ := data2["skipped"].(float64); int(skipped) != 1 {
+		t.Fatalf("expected 1 skipped, got %v", skipped)
+	}
+}
+
 func writeReembedMiniLMTestModel(t *testing.T, modelDir string) {
 	t.Helper()
 	if err := os.MkdirAll(modelDir, 0o755); err != nil {

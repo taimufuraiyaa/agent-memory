@@ -9,6 +9,7 @@ import (
 
 	"github.com/time/timebooks/agent-memory/internal/config"
 	"github.com/time/timebooks/agent-memory/internal/core"
+	"github.com/time/timebooks/agent-memory/internal/observability"
 )
 
 // RetrievalMode alters signal weighting depending on caller intent.
@@ -148,7 +149,38 @@ func NewRetrievalEngineWithCache(vector *VectorSearcher, cacheConfig QueryCacheC
 
 // Retrieve computes mode-aware weighted ranking with explain output.
 // Results are cached to reduce latency for repeated queries.
-func (e *RetrievalEngine) Retrieve(ctx context.Context, opt RetrievalOptions) (*RetrievalResult, error) {
+func (e *RetrievalEngine) Retrieve(ctx context.Context, opt RetrievalOptions) (res *RetrievalResult, retrieveErr error) {
+	spanName := "agent-memory.search"
+	if opt.Mode == ModeRecall {
+		spanName = "agent-memory.recall"
+	}
+	ctx, span := observability.StartSpan(ctx, spanName)
+	defer span.End()
+
+	observability.SetSpanAttributes(ctx,
+		observability.WorkspaceAttr(opt.Workspace),
+		observability.QueryAttr(opt.Query),
+		observability.TopKAttr(opt.TopK),
+		observability.ModeAttr(string(opt.Mode)),
+	)
+
+	timer := observability.NewTimer()
+	defer func() {
+		metrics := observability.GetRegistry()
+		status := "success"
+		if retrieveErr != nil {
+			status = "error"
+			errType := "runtime_error"
+			metrics.RetrievalErrors.WithLabelValues(opt.Workspace, string(opt.Mode), errType).Inc()
+			observability.RecordSpanError(ctx, retrieveErr)
+		} else if res != nil {
+			observability.SetSpanAttributes(ctx, observability.HitCountAttr(len(res.Hits)))
+			metrics.RetrievalHits.WithLabelValues(opt.Workspace, string(opt.Mode)).Observe(float64(len(res.Hits)))
+		}
+		metrics.RetrievalTotal.WithLabelValues(opt.Workspace, string(opt.Mode), status).Inc()
+		timer.ObserveDuration(metrics.RetrievalDuration.WithLabelValues(opt.Workspace, string(opt.Mode)))
+	}()
+
 	// Check result cache first
 	if cachedHits := e.cache.GetResults(ctx, opt); cachedHits != nil {
 		weights := modeWeights(opt.Mode)
@@ -189,8 +221,6 @@ func (e *RetrievalEngine) Retrieve(ctx context.Context, opt RetrievalOptions) (*
 		if !matchRetrievalFilters(h.Memory, opt.Filters) {
 			continue
 		}
-		// Enforce the semantic floor before weighted reranking so recency and
-		// other secondary signals cannot rescue low-semantic candidates.
 		if h.Score < policy.MinSemanticScore {
 			continue
 		}

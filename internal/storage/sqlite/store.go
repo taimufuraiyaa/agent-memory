@@ -6,12 +6,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
 
 	"github.com/time/timebooks/agent-memory/internal/core"
+	"github.com/time/timebooks/agent-memory/internal/observability"
 )
 
 // Store provides SQLite-backed persistence for memory entries.
@@ -86,6 +88,18 @@ func (s *Store) Close() error {
 		return nil
 	}
 	return s.db.Close()
+}
+
+// slowQueryThreshold is the latency above which we log a warning and record a metric.
+const slowQueryThreshold = 100 * time.Millisecond
+
+// logSlowQuery records Prometheus storage duration and warns when a query exceeds the threshold.
+func logSlowQuery(operation, workspace string, d time.Duration) {
+	metrics := observability.GetRegistry()
+	metrics.StorageDuration.WithLabelValues(workspace, operation).Observe(d.Seconds())
+	if d >= slowQueryThreshold {
+		log.Printf("[agent-memory] slow query detected: operation=%s workspace=%s duration=%s", operation, workspace, d.Round(time.Millisecond))
+	}
 }
 
 // Migrate applies schema changes idempotently.
@@ -515,6 +529,7 @@ func (s *Store) InsertMemoryByHash(ctx context.Context, m *core.MemoryEntry, con
 INSERT OR IGNORE INTO memories (id, type, content, diagram_lang, diagram_code, workspace, content_hash, source_json, entities_json, tags_json, confidence, storage_tier, pinned, superseded_by, access_count, last_accessed, decay_score, salience_score, suppression_score, useful_count, ignored_count, rejected_count, harmful_count, last_helpful_at, last_rejected_at, suppression_until, familiarity_band_last, outcome_json, created_at, updated_at)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
+	_startInsert := time.Now()
 	res, err := s.db.ExecContext(
 		ctx,
 		query,
@@ -549,6 +564,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 
 		m.CreatedAt.Format(time.RFC3339Nano),
 		m.UpdatedAt.Format(time.RFC3339Nano),
 	)
+	logSlowQuery("insert_memory", m.Workspace, time.Since(_startInsert))
 	if err != nil {
 		return fmt.Errorf("insert memory: %w", err)
 	}
@@ -762,11 +778,13 @@ func (s *Store) GetMemoryByHash(ctx context.Context, workspace, contentHash stri
 
 // ListMemoriesByWorkspace returns all memories in a workspace ordered by recency.
 func (s *Store) ListMemoriesByWorkspace(ctx context.Context, workspace string) ([]core.MemoryEntry, error) {
+	_startList := time.Now()
 	rows, err := s.db.QueryContext(ctx, `
 SELECT id, type, content, diagram_lang, diagram_code, workspace, source_json, entities_json, tags_json, confidence, storage_tier, pinned, superseded_by, access_count, last_accessed, decay_score, salience_score, suppression_score, useful_count, ignored_count, rejected_count, harmful_count, last_helpful_at, last_rejected_at, suppression_until, familiarity_band_last, outcome_json, created_at, updated_at
 FROM memories
 WHERE workspace = ?
 ORDER BY updated_at DESC`, workspace)
+	logSlowQuery("list_memories_by_workspace", workspace, time.Since(_startList))
 	if err != nil {
 		return nil, err
 	}

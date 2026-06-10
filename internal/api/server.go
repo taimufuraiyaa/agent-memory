@@ -19,9 +19,12 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+
 	"github.com/time/timebooks/agent-memory/internal/core"
 	"github.com/time/timebooks/agent-memory/internal/embeddings"
 	"github.com/time/timebooks/agent-memory/internal/engine"
+	"github.com/time/timebooks/agent-memory/internal/observability"
 	"github.com/time/timebooks/agent-memory/internal/storage/sqlite"
 	"github.com/time/timebooks/agent-memory/internal/workspace"
 )
@@ -136,10 +139,77 @@ func trimRetrievalHits(hits []engine.RetrievalHit, limit int) []engine.Retrieval
 	return hits[:limit]
 }
 
+// instrumentedResponseWriter wraps http.ResponseWriter to capture status code and bytes written.
+type instrumentedResponseWriter struct {
+	http.ResponseWriter
+	statusCode   int
+	bytesWritten int
+}
+
+func (rw *instrumentedResponseWriter) WriteHeader(code int) {
+	rw.statusCode = code
+	rw.ResponseWriter.WriteHeader(code)
+}
+
+func (rw *instrumentedResponseWriter) Write(b []byte) (int, error) {
+	n, err := rw.ResponseWriter.Write(b)
+	rw.bytesWritten += n
+	return n, err
+}
+
+// NewMux returns the HTTP ServeMux with all route handlers registered.
+// Wrap the returned mux with InstrumentedHandler to add Prometheus metrics.
 func NewMux(svc *Service) *http.ServeMux {
 	mux := http.NewServeMux()
+	// Prometheus metrics scrape endpoint
+	mux.Handle("/metrics", promhttp.Handler())
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		writeOK(w, http.StatusOK, map[string]any{"status": "ok"})
+		status := "ok"
+		var memoryCount int
+		var lastLifecycleRun string
+		var dbSizeMB float64
+
+		ws := svc.Workspace
+		if ws == "" {
+			ws = "agent-memory" // fallback if empty
+		}
+
+		assets, err := svc.resolve(r.Context(), ws)
+		if err == nil && assets.Store != nil {
+			if summary, err := assets.Store.GetWorkspaceActivitySummary(r.Context(), ws); err == nil {
+				memoryCount = summary.MemoryCount
+			}
+			if state, err := assets.Store.GetSchedulerWorkspaceState(r.Context(), ws); err == nil && state != nil && !state.LastCompletedAt.IsZero() {
+				lastLifecycleRun = state.LastCompletedAt.Format(time.RFC3339)
+			}
+		}
+
+		dbPath := filepath.Join(svc.BaseDir, ws+".db")
+		if fi, err := os.Stat(dbPath); err == nil {
+			dbSizeMB = float64(fi.Size()) / (1024 * 1024)
+		}
+
+		providerName := "unknown"
+		providerVersion := "unknown"
+		onnxAvailable := false
+		if svc.EmbeddingProvider != nil {
+			providerName = svc.EmbeddingProvider.Name()
+			providerVersion = svc.EmbeddingProvider.ModelVersion()
+			onnxAvailable = (providerName == "onnx-minilm-l6-v2")
+		}
+
+		// Round dbSizeMB to two decimal places
+		dbSizeMB = math.Round(dbSizeMB*100) / 100
+
+		writeOK(w, http.StatusOK, map[string]any{
+			"status":                  status,
+			"db_size_mb":              dbSizeMB,
+			"memory_count":            memoryCount,
+			"last_lifecycle_run":      lastLifecycleRun,
+			"embedding_provider":      providerName,
+			"embedding_model_version": providerVersion,
+			"onnx_runtime_available":   onnxAvailable,
+		})
 	})
 	mux.HandleFunc("/api/v1/scheduler/status", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -1979,6 +2049,35 @@ func NewMux(svc *Service) *http.ServeMux {
 	mux.Handle("/dashboard/", serveDashboard())
 
 	return mux
+}
+
+// InstrumentedHandler wraps the given handler with Prometheus HTTP instrumentation
+// middleware that records request count, duration, size, and in-flight gauges.
+func InstrumentedHandler(h http.Handler) http.Handler {
+	metrics := observability.GetRegistry()
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		metrics.HTTPRequestsInFlight.Inc()
+		defer metrics.HTTPRequestsInFlight.Dec()
+
+		irw := &instrumentedResponseWriter{ResponseWriter: w, statusCode: http.StatusOK}
+		timer := observability.NewTimer()
+
+		// Record request size
+		if r.ContentLength > 0 {
+			metrics.HTTPRequestSize.WithLabelValues(r.Method, r.URL.Path).Observe(float64(r.ContentLength))
+		}
+
+		h.ServeHTTP(irw, r)
+
+		duration := timer.Duration()
+		statusStr := fmt.Sprintf("%d", irw.statusCode)
+		metrics.HTTPRequestsTotal.WithLabelValues(r.Method, r.URL.Path, statusStr).Inc()
+		timer.ObserveDuration(metrics.HTTPRequestDuration.WithLabelValues(r.Method, r.URL.Path))
+		if irw.bytesWritten > 0 {
+			metrics.HTTPResponseSize.WithLabelValues(r.Method, r.URL.Path).Observe(float64(irw.bytesWritten))
+		}
+		_ = duration
+	})
 }
 
 func schedulerSummaryForWorkspace(status *SchedulerStatus, workspace string) map[string]any {

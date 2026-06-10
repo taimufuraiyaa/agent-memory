@@ -780,6 +780,7 @@ func TestServerSearchMinSemanticOverrideAffectsResults(t *testing.T) {
 	})
 	relaxedResults, _ := relaxed["results"].([]any)
 	if len(relaxedResults) == 0 {
+		t.Logf("relaxed search response: %+v", relaxed)
 		t.Fatalf("expected explicit zero semantic floor override to return results")
 	}
 }

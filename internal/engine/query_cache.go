@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"sync"
 	"time"
+
+	"github.com/time/timebooks/agent-memory/internal/observability"
 )
 
 // QueryCache implements TTL-based caching for query embeddings and retrieval results.
@@ -71,22 +73,25 @@ func (c *QueryCache) GetEmbedding(ctx context.Context, queryText string) []float
 	if !c.enabled {
 		return nil
 	}
-	
+
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	
+
 	key := hashQueryText(queryText)
 	entry, ok := c.embeddingCache.get(key)
 	if !ok {
+		observability.GetRegistry().CacheMisses.WithLabelValues("embedding").Inc()
 		return nil
 	}
-	
+
 	cached := entry.(CachedEmbedding)
 	if time.Now().After(cached.ExpiresAt) {
 		// Expired - will be cleaned up on next write
+		observability.GetRegistry().CacheMisses.WithLabelValues("embedding").Inc()
 		return nil
 	}
-	
+
+	observability.GetRegistry().CacheHits.WithLabelValues("embedding").Inc()
 	return cached.Vector
 }
 
@@ -95,10 +100,10 @@ func (c *QueryCache) SetEmbedding(ctx context.Context, queryText string, vector 
 	if !c.enabled {
 		return
 	}
-	
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	
+
 	key := hashQueryText(queryText)
 	now := time.Now()
 	cached := CachedEmbedding{
@@ -107,6 +112,7 @@ func (c *QueryCache) SetEmbedding(ctx context.Context, queryText string, vector 
 		ExpiresAt: now.Add(c.ttl),
 	}
 	c.embeddingCache.set(key, cached)
+	observability.GetRegistry().CacheSize.WithLabelValues("embedding").Set(float64(c.embeddingCache.size()))
 }
 
 // GetResults retrieves cached retrieval results.
@@ -115,22 +121,25 @@ func (c *QueryCache) GetResults(ctx context.Context, opt RetrievalOptions) []Ret
 	if !c.enabled {
 		return nil
 	}
-	
+
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	
+
 	key := hashRetrievalOptions(opt)
 	entry, ok := c.resultCache.get(key)
 	if !ok {
+		observability.GetRegistry().CacheMisses.WithLabelValues("result").Inc()
 		return nil
 	}
-	
+
 	cached := entry.(CachedResult)
 	if time.Now().After(cached.ExpiresAt) {
 		// Expired - will be cleaned up on next write
+		observability.GetRegistry().CacheMisses.WithLabelValues("result").Inc()
 		return nil
 	}
-	
+
+	observability.GetRegistry().CacheHits.WithLabelValues("result").Inc()
 	return cached.Hits
 }
 
@@ -139,10 +148,10 @@ func (c *QueryCache) SetResults(ctx context.Context, opt RetrievalOptions, hits 
 	if !c.enabled {
 		return
 	}
-	
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	
+
 	key := hashRetrievalOptions(opt)
 	now := time.Now()
 	cached := CachedResult{
@@ -151,6 +160,7 @@ func (c *QueryCache) SetResults(ctx context.Context, opt RetrievalOptions, hits 
 		ExpiresAt: now.Add(c.ttl),
 	}
 	c.resultCache.set(key, cached)
+	observability.GetRegistry().CacheSize.WithLabelValues("result").Set(float64(c.resultCache.size()))
 }
 
 // InvalidateWorkspace removes all cache entries for a workspace.
@@ -225,14 +235,64 @@ func hashQueryText(text string) string {
 
 // hashRetrievalOptions creates a deterministic hash of retrieval parameters.
 func hashRetrievalOptions(opt RetrievalOptions) string {
-	// Create a deterministic string representation of options
-	key := fmt.Sprintf("workspace=%s|query=%s|topk=%d|mode=%s|types=%v|tiers=%v",
+	var outcome any
+	if opt.Filters.OutcomeResult != nil {
+		outcome = *opt.Filters.OutcomeResult
+	}
+	var minConf, minDecay float64
+	if opt.Filters.MinConfidence != nil {
+		minConf = *opt.Filters.MinConfidence
+	}
+	if opt.Filters.MinDecayScore != nil {
+		minDecay = *opt.Filters.MinDecayScore
+	}
+	var dateFrom, dateTo string
+	if opt.Filters.DateFrom != nil {
+		dateFrom = opt.Filters.DateFrom.Format(time.RFC3339)
+	}
+	if opt.Filters.DateTo != nil {
+		dateTo = opt.Filters.DateTo.Format(time.RFC3339)
+	}
+
+	var minSem, minTotal, relCutoff, weakSem, weakTotal, weakCutoff float64
+	if opt.Policy.MinSemanticScore != nil {
+		minSem = *opt.Policy.MinSemanticScore
+	}
+	if opt.Policy.MinTotalScore != nil {
+		minTotal = *opt.Policy.MinTotalScore
+	}
+	if opt.Policy.RelativeScoreCutoff != nil {
+		relCutoff = *opt.Policy.RelativeScoreCutoff
+	}
+	if opt.Policy.WeakSemanticScore != nil {
+		weakSem = *opt.Policy.WeakSemanticScore
+	}
+	if opt.Policy.WeakTotalScore != nil {
+		weakTotal = *opt.Policy.WeakTotalScore
+	}
+	if opt.Policy.WeakRelativeCutoff != nil {
+		weakCutoff = *opt.Policy.WeakRelativeCutoff
+	}
+
+	key := fmt.Sprintf("ws=%s|q=%s|k=%d|m=%s|types=%v|tiers=%v|outcome=%v|conf=%.4f|decay=%.4f|entities=%v|from=%s|to=%s|min_sem=%.4f|min_total=%.4f|rel=%.4f|w_sem=%.4f|w_total=%.4f|w_rel=%.4f",
 		opt.Workspace,
 		opt.Query,
 		opt.TopK,
 		opt.Mode,
 		opt.Filters.Types,
 		opt.Filters.Tiers,
+		outcome,
+		minConf,
+		minDecay,
+		opt.Filters.Entities,
+		dateFrom,
+		dateTo,
+		minSem,
+		minTotal,
+		relCutoff,
+		weakSem,
+		weakTotal,
+		weakCutoff,
 	)
 	h := sha256.Sum256([]byte(key))
 	return hex.EncodeToString(h[:])

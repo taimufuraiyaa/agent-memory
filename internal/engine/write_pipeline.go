@@ -9,9 +9,11 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/attribute"
 
 	"github.com/time/timebooks/agent-memory/internal/core"
 	"github.com/time/timebooks/agent-memory/internal/embeddings"
+	"github.com/time/timebooks/agent-memory/internal/observability"
 	"github.com/time/timebooks/agent-memory/internal/storage/markdown"
 	"github.com/time/timebooks/agent-memory/internal/storage/sqlite"
 	"github.com/time/timebooks/agent-memory/internal/validation"
@@ -135,7 +137,57 @@ func NewWritePipelineWithMarkdown(store *sqlite.Store, markdownFilePath string) 
 }
 
 // Write executes stages: security -> extract -> dedup -> route/store.
-func (p *WritePipeline) Write(ctx context.Context, in WriteInput) (*WriteResult, error) {
+func (p *WritePipeline) Write(ctx context.Context, in WriteInput) (res *WriteResult, writeErr error) {
+	// Start trace span
+	ctx, span := observability.StartSpan(ctx, "agent-memory.write")
+	defer span.End()
+
+	// Initial span attributes
+	observability.SetSpanAttributes(ctx,
+		observability.WorkspaceAttr(in.Workspace),
+		observability.MemoryTypeAttr(string(in.Type)),
+		observability.OperationAttr("write"),
+	)
+
+	timer := observability.NewTimer()
+	defer func() {
+		metrics := observability.GetRegistry()
+		status := "success"
+		if writeErr != nil {
+			status = "error"
+			errType := "runtime_error"
+			errStr := writeErr.Error()
+			if strings.Contains(errStr, "invalid workspace") ||
+				strings.Contains(errStr, "invalid content") ||
+				strings.Contains(errStr, "invalid diagram") ||
+				strings.Contains(errStr, "required") ||
+				strings.Contains(errStr, "unsupported extract mode") {
+				errType = "validation_error"
+			} else if strings.Contains(errStr, "persist eager vector") {
+				errType = "embedding_error"
+			}
+			metrics.WriteErrors.WithLabelValues(in.Workspace, string(in.Type), errType).Inc()
+			observability.RecordSpanError(ctx, writeErr)
+		} else if res != nil {
+			if res.Rejected {
+				status = "rejected"
+				metrics.WriteErrors.WithLabelValues(in.Workspace, string(in.Type), "rejected").Inc()
+				observability.SetSpanAttributes(ctx, attribute.Bool("agent_memory.rejected", true))
+			} else {
+				if res.Deduplicated {
+					observability.SetSpanAttributes(ctx, attribute.Bool("agent_memory.deduplicated", true))
+				}
+				observability.SetSpanAttributes(ctx,
+					observability.MemoryIDAttr(res.ID),
+					observability.StorageTierAttr(string(res.StorageTier)),
+				)
+				metrics.WriteBytes.WithLabelValues(in.Workspace, string(in.Type)).Observe(float64(len(in.Content)))
+			}
+		}
+		metrics.WriteTotal.WithLabelValues(in.Workspace, string(in.Type), status).Inc()
+		timer.ObserveDuration(metrics.WriteDuration.WithLabelValues(in.Workspace, string(in.Type)))
+	}()
+
 	// Validate workspace name
 	if err := validation.ValidateWorkspaceName(in.Workspace); err != nil {
 		return nil, fmt.Errorf("invalid workspace: %w", err)
@@ -269,11 +321,20 @@ func (p *WritePipeline) Write(ctx context.Context, in WriteInput) (*WriteResult,
 	if p.embedder != nil {
 		text := memoryVectorText(*entry)
 		if strings.TrimSpace(text) != "" {
+			embedTimer := observability.NewTimer()
+			provider := p.embedder.Name()
 			vec, err := p.embedder.Embed(ctx, text)
+			metrics := observability.GetRegistry()
 			if err != nil {
+				metrics.EmbeddingTotal.WithLabelValues(provider, "error").Inc()
+				metrics.EmbeddingErrors.WithLabelValues(provider, "embed_failed").Inc()
 				_ = p.store.DeleteByIDs(ctx, []string{entry.ID})
 				return nil, fmt.Errorf("persist eager vector: embed memory %s: %w", entry.ID, err)
 			}
+			metrics.EmbeddingTotal.WithLabelValues(provider, "success").Inc()
+			embedTimer.ObserveDuration(metrics.EmbeddingDuration.WithLabelValues(provider))
+			metrics.EmbeddingBatchSize.WithLabelValues(provider).Observe(1.0)
+
 			if err := p.store.UpsertMemoryVector(ctx, entry.ID, entry.Workspace, p.embedder.Name(), p.embedder.ModelVersion(), vec); err != nil {
 				_ = p.store.DeleteByIDs(ctx, []string{entry.ID})
 				return nil, fmt.Errorf("persist eager vector: upsert memory %s: %w", entry.ID, err)

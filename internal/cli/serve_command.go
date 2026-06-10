@@ -222,6 +222,7 @@ func newServeCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "active embedding provider: %s (%s)\n", provider.Name(), provider.ModelVersion())
 			scheduler := newServeScheduler(cfg, provider, cmd.ErrOrStderr())
 			svc := &api.Service{
 				Workspace:         cfg.workspace,
@@ -231,7 +232,7 @@ func newServeCommand() *cobra.Command {
 			}
 			server := &http.Server{
 				Addr:    addr,
-				Handler: api.NewMux(svc),
+				Handler: api.InstrumentedHandler(api.NewMux(svc)),
 			}
 			ln, err := net.Listen("tcp", addr)
 			if err != nil {
