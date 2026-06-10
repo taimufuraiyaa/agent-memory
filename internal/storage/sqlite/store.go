@@ -93,12 +93,24 @@ func (s *Store) Close() error {
 // slowQueryThreshold is the latency above which we log a warning and record a metric.
 const slowQueryThreshold = 100 * time.Millisecond
 
-// logSlowQuery records Prometheus storage duration and warns when a query exceeds the threshold.
-func logSlowQuery(operation, workspace string, d time.Duration) {
+// logSlowQuery records Prometheus storage duration, warns on slow queries (>100ms), and updates connection/size metrics.
+func (s *Store) logSlowQuery(ctx context.Context, operation, workspace string, d time.Duration) {
 	metrics := observability.GetRegistry()
 	metrics.StorageDuration.WithLabelValues(workspace, operation).Observe(d.Seconds())
 	if d >= slowQueryThreshold {
 		log.Printf("[agent-memory] slow query detected: operation=%s workspace=%s duration=%s", operation, workspace, d.Round(time.Millisecond))
+	}
+
+	if s != nil && s.db != nil {
+		stats := s.db.Stats()
+		metrics.DBConnections.Set(float64(stats.OpenConnections))
+
+		var pageCount, pageSize int64
+		if err := s.db.QueryRowContext(ctx, "PRAGMA page_count").Scan(&pageCount); err == nil {
+			if err := s.db.QueryRowContext(ctx, "PRAGMA page_size").Scan(&pageSize); err == nil {
+				metrics.DBSize.WithLabelValues(workspace).Set(float64(pageCount * pageSize))
+			}
+		}
 	}
 }
 
@@ -564,7 +576,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 
 		m.CreatedAt.Format(time.RFC3339Nano),
 		m.UpdatedAt.Format(time.RFC3339Nano),
 	)
-	logSlowQuery("insert_memory", m.Workspace, time.Since(_startInsert))
+	s.logSlowQuery(ctx, "insert_memory", m.Workspace, time.Since(_startInsert))
 	if err != nil {
 		return fmt.Errorf("insert memory: %w", err)
 	}
@@ -784,10 +796,13 @@ SELECT id, type, content, diagram_lang, diagram_code, workspace, source_json, en
 FROM memories
 WHERE workspace = ?
 ORDER BY updated_at DESC`, workspace)
-	logSlowQuery("list_memories_by_workspace", workspace, time.Since(_startList))
 	if err != nil {
+		s.logSlowQuery(ctx, "list_memories_by_workspace", workspace, time.Since(_startList))
 		return nil, err
 	}
+	defer func() {
+		s.logSlowQuery(ctx, "list_memories_by_workspace", workspace, time.Since(_startList))
+	}()
 	defer func() { _ = rows.Close() }()
 
 	out := make([]core.MemoryEntry, 0)
