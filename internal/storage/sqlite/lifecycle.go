@@ -127,3 +127,32 @@ func (s *Store) CountTierTransitions(ctx context.Context, memoryID string) (int,
 	}
 	return n, nil
 }
+
+// ListWorkspaceRelations returns all graph edges within a workspace.
+func (s *Store) ListWorkspaceRelations(ctx context.Context, workspace string) ([]core.RelationEdge, error) {
+	rows, err := s.db.QueryContext(ctx, `
+SELECT r.source_id, r.target_id, r.type, r.weight, r.metadata_json
+FROM relations r
+JOIN memories m ON r.source_id = m.id
+WHERE m.workspace = ?`, workspace)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	out := make([]core.RelationEdge, 0)
+	for rows.Next() {
+		var edge core.RelationEdge
+		var typ string
+		var metaJSON string
+		if err := rows.Scan(&edge.SourceID, &edge.TargetID, &typ, &edge.Weight, &metaJSON); err != nil {
+			return nil, err
+		}
+		edge.Type = core.RelationType(typ)
+		if metaJSON != "" {
+			_ = json.Unmarshal([]byte(metaJSON), &edge.Metadata)
+		}
+		out = append(out, edge)
+	}
+	return out, rows.Err()
+}
+

@@ -17,6 +17,11 @@ type MetricsRegistry struct {
 	WriteErrors     *prometheus.CounterVec
 	WriteBytes      *prometheus.HistogramVec
 	
+	// Write embedding metrics (eager write-time embedding)
+	WriteEmbeddingDuration *prometheus.HistogramVec
+	WriteEmbeddingErrors   *prometheus.CounterVec
+	WriteEmbeddingSuccess  *prometheus.CounterVec
+	
 	// Retrieval metrics
 	RetrievalTotal      *prometheus.CounterVec
 	RetrievalDuration   *prometheus.HistogramVec
@@ -50,6 +55,9 @@ type MetricsRegistry struct {
 	CacheHits   *prometheus.CounterVec
 	CacheMisses *prometheus.CounterVec
 	CacheSize   *prometheus.GaugeVec
+
+	// Lifecycle metrics
+	LifecycleDuration *prometheus.HistogramVec
 
 	// API metrics
 	HTTPRequestsTotal    *prometheus.CounterVec
@@ -105,6 +113,28 @@ func newMetricsRegistry() *MetricsRegistry {
 				Buckets: []float64{100, 500, 1000, 5000, 10000, 50000, 100000},
 			},
 			[]string{"workspace", "type"},
+		),
+		WriteEmbeddingDuration: promauto.NewHistogramVec(
+			prometheus.HistogramOpts{
+				Name:    "agent_memory_write_embedding_duration_seconds",
+				Help:    "Duration of eager write-time embedding operations",
+				Buckets: []float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0},
+			},
+			[]string{"workspace", "provider"},
+		),
+		WriteEmbeddingErrors: promauto.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "agent_memory_write_embedding_errors_total",
+				Help: "Total number of eager write-time embedding errors",
+			},
+			[]string{"workspace", "provider", "error_type"},
+		),
+		WriteEmbeddingSuccess: promauto.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "agent_memory_write_embedding_success_total",
+				Help: "Total number of successful eager write-time embedding operations",
+			},
+			[]string{"workspace", "provider"},
 		),
 		
 		// Retrieval metrics
@@ -314,6 +344,14 @@ func newMetricsRegistry() *MetricsRegistry {
 				Help: "Current number of entries in query cache",
 			},
 			[]string{"cache_type"},
+		),
+		LifecycleDuration: promauto.NewHistogramVec(
+			prometheus.HistogramOpts{
+				Name:    "agent_memory_lifecycle_run_duration_seconds",
+				Help:    "Duration of background lifecycle maintenance runs",
+				Buckets: []float64{0.1, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0},
+			},
+			[]string{"workspace", "status"},
 		),
 	}
 }

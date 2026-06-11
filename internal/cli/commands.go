@@ -155,6 +155,7 @@ func newSearchCommand() *cobra.Command {
 	var entities []string
 	var from, to string
 	var tokenBudget int
+	var depth int
 	cmd := &cobra.Command{
 		Use:   "search",
 		Short: "Semantic multi-signal search",
@@ -338,6 +339,7 @@ Use --explain to see per-signal score breakdowns.`,
 				Query:     query,
 				TopK:      topK,
 				Mode:      engine.RetrievalMode(mode),
+				Depth:     depth,
 				Filters: engine.RetrievalFilters{
 					Types:         typed,
 					Tiers:         tiered,
@@ -364,7 +366,8 @@ Use --explain to see per-signal score breakdowns.`,
 	addCommonFlags(cmd, &flags)
 	cmd.Flags().StringVar(&query, "query", "", "Search query")
 	cmd.Flags().IntVar(&topK, "top-k", 10, "Top K results")
-	cmd.Flags().StringVar(&mode, "mode", string(engine.ModeSearch), "Mode: search|recall|relate|outcomes")
+	cmd.Flags().StringVar(&mode, "mode", string(engine.ModeSearch), "Mode: search|recall|relate|outcomes|graph-expand")
+	cmd.Flags().IntVar(&depth, "depth", 2, "Graph expansion depth limit (mode=graph-expand only)")
 	cmd.Flags().BoolVar(&explain, "explain", false, "Include per-signal score breakdown")
 	cmd.Flags().StringSliceVar(&tiers, "tier", nil, "Filter by storage tier (repeatable): markdown|vector|vector+graph|document")
 	cmd.Flags().StringSliceVar(&types, "type", nil, "Filter by memory type (repeatable): episodic|semantic|procedural|outcome")

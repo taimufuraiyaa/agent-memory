@@ -274,11 +274,12 @@ func hashRetrievalOptions(opt RetrievalOptions) string {
 		weakCutoff = *opt.Policy.WeakRelativeCutoff
 	}
 
-	key := fmt.Sprintf("ws=%s|q=%s|k=%d|m=%s|types=%v|tiers=%v|outcome=%v|conf=%.4f|decay=%.4f|entities=%v|from=%s|to=%s|min_sem=%.4f|min_total=%.4f|rel=%.4f|w_sem=%.4f|w_total=%.4f|w_rel=%.4f",
+	key := fmt.Sprintf("ws=%s|q=%s|k=%d|m=%s|d=%d|types=%v|tiers=%v|outcome=%v|conf=%.4f|decay=%.4f|entities=%v|from=%s|to=%s|min_sem=%.4f|min_total=%.4f|rel=%.4f|w_sem=%.4f|w_total=%.4f|w_rel=%.4f",
 		opt.Workspace,
 		opt.Query,
 		opt.TopK,
 		opt.Mode,
+		opt.Depth,
 		opt.Filters.Types,
 		opt.Filters.Tiers,
 		outcome,

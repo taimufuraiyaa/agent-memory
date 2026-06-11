@@ -42,6 +42,16 @@ func NewVectorSearcher(store *sqlite.Store, provider embeddings.Provider) *Vecto
 	}
 }
 
+// Store returns the underlying SQLite store.
+func (s *VectorSearcher) Store() *sqlite.Store {
+	return s.store
+}
+
+// Provider returns the underlying embedding provider.
+func (s *VectorSearcher) Provider() embeddings.Provider {
+	return s.provider
+}
+
 // Search runs brute-force semantic search over workspace entries.
 func (s *VectorSearcher) Search(ctx context.Context, workspace, query string, topK int) ([]SearchHit, error) {
 	return s.SearchWithOptions(ctx, VectorSearchOptions{

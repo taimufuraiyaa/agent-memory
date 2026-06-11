@@ -211,6 +211,10 @@ func NewMux(svc *Service) *http.ServeMux {
 			"onnx_runtime_available":   onnxAvailable,
 		})
 	})
+	mux.HandleFunc("/ops/dashboard", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write([]byte(OperatorDashboardHTML))
+	})
 	mux.HandleFunc("/api/v1/scheduler/status", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			writeErr(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
@@ -1872,6 +1876,51 @@ func NewMux(svc *Service) *http.ServeMux {
 			},
 		})
 	})
+	mux.HandleFunc("/api/v1/graph", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			writeErr(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+			return
+		}
+		workspace := workspaceFromRequest(r, svc.Workspace)
+		assets, err := svc.resolve(r.Context(), workspace)
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
+			return
+		}
+		memories, err := assets.Store.ListMemoriesByWorkspace(r.Context(), workspace)
+		if err != nil {
+			writeErr(w, http.StatusBadRequest, "runtime", err.Error())
+			return
+		}
+		relations, err := assets.Store.ListWorkspaceRelations(r.Context(), workspace)
+		if err != nil {
+			writeErr(w, http.StatusBadRequest, "runtime", err.Error())
+			return
+		}
+
+		type GraphNode struct {
+			ID          string           `json:"id"`
+			Content     string           `json:"content"`
+			Type        core.MemoryType  `json:"type"`
+			StorageTier core.StorageTier `json:"storage_tier"`
+		}
+
+		nodes := make([]GraphNode, 0, len(memories))
+		for _, m := range memories {
+			nodes = append(nodes, GraphNode{
+				ID:          m.ID,
+				Content:     m.Content,
+				Type:        m.Type,
+				StorageTier: m.StorageTier,
+			})
+		}
+
+		writeOK(w, http.StatusOK, map[string]any{
+			"workspace": workspace,
+			"nodes":     nodes,
+			"edges":     relations,
+		})
+	})
 	mux.HandleFunc("/api/v1/stats", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			writeErr(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
@@ -2036,7 +2085,52 @@ func NewMux(svc *Service) *http.ServeMux {
 			"overall_token_savings_percent": percentSaved(tokenTotals.BaselineTokens, tokenTotals.SavedTokens),
 			"recall_token_savings_percent":  percentSaved(recallTokenTotals.BaselineTokens, recallTokenTotals.SavedTokens),
 			"token_savings_percent":         percentSaved(recallTokenTotals.BaselineTokens, recallTokenTotals.SavedTokens),
+		cacheStats := assets.Retrieval.CacheStats()
+		writeOK(w, http.StatusOK, map[string]any{
+			"workspace":                     workspace,
+			"memory_count":                  len(memories),
+			"db_size_bytes":                 dbSize,
+			"memory_type_counts":            typeCounts,
+			"storage_tier_counts":           tierCounts,
+			"diagram_count":                 diagramCount,
+			"pinned_count":                  pinnedCount,
+			"retrieve_count_total":          totalRetrieveCount,
+			"retrieved_memory_count":        retrievedMemoryCount,
+			"never_reached_memory_count":    neverReachedMemoryCount,
+			"retrieval_coverage_percent":    retrievalCoveragePercent,
+			"never_reached_percent":         neverReachedPercent,
+			"low_reach_percentile":          lowReachPercentile,
+			"low_reach_threshold":           lowReachThreshold,
+			"low_reach_memory_count":        lowReachMemoryCount,
+			"top_retrieved_memories":        topRetrievedMemories,
+			"last_memory_updated_at":        lastUpdated,
+			"last_memory_accessed_at":       lastAccessed,
+			"last_activity":                 lastActivityStr,
+			"token_metrics":                 tokenTotals,
+			"token_metrics_by_operation":    tokenByOperation,
+			"token_metrics_by_group":        enabledGroups,
+			"raw_token_metrics_by_group":    disabledGroups,
+			"token_metrics_by_group_all":    tokenGroups,
+			"recall_token_metrics":          recallTokenTotals,
+			"llm_usage_totals":              llmTotals,
+			"llm_usage_by_group":            llmEnabledGroups,
+			"raw_llm_usage_by_group":        llmDisabledGroups,
+			"llm_usage_by_group_all":        llmGroups,
+			"overall_token_savings_percent": percentSaved(tokenTotals.BaselineTokens, tokenTotals.SavedTokens),
+			"recall_token_savings_percent":  percentSaved(recallTokenTotals.BaselineTokens, recallTokenTotals.SavedTokens),
+			"token_savings_percent":         percentSaved(recallTokenTotals.BaselineTokens, recallTokenTotals.SavedTokens),
 			"scheduler":                     schedulerSummary,
+			"cache": map[string]any{
+				"enabled":            cacheStats.Enabled,
+				"embedding_entries":  cacheStats.EmbeddingEntries,
+				"result_entries":     cacheStats.ResultEntries,
+				"embedding_hits":     cacheStats.EmbeddingHits,
+				"embedding_misses":   cacheStats.EmbeddingMisses,
+				"result_hits":        cacheStats.ResultHits,
+				"result_misses":      cacheStats.ResultMisses,
+				"embedding_hit_rate": cacheStats.EmbeddingHitRate(),
+				"result_hit_rate":    cacheStats.ResultHitRate(),
+			},
 		})
 	})
 

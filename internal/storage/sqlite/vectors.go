@@ -22,6 +22,8 @@ type MemoryVectorRow struct {
 
 // UpsertMemoryVector writes or updates an embedding for a memory row.
 func (s *Store) UpsertMemoryVector(ctx context.Context, memoryID, workspace, provider, modelVersion string, embedding []float32) error {
+	_start := time.Now()
+	defer func() { s.logSlowQuery(ctx, "upsert_memory_vector", workspace, time.Since(_start)) }()
 	if strings.TrimSpace(provider) == "" {
 		return errors.New("embedding provider is required")
 	}
@@ -60,6 +62,8 @@ func (s *Store) ListMemoryVectorsByWorkspace(ctx context.Context, workspace stri
 
 // ListMemoryVectorRowsByWorkspace returns cached embeddings plus provenance data.
 func (s *Store) ListMemoryVectorRowsByWorkspace(ctx context.Context, workspace string) ([]MemoryVectorRow, error) {
+	_start := time.Now()
+	defer func() { s.logSlowQuery(ctx, "list_memory_vector_rows", workspace, time.Since(_start)) }()
 	rows, err := s.db.QueryContext(ctx, `
 SELECT memory_id, workspace, embedding_json, embedding_provider, embedding_model_version, updated_at
 FROM memory_vectors
@@ -90,6 +94,8 @@ WHERE workspace = ?
 
 // CountMemoryVectorsByProvider returns provider counts for one workspace.
 func (s *Store) CountMemoryVectorsByProvider(ctx context.Context, workspace string) (map[string]int, error) {
+	_start := time.Now()
+	defer func() { s.logSlowQuery(ctx, "count_memory_vectors_by_provider", workspace, time.Since(_start)) }()
 	rows, err := s.db.QueryContext(ctx, `
 SELECT embedding_provider, COUNT(*)
 FROM memory_vectors
@@ -132,6 +138,8 @@ func (s *Store) SearchMemoryVectorsSQL(
 	types []core.MemoryType,
 	tiers []core.StorageTier,
 ) ([]VectorScore, error) {
+	_start := time.Now()
+	defer func() { s.logSlowQuery(ctx, "search_memory_vectors_sql", workspace, time.Since(_start)) }()
 	if topK <= 0 {
 		topK = 5
 	}

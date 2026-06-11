@@ -328,14 +328,18 @@ func (p *WritePipeline) Write(ctx context.Context, in WriteInput) (res *WriteRes
 			if err != nil {
 				metrics.EmbeddingTotal.WithLabelValues(provider, "error").Inc()
 				metrics.EmbeddingErrors.WithLabelValues(provider, "embed_failed").Inc()
+				metrics.WriteEmbeddingErrors.WithLabelValues(entry.Workspace, provider, "embed_failed").Inc()
 				_ = p.store.DeleteByIDs(ctx, []string{entry.ID})
 				return nil, fmt.Errorf("persist eager vector: embed memory %s: %w", entry.ID, err)
 			}
 			metrics.EmbeddingTotal.WithLabelValues(provider, "success").Inc()
 			embedTimer.ObserveDuration(metrics.EmbeddingDuration.WithLabelValues(provider))
+			embedTimer.ObserveDuration(metrics.WriteEmbeddingDuration.WithLabelValues(entry.Workspace, provider))
 			metrics.EmbeddingBatchSize.WithLabelValues(provider).Observe(1.0)
+			metrics.WriteEmbeddingSuccess.WithLabelValues(entry.Workspace, provider).Inc()
 
 			if err := p.store.UpsertMemoryVector(ctx, entry.ID, entry.Workspace, p.embedder.Name(), p.embedder.ModelVersion(), vec); err != nil {
+				metrics.WriteEmbeddingErrors.WithLabelValues(entry.Workspace, provider, "db_upsert_failed").Inc()
 				_ = p.store.DeleteByIDs(ctx, []string{entry.ID})
 				return nil, fmt.Errorf("persist eager vector: upsert memory %s: %w", entry.ID, err)
 			}
@@ -347,6 +351,9 @@ func (p *WritePipeline) Write(ctx context.Context, in WriteInput) (res *WriteRes
 			return nil, err
 		}
 	}
+
+	// Infer and persist relationships for the new memory entry
+	p.inferRelationships(ctx, entry)
 
 	// Invalidate query cache after successful write to ensure fresh results
 	if p.cache != nil {
@@ -362,6 +369,110 @@ func (p *WritePipeline) Write(ctx context.Context, in WriteInput) (res *WriteRes
 		Confidence:  confidence,
 	}, nil
 }
+
+// inferRelationships implements FR-SDO-12 automatic relationship inference on write
+func (p *WritePipeline) inferRelationships(ctx context.Context, entry *core.MemoryEntry) {
+	// 1. Temporal relationships (same session)
+	if entry.Source.SessionID != "" {
+		pastMemories, err := p.store.GetSessionMemories(ctx, entry.Workspace, entry.Source.SessionID)
+		if err == nil {
+			for _, m := range pastMemories {
+				if m.ID == entry.ID {
+					continue
+				}
+				timeDiff := entry.CreatedAt.Sub(m.CreatedAt)
+				if timeDiff < 0 {
+					timeDiff = -timeDiff
+				}
+				if timeDiff <= time.Hour {
+					// Weight by time proximity: 1.0 - (time_diff_seconds / 3600.0)
+					weight := 1.0 - (timeDiff.Seconds() / 3600.0)
+					if weight < 0.1 {
+						weight = 0.1
+					}
+					// If m is older than entry, m -> entry (chronological order)
+					if m.CreatedAt.Before(entry.CreatedAt) {
+						_ = p.store.AddRelation(ctx, m.ID, entry.ID, core.RelCalls, weight, map[string]string{
+							"session_id": entry.Source.SessionID,
+							"subtype":    "temporal",
+						})
+					} else {
+						_ = p.store.AddRelation(ctx, entry.ID, m.ID, core.RelCalls, weight, map[string]string{
+							"session_id": entry.Source.SessionID,
+							"subtype":    "temporal",
+						})
+					}
+				}
+			}
+		}
+	}
+
+	// 2. Entity co-occurrence (Jaccard similarity > 0)
+	if len(entry.Entities) > 0 {
+		workspaceMemories, err := p.store.ListMemoriesByWorkspace(ctx, entry.Workspace)
+		if err == nil {
+			for _, m := range workspaceMemories {
+				if m.ID == entry.ID || m.StorageTier == core.TierCold {
+					continue
+				}
+				if len(m.Entities) == 0 {
+					continue
+				}
+				// Find intersection of entities
+				intersectCount := 0
+				shared := []string{}
+				for _, e1 := range entry.Entities {
+					for _, e2 := range m.Entities {
+						if strings.EqualFold(e1, e2) {
+							intersectCount++
+							shared = append(shared, e1)
+							break
+						}
+					}
+				}
+				if intersectCount > 0 {
+					unionCount := len(entry.Entities) + len(m.Entities) - intersectCount
+					weight := float64(intersectCount) / float64(unionCount)
+					// Add bidirectional depends_on relations
+					meta := map[string]string{
+						"shared_entities": strings.Join(shared, ","),
+						"subtype":         "co_occurrence",
+					}
+					_ = p.store.AddRelation(ctx, entry.ID, m.ID, core.RelDependsOn, weight, meta)
+					_ = p.store.AddRelation(ctx, m.ID, entry.ID, core.RelDependsOn, weight, meta)
+				}
+			}
+		}
+	}
+
+	// 3. Outcome chains (failed attempt -> successful approach)
+	if entry.Outcome != nil && entry.Outcome.Result == core.OutcomeSuccess {
+		if entry.Source.SessionID != "" {
+			pastMemories, err := p.store.GetSessionMemories(ctx, entry.Workspace, entry.Source.SessionID)
+			if err == nil {
+				for _, m := range pastMemories {
+					if m.ID == entry.ID {
+						continue
+					}
+					// Check if m is a failed outcome
+					isFailed := false
+					if m.Type == core.OutcomeMemory {
+						isFailed = true
+					} else if m.Outcome != nil && m.Outcome.Result == core.OutcomeFailure {
+						isFailed = true
+					}
+					if isFailed {
+						// Add m -> entry relation (RelLedTo)
+						_ = p.store.AddRelation(ctx, m.ID, entry.ID, core.RelLedTo, 1.0, map[string]string{
+							"subtype": "outcome_chain",
+						})
+					}
+				}
+			}
+		}
+	}
+}
+
 
 func appendUnique(tags []string, tag string) []string {
 	for _, t := range tags {
