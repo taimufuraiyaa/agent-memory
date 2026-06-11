@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/time/timebooks/agent-memory/internal/core"
+	"github.com/time/timebooks/agent-memory/internal/observability"
 	"github.com/time/timebooks/agent-memory/internal/storage/sqlite"
 )
 
@@ -40,27 +41,46 @@ func NewLifecycleManager(store *sqlite.Store, pipeline *WritePipeline) *Lifecycl
 }
 
 func (m *LifecycleManager) Run(ctx context.Context, workspace string) (*LifecycleMetrics, error) {
+	ctx, span := observability.StartSpan(ctx, "agent-memory.lifecycle")
+	defer span.End()
+	observability.SetSpanAttributes(ctx, observability.WorkspaceAttr(workspace))
+
+	_start := time.Now()
+	var runErr error
+	defer func() {
+		status := "success"
+		if runErr != nil {
+			status = "error"
+			observability.RecordSpanError(ctx, runErr)
+		}
+		observability.GetRegistry().LifecycleDuration.WithLabelValues(workspace, status).Observe(time.Since(_start).Seconds())
+	}()
+
 	metrics := &LifecycleMetrics{}
 	n, err := m.decay.UpdateWorkspaceDecay(ctx, workspace)
 	if err != nil {
+		runErr = err
 		return nil, err
 	}
 	metrics.DecayUpdated = n
 
 	ids, err := m.consolidation.Run(ctx, workspace, MergeFast)
 	if err != nil {
+		runErr = err
 		return nil, err
 	}
 	metrics.Consolidated = len(ids)
 
 	conflicts, err := m.conflicts.Resolve(ctx, workspace)
 	if err != nil {
+		runErr = err
 		return nil, err
 	}
 	metrics.ConflictsFound = len(conflicts)
 
 	evicted, promoted, demoted, err := m.applyEvictionPromotion(ctx, workspace)
 	if err != nil {
+		runErr = err
 		return nil, err
 	}
 	metrics.Evicted = evicted

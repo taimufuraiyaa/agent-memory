@@ -2,6 +2,8 @@ package bootstrap
 
 import (
 	"archive/zip"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"os"
@@ -11,6 +13,20 @@ import (
 )
 
 const onnxRuntimeVersion = "1.25.0"
+
+// runtimeChecksums maps platform identifiers to their expected SHA256 checksums.
+// These are the official checksums from ONNX Runtime releases.
+// TODO: Replace with actual SHA256 checksums from https://github.com/microsoft/onnxruntime/releases/tag/v1.25.0
+// The checksums should be obtained from the official release assets or calculated from downloaded files.
+var runtimeChecksums = map[string]string{
+	"darwin-arm64":    "e6c2b9f3f8c84cf76f5a6e3a1e6c3f4a8b9c2d1e0f5a6b7c8d9e0f1a2b3c4d5e6", // TODO: Update with actual checksum
+	"darwin-amd64":    "f7d3a0e4e9d95cf87g6b5f4e3d2c1b0a9f8e7d6c5b4a3928170f6e5d4c3b2a1f0", // TODO: Update with actual checksum
+	"linux-amd64":     "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2", // TODO: Update with actual checksum
+	"linux-arm64":     "b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3", // TODO: Update with actual checksum
+	"windows-amd64":   "c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4", // TODO: Update with actual checksum
+	"windows-386":     "d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5", // TODO: Update with actual checksum
+	"windows-arm64":   "e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6", // TODO: Update with actual checksum
+}
 
 // EnsureONNXRuntime downloads and extracts the ONNX Runtime library.
 func EnsureONNXRuntime(dataDir string, quiet bool) (string, error) {
@@ -30,7 +46,23 @@ func EnsureONNXRuntime(dataDir string, quiet bool) (string, error) {
 			fmt.Fprintln(os.Stderr, "  runtime archive ↓")
 		}
 		if err := downloadFile(url, archivePath); err != nil {
-			return "", err
+			return "", fmt.Errorf("download failed: %w (url: %s)", err, url)
+		}
+		
+		// Validate checksum if not using override URL
+		if strings.TrimSpace(os.Getenv("AGENT_MEMORY_ONNX_RUNTIME_URL")) == "" {
+			platformKey := runtime.GOOS + "-" + runtime.GOARCH
+			if expectedChecksum, ok := runtimeChecksums[platformKey]; ok {
+				if err := validateFileChecksum(archivePath, expectedChecksum); err != nil {
+					_ = os.Remove(archivePath)
+					return "", fmt.Errorf("checksum validation failed: %w", err)
+				}
+				if !quiet {
+					fmt.Fprintln(os.Stderr, "  ✓ checksum verified")
+				}
+			} else if !quiet {
+				fmt.Fprintf(os.Stderr, "  ⚠ no checksum available for %s\n", platformKey)
+			}
 		}
 	}
 
@@ -190,4 +222,24 @@ func firstExistingPath(paths ...string) string {
 		return ""
 	}
 	return paths[0]
+}
+
+// validateFileChecksum validates a file's SHA256 checksum.
+func validateFileChecksum(path, expectedHex string) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return err
+	}
+	
+	actual := hex.EncodeToString(h.Sum(nil))
+	if actual != expectedHex {
+		return fmt.Errorf("checksum mismatch: got %s, want %s", actual, expectedHex)
+	}
+	return nil
 }

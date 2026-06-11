@@ -6,12 +6,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
 
 	"github.com/time/timebooks/agent-memory/internal/core"
+	"github.com/time/timebooks/agent-memory/internal/observability"
 )
 
 // Store provides SQLite-backed persistence for memory entries.
@@ -24,13 +26,21 @@ var ErrDuplicateContent = errors.New("duplicate content hash")
 
 // Open creates a SQLite store, applies pragmas, and runs migrations.
 func Open(ctx context.Context, dbPath string) (*Store, error) {
-	db, err := sql.Open("sqlite", dbPath)
+	// Add query parameters for WAL mode and busy timeout
+	// These need to be in the connection string for modernc.org/sqlite
+	connStr := dbPath + "?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(10000)"
+	
+	db, err := sql.Open("sqlite", connStr)
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite: %w", err)
 	}
-	// Keep one writer connection by default to reduce SQLITE_BUSY in local-first mode.
-	db.SetMaxOpenConns(1)
-	db.SetMaxIdleConns(1)
+	
+	// Connection pool configuration for concurrent access
+	// WAL mode allows multiple readers + one writer concurrently
+	db.SetMaxOpenConns(10)             // Allow up to 10 concurrent connections
+	db.SetMaxIdleConns(5)              // Keep 5 warm connections in pool
+	db.SetConnMaxLifetime(time.Hour)   // Rotate connections every hour
+	
 	if err := ping(ctx, db); err != nil {
 		_ = db.Close()
 		return nil, err
@@ -61,7 +71,8 @@ func applyPragmas(ctx context.Context, db *sql.DB) error {
 		"PRAGMA foreign_keys = ON",
 		"PRAGMA journal_mode = WAL",
 		"PRAGMA synchronous = NORMAL",
-		"PRAGMA busy_timeout = 5000",
+		"PRAGMA busy_timeout = 10000",  // 10 seconds for concurrent operations
+		"PRAGMA cache_size = -64000",    // 64MB cache
 	}
 	for _, stmt := range pragmas {
 		if _, err := db.ExecContext(ctx, stmt); err != nil {
@@ -77,6 +88,30 @@ func (s *Store) Close() error {
 		return nil
 	}
 	return s.db.Close()
+}
+
+// slowQueryThreshold is the latency above which we log a warning and record a metric.
+const slowQueryThreshold = 100 * time.Millisecond
+
+// logSlowQuery records Prometheus storage duration, warns on slow queries (>100ms), and updates connection/size metrics.
+func (s *Store) logSlowQuery(ctx context.Context, operation, workspace string, d time.Duration) {
+	metrics := observability.GetRegistry()
+	metrics.StorageDuration.WithLabelValues(workspace, operation).Observe(d.Seconds())
+	if d >= slowQueryThreshold {
+		log.Printf("[agent-memory] slow query detected: operation=%s workspace=%s duration=%s", operation, workspace, d.Round(time.Millisecond))
+	}
+
+	if s != nil && s.db != nil {
+		stats := s.db.Stats()
+		metrics.DBConnections.Set(float64(stats.OpenConnections))
+
+		var pageCount, pageSize int64
+		if err := s.db.QueryRowContext(ctx, "PRAGMA page_count").Scan(&pageCount); err == nil {
+			if err := s.db.QueryRowContext(ctx, "PRAGMA page_size").Scan(&pageSize); err == nil {
+				metrics.DBSize.WithLabelValues(workspace).Set(float64(pageCount * pageSize))
+			}
+		}
+	}
 }
 
 // Migrate applies schema changes idempotently.
@@ -392,6 +427,9 @@ func (s *Store) Migrate(ctx context.Context) error {
 	if err := s.ensureColumn(ctx, "memory_vectors", "embedding_provider", `ALTER TABLE memory_vectors ADD COLUMN embedding_provider TEXT NOT NULL DEFAULT ''`); err != nil {
 		return err
 	}
+	if err := s.ensureColumn(ctx, "memory_vectors", "embedding_model_version", `ALTER TABLE memory_vectors ADD COLUMN embedding_model_version TEXT NOT NULL DEFAULT 'unknown'`); err != nil {
+		return err
+	}
 	if err := s.ensureColumn(ctx, "token_metrics", "run_label", `ALTER TABLE token_metrics ADD COLUMN run_label TEXT NOT NULL DEFAULT ''`); err != nil {
 		return err
 	}
@@ -449,6 +487,13 @@ func (s *Store) Migrate(ctx context.Context) error {
 	if err := s.ensureColumn(ctx, "benchmark_runs", "continuation_verdict", `ALTER TABLE benchmark_runs ADD COLUMN continuation_verdict TEXT NOT NULL DEFAULT ''`); err != nil {
 		return err
 	}
+	// Add indexes for vector provenance columns
+	if _, err := s.db.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_memory_vectors_provider ON memory_vectors(embedding_provider)`); err != nil {
+		return fmt.Errorf("create embedding_provider index: %w", err)
+	}
+	if _, err := s.db.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_memory_vectors_model_version ON memory_vectors(embedding_model_version)`); err != nil {
+		return fmt.Errorf("create embedding_model_version index: %w", err)
+	}
 	return nil
 }
 
@@ -496,6 +541,7 @@ func (s *Store) InsertMemoryByHash(ctx context.Context, m *core.MemoryEntry, con
 INSERT OR IGNORE INTO memories (id, type, content, diagram_lang, diagram_code, workspace, content_hash, source_json, entities_json, tags_json, confidence, storage_tier, pinned, superseded_by, access_count, last_accessed, decay_score, salience_score, suppression_score, useful_count, ignored_count, rejected_count, harmful_count, last_helpful_at, last_rejected_at, suppression_until, familiarity_band_last, outcome_json, created_at, updated_at)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
+	_startInsert := time.Now()
 	res, err := s.db.ExecContext(
 		ctx,
 		query,
@@ -530,6 +576,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 
 		m.CreatedAt.Format(time.RFC3339Nano),
 		m.UpdatedAt.Format(time.RFC3339Nano),
 	)
+	s.logSlowQuery(ctx, "insert_memory", m.Workspace, time.Since(_startInsert))
 	if err != nil {
 		return fmt.Errorf("insert memory: %w", err)
 	}
@@ -743,14 +790,19 @@ func (s *Store) GetMemoryByHash(ctx context.Context, workspace, contentHash stri
 
 // ListMemoriesByWorkspace returns all memories in a workspace ordered by recency.
 func (s *Store) ListMemoriesByWorkspace(ctx context.Context, workspace string) ([]core.MemoryEntry, error) {
+	_startList := time.Now()
 	rows, err := s.db.QueryContext(ctx, `
 SELECT id, type, content, diagram_lang, diagram_code, workspace, source_json, entities_json, tags_json, confidence, storage_tier, pinned, superseded_by, access_count, last_accessed, decay_score, salience_score, suppression_score, useful_count, ignored_count, rejected_count, harmful_count, last_helpful_at, last_rejected_at, suppression_until, familiarity_band_last, outcome_json, created_at, updated_at
 FROM memories
 WHERE workspace = ?
 ORDER BY updated_at DESC`, workspace)
 	if err != nil {
+		s.logSlowQuery(ctx, "list_memories_by_workspace", workspace, time.Since(_startList))
 		return nil, err
 	}
+	defer func() {
+		s.logSlowQuery(ctx, "list_memories_by_workspace", workspace, time.Since(_startList))
+	}()
 	defer func() { _ = rows.Close() }()
 
 	out := make([]core.MemoryEntry, 0)
@@ -1050,6 +1102,90 @@ func (s *Store) hasColumn(ctx context.Context, table, column string) (bool, erro
 	return false, rows.Err()
 }
 
+// GetSessionMemories returns memories in a session ordered by created_at DESC.
+func (s *Store) GetSessionMemories(ctx context.Context, workspace, sessionID string) ([]core.MemoryEntry, error) {
+	_startList := time.Now()
+	rows, err := s.db.QueryContext(ctx, `
+SELECT id, type, content, diagram_lang, diagram_code, workspace, source_json, entities_json, tags_json, confidence, storage_tier, pinned, superseded_by, access_count, last_accessed, decay_score, salience_score, suppression_score, useful_count, ignored_count, rejected_count, harmful_count, last_helpful_at, last_rejected_at, suppression_until, familiarity_band_last, outcome_json, created_at, updated_at
+FROM memories
+WHERE workspace = ? AND json_extract(source_json, '$.session_id') = ?
+ORDER BY created_at DESC`, workspace, sessionID)
+	if err != nil {
+		s.logSlowQuery(ctx, "get_session_memories", workspace, time.Since(_startList))
+		return nil, err
+	}
+	defer func() {
+		s.logSlowQuery(ctx, "get_session_memories", workspace, time.Since(_startList))
+	}()
+	defer func() { _ = rows.Close() }()
+
+	out := make([]core.MemoryEntry, 0)
+	for rows.Next() {
+		var m core.MemoryEntry
+		var sourceJSON, entitiesJSON, tagsJSON string
+		var outcomeJSON sql.NullString
+		var diagramLang, diagramCode string
+		var pinned int
+		var supersededBy sql.NullString
+		var createdAt, updatedAt, lastAccessed, lastHelpfulAt, lastRejectedAt, suppressionUntil string
+		if err := rows.Scan(
+			&m.ID, &m.Type, &m.Content, &diagramLang, &diagramCode, &m.Workspace, &sourceJSON, &entitiesJSON, &tagsJSON,
+			&m.Confidence, &m.StorageTier, &pinned, &supersededBy, &m.AccessCount, &lastAccessed, &m.DecayScore, &m.SalienceScore, &m.SuppressionScore, &m.UsefulCount, &m.IgnoredCount, &m.RejectedCount, &m.HarmfulCount, &lastHelpfulAt, &lastRejectedAt, &suppressionUntil, &m.FamiliarityBandLast, &outcomeJSON, &createdAt, &updatedAt,
+		); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal([]byte(sourceJSON), &m.Source); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal([]byte(entitiesJSON), &m.Entities); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal([]byte(tagsJSON), &m.Tags); err != nil {
+			return nil, err
+		}
+		if outcomeJSON.Valid && outcomeJSON.String != "" {
+			var o core.Outcome
+			if err := json.Unmarshal([]byte(outcomeJSON.String), &o); err != nil {
+				return nil, err
+			}
+			m.Outcome = &o
+		}
+		if supersededBy.Valid {
+			m.SupersededBy = &supersededBy.String
+		}
+		if diagramLang != "" || diagramCode != "" {
+			m.Diagram = &core.Diagram{Lang: diagramLang, Code: diagramCode}
+		}
+		m.Pinned = pinned != 0
+		if t, err := time.Parse(time.RFC3339Nano, createdAt); err == nil {
+			m.CreatedAt = t
+		}
+		if t, err := time.Parse(time.RFC3339Nano, updatedAt); err == nil {
+			m.UpdatedAt = t
+		}
+		if t, err := time.Parse(time.RFC3339Nano, lastAccessed); err == nil {
+			m.LastAccessedAt = t
+		}
+		if lastHelpfulAt != "" {
+			if t, err := time.Parse(time.RFC3339Nano, lastHelpfulAt); err == nil {
+				m.LastHelpfulAt = t
+			}
+		}
+		if lastRejectedAt != "" {
+			if t, err := time.Parse(time.RFC3339Nano, lastRejectedAt); err == nil {
+				m.LastRejectedAt = t
+			}
+		}
+		if suppressionUntil != "" {
+			if t, err := time.Parse(time.RFC3339Nano, suppressionUntil); err == nil {
+				m.SuppressionUntil = &t
+			}
+		}
+		out = append(out, m)
+	}
+	return out, rows.Err()
+}
+
 func (s *Store) ensureColumn(ctx context.Context, table, column, alterSQL string) error {
 	ok, err := s.hasColumn(ctx, table, column)
 	if err != nil {
@@ -1063,3 +1199,4 @@ func (s *Store) ensureColumn(ctx context.Context, table, column, alterSQL string
 	}
 	return nil
 }
+

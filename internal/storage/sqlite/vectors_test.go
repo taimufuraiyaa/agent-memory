@@ -26,7 +26,7 @@ func TestUpsertAndListMemoryVectorsByWorkspace(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("upsert memory: %v", err)
 	}
-	if err := store.UpsertMemoryVector(context.Background(), "m1", "ws", "test-provider", []float32{0.1, 0.2, 0.3}); err != nil {
+	if err := store.UpsertMemoryVector(context.Background(), "m1", "ws", "test-provider", "test-v1", []float32{0.1, 0.2, 0.3}); err != nil {
 		t.Fatalf("upsert memory vector: %v", err)
 	}
 	vecs, err := store.ListMemoryVectorsByWorkspace(context.Background(), "ws")
@@ -86,10 +86,10 @@ func TestSearchMemoryVectorsSQL(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("upsert m2: %v", err)
 	}
-	if err := store.UpsertMemoryVector(ctx, "m1", "ws", "test-provider", []float32{1, 0, 0}); err != nil {
+	if err := store.UpsertMemoryVector(ctx, "m1", "ws", "test-provider", "test-v1", []float32{1, 0, 0}); err != nil {
 		t.Fatalf("vector m1: %v", err)
 	}
-	if err := store.UpsertMemoryVector(ctx, "m2", "ws", "test-provider", []float32{0, 1, 0}); err != nil {
+	if err := store.UpsertMemoryVector(ctx, "m2", "ws", "test-provider", "test-v1", []float32{0, 1, 0}); err != nil {
 		t.Fatalf("vector m2: %v", err)
 	}
 	scores, err := store.SearchMemoryVectorsSQL(ctx, "ws", "test-provider", []float32{1, 0, 0}, 5, nil, nil)
@@ -114,7 +114,7 @@ func TestSearchMemoryVectorsSQL(t *testing.T) {
 	if len(filtered) != 1 || filtered[0].MemoryID != "m2" {
 		t.Fatalf("expected filtered result m2, got %+v", filtered)
 	}
-	if err := store.UpsertMemoryVector(ctx, "m2", "ws", "legacy-provider", []float32{1, 0, 0}); err != nil {
+	if err := store.UpsertMemoryVector(ctx, "m2", "ws", "legacy-provider", "legacy-v1", []float32{1, 0, 0}); err != nil {
 		t.Fatalf("rewrite m2 vector with legacy provider: %v", err)
 	}
 	legacyFiltered, err := store.SearchMemoryVectorsSQL(ctx, "ws", "test-provider", []float32{1, 0, 0}, 5, nil, nil)

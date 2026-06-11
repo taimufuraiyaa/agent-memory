@@ -7,6 +7,8 @@ import (
 	"os"
 	"strings"
 	"sync"
+
+	"github.com/time/timebooks/agent-memory/internal/observability"
 )
 
 // ONNXMiniLMProvider loads the MiniLM tokenizer and runs inference through ONNX Runtime.
@@ -47,40 +49,69 @@ func newONNXMiniLMProviderWithRuntime(modelDir string, opt ModelLifecycleOptions
 	}, nil
 }
 
-func (p *ONNXMiniLMProvider) Name() string   { return "onnx-minilm-l6-v2" }
-func (p *ONNXMiniLMProvider) Dimension() int { return MiniLMDimension }
+func (p *ONNXMiniLMProvider) Name() string          { return "onnx-minilm-l6-v2" }
+func (p *ONNXMiniLMProvider) ModelVersion() string  { return "minilm-l6-v2-fp32" }
+func (p *ONNXMiniLMProvider) Dimension() int        { return MiniLMDimension }
 
 func (p *ONNXMiniLMProvider) Embed(ctx context.Context, text string) ([]float32, error) {
+	ctx, span := observability.StartSpan(ctx, "agent-memory.embed")
+	defer span.End()
+	observability.SetSpanAttributes(ctx,
+		observability.ProviderAttr(p.Name()),
+		observability.BatchSizeAttr(1),
+	)
+
 	if strings.TrimSpace(text) == "" {
-		return nil, errors.New("text is required")
+		err := errors.New("text is required")
+		observability.RecordSpanError(ctx, err)
+		return nil, err
 	}
 	tokenized, err := p.tokenizer.Encode(text)
 	if err != nil {
+		observability.RecordSpanError(ctx, err)
 		return nil, err
 	}
 	rt, err := p.getRuntime()
 	if err != nil {
+		observability.RecordSpanError(ctx, err)
 		return nil, err
 	}
-	return rt.Embed(ctx, tokenized)
+	vec, err := rt.Embed(ctx, tokenized)
+	if err != nil {
+		observability.RecordSpanError(ctx, err)
+		return nil, err
+	}
+	return vec, nil
 }
 
 func (p *ONNXMiniLMProvider) EmbedBatch(ctx context.Context, texts []string) ([][]float32, error) {
+	ctx, span := observability.StartSpan(ctx, "agent-memory.embed")
+	defer span.End()
+	observability.SetSpanAttributes(ctx,
+		observability.ProviderAttr(p.Name()),
+		observability.BatchSizeAttr(len(texts)),
+	)
+
 	rt, err := p.getRuntime()
 	if err != nil {
+		observability.RecordSpanError(ctx, err)
 		return nil, err
 	}
 	out := make([][]float32, 0, len(texts))
 	for _, text := range texts {
 		if strings.TrimSpace(text) == "" {
-			return nil, errors.New("text is required")
+			err := errors.New("text is required")
+			observability.RecordSpanError(ctx, err)
+			return nil, err
 		}
 		tokenized, err := p.tokenizer.Encode(text)
 		if err != nil {
+			observability.RecordSpanError(ctx, err)
 			return nil, err
 		}
 		vec, err := rt.Embed(ctx, tokenized)
 		if err != nil {
+			observability.RecordSpanError(ctx, err)
 			return nil, err
 		}
 		out = append(out, vec)

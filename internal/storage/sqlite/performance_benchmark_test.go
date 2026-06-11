@@ -55,7 +55,7 @@ func BenchmarkUpsertMemoryWithEmbedding(b *testing.B) {
 			b.Fatal(err)
 		}
 		
-		err = store.UpsertMemoryVector(ctx, mem.ID, "bench", "test-provider", embedding)
+		err = store.UpsertMemoryVector(ctx, mem.ID, "bench", "test-provider", "test-v1", embedding)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -345,7 +345,7 @@ func seedStoreMemories(b *testing.B, ctx context.Context, store *Store, count in
 		
 		// Add embedding for half of them
 		if i%2 == 0 {
-			err = store.UpsertMemoryVector(ctx, mem.ID, "bench", "test-provider", embedding)
+			err = store.UpsertMemoryVector(ctx, mem.ID, "bench", "test-provider", "test-v1", embedding)
 			if err != nil {
 				b.Fatalf("seed embedding: %v", err)
 			}

@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/time/timebooks/agent-memory/internal/observability"
 )
 
 const (
@@ -49,24 +51,42 @@ func NewLocalProvider(modelDir string) (*LocalProvider, error) {
 	return &LocalProvider{modelDir: modelDir}, nil
 }
 
-func (p *LocalProvider) Name() string     { return "local-minilm-scaffold" }
-func (p *LocalProvider) Dimension() int   { return MiniLMDimension }
-func (p *LocalProvider) ModelDir() string { return p.modelDir }
+func (p *LocalProvider) Name() string          { return "local-minilm-scaffold" }
+func (p *LocalProvider) ModelVersion() string  { return "local-hash-v1" }
+func (p *LocalProvider) Dimension() int        { return MiniLMDimension }
+func (p *LocalProvider) ModelDir() string      { return p.modelDir }
 
 // Embed returns a normalized deterministic vector with MiniLM-compatible dimensions.
-func (p *LocalProvider) Embed(_ context.Context, text string) ([]float32, error) {
+func (p *LocalProvider) Embed(ctx context.Context, text string) ([]float32, error) {
+	ctx, span := observability.StartSpan(ctx, "agent-memory.embed")
+	defer span.End()
+	observability.SetSpanAttributes(ctx,
+		observability.ProviderAttr(p.Name()),
+		observability.BatchSizeAttr(1),
+	)
+
 	if strings.TrimSpace(text) == "" {
-		return nil, errors.New("text is required")
+		err := errors.New("text is required")
+		observability.RecordSpanError(ctx, err)
+		return nil, err
 	}
 	return deterministicEmbedding(text), nil
 }
 
 // EmbedBatch embeds each input deterministically.
 func (p *LocalProvider) EmbedBatch(ctx context.Context, texts []string) ([][]float32, error) {
+	ctx, span := observability.StartSpan(ctx, "agent-memory.embed")
+	defer span.End()
+	observability.SetSpanAttributes(ctx,
+		observability.ProviderAttr(p.Name()),
+		observability.BatchSizeAttr(len(texts)),
+	)
+
 	out := make([][]float32, 0, len(texts))
 	for _, t := range texts {
 		v, err := p.Embed(ctx, t)
 		if err != nil {
+			observability.RecordSpanError(ctx, err)
 			return nil, err
 		}
 		out = append(out, v)

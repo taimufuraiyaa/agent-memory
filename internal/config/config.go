@@ -563,6 +563,38 @@ func (c *Config) applyEnvOverrides() {
 	// Adaptive tuning - handled by existing adaptive_tuning.go functions
 }
 
+// GetAdaptiveBudget returns a budget that adapts to the agent's context window size.
+// It reads AGENT_CONTEXT_WINDOW environment variable and scales the budget as a percentage.
+// Default percentage: 10% of context window (configurable via budgetPercentage parameter).
+func GetAdaptiveBudget(defaultBudget int, budgetPercentage float64) int {
+	contextWindowStr := strings.TrimSpace(os.Getenv("AGENT_CONTEXT_WINDOW"))
+	if contextWindowStr == "" {
+		return defaultBudget
+	}
+
+	var contextWindow int
+	if _, err := fmt.Sscanf(contextWindowStr, "%d", &contextWindow); err != nil || contextWindow <= 0 {
+		return defaultBudget
+	}
+
+	// Default to 10% of context window if no percentage specified or invalid
+	if budgetPercentage <= 0 || budgetPercentage > 1.0 {
+		budgetPercentage = 0.10
+	}
+
+	adaptiveBudget := int(float64(contextWindow) * budgetPercentage)
+	
+	// Ensure adaptive budget is reasonable (min 100, max contextWindow)
+	if adaptiveBudget < 100 {
+		adaptiveBudget = 100
+	}
+	if adaptiveBudget > contextWindow {
+		adaptiveBudget = contextWindow
+	}
+
+	return adaptiveBudget
+}
+
 // Validate validates the configuration and returns detailed errors.
 func (c *Config) Validate() error {
 	var errors []string

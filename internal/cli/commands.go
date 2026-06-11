@@ -23,6 +23,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/time/timebooks/agent-memory/internal/api"
+	"github.com/time/timebooks/agent-memory/internal/config"
 	"github.com/time/timebooks/agent-memory/internal/core"
 	"github.com/time/timebooks/agent-memory/internal/embeddings"
 	"github.com/time/timebooks/agent-memory/internal/engine"
@@ -112,6 +113,9 @@ The memory will be automatically:
 			}
 			defer func() { _ = store.Close() }()
 
+			// Check for model version mismatches and warn user
+			checkAndWarnModelVersion(ctx, cfg.workspace, store, provider)
+
 			p := engine.NewWritePipelineWithEmbedder(store, provider)
 			mt := core.MemoryType(mType)
 			res, err := p.Write(ctx, engine.WriteInput{
@@ -151,6 +155,7 @@ func newSearchCommand() *cobra.Command {
 	var entities []string
 	var from, to string
 	var tokenBudget int
+	var depth int
 	cmd := &cobra.Command{
 		Use:   "search",
 		Short: "Semantic multi-signal search",
@@ -324,6 +329,9 @@ Use --explain to see per-signal score breakdowns.`,
 			}
 			defer func() { _ = store.Close() }()
 
+			// Check for model version mismatches and warn user
+			checkAndWarnModelVersion(ctx, cfg.workspace, store, provider)
+
 			searcher := engine.NewVectorSearcher(store, provider)
 			retrieval := engine.NewRetrievalEngine(searcher)
 			res, err := retrieval.Retrieve(ctx, engine.RetrievalOptions{
@@ -331,6 +339,7 @@ Use --explain to see per-signal score breakdowns.`,
 				Query:     query,
 				TopK:      topK,
 				Mode:      engine.RetrievalMode(mode),
+				Depth:     depth,
 				Filters: engine.RetrievalFilters{
 					Types:         typed,
 					Tiers:         tiered,
@@ -357,7 +366,8 @@ Use --explain to see per-signal score breakdowns.`,
 	addCommonFlags(cmd, &flags)
 	cmd.Flags().StringVar(&query, "query", "", "Search query")
 	cmd.Flags().IntVar(&topK, "top-k", 10, "Top K results")
-	cmd.Flags().StringVar(&mode, "mode", string(engine.ModeSearch), "Mode: search|recall|relate|outcomes")
+	cmd.Flags().StringVar(&mode, "mode", string(engine.ModeSearch), "Mode: search|recall|relate|outcomes|graph-expand")
+	cmd.Flags().IntVar(&depth, "depth", 2, "Graph expansion depth limit (mode=graph-expand only)")
 	cmd.Flags().BoolVar(&explain, "explain", false, "Include per-signal score breakdown")
 	cmd.Flags().StringSliceVar(&tiers, "tier", nil, "Filter by storage tier (repeatable): markdown|vector|vector+graph|document")
 	cmd.Flags().StringSliceVar(&types, "type", nil, "Filter by memory type (repeatable): episodic|semantic|procedural|outcome")
@@ -382,6 +392,9 @@ func newRecallCommand() *cobra.Command {
 	var includeObservations bool
 	var observationLimit int
 	var observationSessionID string
+	var useAdaptiveBudget bool
+	var budgetPercentage float64
+	
 	cmd := &cobra.Command{
 		Use:   "recall",
 		Short: "Session-start recall block",
@@ -395,7 +408,12 @@ including in agent system prompts. It prioritizes:
   - Task-specific context
 
 The output is formatted as a structured context block ready to paste
-into your agent's system prompt or context.`,
+into your agent's system prompt or context.
+
+Budget Configuration:
+  The --budget flag sets a fixed token budget. Alternatively, use
+  --adaptive-budget to scale the budget based on AGENT_CONTEXT_WINDOW
+  (defaults to 10% of context window, configurable via --budget-percentage).`,
 		Example: `  # Basic recall for continuing work
   agent-memory recall --workspace my-project \
     --task "continue working on authentication feature" --budget 1000
@@ -403,6 +421,14 @@ into your agent's system prompt or context.`,
   # Quick recall with smaller budget
   agent-memory recall --workspace my-project \
     --task "fix database migration bug" --budget 500
+
+  # Adaptive budget (10% of AGENT_CONTEXT_WINDOW)
+  agent-memory recall --workspace my-project \
+    --task "implement API endpoint" --adaptive-budget
+
+  # Adaptive budget with custom percentage (15% of context window)
+  agent-memory recall --workspace my-project \
+    --task "deploy to production" --adaptive-budget --budget-percentage 0.15
 
   # Recall with observations from current session
   agent-memory recall --workspace my-project \
@@ -421,6 +447,19 @@ into your agent's system prompt or context.`,
 			if err := validateOutputFormat(flags.format, true); err != nil {
 				return err
 			}
+			
+			// Handle adaptive budget sizing
+			if useAdaptiveBudget {
+				adaptiveBudget := config.GetAdaptiveBudget(budget, budgetPercentage)
+				if adaptiveBudget != budget {
+					budget = adaptiveBudget
+					// Note: Don't print to stdout in JSON mode, use stderr
+					if strings.EqualFold(flags.format, formatRaw) || flags.format == "" {
+						// Silent in raw mode to avoid polluting output
+					}
+				}
+			}
+			
 			if !engine.MemoryEnabled() {
 				store, _, err := openDeps(ctx, cfg)
 				if err != nil {
@@ -492,6 +531,12 @@ into your agent's system prompt or context.`,
 				return err
 			}
 			defer func() { _ = store.Close() }()
+
+			// Check for model version mismatches and warn user (only if memory enabled)
+			if memoryEnabled {
+				checkAndWarnModelVersion(ctx, cfg.workspace, store, provider)
+			}
+
 			payload, contextBlock, err := executeRecall(ctx, cfg, store, provider, memoryEnabled, request)
 			if err != nil {
 				return err
@@ -506,7 +551,9 @@ into your agent's system prompt or context.`,
 	addCommonFlags(cmd, &flags)
 	cmd.Flags().StringVar(&task, "task", "", "Task description")
 	cmd.Flags().IntVar(&topK, "top-k", 50, "Candidate count")
-	cmd.Flags().IntVar(&budget, "budget", 4000, "Token budget")
+	cmd.Flags().IntVar(&budget, "budget", 4000, "Token budget (or use --adaptive-budget)")
+	cmd.Flags().BoolVar(&useAdaptiveBudget, "adaptive-budget", false, "Scale budget based on AGENT_CONTEXT_WINDOW")
+	cmd.Flags().Float64Var(&budgetPercentage, "budget-percentage", 0.10, "Percentage of context window for adaptive budget (default: 0.10 = 10%)")
 	cmd.Flags().BoolVar(&includeObservations, "include-observations", false, "Include recent observation summaries (if available)")
 	cmd.Flags().IntVar(&observationLimit, "observation-limit", 10, "Recent observation count to include (max 50)")
 	cmd.Flags().StringVar(&observationSessionID, "observation-session-id", "", "Session ID for observations (default: most recent)")

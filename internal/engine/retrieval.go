@@ -9,16 +9,19 @@ import (
 
 	"github.com/time/timebooks/agent-memory/internal/config"
 	"github.com/time/timebooks/agent-memory/internal/core"
+	"github.com/time/timebooks/agent-memory/internal/embeddings"
+	"github.com/time/timebooks/agent-memory/internal/observability"
 )
 
 // RetrievalMode alters signal weighting depending on caller intent.
 type RetrievalMode string
 
 const (
-	ModeSearch   RetrievalMode = "search"
-	ModeRecall   RetrievalMode = "recall"
-	ModeRelate   RetrievalMode = "relate"
-	ModeOutcomes RetrievalMode = "outcomes"
+	ModeSearch      RetrievalMode = "search"
+	ModeRecall      RetrievalMode = "recall"
+	ModeRelate      RetrievalMode = "relate"
+	ModeOutcomes    RetrievalMode = "outcomes"
+	ModeGraphExpand RetrievalMode = "graph-expand"
 )
 
 // RetrievalOptions controls retrieval behavior.
@@ -27,6 +30,7 @@ type RetrievalOptions struct {
 	Query     string
 	TopK      int
 	Mode      RetrievalMode
+	Depth     int // graph expansion traversal depth limit
 	Filters   RetrievalFilters
 	Policy    RetrievalPolicy
 }
@@ -124,6 +128,7 @@ type SignalWeights struct {
 // RetrievalEngine combines semantic search and additional ranking signals.
 type RetrievalEngine struct {
 	vector *VectorSearcher
+	cache  *QueryCache
 	clock  func() time.Time
 }
 
@@ -131,18 +136,135 @@ type RetrievalEngine struct {
 func NewRetrievalEngine(vector *VectorSearcher) *RetrievalEngine {
 	return &RetrievalEngine{
 		vector: vector,
+		cache:  NewQueryCache(DefaultQueryCacheConfig()),
+		clock:  func() time.Time { return time.Now().UTC() },
+	}
+}
+
+// NewRetrievalEngineWithCache creates a retrieval engine with custom cache config.
+func NewRetrievalEngineWithCache(vector *VectorSearcher, cacheConfig QueryCacheConfig) *RetrievalEngine {
+	return &RetrievalEngine{
+		vector: vector,
+		cache:  NewQueryCache(cacheConfig),
 		clock:  func() time.Time { return time.Now().UTC() },
 	}
 }
 
 // Retrieve computes mode-aware weighted ranking with explain output.
-func (e *RetrievalEngine) Retrieve(ctx context.Context, opt RetrievalOptions) (*RetrievalResult, error) {
+// Results are cached to reduce latency for repeated queries.
+func (e *RetrievalEngine) Retrieve(ctx context.Context, opt RetrievalOptions) (res *RetrievalResult, retrieveErr error) {
+	spanName := "agent-memory.search"
+	if opt.Mode == ModeRecall {
+		spanName = "agent-memory.recall"
+	}
+	ctx, span := observability.StartSpan(ctx, spanName)
+	defer span.End()
+
+	observability.SetSpanAttributes(ctx,
+		observability.WorkspaceAttr(opt.Workspace),
+		observability.QueryAttr(opt.Query),
+		observability.TopKAttr(opt.TopK),
+		observability.ModeAttr(string(opt.Mode)),
+	)
+
+	timer := observability.NewTimer()
+	defer func() {
+		metrics := observability.GetRegistry()
+		status := "success"
+		if retrieveErr != nil {
+			status = "error"
+			errType := "runtime_error"
+			metrics.RetrievalErrors.WithLabelValues(opt.Workspace, string(opt.Mode), errType).Inc()
+			observability.RecordSpanError(ctx, retrieveErr)
+		} else if res != nil {
+			observability.SetSpanAttributes(ctx, observability.HitCountAttr(len(res.Hits)))
+			metrics.RetrievalHits.WithLabelValues(opt.Workspace, string(opt.Mode)).Observe(float64(len(res.Hits)))
+		}
+		metrics.RetrievalTotal.WithLabelValues(opt.Workspace, string(opt.Mode), status).Inc()
+		timer.ObserveDuration(metrics.RetrievalDuration.WithLabelValues(opt.Workspace, string(opt.Mode)))
+	}()
+
+	// Check result cache first
+	if cachedHits := e.cache.GetResults(ctx, opt); cachedHits != nil {
+		weights := modeWeights(opt.Mode)
+		policy := policyForMode(opt.Mode, opt.Policy)
+		
+		return &RetrievalResult{
+			Mode:       opt.Mode,
+			Weights:    weights,
+			Policy:     policy,
+			Hits:       cachedHits,
+			StrongHits: filterStrongHits(cachedHits),
+			WeakHits:   filterWeakHits(cachedHits),
+		}, nil
+	}
+	
 	if opt.TopK <= 0 {
 		opt.TopK = 10
 	}
 	if opt.Mode == "" {
 		opt.Mode = ModeSearch
 	}
+
+	if opt.Mode == ModeGraphExpand {
+		hits, err := e.retrieveGraphExpand(ctx, opt)
+		if err != nil {
+			return nil, err
+		}
+		weights := modeWeights(opt.Mode)
+		policy := policyForMode(opt.Mode, opt.Policy)
+		bestScore := 0.0
+		if len(hits) > 0 {
+			bestScore = hits[0].Score
+		}
+		strong := make([]RetrievalHit, 0, len(hits))
+		weak := make([]RetrievalHit, 0, len(hits))
+		suppressed := make([]RetrievalHit, 0, len(hits))
+		now := e.clock()
+		for i, hit := range hits {
+			hits[i].Breakdown.RelativeToBest = relativeToBest(bestScore, hit.Score)
+			band, reasons := classifyHit(opt.Mode, policy, now, hits[i])
+			hits[i].Band = band
+			hits[i].ExclusionReasons = reasons
+			switch band {
+			case BandStrongRecall:
+				strong = append(strong, hits[i])
+			case BandWeakFamiliarity:
+				weak = append(weak, hits[i])
+			default:
+				suppressed = append(suppressed, hits[i])
+			}
+		}
+		if len(strong) > opt.TopK {
+			strong = strong[:opt.TopK]
+		}
+		if len(weak) > opt.TopK {
+			weak = weak[:opt.TopK]
+		}
+		if len(suppressed) > opt.TopK {
+			suppressed = suppressed[:opt.TopK]
+		}
+		ids := make([]string, 0, len(strong)+len(weak))
+		for _, h := range strong {
+			ids = append(ids, h.Memory.ID)
+		}
+		for _, h := range weak {
+			ids = append(ids, h.Memory.ID)
+		}
+		_ = e.vector.MarkAccessed(ctx, ids)
+		visible := append(append([]RetrievalHit{}, strong...), weak...)
+		e.cache.SetResults(ctx, opt, visible)
+		return &RetrievalResult{
+			Mode:           opt.Mode,
+			Weights:        weights,
+			Policy:         policy,
+			Hits:           visible,
+			StrongHits:     strong,
+			WeakHits:       weak,
+			SuppressedHits: suppressed,
+		}, nil
+	}
+
 	baseHits, err := e.vector.SearchWithOptions(ctx, VectorSearchOptions{
 		Workspace: opt.Workspace,
 		Query:     opt.Query,
@@ -162,8 +284,6 @@ func (e *RetrievalEngine) Retrieve(ctx context.Context, opt RetrievalOptions) (*
 		if !matchRetrievalFilters(h.Memory, opt.Filters) {
 			continue
 		}
-		// Enforce the semantic floor before weighted reranking so recency and
-		// other secondary signals cannot rescue low-semantic candidates.
 		if h.Score < policy.MinSemanticScore {
 			continue
 		}
@@ -234,6 +354,10 @@ func (e *RetrievalEngine) Retrieve(ctx context.Context, opt RetrievalOptions) (*
 	if opt.Mode != ModeRecall {
 		visible = append(append([]RetrievalHit{}, strong...), weak...)
 	}
+	
+	// Store results in cache for future queries
+	e.cache.SetResults(ctx, opt, visible)
+	
 	return &RetrievalResult{
 		Mode:           opt.Mode,
 		Weights:        weights,
@@ -243,6 +367,36 @@ func (e *RetrievalEngine) Retrieve(ctx context.Context, opt RetrievalOptions) (*
 		WeakHits:       weak,
 		SuppressedHits: suppressed,
 	}, nil
+}
+
+// InvalidateCache clears cached results for a workspace after writes.
+func (e *RetrievalEngine) InvalidateCache(workspace string) {
+	e.cache.InvalidateWorkspace(workspace)
+}
+
+// CacheStats returns cache performance metrics.
+func (e *RetrievalEngine) CacheStats() CacheStats {
+	return e.cache.Stats()
+}
+
+func filterStrongHits(hits []RetrievalHit) []RetrievalHit {
+	strong := make([]RetrievalHit, 0, len(hits))
+	for _, h := range hits {
+		if h.Band == BandStrongRecall {
+			strong = append(strong, h)
+		}
+	}
+	return strong
+}
+
+func filterWeakHits(hits []RetrievalHit) []RetrievalHit {
+	weak := make([]RetrievalHit, 0, len(hits))
+	for _, h := range hits {
+		if h.Band == BandWeakFamiliarity {
+			weak = append(weak, h)
+		}
+	}
+	return weak
 }
 
 func matchRetrievalFilters(m core.MemoryEntry, f RetrievalFilters) bool {
@@ -511,3 +665,144 @@ func max(a, b int) int {
 	}
 	return b
 }
+
+func (e *RetrievalEngine) retrieveGraphExpand(ctx context.Context, opt RetrievalOptions) ([]RetrievalHit, error) {
+	// 1. Get seed memories via semantic search (limit to TopK seeds)
+	seedHits, err := e.vector.SearchWithOptions(ctx, VectorSearchOptions{
+		Workspace: opt.Workspace,
+		Query:     opt.Query,
+		TopK:      opt.TopK,
+		Types:     opt.Filters.Types,
+		Tiers:     opt.Filters.Tiers,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// 2. Perform BFS expansion
+	depthLimit := opt.Depth
+	if depthLimit <= 0 {
+		depthLimit = 2
+	}
+
+	type bfsNode struct {
+		id       string
+		distance int
+		weight   float64
+	}
+
+	queue := make([]bfsNode, 0)
+	visited := make(map[string]int) // ID -> distance
+	pathWeight := make(map[string]float64) // ID -> max relation weight
+
+	for _, h := range seedHits {
+		queue = append(queue, bfsNode{id: h.Memory.ID, distance: 0, weight: 1.0})
+		visited[h.Memory.ID] = 0
+		pathWeight[h.Memory.ID] = 1.0
+	}
+
+	for len(queue) > 0 {
+		curr := queue[0]
+		queue = queue[1:]
+
+		if curr.distance >= depthLimit {
+			continue
+		}
+
+		rels, err := e.vector.Store().ListRelations(ctx, curr.id)
+		if err != nil {
+			continue
+		}
+
+		for _, r := range rels {
+			newDist := curr.distance + 1
+			newWeight := curr.weight * r.Weight
+
+			if prevDist, exists := visited[r.TargetID]; exists {
+				if newDist < prevDist {
+					visited[r.TargetID] = newDist
+					pathWeight[r.TargetID] = newWeight
+					queue = append(queue, bfsNode{id: r.TargetID, distance: newDist, weight: newWeight})
+				} else if newDist == prevDist && newWeight > pathWeight[r.TargetID] {
+					pathWeight[r.TargetID] = newWeight
+				}
+			} else {
+				visited[r.TargetID] = newDist
+				pathWeight[r.TargetID] = newWeight
+				queue = append(queue, bfsNode{id: r.TargetID, distance: newDist, weight: newWeight})
+			}
+		}
+	}
+
+	// 3. Compute query embedding for scoring
+	qv, err := e.vector.Provider().Embed(ctx, opt.Query)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get all cached vectors for workspace to avoid re-embedding
+	vectorsMap, err := e.vector.Store().ListMemoryVectorsByWorkspace(ctx, opt.Workspace)
+	if err != nil {
+		vectorsMap = make(map[string][]float32)
+	}
+
+	now := e.clock()
+	ranked := make([]RetrievalHit, 0, len(visited))
+
+	// 4. Retrieve memory details and score them
+	for id, dist := range visited {
+		m, err := e.vector.Store().GetMemory(ctx, id)
+		if err != nil {
+			continue
+		}
+		if !matchRetrievalFilters(*m, opt.Filters) {
+			continue
+		}
+
+		// Compute semantic score
+		var score float64
+		mv, hasVector := vectorsMap[id]
+		if !hasVector || len(mv) == 0 {
+			text := memoryVectorText(*m)
+			mv, err = e.vector.Provider().Embed(ctx, text)
+			if err == nil {
+				score, _ = embeddings.Cosine(qv, mv)
+				_ = e.vector.Store().UpsertMemoryVector(ctx, m.ID, m.Workspace, e.vector.Provider().Name(), e.vector.Provider().ModelVersion(), mv)
+			}
+		} else {
+			score, _ = embeddings.Cosine(qv, mv)
+		}
+
+		// Calculate total score using path distance and relationship weight
+		relWeight := pathWeight[id]
+		distanceFactor := 1.0 / (1.0 + float64(dist))
+		totalScore := score * distanceFactor * relWeight
+
+		recency := recencyScore(now, m.UpdatedAt)
+		outcome := outcomeScore(opt.Mode, *m)
+		decay := decayScore(*m)
+		tierBias := tierBiasScore(m.StorageTier)
+		salience := salienceSignal(now, *m)
+		suppression := suppressionSignal(now, *m)
+
+		ranked = append(ranked, RetrievalHit{
+			Memory: *m,
+			Score:  totalScore,
+			Breakdown: SignalBreakdown{
+				Semantic:    score,
+				Recency:     recency,
+				Outcome:     outcome,
+				Decay:       decay,
+				TierBias:    tierBias,
+				Salience:    salience,
+				Suppression: suppression,
+				Total:       totalScore,
+			},
+		})
+	}
+
+	sort.Slice(ranked, func(i, j int) bool { return ranked[i].Score > ranked[j].Score })
+	return ranked, nil
+}
+
+

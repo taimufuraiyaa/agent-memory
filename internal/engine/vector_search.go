@@ -21,6 +21,7 @@ type SearchHit struct {
 type VectorSearcher struct {
 	store    *sqlite.Store
 	provider embeddings.Provider
+	cache    *QueryCache
 }
 
 // VectorSearchOptions controls semantic search behavior and filtering.
@@ -34,7 +35,21 @@ type VectorSearchOptions struct {
 
 // NewVectorSearcher builds a semantic searcher.
 func NewVectorSearcher(store *sqlite.Store, provider embeddings.Provider) *VectorSearcher {
-	return &VectorSearcher{store: store, provider: provider}
+	return &VectorSearcher{
+		store:    store,
+		provider: provider,
+		cache:    NewQueryCache(DefaultQueryCacheConfig()),
+	}
+}
+
+// Store returns the underlying SQLite store.
+func (s *VectorSearcher) Store() *sqlite.Store {
+	return s.store
+}
+
+// Provider returns the underlying embedding provider.
+func (s *VectorSearcher) Provider() embeddings.Provider {
+	return s.provider
 }
 
 // Search runs brute-force semantic search over workspace entries.
@@ -51,9 +66,23 @@ func (s *VectorSearcher) SearchWithOptions(ctx context.Context, opt VectorSearch
 	if opt.TopK <= 0 {
 		opt.TopK = 5
 	}
-	qv, err := s.provider.Embed(ctx, opt.Query)
-	if err != nil {
-		return nil, err
+	
+	// Check embedding cache first to avoid re-embedding repeated queries
+	var qv []float32
+	if s.cache != nil {
+		qv = s.cache.GetEmbedding(ctx, opt.Query)
+	}
+	
+	// Cache miss - compute embedding and store it
+	if qv == nil {
+		var err error
+		qv, err = s.provider.Embed(ctx, opt.Query)
+		if err != nil {
+			return nil, err
+		}
+		if s.cache != nil {
+			s.cache.SetEmbedding(ctx, opt.Query, qv)
+		}
 	}
 	activeProvider := strings.TrimSpace(s.provider.Name())
 	memories, err := s.store.ListMemoriesByWorkspace(ctx, opt.Workspace)
@@ -100,7 +129,7 @@ func (s *VectorSearcher) SearchWithOptions(ctx context.Context, opt VectorSearch
 				return nil, err
 			}
 			// Best-effort cache write; retrieval should still succeed without cache.
-			_ = s.store.UpsertMemoryVector(ctx, m.ID, m.Workspace, activeProvider, mv)
+			_ = s.store.UpsertMemoryVector(ctx, m.ID, m.Workspace, activeProvider, s.provider.ModelVersion(), mv)
 		}
 		score, err := embeddings.Cosine(qv, mv)
 		if err != nil {

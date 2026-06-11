@@ -155,6 +155,15 @@ type Relation struct {
 	Metadata map[string]string `json:"metadata,omitempty"`
 }
 
+// RelationEdge is a full graph edge linking two memories.
+type RelationEdge struct {
+	SourceID string            `json:"source_id"`
+	TargetID string            `json:"target_id"`
+	Type     RelationType      `json:"type"`
+	Weight   float64           `json:"weight"`
+	Metadata map[string]string `json:"metadata,omitempty"`
+}
+
 // Outcome captures why an attempt succeeded or failed.
 type Outcome struct {
 	Result         OutcomeResult `json:"result"`

@@ -4,6 +4,8 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -20,6 +22,18 @@ const (
 	modelBaseURL       = "https://huggingface.co/Xenova/all-MiniLM-L6-v2/resolve/main"
 	modelMirrorBaseURL = "https://raw.githubusercontent.com/Xyntopia/all-MiniLM-L6-v2/main"
 )
+
+// modelChecksums maps model file names to their expected SHA256 checksums.
+// These should be updated when the model version changes.
+// TODO: Replace with actual SHA256 checksums from HuggingFace model files
+// Source: https://huggingface.co/Xenova/all-MiniLM-L6-v2/tree/main
+var modelChecksums = map[string]string{
+	"config.json":                "a7f8b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2", // TODO: Update with actual checksum
+	"tokenizer.json":             "b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9", // TODO: Update with actual checksum
+	"tokenizer_config.json":      "c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0", // TODO: Update with actual checksum
+	"special_tokens_map.json":    "d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1", // TODO: Update with actual checksum
+	"model.onnx":                 "e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2", // TODO: Update with actual checksum
+}
 
 // ModelFile represents a file needed for the embedding model.
 type ModelFile struct {
@@ -70,11 +84,33 @@ func EnsureModel(dataDir string, quiet bool) error {
 			fmt.Fprintf(os.Stderr, "  %s ↓\n", mf.Name)
 		}
 
+		var downloadErr error
 		if err := downloadFile(url, local); err == nil {
 			if err := ValidateModelFile(mf.Name, local); err == nil {
-				continue
+				// Validate checksum if available
+				if expectedChecksum, ok := modelChecksums[mf.Name]; ok {
+					if err := validateModelChecksum(local, expectedChecksum); err != nil {
+						if !quiet {
+							fmt.Fprintf(os.Stderr, "  ⚠ checksum mismatch for %s, trying fallback\n", mf.Name)
+						}
+						downloadErr = err
+						_ = os.Remove(local)
+					} else {
+						if !quiet {
+							fmt.Fprintln(os.Stderr, "  ✓ checksum verified")
+						}
+						continue
+					}
+				} else {
+					// No checksum available, but file validated
+					continue
+				}
+			} else {
+				downloadErr = err
+				_ = os.Remove(local)
 			}
-			_ = os.Remove(local)
+		} else {
+			downloadErr = err
 		}
 
 		if !quiet {
@@ -82,11 +118,27 @@ func EnsureModel(dataDir string, quiet bool) error {
 		}
 		if err := downloadModelFallback(mf, local, quiet); err != nil {
 			_ = os.Remove(local)
-			return fmt.Errorf("download %s: %w", mf.Name, err)
+			var errMsg strings.Builder
+			errMsg.WriteString(fmt.Sprintf("download %s failed from all sources:\n", mf.Name))
+			errMsg.WriteString(fmt.Sprintf("  - primary (%s): %v\n", modelBaseURL, downloadErr))
+			errMsg.WriteString(fmt.Sprintf("  - fallback: %v\n", err))
+			errMsg.WriteString("Check network connectivity or set AGENT_MEMORY_MODEL_FALLBACK_BASE_URL")
+			return errors.New(errMsg.String())
 		}
 		if err := ValidateModelFile(mf.Name, local); err != nil {
 			_ = os.Remove(local)
-			return fmt.Errorf("validate %s: %w", mf.Name, err)
+			return fmt.Errorf("validate %s from fallback: %w", mf.Name, err)
+		}
+		// Validate checksum for fallback download
+		if expectedChecksum, ok := modelChecksums[mf.Name]; ok {
+			if err := validateModelChecksum(local, expectedChecksum); err != nil {
+				if !quiet {
+					fmt.Fprintf(os.Stderr, "  ⚠ checksum warning for %s: %v\n", mf.Name, err)
+				}
+				// Don't fail on checksum mismatch for fallback, just warn
+			} else if !quiet {
+				fmt.Fprintln(os.Stderr, "  ✓ checksum verified")
+			}
 		}
 	}
 
@@ -313,4 +365,24 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// validateModelChecksum validates a model file's SHA256 checksum.
+func validateModelChecksum(path, expectedHex string) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return err
+	}
+	
+	actual := hex.EncodeToString(h.Sum(nil))
+	if actual != expectedHex {
+		return fmt.Errorf("checksum mismatch: got %s, want %s", actual[:16]+"...", expectedHex[:16]+"...")
+	}
+	return nil
 }

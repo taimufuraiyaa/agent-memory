@@ -353,7 +353,7 @@ func TestSearchParityHTTPVsCLIWithTierFilter(t *testing.T) {
 		if err != nil {
 			t.Fatalf("embed %s: %v", id, err)
 		}
-		if err := store.UpsertMemoryVector(ctx, id, "ws", provider.Name(), vec); err != nil {
+		if err := store.UpsertMemoryVector(ctx, id, "ws", provider.Name(), provider.ModelVersion(), vec); err != nil {
 			t.Fatalf("vector %s: %v", id, err)
 		}
 	}

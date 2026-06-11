@@ -19,9 +19,12 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+
 	"github.com/time/timebooks/agent-memory/internal/core"
 	"github.com/time/timebooks/agent-memory/internal/embeddings"
 	"github.com/time/timebooks/agent-memory/internal/engine"
+	"github.com/time/timebooks/agent-memory/internal/observability"
 	"github.com/time/timebooks/agent-memory/internal/storage/sqlite"
 	"github.com/time/timebooks/agent-memory/internal/workspace"
 )
@@ -67,10 +70,19 @@ func (s *Service) resolve(ctx context.Context, ws string) (*workspaceAssets, err
 	if err != nil {
 		return nil, err
 	}
+	
+	// Create shared cache for efficient query reuse
+	cache := engine.NewQueryCache(engine.DefaultQueryCacheConfig())
+	searcher := engine.NewVectorSearcher(store, s.EmbeddingProvider)
+	retrieval := engine.NewRetrievalEngineWithCache(searcher, engine.DefaultQueryCacheConfig())
+	
 	assets = &workspaceAssets{
 		Store:     store,
-		Writer:    engine.NewWritePipelineWithEmbedder(store, s.EmbeddingProvider),
-		Retrieval: engine.NewRetrievalEngine(engine.NewVectorSearcher(store, s.EmbeddingProvider)),
+		Writer:    engine.NewWritePipelineWithOptions(store, engine.WritePipelineOptions{
+			Embedder: s.EmbeddingProvider,
+			Cache:    cache,
+		}),
+		Retrieval: retrieval,
 		Clipper:   engine.NewTokenClipper(nil),
 	}
 	if s.stores == nil {
@@ -127,10 +139,81 @@ func trimRetrievalHits(hits []engine.RetrievalHit, limit int) []engine.Retrieval
 	return hits[:limit]
 }
 
+// instrumentedResponseWriter wraps http.ResponseWriter to capture status code and bytes written.
+type instrumentedResponseWriter struct {
+	http.ResponseWriter
+	statusCode   int
+	bytesWritten int
+}
+
+func (rw *instrumentedResponseWriter) WriteHeader(code int) {
+	rw.statusCode = code
+	rw.ResponseWriter.WriteHeader(code)
+}
+
+func (rw *instrumentedResponseWriter) Write(b []byte) (int, error) {
+	n, err := rw.ResponseWriter.Write(b)
+	rw.bytesWritten += n
+	return n, err
+}
+
+// NewMux returns the HTTP ServeMux with all route handlers registered.
+// Wrap the returned mux with InstrumentedHandler to add Prometheus metrics.
 func NewMux(svc *Service) *http.ServeMux {
 	mux := http.NewServeMux()
+	// Prometheus metrics scrape endpoint
+	mux.Handle("/metrics", promhttp.Handler())
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		writeOK(w, http.StatusOK, map[string]any{"status": "ok"})
+		status := "ok"
+		var memoryCount int
+		var lastLifecycleRun string
+		var dbSizeMB float64
+
+		ws := svc.Workspace
+		if ws == "" {
+			ws = "agent-memory" // fallback if empty
+		}
+
+		assets, err := svc.resolve(r.Context(), ws)
+		if err == nil && assets.Store != nil {
+			if summary, err := assets.Store.GetWorkspaceActivitySummary(r.Context(), ws); err == nil {
+				memoryCount = summary.MemoryCount
+			}
+			if state, err := assets.Store.GetSchedulerWorkspaceState(r.Context(), ws); err == nil && state != nil && !state.LastCompletedAt.IsZero() {
+				lastLifecycleRun = state.LastCompletedAt.Format(time.RFC3339)
+			}
+		}
+
+		dbPath := filepath.Join(svc.BaseDir, ws+".db")
+		if fi, err := os.Stat(dbPath); err == nil {
+			dbSizeMB = float64(fi.Size()) / (1024 * 1024)
+		}
+
+		providerName := "unknown"
+		providerVersion := "unknown"
+		onnxAvailable := false
+		if svc.EmbeddingProvider != nil {
+			providerName = svc.EmbeddingProvider.Name()
+			providerVersion = svc.EmbeddingProvider.ModelVersion()
+			onnxAvailable = (providerName == "onnx-minilm-l6-v2")
+		}
+
+		// Round dbSizeMB to two decimal places
+		dbSizeMB = math.Round(dbSizeMB*100) / 100
+
+		writeOK(w, http.StatusOK, map[string]any{
+			"status":                  status,
+			"db_size_mb":              dbSizeMB,
+			"memory_count":            memoryCount,
+			"last_lifecycle_run":      lastLifecycleRun,
+			"embedding_provider":      providerName,
+			"embedding_model_version": providerVersion,
+			"onnx_runtime_available":   onnxAvailable,
+		})
+	})
+	mux.HandleFunc("/ops/dashboard", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write([]byte(OperatorDashboardHTML))
 	})
 	mux.HandleFunc("/api/v1/scheduler/status", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -423,6 +506,7 @@ func NewMux(svc *Service) *http.ServeMux {
 			TopK        int               `json:"top_k"`
 			TokenBudget int               `json:"token_budget"`
 			Mode        string            `json:"mode"`
+			Depth       int               `json:"depth"`
 			Explain     bool              `json:"explain"`
 			Tiers       []string          `json:"tiers"`
 			Types       []core.MemoryType `json:"types"`
@@ -479,7 +563,7 @@ func NewMux(svc *Service) *http.ServeMux {
 			mode = engine.ModeSearch
 		}
 		switch mode {
-		case engine.ModeSearch, engine.ModeRecall, engine.ModeRelate, engine.ModeOutcomes:
+		case engine.ModeSearch, engine.ModeRecall, engine.ModeRelate, engine.ModeOutcomes, engine.ModeGraphExpand:
 		default:
 			writeErr(w, http.StatusBadRequest, "validation", "invalid mode")
 			return
@@ -577,6 +661,7 @@ func NewMux(svc *Service) *http.ServeMux {
 			Query:     req.Query,
 			TopK:      topK,
 			Mode:      mode,
+			Depth:     req.Depth,
 			Filters: engine.RetrievalFilters{
 				Types:         types,
 				Tiers:         parsedTiers,
@@ -618,6 +703,7 @@ func NewMux(svc *Service) *http.ServeMux {
 					Query:     opt.Query,
 					TopK:      opt.TopK,
 					Mode:      opt.Mode,
+					Depth:     opt.Depth,
 					Filters:   opt.Filters,
 					Policy:    opt.Policy,
 				})
@@ -650,6 +736,7 @@ func NewMux(svc *Service) *http.ServeMux {
 				Query:     opt.Query,
 				TopK:      opt.TopK,
 				Mode:      opt.Mode,
+				Depth:     opt.Depth,
 				Filters:   opt.Filters,
 				Policy:    opt.Policy,
 			})
@@ -1793,6 +1880,51 @@ func NewMux(svc *Service) *http.ServeMux {
 			},
 		})
 	})
+	mux.HandleFunc("/api/v1/graph", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			writeErr(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+			return
+		}
+		workspace := workspaceFromRequest(r, svc.Workspace)
+		assets, err := svc.resolve(r.Context(), workspace)
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
+			return
+		}
+		memories, err := assets.Store.ListMemoriesByWorkspace(r.Context(), workspace)
+		if err != nil {
+			writeErr(w, http.StatusBadRequest, "runtime", err.Error())
+			return
+		}
+		relations, err := assets.Store.ListWorkspaceRelations(r.Context(), workspace)
+		if err != nil {
+			writeErr(w, http.StatusBadRequest, "runtime", err.Error())
+			return
+		}
+
+		type GraphNode struct {
+			ID          string           `json:"id"`
+			Content     string           `json:"content"`
+			Type        core.MemoryType  `json:"type"`
+			StorageTier core.StorageTier `json:"storage_tier"`
+		}
+
+		nodes := make([]GraphNode, 0, len(memories))
+		for _, m := range memories {
+			nodes = append(nodes, GraphNode{
+				ID:          m.ID,
+				Content:     m.Content,
+				Type:        m.Type,
+				StorageTier: m.StorageTier,
+			})
+		}
+
+		writeOK(w, http.StatusOK, map[string]any{
+			"workspace": workspace,
+			"nodes":     nodes,
+			"edges":     relations,
+		})
+	})
 	mux.HandleFunc("/api/v1/stats", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			writeErr(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
@@ -1923,7 +2055,7 @@ func NewMux(svc *Service) *http.ServeMux {
 		} else {
 			schedulerSummary = externalSchedulerSummary(r.Context(), svc.BaseDir, workspace)
 		}
-
+		cacheStats := assets.Retrieval.CacheStats()
 		writeOK(w, http.StatusOK, map[string]any{
 			"workspace":                     workspace,
 			"memory_count":                  len(memories),
@@ -1958,6 +2090,17 @@ func NewMux(svc *Service) *http.ServeMux {
 			"recall_token_savings_percent":  percentSaved(recallTokenTotals.BaselineTokens, recallTokenTotals.SavedTokens),
 			"token_savings_percent":         percentSaved(recallTokenTotals.BaselineTokens, recallTokenTotals.SavedTokens),
 			"scheduler":                     schedulerSummary,
+			"cache": map[string]any{
+				"enabled":            cacheStats.Enabled,
+				"embedding_entries":  cacheStats.EmbeddingEntries,
+				"result_entries":     cacheStats.ResultEntries,
+				"embedding_hits":     cacheStats.EmbeddingHits,
+				"embedding_misses":   cacheStats.EmbeddingMisses,
+				"result_hits":        cacheStats.ResultHits,
+				"result_misses":      cacheStats.ResultMisses,
+				"embedding_hit_rate": cacheStats.EmbeddingHitRate(),
+				"result_hit_rate":    cacheStats.ResultHitRate(),
+			},
 		})
 	})
 
@@ -1970,6 +2113,35 @@ func NewMux(svc *Service) *http.ServeMux {
 	mux.Handle("/dashboard/", serveDashboard())
 
 	return mux
+}
+
+// InstrumentedHandler wraps the given handler with Prometheus HTTP instrumentation
+// middleware that records request count, duration, size, and in-flight gauges.
+func InstrumentedHandler(h http.Handler) http.Handler {
+	metrics := observability.GetRegistry()
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		metrics.HTTPRequestsInFlight.Inc()
+		defer metrics.HTTPRequestsInFlight.Dec()
+
+		irw := &instrumentedResponseWriter{ResponseWriter: w, statusCode: http.StatusOK}
+		timer := observability.NewTimer()
+
+		// Record request size
+		if r.ContentLength > 0 {
+			metrics.HTTPRequestSize.WithLabelValues(r.Method, r.URL.Path).Observe(float64(r.ContentLength))
+		}
+
+		h.ServeHTTP(irw, r)
+
+		duration := timer.Duration()
+		statusStr := fmt.Sprintf("%d", irw.statusCode)
+		metrics.HTTPRequestsTotal.WithLabelValues(r.Method, r.URL.Path, statusStr).Inc()
+		timer.ObserveDuration(metrics.HTTPRequestDuration.WithLabelValues(r.Method, r.URL.Path))
+		if irw.bytesWritten > 0 {
+			metrics.HTTPResponseSize.WithLabelValues(r.Method, r.URL.Path).Observe(float64(irw.bytesWritten))
+		}
+		_ = duration
+	})
 }
 
 func schedulerSummaryForWorkspace(status *SchedulerStatus, workspace string) map[string]any {

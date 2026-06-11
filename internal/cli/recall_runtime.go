@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -46,6 +47,69 @@ func openDeps(ctx context.Context, cfg runtimeConfig) (*sqlite.Store, embeddings
 		return nil, nil, err
 	}
 	return store, provider, nil
+}
+
+// checkAndWarnModelVersion checks for model version mismatches and prints warnings to stderr.
+// This is called after openDeps to alert users about embedding version inconsistencies.
+// If AGENT_MEMORY_AUTO_REEMBED=1 is set and a significant mismatch is detected, it will
+// automatically trigger a reembed operation.
+func checkAndWarnModelVersion(ctx context.Context, workspace string, store *sqlite.Store, provider embeddings.Provider) {
+	if store == nil || provider == nil || strings.TrimSpace(workspace) == "" {
+		return
+	}
+
+	check, err := engine.CheckModelVersion(ctx, workspace, store, provider)
+	if err != nil {
+		// Don't fail the command, just skip the check
+		return
+	}
+
+	if check == nil || !check.ShouldWarnAboutVersionMismatch() {
+		return
+	}
+
+	// Print warning to stderr
+	_, _ = os.Stderr.WriteString("\n" + check.FormatWarningMessage() + "\n")
+
+	// Check for auto-reembed flag
+	if strings.TrimSpace(os.Getenv("AGENT_MEMORY_AUTO_REEMBED")) != "1" {
+		return
+	}
+
+	// Auto-trigger reembed if enabled and reembed is required
+	if !check.ReembedRequired {
+		return
+	}
+
+	_, _ = os.Stderr.WriteString("\n🔄 Auto-reembed triggered (AGENT_MEMORY_AUTO_REEMBED=1)\n")
+	_, _ = os.Stderr.WriteString("Re-embedding workspace: " + workspace + "\n\n")
+
+	// Get the database path from the store
+	dbPath := getDBPathFromWorkspace(workspace)
+	if dbPath == "" {
+		_, _ = os.Stderr.WriteString("⚠️  Failed to determine database path, skipping auto-reembed\n\n")
+		return
+	}
+
+	// Run reembed
+	result, reembedErr := runReembedWorkspace(ctx, workspace, dbPath, provider, false)
+	if reembedErr != nil {
+		_, _ = os.Stderr.WriteString("⚠️  Auto-reembed failed: " + reembedErr.Error() + "\n\n")
+		return
+	}
+
+	_, _ = os.Stderr.WriteString(fmt.Sprintf("✅ Auto-reembed complete:\n"))
+	_, _ = os.Stderr.WriteString(fmt.Sprintf("   - Re-embedded: %d memories\n", result.ReEmbedded))
+	_, _ = os.Stderr.WriteString(fmt.Sprintf("   - Skipped: %d memories\n\n", result.Skipped))
+}
+
+func getDBPathFromWorkspace(workspace string) string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	baseDir := filepath.Join(home, ".agent-memory")
+	return filepath.Join(baseDir, workspace+".db")
 }
 
 func executeRecall(
@@ -105,9 +169,14 @@ func executeRecall(
 		}
 	}
 
+	// Create shared cache for searcher, retrieval, and pipeline
+	cache := engine.NewQueryCache(engine.DefaultQueryCacheConfig())
 	searcher := engine.NewVectorSearcher(store, provider)
-	retrieval := engine.NewRetrievalEngine(searcher)
-	pipeline := engine.NewWritePipelineWithEmbedder(store, provider)
+	retrieval := engine.NewRetrievalEngineWithCache(searcher, engine.DefaultQueryCacheConfig())
+	pipeline := engine.NewWritePipelineWithOptions(store, engine.WritePipelineOptions{
+		Embedder: provider,
+		Cache:    cache,
+	})
 	var (
 		retrieved *engine.RetrievalResult
 		decision  engine.RecallGateDecision
