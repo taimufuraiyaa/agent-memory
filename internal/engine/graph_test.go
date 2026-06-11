@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/time/timebooks/agent-memory/internal/core"
 	"github.com/time/timebooks/agent-memory/internal/embeddings"

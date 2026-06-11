@@ -506,6 +506,7 @@ func NewMux(svc *Service) *http.ServeMux {
 			TopK        int               `json:"top_k"`
 			TokenBudget int               `json:"token_budget"`
 			Mode        string            `json:"mode"`
+			Depth       int               `json:"depth"`
 			Explain     bool              `json:"explain"`
 			Tiers       []string          `json:"tiers"`
 			Types       []core.MemoryType `json:"types"`
@@ -562,7 +563,7 @@ func NewMux(svc *Service) *http.ServeMux {
 			mode = engine.ModeSearch
 		}
 		switch mode {
-		case engine.ModeSearch, engine.ModeRecall, engine.ModeRelate, engine.ModeOutcomes:
+		case engine.ModeSearch, engine.ModeRecall, engine.ModeRelate, engine.ModeOutcomes, engine.ModeGraphExpand:
 		default:
 			writeErr(w, http.StatusBadRequest, "validation", "invalid mode")
 			return
@@ -660,6 +661,7 @@ func NewMux(svc *Service) *http.ServeMux {
 			Query:     req.Query,
 			TopK:      topK,
 			Mode:      mode,
+			Depth:     req.Depth,
 			Filters: engine.RetrievalFilters{
 				Types:         types,
 				Tiers:         parsedTiers,
@@ -701,6 +703,7 @@ func NewMux(svc *Service) *http.ServeMux {
 					Query:     opt.Query,
 					TopK:      opt.TopK,
 					Mode:      opt.Mode,
+					Depth:     opt.Depth,
 					Filters:   opt.Filters,
 					Policy:    opt.Policy,
 				})
@@ -733,6 +736,7 @@ func NewMux(svc *Service) *http.ServeMux {
 				Query:     opt.Query,
 				TopK:      opt.TopK,
 				Mode:      opt.Mode,
+				Depth:     opt.Depth,
 				Filters:   opt.Filters,
 				Policy:    opt.Policy,
 			})
@@ -2051,40 +2055,6 @@ func NewMux(svc *Service) *http.ServeMux {
 		} else {
 			schedulerSummary = externalSchedulerSummary(r.Context(), svc.BaseDir, workspace)
 		}
-
-		writeOK(w, http.StatusOK, map[string]any{
-			"workspace":                     workspace,
-			"memory_count":                  len(memories),
-			"db_size_bytes":                 dbSize,
-			"memory_type_counts":            typeCounts,
-			"storage_tier_counts":           tierCounts,
-			"diagram_count":                 diagramCount,
-			"pinned_count":                  pinnedCount,
-			"retrieve_count_total":          totalRetrieveCount,
-			"retrieved_memory_count":        retrievedMemoryCount,
-			"never_reached_memory_count":    neverReachedMemoryCount,
-			"retrieval_coverage_percent":    retrievalCoveragePercent,
-			"never_reached_percent":         neverReachedPercent,
-			"low_reach_percentile":          lowReachPercentile,
-			"low_reach_threshold":           lowReachThreshold,
-			"low_reach_memory_count":        lowReachMemoryCount,
-			"top_retrieved_memories":        topRetrievedMemories,
-			"last_memory_updated_at":        lastUpdated,
-			"last_memory_accessed_at":       lastAccessed,
-			"last_activity":                 lastActivityStr,
-			"token_metrics":                 tokenTotals,
-			"token_metrics_by_operation":    tokenByOperation,
-			"token_metrics_by_group":        enabledGroups,
-			"raw_token_metrics_by_group":    disabledGroups,
-			"token_metrics_by_group_all":    tokenGroups,
-			"recall_token_metrics":          recallTokenTotals,
-			"llm_usage_totals":              llmTotals,
-			"llm_usage_by_group":            llmEnabledGroups,
-			"raw_llm_usage_by_group":        llmDisabledGroups,
-			"llm_usage_by_group_all":        llmGroups,
-			"overall_token_savings_percent": percentSaved(tokenTotals.BaselineTokens, tokenTotals.SavedTokens),
-			"recall_token_savings_percent":  percentSaved(recallTokenTotals.BaselineTokens, recallTokenTotals.SavedTokens),
-			"token_savings_percent":         percentSaved(recallTokenTotals.BaselineTokens, recallTokenTotals.SavedTokens),
 		cacheStats := assets.Retrieval.CacheStats()
 		writeOK(w, http.StatusOK, map[string]any{
 			"workspace":                     workspace,

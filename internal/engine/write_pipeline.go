@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/attribute"
@@ -192,19 +193,19 @@ func (p *WritePipeline) Write(ctx context.Context, in WriteInput) (res *WriteRes
 	if err := validation.ValidateWorkspaceName(in.Workspace); err != nil {
 		return nil, fmt.Errorf("invalid workspace: %w", err)
 	}
-	
+
 	// Validate content length
 	if err := validation.ValidateContentLength(in.Content); err != nil {
 		return nil, fmt.Errorf("invalid content: %w", err)
 	}
-	
+
 	// Validate diagram code if present
 	if in.Diagram != nil && in.Diagram.Code != "" {
 		if err := validation.ValidateDiagramCode(in.Diagram.Code); err != nil {
 			return nil, fmt.Errorf("invalid diagram: %w", err)
 		}
 	}
-	
+
 	if strings.TrimSpace(in.Workspace) == "" {
 		return nil, errors.New("workspace is required")
 	}
@@ -472,7 +473,6 @@ func (p *WritePipeline) inferRelationships(ctx context.Context, entry *core.Memo
 		}
 	}
 }
-
 
 func appendUnique(tags []string, tag string) []string {
 	for _, t := range tags {

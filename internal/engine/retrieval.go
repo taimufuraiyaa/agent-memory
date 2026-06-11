@@ -9,6 +9,7 @@ import (
 
 	"github.com/time/timebooks/agent-memory/internal/config"
 	"github.com/time/timebooks/agent-memory/internal/core"
+	"github.com/time/timebooks/agent-memory/internal/embeddings"
 	"github.com/time/timebooks/agent-memory/internal/observability"
 )
 

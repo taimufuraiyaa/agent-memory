@@ -575,7 +575,7 @@ const OperatorDashboardHTML = `<!DOCTYPE html>
                     return {
                         id: n.id,
                         label: cleanContent,
-                        title: `ID: ${n.id}\nType: ${n.type}\nTier: ${n.storage_tier}\nContent: ${n.content}`,
+                        title: 'ID: ' + n.id + '\nType: ' + n.type + '\nTier: ' + n.storage_tier + '\nContent: ' + n.content,
                         color: {
                             background: typeColors[n.type] || '#6b7280',
                             border: 'rgba(255, 255, 255, 0.2)',
