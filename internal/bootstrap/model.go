@@ -28,11 +28,11 @@ const (
 // TODO: Replace with actual SHA256 checksums from HuggingFace model files
 // Source: https://huggingface.co/Xenova/all-MiniLM-L6-v2/tree/main
 var modelChecksums = map[string]string{
-	"config.json":                "a7f8b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2", // TODO: Update with actual checksum
-	"tokenizer.json":             "b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9", // TODO: Update with actual checksum
-	"tokenizer_config.json":      "c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0", // TODO: Update with actual checksum
-	"special_tokens_map.json":    "d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1", // TODO: Update with actual checksum
-	"model.onnx":                 "e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2", // TODO: Update with actual checksum
+	"config.json":                "7135149f7cffa1a573466c6e4d8423ed73b62fd2332c575bf738a0d033f70df7",
+	"tokenizer.json":             "da0e79933b9ed51798a3ae27893d3c5fa4a201126cef75586296df9b4d2c62a0",
+	"tokenizer_config.json":      "9261e7d79b44c8195c1cada2b453e55b00aeb81e907a6664974b4d7776172ab3",
+	"special_tokens_map.json":    "b6d346be366a7d1d48332dbc9fdf3bf8960b5d879522b7799ddba59e76237ee3",
+	"model.onnx":                 "afdb6f1a0e45b715d0bb9b11772f032c399babd23bfc31fed1c170afc848bdb1",
 }
 
 // ModelFile represents a file needed for the embedding model.

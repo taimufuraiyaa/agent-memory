@@ -1186,6 +1186,143 @@ ORDER BY created_at DESC`, workspace, sessionID)
 	return out, rows.Err()
 }
 
+// GetMemoriesByIDs loads multiple memory entries by their IDs in a single query.
+// Returns a map from memory ID to memory entry.
+func (s *Store) GetMemoriesByIDs(ctx context.Context, ids []string) (map[string]core.MemoryEntry, error) {
+	if len(ids) == 0 {
+		return make(map[string]core.MemoryEntry), nil
+	}
+
+	// Build query with IN placeholders
+	placeholders := make([]string, len(ids))
+	args := make([]interface{}, len(ids))
+	for i, id := range ids {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+
+	query := fmt.Sprintf(`
+SELECT id, type, content, diagram_lang, diagram_code, workspace, source_json, entities_json, tags_json, confidence, storage_tier, pinned, superseded_by, access_count, last_accessed, decay_score, salience_score, suppression_score, useful_count, ignored_count, rejected_count, harmful_count, last_helpful_at, last_rejected_at, suppression_until, familiarity_band_last, outcome_json, created_at, updated_at
+FROM memories WHERE id IN (%s)`, strings.Join(placeholders, ","))
+
+	_startGet := time.Now()
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		s.logSlowQuery(ctx, "get_memories_by_ids", "", time.Since(_startGet))
+		return nil, err
+	}
+	defer func() {
+		s.logSlowQuery(ctx, "get_memories_by_ids", "", time.Since(_startGet))
+	}()
+	defer func() { _ = rows.Close() }()
+
+	out := make(map[string]core.MemoryEntry)
+	for rows.Next() {
+		var m core.MemoryEntry
+		var sourceJSON, entitiesJSON, tagsJSON string
+		var outcomeJSON sql.NullString
+		var diagramLang, diagramCode string
+		var pinned int
+		var supersededBy sql.NullString
+		var createdAt, updatedAt, lastAccessed, lastHelpfulAt, lastRejectedAt, suppressionUntil string
+		if err := rows.Scan(
+			&m.ID, &m.Type, &m.Content, &diagramLang, &diagramCode, &m.Workspace, &sourceJSON, &entitiesJSON, &tagsJSON,
+			&m.Confidence, &m.StorageTier, &pinned, &supersededBy, &m.AccessCount, &lastAccessed, &m.DecayScore, &m.SalienceScore, &m.SuppressionScore, &m.UsefulCount, &m.IgnoredCount, &m.RejectedCount, &m.HarmfulCount, &lastHelpfulAt, &lastRejectedAt, &suppressionUntil, &m.FamiliarityBandLast, &outcomeJSON, &createdAt, &updatedAt,
+		); err != nil {
+			return nil, err
+		}
+
+		if err := json.Unmarshal([]byte(sourceJSON), &m.Source); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal([]byte(entitiesJSON), &m.Entities); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal([]byte(tagsJSON), &m.Tags); err != nil {
+			return nil, err
+		}
+		if outcomeJSON.Valid && outcomeJSON.String != "" {
+			var o core.Outcome
+			if err := json.Unmarshal([]byte(outcomeJSON.String), &o); err != nil {
+				return nil, err
+			}
+			m.Outcome = &o
+		}
+		if t, err := time.Parse(time.RFC3339Nano, createdAt); err == nil {
+			m.CreatedAt = t
+		}
+		if t, err := time.Parse(time.RFC3339Nano, updatedAt); err == nil {
+			m.UpdatedAt = t
+		}
+		if t, err := time.Parse(time.RFC3339Nano, lastAccessed); err == nil {
+			m.LastAccessedAt = t
+		}
+		if lastHelpfulAt != "" {
+			if t, err := time.Parse(time.RFC3339Nano, lastHelpfulAt); err == nil {
+				m.LastHelpfulAt = t
+			}
+		}
+		if lastRejectedAt != "" {
+			if t, err := time.Parse(time.RFC3339Nano, lastRejectedAt); err == nil {
+				m.LastRejectedAt = t
+			}
+		}
+		if suppressionUntil != "" {
+			if t, err := time.Parse(time.RFC3339Nano, suppressionUntil); err == nil {
+				m.SuppressionUntil = &t
+			}
+		}
+		if supersededBy.Valid && supersededBy.String != "" {
+			m.SupersededBy = &supersededBy.String
+		}
+		m.Pinned = pinned == 1
+		applyDiagram(&m, diagramLang, diagramCode)
+		out[m.ID] = m
+	}
+	return out, rows.Err()
+}
+
+// ListMemoryLightweightForInference returns only the necessary fields (ID, Entities, StorageTier, CreatedAt) for non-cold memories.
+// This optimizes writes by preventing loading the full text content and parsing all JSON fields of all memories in the workspace.
+func (s *Store) ListMemoryLightweightForInference(ctx context.Context, workspace string) ([]core.MemoryEntry, error) {
+	_startList := time.Now()
+	rows, err := s.db.QueryContext(ctx, `
+SELECT id, entities_json, storage_tier, created_at
+FROM memories
+WHERE workspace = ? AND storage_tier != 'cold'`, workspace)
+	if err != nil {
+		s.logSlowQuery(ctx, "list_memory_lightweight_for_inference", workspace, time.Since(_startList))
+		return nil, err
+	}
+	defer func() {
+		s.logSlowQuery(ctx, "list_memory_lightweight_for_inference", workspace, time.Since(_startList))
+	}()
+	defer func() { _ = rows.Close() }()
+
+	out := make([]core.MemoryEntry, 0)
+	for rows.Next() {
+		var m core.MemoryEntry
+		var entitiesJSON string
+		var createdAt string
+		if err := rows.Scan(
+			&m.ID,
+			&entitiesJSON,
+			&m.StorageTier,
+			&createdAt,
+		); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal([]byte(entitiesJSON), &m.Entities); err != nil {
+			return nil, err
+		}
+		if t, err := time.Parse(time.RFC3339Nano, createdAt); err == nil {
+			m.CreatedAt = t
+		}
+		out = append(out, m)
+	}
+	return out, rows.Err()
+}
+
 func (s *Store) ensureColumn(ctx context.Context, table, column, alterSQL string) error {
 	ok, err := s.hasColumn(ctx, table, column)
 	if err != nil {

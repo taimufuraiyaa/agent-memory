@@ -74,7 +74,7 @@ func (s *Service) resolve(ctx context.Context, ws string) (*workspaceAssets, err
 	// Create shared cache for efficient query reuse
 	cache := engine.NewQueryCache(engine.DefaultQueryCacheConfig())
 	searcher := engine.NewVectorSearcher(store, s.EmbeddingProvider)
-	retrieval := engine.NewRetrievalEngineWithCache(searcher, engine.DefaultQueryCacheConfig())
+	retrieval := engine.NewRetrievalEngineWithSharedCache(searcher, cache)
 	
 	assets = &workspaceAssets{
 		Store:     store,

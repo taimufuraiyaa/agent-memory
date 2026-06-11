@@ -2,9 +2,8 @@ package engine
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -140,7 +139,11 @@ func (c *QueryCache) GetResults(ctx context.Context, opt RetrievalOptions) []Ret
 	}
 
 	observability.GetRegistry().CacheHits.WithLabelValues("result").Inc()
-	return cached.Hits
+	
+	// Return a copy of the hits slice to prevent future external mutations
+	hitsCopy := make([]RetrievalHit, len(cached.Hits))
+	copy(hitsCopy, cached.Hits)
+	return hitsCopy
 }
 
 // SetResults stores retrieval results in the cache.
@@ -154,8 +157,13 @@ func (c *QueryCache) SetResults(ctx context.Context, opt RetrievalOptions, hits 
 
 	key := hashRetrievalOptions(opt)
 	now := time.Now()
+	
+	// Create a copy of the hits slice to prevent future external mutations
+	hitsCopy := make([]RetrievalHit, len(hits))
+	copy(hitsCopy, hits)
+	
 	cached := CachedResult{
-		Hits:      hits,
+		Hits:      hitsCopy,
 		CachedAt:  now,
 		ExpiresAt: now.Add(c.ttl),
 	}
@@ -173,9 +181,11 @@ func (c *QueryCache) InvalidateWorkspace(workspace string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	
-	// For now, clear entire result cache on workspace writes
-	// This is conservative but safe - more granular invalidation can be added later
-	c.resultCache = newLRUCache(c.resultCache.maxSize)
+	// Invalidate only results belonging to this workspace using prefix matching
+	prefix := fmt.Sprintf("ws=%s|", workspace)
+	c.resultCache.invalidate(func(key string) bool {
+		return strings.HasPrefix(key, prefix)
+	})
 }
 
 // Stats returns cache performance metrics.
@@ -227,13 +237,12 @@ func (s CacheStats) ResultHitRate() float64 {
 	return float64(s.ResultHits) / float64(total)
 }
 
-// hashQueryText creates a deterministic hash of query text for cache keys.
+// hashQueryText returns the raw text directly to avoid hashing overhead and keep keys readable.
 func hashQueryText(text string) string {
-	h := sha256.Sum256([]byte(text))
-	return hex.EncodeToString(h[:])
+	return text
 }
 
-// hashRetrievalOptions creates a deterministic hash of retrieval parameters.
+// hashRetrievalOptions returns a deterministic key representing the retrieval options.
 func hashRetrievalOptions(opt RetrievalOptions) string {
 	var outcome any
 	if opt.Filters.OutcomeResult != nil {
@@ -274,7 +283,7 @@ func hashRetrievalOptions(opt RetrievalOptions) string {
 		weakCutoff = *opt.Policy.WeakRelativeCutoff
 	}
 
-	key := fmt.Sprintf("ws=%s|q=%s|k=%d|m=%s|d=%d|types=%v|tiers=%v|outcome=%v|conf=%.4f|decay=%.4f|entities=%v|from=%s|to=%s|min_sem=%.4f|min_total=%.4f|rel=%.4f|w_sem=%.4f|w_total=%.4f|w_rel=%.4f",
+	return fmt.Sprintf("ws=%s|q=%s|k=%d|m=%s|d=%d|types=%v|tiers=%v|outcome=%v|conf=%.4f|decay=%.4f|entities=%v|from=%s|to=%s|min_sem=%.4f|min_total=%.4f|rel=%.4f|w_sem=%.4f|w_total=%.4f|w_rel=%.4f",
 		opt.Workspace,
 		opt.Query,
 		opt.TopK,
@@ -295,8 +304,6 @@ func hashRetrievalOptions(opt RetrievalOptions) string {
 		weakTotal,
 		weakCutoff,
 	)
-	h := sha256.Sum256([]byte(key))
-	return hex.EncodeToString(h[:])
 }
 
 // lruCache is a simple LRU cache implementation.
@@ -395,4 +402,16 @@ func (c *lruCache) removeLRU() {
 	}
 	c.removeNode(lru)
 	delete(c.items, lru.key)
+}
+
+func (c *lruCache) invalidate(filter func(key string) bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	
+	for key, node := range c.items {
+		if filter(key) {
+			c.removeNode(node)
+			delete(c.items, key)
+		}
+	}
 }

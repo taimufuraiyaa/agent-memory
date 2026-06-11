@@ -85,27 +85,35 @@ func (s *VectorSearcher) SearchWithOptions(ctx context.Context, opt VectorSearch
 		}
 	}
 	activeProvider := strings.TrimSpace(s.provider.Name())
+	
+	// Fast path: SQL-based vector search inside SQLite
+	sqlScores, err := s.store.SearchMemoryVectorsSQL(ctx, opt.Workspace, activeProvider, qv, opt.TopK, opt.Types, opt.Tiers)
+	if err == nil && len(sqlScores) > 0 {
+		ids := make([]string, len(sqlScores))
+		for i, sc := range sqlScores {
+			ids[i] = sc.MemoryID
+		}
+		
+		matchingMemories, err := s.store.GetMemoriesByIDs(ctx, ids)
+		if err == nil && len(matchingMemories) > 0 {
+			out := make([]SearchHit, 0, len(sqlScores))
+			for _, sc := range sqlScores {
+				m, ok := matchingMemories[sc.MemoryID]
+				if !ok {
+					continue
+				}
+				out = append(out, SearchHit{Memory: m, Score: sc.Score})
+			}
+			if len(out) > 0 {
+				return out, nil
+			}
+		}
+	}
+
+	// Fallback path: load all memories and compute similarity brute-force
 	memories, err := s.store.ListMemoriesByWorkspace(ctx, opt.Workspace)
 	if err != nil {
 		return nil, err
-	}
-	memoryByID := make(map[string]core.MemoryEntry, len(memories))
-	for _, m := range memories {
-		memoryByID[m.ID] = m
-	}
-	sqlScores, err := s.store.SearchMemoryVectorsSQL(ctx, opt.Workspace, activeProvider, qv, opt.TopK, opt.Types, opt.Tiers)
-	if err == nil && len(sqlScores) > 0 {
-		out := make([]SearchHit, 0, len(sqlScores))
-		for _, sc := range sqlScores {
-			m, ok := memoryByID[sc.MemoryID]
-			if !ok {
-				continue
-			}
-			out = append(out, SearchHit{Memory: m, Score: sc.Score})
-		}
-		if len(out) > 0 {
-			return out, nil
-		}
 	}
 	cachedRows, err := s.store.ListMemoryVectorRowsByWorkspace(ctx, opt.Workspace)
 	if err != nil {

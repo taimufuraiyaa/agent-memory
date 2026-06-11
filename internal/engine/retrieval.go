@@ -150,6 +150,15 @@ func NewRetrievalEngineWithCache(vector *VectorSearcher, cacheConfig QueryCacheC
 	}
 }
 
+// NewRetrievalEngineWithSharedCache creates a retrieval engine with a shared query cache.
+func NewRetrievalEngineWithSharedCache(vector *VectorSearcher, cache *QueryCache) *RetrievalEngine {
+	return &RetrievalEngine{
+		vector: vector,
+		cache:  cache,
+		clock:  func() time.Time { return time.Now().UTC() },
+	}
+}
+
 // Retrieve computes mode-aware weighted ranking with explain output.
 // Results are cached to reduce latency for repeated queries.
 func (e *RetrievalEngine) Retrieve(ctx context.Context, opt RetrievalOptions) (res *RetrievalResult, retrieveErr error) {
@@ -747,14 +756,23 @@ func (e *RetrievalEngine) retrieveGraphExpand(ctx context.Context, opt Retrieval
 	}
 
 	now := e.clock()
-	ranked := make([]RetrievalHit, 0, len(visited))
+	// 4. Retrieve memory details in a batch query and score them
+	visitedIDs := make([]string, 0, len(visited))
+	for id := range visited {
+		visitedIDs = append(visitedIDs, id)
+	}
+	memoriesMap, err := e.vector.Store().GetMemoriesByIDs(ctx, visitedIDs)
+	if err != nil {
+		memoriesMap = make(map[string]core.MemoryEntry)
+	}
 
-	// 4. Retrieve memory details and score them
+	ranked := make([]RetrievalHit, 0, len(visited))
 	for id, dist := range visited {
-		m, err := e.vector.Store().GetMemory(ctx, id)
-		if err != nil {
+		mEntry, ok := memoriesMap[id]
+		if !ok {
 			continue
 		}
+		m := &mEntry
 		if !matchRetrievalFilters(*m, opt.Filters) {
 			continue
 		}
