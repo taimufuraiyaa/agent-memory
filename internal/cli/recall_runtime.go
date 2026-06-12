@@ -172,7 +172,7 @@ func executeRecall(
 	// Create shared cache for searcher, retrieval, and pipeline
 	cache := engine.NewQueryCache(engine.DefaultQueryCacheConfig())
 	searcher := engine.NewVectorSearcher(store, provider)
-	retrieval := engine.NewRetrievalEngineWithCache(searcher, engine.DefaultQueryCacheConfig())
+	retrieval := engine.NewRetrievalEngineWithSharedCache(searcher, cache)
 	pipeline := engine.NewWritePipelineWithOptions(store, engine.WritePipelineOptions{
 		Embedder: provider,
 		Cache:    cache,

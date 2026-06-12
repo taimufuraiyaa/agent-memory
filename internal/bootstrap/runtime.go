@@ -19,13 +19,14 @@ const onnxRuntimeVersion = "1.25.0"
 // TODO: Replace with actual SHA256 checksums from https://github.com/microsoft/onnxruntime/releases/tag/v1.25.0
 // The checksums should be obtained from the official release assets or calculated from downloaded files.
 var runtimeChecksums = map[string]string{
-	"darwin-arm64":    "e6c2b9f3f8c84cf76f5a6e3a1e6c3f4a8b9c2d1e0f5a6b7c8d9e0f1a2b3c4d5e6", // TODO: Update with actual checksum
-	"darwin-amd64":    "f7d3a0e4e9d95cf87g6b5f4e3d2c1b0a9f8e7d6c5b4a3928170f6e5d4c3b2a1f0", // TODO: Update with actual checksum
-	"linux-amd64":     "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2", // TODO: Update with actual checksum
-	"linux-arm64":     "b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3", // TODO: Update with actual checksum
-	"windows-amd64":   "c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4", // TODO: Update with actual checksum
-	"windows-386":     "d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5", // TODO: Update with actual checksum
-	"windows-arm64":   "e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6", // TODO: Update with actual checksum
+	"darwin-arm64":    "65405dc8793c86cadb98b5e07f6d3bdde84f8300f1b030d4736b41c17610d6c1",
+	// Other platforms are commented out to allow a warning path rather than failing on placeholder mismatch.
+	// "darwin-amd64":  "",
+	// "linux-amd64":   "",
+	// "linux-arm64":   "",
+	// "windows-amd64": "",
+	// "windows-386":   "",
+	// "windows-arm64": "",
 }
 
 // EnsureONNXRuntime downloads and extracts the ONNX Runtime library.

@@ -410,7 +410,7 @@ func (p *WritePipeline) inferRelationships(ctx context.Context, entry *core.Memo
 
 	// 2. Entity co-occurrence (Jaccard similarity > 0)
 	if len(entry.Entities) > 0 {
-		workspaceMemories, err := p.store.ListMemoriesByWorkspace(ctx, entry.Workspace)
+		workspaceMemories, err := p.store.ListMemoryLightweightForInference(ctx, entry.Workspace)
 		if err == nil {
 			for _, m := range workspaceMemories {
 				if m.ID == entry.ID || m.StorageTier == core.TierCold {

@@ -294,3 +294,49 @@ func TestCacheEmbeddingReuse(t *testing.T) {
 		stats.EmbeddingEntries, stats.EmbeddingHits, stats.EmbeddingMisses,
 		stats.EmbeddingHitRate()*100)
 }
+
+// TestWorkspacePrefixCacheInvalidation verifies that invalidating Workspace A does not clear Workspace B's cache.
+func TestWorkspacePrefixCacheInvalidation(t *testing.T) {
+	cache := NewQueryCache(DefaultQueryCacheConfig())
+
+	optA := RetrievalOptions{
+		Workspace: "workspace-A",
+		Query:     "query A",
+		TopK:      5,
+		Mode:      ModeSearch,
+	}
+	optB := RetrievalOptions{
+		Workspace: "workspace-B",
+		Query:     "query B",
+		TopK:      5,
+		Mode:      ModeSearch,
+	}
+
+	hitsA := []RetrievalHit{{Memory: core.MemoryEntry{ID: "mem-A", Workspace: "workspace-A"}}}
+	hitsB := []RetrievalHit{{Memory: core.MemoryEntry{ID: "mem-B", Workspace: "workspace-B"}}}
+
+	ctx := context.Background()
+
+	// 1. Populate cache
+	cache.SetResults(ctx, optA, hitsA)
+	cache.SetResults(ctx, optB, hitsB)
+
+	// Verify both exist
+	if got := cache.GetResults(ctx, optA); got == nil || got[0].Memory.ID != "mem-A" {
+		t.Fatal("expected cached result for A")
+	}
+	if got := cache.GetResults(ctx, optB); got == nil || got[0].Memory.ID != "mem-B" {
+		t.Fatal("expected cached result for B")
+	}
+
+	// 2. Invalidate Workspace A
+	cache.InvalidateWorkspace("workspace-A")
+
+	// 3. Verify Workspace A is miss/cleared, but Workspace B is still present
+	if got := cache.GetResults(ctx, optA); got != nil {
+		t.Error("expected Workspace A's cache to be invalidated/cleared")
+	}
+	if got := cache.GetResults(ctx, optB); got == nil || got[0].Memory.ID != "mem-B" {
+		t.Error("expected Workspace B's cache to remain intact")
+	}
+}
