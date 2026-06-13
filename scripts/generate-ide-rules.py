@@ -14,12 +14,12 @@ IDE_CONFIGS = [
     (
         ".cursor/rules/agent-memory.mdc",
         {"cursor"},
-        "# agent-memory\nworkspace: agent-memory\n",
+        "---\ndescription: Always use agent-memory CLI for memory search, recall, write, and session-end\nglobs: *\nalwaysApply: true\n---\n# agent-memory\nworkspace: agent-memory\n",
     ),
     (
         ".agents/rules/agent-memory.md",
         {"agents", "antigravity"},
-        "# agent-memory\nworkspace: agent-memory\n",
+        "---\ntrigger: always_on\n---\n# agent-memory\nworkspace: agent-memory\n",
     ),
     (
         ".trae/rules/project_rules.md",

@@ -692,7 +692,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 
 	if err != nil {
 		return fmt.Errorf("insert memory: %w", err)
 	}
-	affected, err = res.RowsAffected()
+	affected, err := res.RowsAffected()
 	if err != nil {
 		return fmt.Errorf("insert memory rows: %w", err)
 	}

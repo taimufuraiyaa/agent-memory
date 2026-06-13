@@ -1,3 +1,6 @@
+---
+trigger: always_on
+---
 # agent-memory
 workspace: agent-memory
 

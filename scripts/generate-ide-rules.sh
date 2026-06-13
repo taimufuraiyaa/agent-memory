@@ -92,13 +92,21 @@ main() {
     # Cursor (.cursor/rules/agent-memory.mdc)
     generate_file "cursor" \
         ".cursor/rules/agent-memory.mdc" \
-        "# agent-memory
+        "---
+description: Always use agent-memory CLI for memory search, recall, write, and session-end
+globs: *
+alwaysApply: true
+---
+# agent-memory
 workspace: agent-memory"
     
     # Antigravity (.agents/rules/agent-memory.md)
     generate_file "antigravity" \
         ".agents/rules/agent-memory.md" \
-        "# agent-memory
+        "---
+trigger: always_on
+---
+# agent-memory
 workspace: agent-memory"
     
     # Trae (.trae/rules/project_rules.md)

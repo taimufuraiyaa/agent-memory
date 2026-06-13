@@ -170,11 +170,16 @@ def fetch_token_metrics(
     run_label: str,
     memory_enabled: bool,
     operation: str = "recall",
+    fallback_db_path: Path | None = None,
 ) -> list[TokenMetricRow]:
     import sys
     if not db_path.is_file():
-        sys.stderr.write(f"DEBUG fetch_token_metrics: db_path {db_path} does not exist, returning empty rows\n")
-        return []
+        if fallback_db_path and fallback_db_path.is_file() and fallback_db_path != db_path:
+            sys.stderr.write(f"DEBUG fetch_token_metrics: db_path {db_path} does not exist, falling back to {fallback_db_path}\n")
+            db_path = fallback_db_path
+        else:
+            sys.stderr.write(f"DEBUG fetch_token_metrics: db_path {db_path} does not exist, returning empty rows\n")
+            return []
     db_uri = f"file:{str(db_path)}?mode=ro&immutable=1"
     sys.stderr.write(f"DEBUG fetch_token_metrics: db_path={db_path}, db_uri={db_uri}, workspace={workspace}, run_label={run_label}, memory_enabled={memory_enabled}\n")
     conn = sqlite3.connect(db_uri, uri=True)
@@ -191,8 +196,21 @@ def fetch_token_metrics(
             """,
             (workspace, run_label, 1 if memory_enabled else 0, operation),
         ).fetchall()
+    except sqlite3.OperationalError as e:
+        if "no such table: token_metrics" in str(e) and fallback_db_path and fallback_db_path.is_file() and fallback_db_path != db_path:
+            sys.stderr.write(f"DEBUG fetch_token_metrics: table token_metrics not found in {db_path}, falling back to {fallback_db_path}\n")
+            try:
+                conn.close()
+            except Exception:
+                pass
+            return fetch_token_metrics(fallback_db_path, workspace, run_label, memory_enabled, operation)
+        sys.stderr.write(f"WARNING: fetch_token_metrics failed: {e}\n")
+        return []
     finally:
-        conn.close()
+        try:
+            conn.close()
+        except Exception:
+            pass
     return [
         TokenMetricRow(
             row_id=row[0],
@@ -502,8 +520,9 @@ def score_run(run_dir: Path, db_path: Path | None) -> dict[str, Any]:
         for fixture_id in case.get("prior_fixture_ids", []):
             fixture_reuse_counts[fixture_id] = fixture_reuse_counts.get(fixture_id, 0) + 1
 
-    on_token_rows = fetch_token_metrics(db_file, workspace, "benchmark-on", True)
-    off_token_rows = fetch_token_metrics(db_file, workspace, "benchmark-off", False)
+    manifest_db = Path(run_manifest["db_path"])
+    on_token_rows = fetch_token_metrics(db_file, workspace, "benchmark-on", True, fallback_db_path=manifest_db)
+    off_token_rows = fetch_token_metrics(db_file, workspace, "benchmark-off", False, fallback_db_path=manifest_db)
 
     per_case_rows: list[dict[str, Any]] = []
     off_rows_by_case = {row["stable_case_id"]: (index, row) for index, row in enumerate(off_rows)}
