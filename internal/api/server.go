@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"math"
 	"net/http"
 	"os"
@@ -19,13 +20,16 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
+	"github.com/time/timebooks/agent-memory/internal/api/dashboard"
 	"github.com/time/timebooks/agent-memory/internal/core"
 	"github.com/time/timebooks/agent-memory/internal/embeddings"
 	"github.com/time/timebooks/agent-memory/internal/engine"
 	"github.com/time/timebooks/agent-memory/internal/observability"
 	"github.com/time/timebooks/agent-memory/internal/storage/sqlite"
+	"github.com/time/timebooks/agent-memory/internal/validation"
 	"github.com/time/timebooks/agent-memory/internal/workspace"
 )
 
@@ -535,8 +539,10 @@ func NewMux(svc *Service) *http.ServeMux {
 			ws = workspaceFromRequest(r, svc.Workspace)
 		}
 		if !memoryEnabled() {
-			if assets, err := svc.resolve(r.Context(), ws); err == nil && assets.Store != nil {
-				_ = assets.Store.AddTokenMetricV2(r.Context(), ws, "search", 0, 0, engine.RunLabel(), false)
+			if ws != allProjectsScope {
+				if assets, err := svc.resolve(r.Context(), ws); err == nil && assets.Store != nil {
+					_ = assets.Store.AddTokenMetricV2(r.Context(), ws, "search", 0, 0, engine.RunLabel(), false)
+				}
 			}
 			writeOK(w, http.StatusOK, map[string]any{
 				"disabled": true,
@@ -549,10 +555,14 @@ func NewMux(svc *Service) *http.ServeMux {
 			writeErr(w, http.StatusBadRequest, "validation", "query is required")
 			return
 		}
-		assets, err := svc.resolve(r.Context(), ws)
-		if err != nil {
-			writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
-			return
+		var assets *workspaceAssets
+		var err error
+		if ws != allProjectsScope {
+			assets, err = svc.resolve(r.Context(), ws)
+			if err != nil {
+				writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
+				return
+			}
 		}
 		topK := req.TopK
 		if topK <= 0 {
@@ -695,8 +705,8 @@ func NewMux(svc *Service) *http.ServeMux {
 			for _, projectName := range projectNames {
 				projectAssets, err := svc.resolve(r.Context(), projectName)
 				if err != nil {
-					writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
-					return
+					log.Printf("[agent-memory] failed to resolve project %q during all-projects search: %v", projectName, err)
+					continue
 				}
 				projectOut, err := projectAssets.Retrieval.Retrieve(r.Context(), engine.RetrievalOptions{
 					Workspace: projectName,
@@ -708,8 +718,8 @@ func NewMux(svc *Service) *http.ServeMux {
 					Policy:    opt.Policy,
 				})
 				if err != nil {
-					writeErr(w, http.StatusBadRequest, "runtime", err.Error())
-					return
+					log.Printf("[agent-memory] failed to retrieve memories from project %q during all-projects search: %v", projectName, err)
+					continue
 				}
 				hits = append(hits, projectOut.Hits...)
 				strongHits = append(strongHits, projectOut.StrongHits...)
@@ -883,115 +893,46 @@ func NewMux(svc *Service) *http.ServeMux {
 		if budget <= 0 {
 			budget = req.Budget
 		}
-		if budget <= 0 {
-			budget = 4000
-		}
-		observationBlock := ""
-		observationTokens := 0
-		observationCount := 0
-		observationSessionID := ""
-		if req.IncludeObservations && observeEnabled() {
-			block, sid, count := buildRecentObservationBlock(r.Context(), assets.Store, ws, strings.TrimSpace(req.ObservationSession), req.ObservationLimit)
-			observationBlock = block
-			observationSessionID = sid
-			observationCount = count
-			observationTokens = len(strings.Fields(observationBlock)) + len(strings.Fields("## Recent Observations"))
-			if budget-observationTokens > 0 {
-				budget = budget - observationTokens
-			} else {
-				budget = 0
-			}
-		}
-		topK := req.TopK
-		if topK <= 0 {
-			topK = 50
-		}
-		var (
-			retrieved *engine.RetrievalResult
-			decision  engine.RecallGateDecision
-		)
-		if engine.IsContinuationPrompt(task) {
-			decision = engine.DecideRecallGate(task, nil)
-			retrieved, err = assets.Retrieval.Retrieve(r.Context(), engine.RetrievalOptions{
-				Workspace: ws,
-				Query:     task,
-				TopK:      topK,
-				Mode:      engine.ModeRecall,
-			})
-		} else {
-			searchProbe, searchErr := assets.Retrieval.Retrieve(r.Context(), engine.RetrievalOptions{
-				Workspace: ws,
-				Query:     task,
-				TopK:      topK,
-				Mode:      engine.ModeSearch,
-			})
-			if searchErr != nil {
-				writeErr(w, http.StatusBadRequest, "runtime", searchErr.Error())
-				return
-			}
-			decision = engine.DecideRecallGate(task, searchProbe)
-			if decision.SearchSufficient {
-				retrieved = &engine.RetrievalResult{
-					Mode:           engine.ModeSearch,
-					Weights:        searchProbe.Weights,
-					Policy:         searchProbe.Policy,
-					Hits:           append([]engine.RetrievalHit(nil), searchProbe.StrongHits...),
-					StrongHits:     append([]engine.RetrievalHit(nil), searchProbe.StrongHits...),
-					WeakHits:       append([]engine.RetrievalHit(nil), searchProbe.WeakHits...),
-					SuppressedHits: append([]engine.RetrievalHit(nil), searchProbe.SuppressedHits...),
-				}
-			} else {
-				retrieved, err = assets.Retrieval.Retrieve(r.Context(), engine.RetrievalOptions{
-					Workspace: ws,
-					Query:     task,
-					TopK:      topK,
-					Mode:      engine.ModeRecall,
-				})
-			}
-		}
+		result, err := runRecallPipeline(r.Context(), assets, recallParams{
+			workspace:           ws,
+			task:                task,
+			topK:                req.TopK,
+			budget:              budget,
+			includeObservations: req.IncludeObservations,
+			observationSession:  req.ObservationSession,
+			observationLimit:    req.ObservationLimit,
+		})
 		if err != nil {
 			writeErr(w, http.StatusBadRequest, "runtime", err.Error())
 			return
-		}
-		retrieved, reconstruction, err := engine.AugmentRecallWithReconstruction(r.Context(), ws, task, retrieved, assets.Retrieval, assets.Store, assets.Writer, topK)
-		if err != nil {
-			writeErr(w, http.StatusBadRequest, "runtime", err.Error())
-			return
-		}
-		rebalanced := engine.RebalanceRecallHits(task, retrieved.Hits)
-		included, meta := assets.Clipper.Clip(rebalanced, budget)
-		contextBlock := engine.AssembleRecallSectionsWithObservations(task, observationBlock, included)
-		tokensUsedTotal := meta.UsedTokens + observationTokens
-		if assets.Store != nil {
-			_ = assets.Store.AddTokenMetricV2(r.Context(), ws, "recall", tokensUsedTotal, recallBaselineTokens(rebalanced, observationTokens), engine.RunLabel(), engine.MemoryEnabled())
 		}
 		data := map[string]any{
-			"context_block":          contextBlock,
-			"tokens_used":            tokensUsedTotal,
-			"tokens_budget":          meta.Budget + observationTokens,
-			"memories_used":          included,
-			"weak_memories":          retrieved.WeakHits,
-			"suppressed_memories":    retrieved.SuppressedHits,
-			"clipping":               meta,
+			"context_block":          result.contextBlock,
+			"tokens_used":            result.clip.UsedTokens + result.observationTokens,
+			"tokens_budget":          result.clip.Budget + result.observationTokens,
+			"memories_used":          result.included,
+			"weak_memories":          result.retrieved.WeakHits,
+			"suppressed_memories":    result.retrieved.SuppressedHits,
+			"clipping":               result.clip,
 			"workspace":              ws,
-			"requested_top_k":        topK,
-			"requested_budget":       meta.Budget + observationTokens,
-			"retrieval_policy":       retrieved.Policy,
-			"observations_included":  req.IncludeObservations && observeEnabled(),
-			"observation_session_id": observationSessionID,
-			"observation_count":      observationCount,
-			"observation_tokens":     observationTokens,
-			"retrieval_mode":         retrieved.Mode,
-			"retrieved_hit_count":    len(retrieved.Hits),
-			"retrieval_strategy":     decision.Strategy,
-			"recall_trigger":         decision.Trigger,
-			"search_sufficient":      decision.SearchSufficient,
-			"search_probe":           decision.Probe,
-			"deep_recall_used":       decision.Strategy != engine.RecallStrategySearchSatisfied,
-			"reconstruction":         reconstruction,
+			"requested_top_k":        result.topK,
+			"requested_budget":       result.clip.Budget + result.observationTokens,
+			"retrieval_policy":       result.retrieved.Policy,
+			"observations_included":  result.includeObservations && observeEnabled(),
+			"observation_session_id": result.observationSessionID,
+			"observation_count":      result.observationCount,
+			"observation_tokens":     result.observationTokens,
+			"retrieval_mode":         result.retrieved.Mode,
+			"retrieved_hit_count":    len(result.retrieved.Hits),
+			"retrieval_strategy":     result.decision.Strategy,
+			"recall_trigger":         result.decision.Trigger,
+			"search_sufficient":      result.decision.SearchSufficient,
+			"search_probe":           result.decision.Probe,
+			"deep_recall_used":       result.decision.Strategy != engine.RecallStrategySearchSatisfied,
+			"reconstruction":         result.reconstruction,
 		}
 		if strings.EqualFold(strings.TrimSpace(req.Format), "raw") {
-			data["text"] = contextBlock
+			data["text"] = result.contextBlock
 		}
 		writeOK(w, http.StatusOK, data)
 	})
@@ -1054,91 +995,26 @@ func NewMux(svc *Service) *http.ServeMux {
 		if budget <= 0 {
 			budget = req.Budget
 		}
-		if budget <= 0 {
-			budget = 4000
-		}
-		observationBlock := ""
-		observationTokens := 0
-		observationCount := 0
-		observationSessionID := ""
-		originalBudget := budget
-		if req.IncludeObservations && observeEnabled() {
-			block, sid, count := buildRecentObservationBlock(r.Context(), assets.Store, ws, strings.TrimSpace(req.ObservationSession), req.ObservationLimit)
-			observationBlock = block
-			observationSessionID = sid
-			observationCount = count
-			observationTokens = len(strings.Fields(observationBlock)) + len(strings.Fields("## Recent Observations"))
-			if budget-observationTokens > 0 {
-				budget = budget - observationTokens
-			} else {
-				budget = 0
-			}
-		}
-		topK := req.TopK
-		if topK <= 0 {
-			topK = 50
-		}
-		var (
-			retrieved *engine.RetrievalResult
-			decision  engine.RecallGateDecision
-		)
-		if engine.IsContinuationPrompt(task) {
-			decision = engine.DecideRecallGate(task, nil)
-			retrieved, err = assets.Retrieval.Retrieve(r.Context(), engine.RetrievalOptions{
-				Workspace: ws,
-				Query:     task,
-				TopK:      topK,
-				Mode:      engine.ModeRecall,
-			})
-		} else {
-			searchProbe, searchErr := assets.Retrieval.Retrieve(r.Context(), engine.RetrievalOptions{
-				Workspace: ws,
-				Query:     task,
-				TopK:      topK,
-				Mode:      engine.ModeSearch,
-			})
-			if searchErr != nil {
-				writeErr(w, http.StatusBadRequest, "runtime", searchErr.Error())
-				return
-			}
-			decision = engine.DecideRecallGate(task, searchProbe)
-			if decision.SearchSufficient {
-				retrieved = &engine.RetrievalResult{
-					Mode:           engine.ModeSearch,
-					Weights:        searchProbe.Weights,
-					Policy:         searchProbe.Policy,
-					Hits:           append([]engine.RetrievalHit(nil), searchProbe.StrongHits...),
-					StrongHits:     append([]engine.RetrievalHit(nil), searchProbe.StrongHits...),
-					WeakHits:       append([]engine.RetrievalHit(nil), searchProbe.WeakHits...),
-					SuppressedHits: append([]engine.RetrievalHit(nil), searchProbe.SuppressedHits...),
-				}
-			} else {
-				retrieved, err = assets.Retrieval.Retrieve(r.Context(), engine.RetrievalOptions{
-					Workspace: ws,
-					Query:     task,
-					TopK:      topK,
-					Mode:      engine.ModeRecall,
-				})
-			}
-		}
+		result, err := runRecallPipeline(r.Context(), assets, recallParams{
+			workspace:           ws,
+			task:                task,
+			topK:                req.TopK,
+			budget:              budget,
+			includeObservations: req.IncludeObservations,
+			observationSession:  req.ObservationSession,
+			observationLimit:    req.ObservationLimit,
+		})
 		if err != nil {
 			writeErr(w, http.StatusBadRequest, "runtime", err.Error())
 			return
 		}
-		retrieved, reconstruction, err := engine.AugmentRecallWithReconstruction(r.Context(), ws, task, retrieved, assets.Retrieval, assets.Store, assets.Writer, topK)
-		if err != nil {
-			writeErr(w, http.StatusBadRequest, "runtime", err.Error())
-			return
-		}
-		rebalanced := engine.RebalanceRecallHits(task, retrieved.Hits)
-		included, meta := assets.Clipper.Clip(rebalanced, budget)
 		tierDist := make(map[string]int)
-		mems := make([]map[string]any, 0, len(included))
+		mems := make([]map[string]any, 0, len(result.included))
 		var fullMems []core.MemoryEntry
 		if req.IncludeMemories {
-			fullMems = make([]core.MemoryEntry, 0, len(included))
+			fullMems = make([]core.MemoryEntry, 0, len(result.included))
 		}
-		for _, h := range included {
+		for _, h := range result.included {
 			tier := string(h.Memory.StorageTier)
 			tierDist[tier]++
 			item := map[string]any{
@@ -1157,37 +1033,34 @@ func NewMux(svc *Service) *http.ServeMux {
 			}
 		}
 		out := map[string]any{
-			"context_block":          engine.AssembleRecallSectionsWithObservations(task, observationBlock, included),
-			"tokens_used":            meta.UsedTokens + observationTokens,
-			"tokens_budget":          meta.Budget + observationTokens,
+			"context_block":          result.contextBlock,
+			"tokens_used":            result.clip.UsedTokens + result.observationTokens,
+			"tokens_budget":          result.clip.Budget + result.observationTokens,
 			"memories_included":      mems,
-			"weak_memories":          renderSearchResults(retrieved.WeakHits, req.Explain),
-			"suppressed_memories":    renderSearchResults(retrieved.SuppressedHits, req.Explain),
-			"memories_clipped":       renderClipped(meta),
+			"weak_memories":          renderSearchResults(result.retrieved.WeakHits, req.Explain),
+			"suppressed_memories":    renderSearchResults(result.retrieved.SuppressedHits, req.Explain),
+			"memories_clipped":       renderClipped(result.clip),
 			"tier_distribution":      tierDist,
-			"clipping":               meta,
+			"clipping":               result.clip,
 			"workspace":              ws,
-			"requested_task":         task,
+			"requested_task":         result.task,
 			"requested_explain":      req.Explain,
-			"requested_top_k":        topK,
-			"requested_budget":       originalBudget,
-			"observations_included":  req.IncludeObservations && observeEnabled(),
-			"observation_session_id": observationSessionID,
-			"observation_count":      observationCount,
-			"observation_tokens":     observationTokens,
-			"retrieval_mode":         retrieved.Mode,
-			"retrieval_weights":      retrieved.Weights,
-			"retrieval_policy":       retrieved.Policy,
-			"retrieved_hit_count":    len(retrieved.Hits),
-			"retrieval_strategy":     decision.Strategy,
-			"recall_trigger":         decision.Trigger,
-			"search_sufficient":      decision.SearchSufficient,
-			"search_probe":           decision.Probe,
-			"deep_recall_used":       decision.Strategy != engine.RecallStrategySearchSatisfied,
-			"reconstruction":         reconstruction,
-		}
-		if assets.Store != nil {
-			_ = assets.Store.AddTokenMetricV2(r.Context(), ws, "recall", meta.UsedTokens+observationTokens, recallBaselineTokens(rebalanced, observationTokens), engine.RunLabel(), engine.MemoryEnabled())
+			"requested_top_k":        result.topK,
+			"requested_budget":       result.originalBudget,
+			"observations_included":  result.includeObservations && observeEnabled(),
+			"observation_session_id": result.observationSessionID,
+			"observation_count":      result.observationCount,
+			"observation_tokens":     result.observationTokens,
+			"retrieval_mode":         result.retrieved.Mode,
+			"retrieval_weights":      result.retrieved.Weights,
+			"retrieval_policy":       result.retrieved.Policy,
+			"retrieved_hit_count":    len(result.retrieved.Hits),
+			"retrieval_strategy":     result.decision.Strategy,
+			"recall_trigger":         result.decision.Trigger,
+			"search_sufficient":      result.decision.SearchSufficient,
+			"search_probe":           result.decision.Probe,
+			"deep_recall_used":       result.decision.Strategy != engine.RecallStrategySearchSatisfied,
+			"reconstruction":         result.reconstruction,
 		}
 		if req.IncludeMemories {
 			out["memories_included_full"] = fullMems
@@ -1408,13 +1281,22 @@ func NewMux(svc *Service) *http.ServeMux {
 			writeErr(w, http.StatusBadRequest, "validation", "unsupported export version")
 			return
 		}
+		filter := engine.NewRegexSecurityFilter()
 		imported := 0
+		skipped := make([]map[string]any, 0)
 		for _, m := range req.Memories {
 			if strings.TrimSpace(m.Workspace) == "" {
 				m.Workspace = ws
 			}
-			mm := m
-			if err := assets.Store.UpsertMemory(r.Context(), &mm); err != nil {
+			if reason := sanitizeImportedMemory(r.Context(), &m, filter); reason != "" {
+				skipped = append(skipped, map[string]any{
+					"id":        m.ID,
+					"workspace": m.Workspace,
+					"reason":    reason,
+				})
+				continue
+			}
+			if err := assets.Store.UpsertMemory(r.Context(), &m); err != nil {
 				writeErr(w, http.StatusBadRequest, "runtime", err.Error())
 				return
 			}
@@ -1423,6 +1305,7 @@ func NewMux(svc *Service) *http.ServeMux {
 		writeOK(w, http.StatusOK, map[string]any{
 			"version":  req.Version,
 			"imported": imported,
+			"skipped":  skipped,
 		})
 	})
 	mux.HandleFunc("/api/v1/memories/reconstruct", func(w http.ResponseWriter, r *http.Request) {
@@ -2251,6 +2134,153 @@ func fetchExternalSchedulerStatus(ctx context.Context, baseURL, workspace string
 	return schedulerSummaryForWorkspace(env.Data, workspace)
 }
 
+// recallParams are the inputs shared by /api/v1/memories/recall and
+// /api/v1/memories/recall/preview, after each handler has resolved its own
+// request-field aliases (task_description/task, token_budget/budget, etc.).
+type recallParams struct {
+	workspace           string
+	task                string
+	topK                int
+	budget              int
+	includeObservations bool
+	observationSession  string
+	observationLimit    int
+}
+
+// recallResult bundles the outputs of the shared recall pipeline (see
+// runRecallPipeline) consumed by both /recall and /recall/preview to build
+// their (differently shaped) responses.
+type recallResult struct {
+	task                 string
+	topK                 int
+	originalBudget       int
+	includeObservations  bool
+	observationBlock     string
+	observationTokens    int
+	observationCount     int
+	observationSessionID string
+
+	retrieved      *engine.RetrievalResult
+	decision       engine.RecallGateDecision
+	reconstruction *engine.RecallReconstructionMeta
+	rebalanced     []engine.RetrievalHit
+	included       []engine.RetrievalHit
+	clip           engine.ClipMetadata
+	contextBlock   string
+}
+
+// runRecallPipeline runs the recall pipeline shared by
+// /api/v1/memories/recall and /api/v1/memories/recall/preview: it builds the
+// optional recent-observations block, runs the continuation/search-probe/
+// recall-gate decision and retrieval, augments the result with
+// tombstone-based reconstruction, rebalances hits for the task, clips to the
+// token budget, assembles the final context block, and records recall
+// token-savings metrics.
+//
+// Both endpoints must apply identical gating/retrieval/reconstruction/
+// clipping logic; previously this ~80-line pipeline was duplicated between
+// the two handlers, which risked them drifting out of sync (a fix applied to
+// one could silently miss the other). This consolidates the HTTP-side copy
+// into one place; each handler builds its own response shape from the
+// returned *recallResult.
+func runRecallPipeline(ctx context.Context, assets *workspaceAssets, p recallParams) (*recallResult, error) {
+	res := &recallResult{
+		task:                p.task,
+		topK:                p.topK,
+		includeObservations: p.includeObservations,
+	}
+	if res.topK <= 0 {
+		res.topK = 50
+	}
+
+	budget := p.budget
+	if budget <= 0 {
+		budget = 4000
+	}
+	res.originalBudget = budget
+
+	if p.includeObservations && observeEnabled() {
+		block, sid, count := buildRecentObservationBlock(ctx, assets.Store, p.workspace, strings.TrimSpace(p.observationSession), p.observationLimit)
+		res.observationBlock = block
+		res.observationSessionID = sid
+		res.observationCount = count
+		res.observationTokens = len(strings.Fields(block)) + len(strings.Fields("## Recent Observations"))
+		if budget-res.observationTokens > 0 {
+			budget -= res.observationTokens
+		} else {
+			budget = 0
+		}
+	}
+
+	var (
+		retrieved *engine.RetrievalResult
+		decision  engine.RecallGateDecision
+		err       error
+	)
+	if engine.IsContinuationPrompt(p.task) {
+		decision = engine.DecideRecallGate(p.task, nil)
+		retrieved, err = assets.Retrieval.Retrieve(ctx, engine.RetrievalOptions{
+			Workspace: p.workspace,
+			Query:     p.task,
+			TopK:      res.topK,
+			Mode:      engine.ModeRecall,
+		})
+	} else {
+		var searchProbe *engine.RetrievalResult
+		searchProbe, err = assets.Retrieval.Retrieve(ctx, engine.RetrievalOptions{
+			Workspace: p.workspace,
+			Query:     p.task,
+			TopK:      res.topK,
+			Mode:      engine.ModeSearch,
+		})
+		if err != nil {
+			return nil, err
+		}
+		decision = engine.DecideRecallGate(p.task, searchProbe)
+		if decision.SearchSufficient {
+			retrieved = &engine.RetrievalResult{
+				Mode:           engine.ModeSearch,
+				Weights:        searchProbe.Weights,
+				Policy:         searchProbe.Policy,
+				Hits:           append([]engine.RetrievalHit(nil), searchProbe.StrongHits...),
+				StrongHits:     append([]engine.RetrievalHit(nil), searchProbe.StrongHits...),
+				WeakHits:       append([]engine.RetrievalHit(nil), searchProbe.WeakHits...),
+				SuppressedHits: append([]engine.RetrievalHit(nil), searchProbe.SuppressedHits...),
+			}
+		} else {
+			retrieved, err = assets.Retrieval.Retrieve(ctx, engine.RetrievalOptions{
+				Workspace: p.workspace,
+				Query:     p.task,
+				TopK:      res.topK,
+				Mode:      engine.ModeRecall,
+			})
+		}
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	retrieved, reconstruction, err := engine.AugmentRecallWithReconstruction(ctx, p.workspace, p.task, retrieved, assets.Retrieval, assets.Store, assets.Writer, res.topK)
+	if err != nil {
+		return nil, err
+	}
+
+	res.decision = decision
+	res.retrieved = retrieved
+	res.reconstruction = reconstruction
+	res.rebalanced = engine.RebalanceRecallHits(p.task, retrieved.Hits)
+	res.included, res.clip = assets.Clipper.Clip(res.rebalanced, budget)
+	res.contextBlock = engine.AssembleRecallSectionsWithObservations(p.task, res.observationBlock, res.included)
+
+	if assets.Store != nil {
+		tokensUsed := res.clip.UsedTokens + res.observationTokens
+		baseline := recallBaselineTokens(res.rebalanced, res.observationTokens)
+		_ = assets.Store.AddTokenMetricV2(ctx, p.workspace, "recall", tokensUsed, baseline, engine.RunLabel(), engine.MemoryEnabled())
+	}
+
+	return res, nil
+}
+
 func buildRecentObservationBlock(ctx context.Context, store *sqlite.Store, workspace string, preferredSessionID string, limit int) (string, string, int) {
 	if limit <= 0 {
 		limit = 10
@@ -2599,12 +2629,61 @@ func matchReasonForHit(h engine.RetrievalHit) string {
 	}
 }
 
-func sumResultTokens(results []searchResult) int {
-	total := 0
-	for _, r := range results {
-		total += len(strings.Fields(r.Content))
+// sanitizeImportedMemory applies the same input-validation, secret/PII
+// redaction, and content-safety checks that the write pipeline applies to
+// newly written memories (see internal/validation and
+// internal/engine.RedactPrivateAndSecrets / RegexSecurityFilter) to a memory
+// arriving via /api/v1/memories/import.
+//
+// Without this, an imported bundle from an untrusted source could inject
+// unredacted secrets, oversized content, or invalid records directly into
+// the store, bypassing the protections normal writes go through.
+//
+// It mutates m in place (assigning an ID if missing, and redacting Content
+// and any Diagram code) and returns a non-empty skip reason if the memory
+// should not be imported.
+func sanitizeImportedMemory(ctx context.Context, m *core.MemoryEntry, filter engine.SecurityFilter) string {
+	if strings.TrimSpace(m.ID) == "" {
+		m.ID = uuid.NewString()
 	}
-	return total
+	if err := validation.ValidateWorkspaceName(m.Workspace); err != nil {
+		return "invalid workspace: " + err.Error()
+	}
+	if err := validation.ValidateContentLength(m.Content); err != nil {
+		return "invalid content: " + err.Error()
+	}
+	if m.Diagram != nil && m.Diagram.Code != "" {
+		if err := validation.ValidateDiagramCode(m.Diagram.Code); err != nil {
+			return "invalid diagram: " + err.Error()
+		}
+	}
+
+	// Redact secrets/private blocks before persisting or running the
+	// security filter, mirroring what the write pipeline does for new
+	// memories.
+	m.Content = engine.RedactPrivateAndSecrets(m.Content)
+	if m.Diagram != nil && m.Diagram.Code != "" {
+		m.Diagram.Code = engine.RedactPrivateAndSecrets(m.Diagram.Code)
+	}
+
+	validationContent := m.Content
+	if m.Diagram != nil && strings.TrimSpace(m.Diagram.Code) != "" {
+		validationContent = strings.TrimSpace(validationContent) + "\n" + m.Diagram.Code
+	}
+	if filter != nil {
+		if err := filter.Validate(ctx, engine.SecurityValidationInput{
+			Workspace: m.Workspace,
+			Content:   validationContent,
+			Tags:      m.Tags,
+		}); err != nil {
+			return "rejected by security filter: " + err.Error()
+		}
+	}
+
+	if err := m.Validate(); err != nil {
+		return "invalid memory: " + err.Error()
+	}
+	return ""
 }
 
 func parseTiers(in []string) ([]core.StorageTier, error) {
@@ -2652,16 +2731,17 @@ func renderClipped(meta engine.ClipMetadata) []map[string]any {
 	return out
 }
 
-// serveDashboard returns an HTTP handler that serves the embedded dashboard assets.
+// serveDashboard returns an HTTP handler that serves the embedded dashboard
+// assets (built via `make build-dashboard`/`make embed-dashboard` and
+// embedded into the binary with go:embed in internal/api/dashboard).
+// If this binary was built without embedded assets, it returns a handler
+// that explains how to build them instead of a bare 404.
 func serveDashboard() http.Handler {
-	// Note: dashboard package import will be added by goimports when we build
-	// Using fully qualified import path for now
-	// return http.StripPrefix("/dashboard/", dashboard.GetEmbeddedHandler())
-	
-	// For now, we need to manually check if assets exist
-	// This will be cleaned up once the build process includes embedded assets
-	return http.StripPrefix("/dashboard/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.Error(w, "Dashboard assets not yet embedded. Run: make build-with-dashboard", http.StatusNotFound)
-	}))
+	if !dashboard.HasEmbeddedAssets() {
+		return http.StripPrefix("/dashboard/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			http.Error(w, "Dashboard assets not embedded in this binary. Run: make build-with-dashboard", http.StatusNotFound)
+		}))
+	}
+	return http.StripPrefix("/dashboard/", dashboard.GetEmbeddedHandler())
 }
 

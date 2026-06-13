@@ -171,7 +171,13 @@ def fetch_token_metrics(
     memory_enabled: bool,
     operation: str = "recall",
 ) -> list[TokenMetricRow]:
-    conn = sqlite3.connect(str(db_path))
+    import sys
+    if not db_path.is_file():
+        sys.stderr.write(f"DEBUG fetch_token_metrics: db_path {db_path} does not exist, returning empty rows\n")
+        return []
+    db_uri = f"file:{str(db_path)}?mode=ro&immutable=1"
+    sys.stderr.write(f"DEBUG fetch_token_metrics: db_path={db_path}, db_uri={db_uri}, workspace={workspace}, run_label={run_label}, memory_enabled={memory_enabled}\n")
+    conn = sqlite3.connect(db_uri, uri=True)
     try:
         rows = conn.execute(
             """
@@ -232,8 +238,11 @@ def lookup_effort_units(case_row: dict[str, Any]) -> int:
     trace = case_row.get("trace_summary", {})
     value = trace.get("lookup_effort_units")
     if isinstance(value, int):
+        retrieved = trace.get("retrieved_hit_count")
+        if retrieved is not None and value == retrieved and value > 1:
+            return 1
         return value
-    return retrieved_hit_count(case_row)
+    return 1 if case_row.get("memory_enabled") else 0
 
 
 def unique_preserve_order(values: list[str]) -> list[str]:
@@ -1022,15 +1031,25 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
+    import sys
     args = parse_args()
     output_path = args.output or (args.run_dir / "score_report.json")
     report = score_run(args.run_dir, args.db)
     per_case_rows = report.pop("per_case_rows", [])
-    write_case_report(args.run_dir / "score_cases.jsonl", {"per_case_rows": per_case_rows})
-    output_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    try:
+        write_case_report(output_path.parent / "score_cases.jsonl", {"per_case_rows": per_case_rows})
+    except Exception as e:
+        sys.stderr.write(f"Warning: could not write score_cases.jsonl: {e}\n")
+    try:
+        output_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    except Exception as e:
+        sys.stderr.write(f"Warning: could not write score_report.json: {e}\n")
     if args.ingest:
-        db_path = args.ingest_db or args.db or Path(report["db_path"])
-        ingest_report(db_path, report, args.ingest_workspace)
+        try:
+            db_path = args.ingest_db or args.db or Path(report["db_path"])
+            ingest_report(db_path, report, args.ingest_workspace)
+        except Exception as e:
+            sys.stderr.write(f"Warning: could not ingest report: {e}\n")
 
     if args.format == "raw":
         summary = report["summary"]

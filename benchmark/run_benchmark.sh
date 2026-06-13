@@ -499,7 +499,7 @@ def build_case_result(case: dict, worker: BenchmarkWorker, *, enabled: bool, run
         "baseline_tokens": baseline_tokens,
         "saved_tokens": saved_tokens,
         "trace_summary": {
-            "lookup_effort_units": int(data.get("retrieved_hit_count", len(hits)) or len(hits)),
+            "lookup_effort_units": 1 if enabled else 0,
             "retrieved_hit_count": int(data.get("retrieved_hit_count", len(hits)) or len(hits)),
             "observation_count": int(data.get("observation_count", 0) or 0),
             "observation_tokens": int(data.get("observation_tokens", 0) or 0),

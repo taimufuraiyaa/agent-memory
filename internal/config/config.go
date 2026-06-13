@@ -298,14 +298,52 @@ func (c *Config) loadFromFile(path string) error {
 		return fmt.Errorf("parsing YAML: %w", err)
 	}
 
-	// Merge non-zero values from file into current config
-	c.merge(&fileConfig)
+	// Merge values from file into current config. presentKeys tracks which
+	// keys were explicitly present in the document so that fields whose Go
+	// zero value differs from their default (most notably booleans that
+	// default to true) are only overridden when the file actually sets them.
+	c.merge(&fileConfig, presentKeys(data))
 	return nil
 }
 
-// merge merges non-zero values from other config into this config.
-func (c *Config) merge(other *Config) {
-	if other.Enabled != c.Enabled && other.Enabled == false {
+// presentKeys returns the set of dot-separated YAML key paths that are
+// explicitly present in the given document (e.g. "storage.auto_vacuum").
+// It lets merge distinguish "this layer doesn't mention the key" from
+// "this layer explicitly sets the key to its Go zero value", which matters
+// for fields (typically booleans) whose default value is non-zero.
+func presentKeys(data []byte) map[string]bool {
+	keys := map[string]bool{}
+	var raw map[string]interface{}
+	if err := yaml.Unmarshal(data, &raw); err != nil {
+		return keys
+	}
+	collectPresentKeys("", raw, keys)
+	return keys
+}
+
+func collectPresentKeys(prefix string, m map[string]interface{}, keys map[string]bool) {
+	for k, v := range m {
+		path := k
+		if prefix != "" {
+			path = prefix + "." + k
+		}
+		keys[path] = true
+		if nested, ok := v.(map[string]interface{}); ok {
+			collectPresentKeys(path, nested, keys)
+		}
+	}
+}
+
+// merge merges values from other into c. present holds the dot-separated
+// keys that were explicitly set in the source layer (e.g. a config file);
+// pass nil/empty when other was constructed directly rather than parsed from
+// YAML, in which case zero-ambiguous fields (booleans whose default is true)
+// are left untouched.
+func (c *Config) merge(other *Config, present map[string]bool) {
+	if present == nil {
+		present = map[string]bool{}
+	}
+	if present["enabled"] {
 		c.Enabled = other.Enabled
 	}
 	if other.DataDir != "" {
@@ -319,24 +357,24 @@ func (c *Config) merge(other *Config) {
 	}
 
 	// Merge nested structs
-	c.mergeStorage(&other.Storage)
-	c.mergeEmbeddings(&other.Embeddings)
-	c.mergeRetrieval(&other.Retrieval)
-	c.mergeDashboard(&other.Dashboard)
-	c.mergeServer(&other.Server)
-	c.mergeObserve(&other.Observe)
-	c.mergeUpgrade(&other.Upgrade)
-	c.mergeAdaptive(&other.Adaptive)
+	c.mergeStorage(&other.Storage, present)
+	c.mergeEmbeddings(&other.Embeddings, present)
+	c.mergeRetrieval(&other.Retrieval, present)
+	c.mergeDashboard(&other.Dashboard, present)
+	c.mergeServer(&other.Server, present)
+	c.mergeObserve(&other.Observe, present)
+	c.mergeUpgrade(&other.Upgrade, present)
+	c.mergeAdaptive(&other.Adaptive, present)
 }
 
-func (c *Config) mergeStorage(other *StorageConfig) {
+func (c *Config) mergeStorage(other *StorageConfig, present map[string]bool) {
 	if other.DBPath != "" {
 		c.Storage.DBPath = other.DBPath
 	}
 	if other.DefaultTier != "" {
 		c.Storage.DefaultTier = other.DefaultTier
 	}
-	if other.AutoVacuum != c.Storage.AutoVacuum {
+	if present["storage.auto_vacuum"] {
 		c.Storage.AutoVacuum = other.AutoVacuum
 	}
 	if other.VacuumIntervalMs > 0 {
@@ -344,7 +382,7 @@ func (c *Config) mergeStorage(other *StorageConfig) {
 	}
 }
 
-func (c *Config) mergeEmbeddings(other *EmbeddingConfig) {
+func (c *Config) mergeEmbeddings(other *EmbeddingConfig, present map[string]bool) {
 	if other.Provider != "" {
 		c.Embeddings.Provider = other.Provider
 	}
@@ -366,7 +404,7 @@ func (c *Config) mergeEmbeddings(other *EmbeddingConfig) {
 	if other.MaxTokens > 0 {
 		c.Embeddings.MaxTokens = other.MaxTokens
 	}
-	if other.CacheEnabled != c.Embeddings.CacheEnabled {
+	if present["embeddings.cache_enabled"] {
 		c.Embeddings.CacheEnabled = other.CacheEnabled
 	}
 	if other.BatchSize > 0 {
@@ -377,7 +415,7 @@ func (c *Config) mergeEmbeddings(other *EmbeddingConfig) {
 	}
 }
 
-func (c *Config) mergeRetrieval(other *RetrievalConfig) {
+func (c *Config) mergeRetrieval(other *RetrievalConfig, present map[string]bool) {
 	if other.DefaultMode != "" {
 		c.Retrieval.DefaultMode = other.DefaultMode
 	}
@@ -402,19 +440,19 @@ func (c *Config) mergeRetrieval(other *RetrievalConfig) {
 	if other.TierBiasWeight > 0 {
 		c.Retrieval.TierBiasWeight = other.TierBiasWeight
 	}
-	if other.EnableReranking != c.Retrieval.EnableReranking {
+	if present["retrieval.enable_reranking"] {
 		c.Retrieval.EnableReranking = other.EnableReranking
 	}
 	if other.RetrievalTimeout > 0 {
 		c.Retrieval.RetrievalTimeout = other.RetrievalTimeout
 	}
-	if other.EnableExplanation != c.Retrieval.EnableExplanation {
+	if present["retrieval.enable_explanation"] {
 		c.Retrieval.EnableExplanation = other.EnableExplanation
 	}
 }
 
-func (c *Config) mergeDashboard(other *DashboardConfig) {
-	if other.Enabled != c.Dashboard.Enabled {
+func (c *Config) mergeDashboard(other *DashboardConfig, present map[string]bool) {
+	if present["dashboard.enabled"] {
 		c.Dashboard.Enabled = other.Enabled
 	}
 	if other.Dir != "" {
@@ -423,19 +461,19 @@ func (c *Config) mergeDashboard(other *DashboardConfig) {
 	if other.Port > 0 {
 		c.Dashboard.Port = other.Port
 	}
-	if other.AutoLaunch != c.Dashboard.AutoLaunch {
+	if present["dashboard.auto_launch"] {
 		c.Dashboard.AutoLaunch = other.AutoLaunch
 	}
 }
 
-func (c *Config) mergeServer(other *ServerConfig) {
+func (c *Config) mergeServer(other *ServerConfig, present map[string]bool) {
 	if other.Host != "" {
 		c.Server.Host = other.Host
 	}
 	if other.Port > 0 {
 		c.Server.Port = other.Port
 	}
-	if other.EnableCORS != c.Server.EnableCORS {
+	if present["server.enable_cors"] {
 		c.Server.EnableCORS = other.EnableCORS
 	}
 	if other.AllowedOrigins != "" {
@@ -449,8 +487,8 @@ func (c *Config) mergeServer(other *ServerConfig) {
 	}
 }
 
-func (c *Config) mergeObserve(other *ObserveConfig) {
-	if other.Enabled != c.Observe.Enabled {
+func (c *Config) mergeObserve(other *ObserveConfig, present map[string]bool) {
+	if present["observe.enabled"] {
 		c.Observe.Enabled = other.Enabled
 	}
 	if other.MetricsPort > 0 {
@@ -467,8 +505,8 @@ func (c *Config) mergeObserve(other *ObserveConfig) {
 	}
 }
 
-func (c *Config) mergeUpgrade(other *UpgradeConfig) {
-	if other.AutoUpgrade != c.Upgrade.AutoUpgrade {
+func (c *Config) mergeUpgrade(other *UpgradeConfig, present map[string]bool) {
+	if present["upgrade.auto_upgrade"] {
 		c.Upgrade.AutoUpgrade = other.AutoUpgrade
 	}
 	if other.CheckInterval != "" {
@@ -479,8 +517,8 @@ func (c *Config) mergeUpgrade(other *UpgradeConfig) {
 	}
 }
 
-func (c *Config) mergeAdaptive(other *AdaptiveConfig) {
-	if other.Enabled != c.Adaptive.Enabled {
+func (c *Config) mergeAdaptive(other *AdaptiveConfig, present map[string]bool) {
+	if present["adaptive.enabled"] {
 		c.Adaptive.Enabled = other.Enabled
 	}
 	if len(other.PolicyDefaults) > 0 {

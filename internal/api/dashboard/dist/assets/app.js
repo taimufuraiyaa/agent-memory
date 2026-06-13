@@ -35394,11 +35394,6 @@ function formatTS(s2) {
   if (Number.isNaN(d2.getTime())) return s2;
   return d2.toLocaleString();
 }
-function formatClock(ts) {
-  const d2 = new Date(ts);
-  if (Number.isNaN(d2.getTime())) return "";
-  return d2.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-}
 function formatNumber(value) {
   return typeof value === "number" ? value.toLocaleString() : "0";
 }
@@ -35429,12 +35424,6 @@ const wikiSuggestionPresets = [
   { label: "recent research", query: "what did we recently learn" },
   { label: "diagrams", query: "architecture diagram mermaid flow" },
   { label: "failures", query: "recent failures regressions incidents" }
-];
-const semanticFloorPresets = [
-  { label: "diagnose 0.00", value: 0 },
-  { label: "default 0.30", value: 0.3 },
-  { label: "medium 0.40", value: 0.4 },
-  { label: "high 0.55", value: 0.55 }
 ];
 function formatScore(value, digits = 3) {
   if (typeof value !== "number" || Number.isNaN(value)) return "n/a";
@@ -35630,8 +35619,7 @@ function getHealthState(stats, statsErr) {
 }
 function App() {
   var _a2;
-  const [surface, setSurface] = reactExports.useState("wiki");
-  const [mode, setMode] = reactExports.useState("search");
+  const [surface, setSurface] = reactExports.useState("overview");
   const [projects, setProjects] = reactExports.useState([]);
   const [workspace, setWorkspace] = reactExports.useState("");
   const [stats, setStats] = reactExports.useState(null);
@@ -35653,14 +35641,8 @@ function App() {
   const [promotionResults, setPromotionResults] = reactExports.useState({});
   const [overviewExperimentFocusKey, setOverviewExperimentFocusKey] = reactExports.useState(0);
   const [rawStatsOpen, setRawStatsOpen] = reactExports.useState(false);
-  const [deepSearchPrompt, setDeepSearchPrompt] = reactExports.useState({
-    open: false,
-    query: ""
-  });
-  const [draft, setDraft] = reactExports.useState("");
   const [topK, setTopK] = reactExports.useState(10);
   const [explain, setExplain] = reactExports.useState(true);
-  const [advancedOpen, setAdvancedOpen] = reactExports.useState(false);
   const [types, setTypes] = reactExports.useState(/* @__PURE__ */ new Set(["semantic"]));
   const [tiers, setTiers] = reactExports.useState(/* @__PURE__ */ new Set(["vector"]));
   const [outcome, setOutcome] = reactExports.useState("");
@@ -35676,12 +35658,8 @@ function App() {
   const [budget, setBudget] = reactExports.useState(4e3);
   const [busy, setBusy] = reactExports.useState(false);
   const [recentsBusy, setRecentsBusy] = reactExports.useState(false);
-  const [messages, setMessages] = reactExports.useState([]);
   const [theme, setTheme] = reactExports.useState("dark");
   const [selectedMemory, setSelectedMemory] = reactExports.useState(null);
-  const [diagramPreviewOpen, setDiagramPreviewOpen] = reactExports.useState(false);
-  const [inputFocused, setInputFocused] = reactExports.useState(false);
-  const [composerFocused, setComposerFocused] = reactExports.useState(false);
   const [wikiQuery, setWikiQuery] = reactExports.useState("");
   const [wikiMode, setWikiMode] = reactExports.useState("search");
   const [wikiScope, setWikiScope] = reactExports.useState(ALL_PROJECTS_SCOPE);
@@ -35697,20 +35675,6 @@ function App() {
   const [wikiDeleteBusy, setWikiDeleteBusy] = reactExports.useState(false);
   const [wikiDiagramMemory, setWikiDiagramMemory] = reactExports.useState(null);
   const threadRef = reactExports.useRef(null);
-  const composerRef = reactExports.useRef(null);
-  reactExports.useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (composerRef.current && !composerRef.current.contains(event.target)) {
-        setAdvancedOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    document.addEventListener("touchstart", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-      document.removeEventListener("touchstart", handleClickOutside);
-    };
-  }, []);
   reactExports.useEffect(() => {
     document.body.classList.remove("light", "dark");
     document.body.classList.add(theme);
@@ -35721,11 +35685,6 @@ function App() {
     }
   }, [surface]);
   reactExports.useEffect(() => {
-    if ((surface === "search" || surface === "recall") && threadRef.current) {
-      threadRef.current.scrollTop = threadRef.current.scrollHeight;
-    }
-  }, [messages, surface]);
-  reactExports.useEffect(() => {
     const handleEscape = (event) => {
       if (event.key !== "Escape") return;
       if (wikiDiagramMemory) {
@@ -35734,14 +35693,6 @@ function App() {
       }
       if (wikiConsolidatedOpen) {
         setWikiConsolidatedOpen(false);
-        return;
-      }
-      if (diagramPreviewOpen) {
-        setDiagramPreviewOpen(false);
-        return;
-      }
-      if (deepSearchPrompt.open) {
-        setDeepSearchPrompt({ open: false, query: "" });
         return;
       }
       if (rawStatsOpen) {
@@ -35754,7 +35705,7 @@ function App() {
     };
     window.addEventListener("keydown", handleEscape);
     return () => window.removeEventListener("keydown", handleEscape);
-  }, [deepSearchPrompt.open, diagramPreviewOpen, rawStatsOpen, selectedMemory, wikiConsolidatedOpen, wikiDiagramMemory]);
+  }, [rawStatsOpen, selectedMemory, wikiConsolidatedOpen, wikiDiagramMemory]);
   const selectedProject = reactExports.useMemo(() => projects.find((x2) => x2.name === workspace), [projects, workspace]);
   const projectLabel = reactExports.useMemo(() => {
     if (!selectedProject) return workspace || "workspace";
@@ -35766,10 +35717,8 @@ function App() {
     () => sessions.find((session) => session.session_id === selectedSessionID) ?? sessions[0],
     [selectedSessionID, sessions]
   );
-  const dashboardWikiLauncher = surface !== "wiki" && mode === "search";
-  const composerExpanded = composerFocused || advancedOpen || draft.trim().length > 0;
   const semanticThreshold = reactExports.useMemo(() => parseUnitScore(minSemantic) ?? SEARCH_DEFAULT_MIN_SEMANTIC_SCORE, [minSemantic]);
-  const semanticThresholdRelevance = reactExports.useMemo(() => getSemanticRelevance(semanticThreshold), [semanticThreshold]);
+  reactExports.useMemo(() => getSemanticRelevance(semanticThreshold), [semanticThreshold]);
   const selectedSemanticSimilarity = reactExports.useMemo(
     () => selectedMemory ? getSemanticSimilarity(selectedMemory) : void 0,
     [selectedMemory]
@@ -35778,23 +35727,6 @@ function App() {
     () => getSemanticRelevance(selectedSemanticSimilarity),
     [selectedSemanticSimilarity]
   );
-  const diagramMemories = reactExports.useMemo(() => {
-    var _a3, _b2, _c2;
-    const map2 = /* @__PURE__ */ new Map();
-    for (const msg of messages) {
-      if ((_a3 = msg.payload) == null ? void 0 : _a3.results) {
-        for (const m2 of msg.payload.results) {
-          if (hasDiagram(m2)) map2.set(m2.id, m2);
-        }
-      }
-      if ((_c2 = (_b2 = msg.payload) == null ? void 0 : _b2.recall) == null ? void 0 : _c2.memories_included_full) {
-        for (const m2 of msg.payload.recall.memories_included_full) {
-          if (hasDiagram(m2)) map2.set(m2.id, m2);
-        }
-      }
-    }
-    return Array.from(map2.values());
-  }, [messages]);
   const wikiAllFragments = reactExports.useMemo(() => mergeMemoryResults([...wikiSearch.results, ...wikiSearch.weakResults]), [wikiSearch]);
   const wikiPinnedResults = reactExports.useMemo(() => wikiAllFragments.filter((memory) => memory.pinned), [wikiAllFragments]);
   const wikiPinnedKeys = reactExports.useMemo(() => new Set(wikiPinnedResults.map((memory) => buildMemoryKey(memory))), [wikiPinnedResults]);
@@ -35962,18 +35894,6 @@ function App() {
       date_to: toDate || void 0
     };
   }, [entities, fromDate, minConfidence, minDecay, minTotal, outcome, relativeCutoff, semanticThreshold, tiers, toDate, types]);
-  function openSearch() {
-    setMode("search");
-    setWikiMode("search");
-    setSurface("wiki");
-    setSelectedMemory(null);
-  }
-  function openRecall() {
-    setMode("recall");
-    setWikiMode("recall");
-    setSurface("wiki");
-    setSelectedMemory(null);
-  }
   function openSessions() {
     setSurface("sessions");
     setSelectedMemory(null);
@@ -35985,12 +35905,16 @@ function App() {
   function openWiki(modeOverride) {
     if (modeOverride) {
       setWikiMode(modeOverride);
-      if (modeOverride === "search" || modeOverride === "recall") {
-        setMode(modeOverride);
-      }
     }
     setSurface("wiki");
     setSelectedMemory(null);
+  }
+  function triggerWikiSearch(query) {
+    setWikiMode("search");
+    setWikiQuery(query);
+    setSurface("wiki");
+    setSelectedMemory(null);
+    void runWikiSearch(query);
   }
   function resetWikiTransientState() {
     setWikiError("");
@@ -36067,45 +35991,9 @@ function App() {
       setRecentsBusy(false);
     }
   }
-  async function runSearchFlow(query) {
-    openSearch();
-    await runWikiSearch(query);
-  }
-  async function runRecallFlow(task) {
-    openRecall();
-    await runWikiRecall(task);
-  }
-  async function runDeepSearch(query) {
-    const q2 = query.trim();
-    if (!q2) return;
-    openRecall();
-    setDeepSearchPrompt({ open: false, query: "" });
-    await runWikiRecall(q2);
-  }
-  async function submit() {
-    const text2 = draft.trim();
-    if (!text2) return;
-    setDraft("");
-    if (mode === "search") {
-      await runSearchFlow(text2);
-      return;
-    }
-    await runRecallFlow(text2);
-  }
   function focusExperimentComparisons() {
     setSurface("overview");
     setOverviewExperimentFocusKey((current) => current + 1);
-  }
-  function openGuidedDiagrams() {
-    if (diagramMemories.length > 0) {
-      if (diagramMemories.length === 1) {
-        setSelectedMemory(diagramMemories[0]);
-      } else {
-        setDiagramPreviewOpen(true);
-      }
-      return;
-    }
-    void runSearchFlow("architecture diagram mermaid flow");
   }
   function toggleWikiSelection(memory) {
     const key = buildMemoryKey(memory);
@@ -36195,7 +36083,7 @@ function App() {
   }
   async function runWikiRecall(taskOverride) {
     var _a3;
-    const text2 = (taskOverride ?? wikiQuery).trim();
+    const text2 = wikiQuery.trim();
     if (!text2) return;
     const targetWorkspace = (wikiScope === ALL_PROJECTS_SCOPE ? workspace : wikiScope || workspace).trim();
     if (!targetWorkspace) {
@@ -36305,7 +36193,7 @@ function App() {
     setWikiOptionsOpen(false);
   }
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: surface === "wiki" ? "shell chatShell shellWikiMode" : "shell chatShell", children: [
-    surface !== "wiki" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("header", { className: "topbar chatTopbar", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("header", { className: "topbar chatTopbar", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "topbarLeft", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "brand", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "brandMark", "aria-hidden": "true", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "brandMarkText", children: "[+]" }) }),
@@ -36320,7 +36208,9 @@ function App() {
             className: "projectSelect",
             value: workspace,
             onChange: (e2) => {
-              setWorkspace(e2.target.value);
+              const val = e2.target.value;
+              setWorkspace(val);
+              setWikiScope(val);
               setSelectedMemory(null);
             },
             "aria-label": "Switch workspace",
@@ -36357,7 +36247,7 @@ function App() {
           /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "navKey", children: "[05]" }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "navLabel", children: "Lifecycle" })
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { className: "navItem", onClick: () => openWiki(), type: "button", "aria-label": "Wiki", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { className: surface === "wiki" ? "navItem navItemOn" : "navItem", onClick: () => openWiki(), type: "button", "aria-label": "Wiki", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "navKey", children: "[06]" }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "navLabel", children: "Wiki" })
         ] })
@@ -36384,403 +36274,163 @@ function App() {
           }
         )
       ] })
-    ] }) : null,
+    ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "chatLayout", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("main", { className: "chatMain", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "chatFeed", children: [
-        diagramMemories.length > 0 && (surface === "search" || surface === "recall") ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
-          "button",
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "chatFeed", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "thread", ref: threadRef, children: [
+        surface === "overview" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+          OverviewPanel,
           {
-            className: "floatingDiagramBtn",
-            onClick: () => {
-              if (diagramMemories.length === 1) {
-                setSelectedMemory(diagramMemories[0]);
-              } else {
-                setDiagramPreviewOpen(true);
-              }
-            },
-            "aria-label": "View diagrams",
-            title: "Quick access to diagrams",
-            children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "[diagrams]" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "floatingDiagramBadge", children: diagramMemories.length })
-            ]
+            workspace,
+            project: selectedProject,
+            stats,
+            statsErr,
+            healthState,
+            diagramCount: (stats == null ? void 0 : stats.diagram_count) || 0,
+            experimentFocusKey: overviewExperimentFocusKey,
+            onCompareRuns: focusExperimentComparisons,
+            onInspectFailures: () => triggerWikiSearch("recent failures errors regressions"),
+            onReviewLastSession: openSessions,
+            onRunDiagramAction: () => triggerWikiSearch("architecture diagram mermaid flow")
           }
         ) : null,
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "thread", ref: threadRef, children: [
-          surface === "overview" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-            OverviewPanel,
-            {
-              workspace,
-              project: selectedProject,
-              stats,
-              statsErr,
-              healthState,
-              diagramCount: diagramMemories.length,
-              experimentFocusKey: overviewExperimentFocusKey,
-              onCompareRuns: focusExperimentComparisons,
-              onInspectFailures: () => void runSearchFlow("recent failures errors regressions"),
-              onReviewLastSession: openSessions,
-              onRunDiagramAction: openGuidedDiagrams
-            }
-          ) : null,
-          surface === "sessions" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-            SessionsPanel,
-            {
-              workspace,
-              sessions,
-              sessionsBusy,
-              sessionsErr,
-              sessionsUnavailable,
-              selectedSessionID: (selectedSession == null ? void 0 : selectedSession.session_id) ?? "",
-              observations,
-              observationsBusy,
-              observationsErr,
-              promotionResult: selectedSession ? promotionResults[selectedSession.session_id] : void 0,
-              promotionBusy: Boolean(selectedSession && promotionBusyFor === selectedSession.session_id),
-              onSelectSession: setSelectedSessionID,
-              onPromote: promoteSelectedSession
-            }
-          ) : null,
-          surface === "diagnostics" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-            DiagnosticsPanel,
-            {
-              workspaceLabel: projectLabel,
-              project: selectedProject,
-              stats,
-              statsErr,
-              healthState,
-              onOpenRaw: () => setRawStatsOpen(true)
-            }
-          ) : null,
-          surface === "benchmark" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-            BenchmarkPanel,
-            {
-              workspace,
-              runs: benchmarkRuns,
-              busy: benchmarkBusy,
-              error: benchmarkErr
-            }
-          ) : null,
-          surface === "lifecycle" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-            LifecyclePanel,
-            {
-              workspace,
-              scheduler: stats == null ? void 0 : stats.scheduler,
-              history: schedulerHistory,
-              busy: schedulerBusy,
-              error: schedulerErr
-            }
-          ) : null,
-          surface === "wiki" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-            WikiPanel,
-            {
-              theme,
-              workspace,
-              projects,
-              mode: wikiMode,
-              query: wikiQuery,
-              scope: wikiScope,
-              viewMode: wikiViewMode,
-              optionsOpen: wikiOptionsOpen,
-              searched: wikiSearch.searched,
-              busy: wikiBusy,
-              error: wikiError,
-              results: wikiMainResults,
-              pinnedResults: wikiPinnedResults,
-              weakResults: wikiWeakResults,
-              recall: wikiRecall,
-              recentsBusy,
-              selectedCount: wikiSelectedFragments.length,
-              selectedIds: wikiSelectedIds,
-              explain,
-              topK,
-              recallTopK,
-              budget,
-              semanticThreshold,
-              minTotal,
-              minConfidence,
-              outcome,
-              types,
-              tiers,
-              onQueryChange: setWikiQuery,
-              onModeChange: (nextMode) => {
-                setWikiMode(nextMode);
-                setWikiError("");
-                setWikiSearch((current) => current.mode === nextMode ? current : { ...current, mode: nextMode, searched: false });
-                if (nextMode !== "recall") setWikiRecall(null);
-                if (nextMode === "search") setMode("search");
-                if (nextMode === "recall") setMode("recall");
-                if (nextMode === "recents") void showRecentsCapture();
-              },
-              onScopeChange: setWikiScope,
-              onViewModeChange: setWikiViewMode,
-              onExitWiki: () => setSurface("overview"),
-              onOpenRaw: () => setRawStatsOpen(true),
-              onToggleTheme: () => setTheme((t2) => t2 === "dark" ? "light" : "dark"),
-              onClearView: clearWikiView,
-              onToggleOptions: () => setWikiOptionsOpen((current) => !current),
-              onSubmit: () => {
-                if (wikiMode === "recall") {
-                  void runWikiRecall();
-                  return;
-                }
-                if (wikiMode === "recents") {
-                  void showRecentsCapture();
-                  return;
-                }
-                void runWikiSearch();
-              },
-              onSuggestion: (query) => void runWikiSearch(query),
-              onToggleSelection: toggleWikiSelection,
-              onOpenMemory: setSelectedMemory,
-              onOpenDiagram: setWikiDiagramMemory,
-              onTogglePin: (memory) => void toggleWikiPin(memory),
-              isPinned: (memory) => memory.pinned,
-              isPinBusy: (memory) => wikiPinBusyIds.has(buildMemoryKey(memory)),
-              onOpenConsolidated: () => setWikiConsolidatedOpen(true),
-              onDownloadSelection: exportWikiSelection,
-              onPrintSelection: printWikiSelection,
-              onDeleteSelection: () => void deleteWikiSelection(),
-              deleteBusy: wikiDeleteBusy,
-              onSetMinSemantic: (value) => setMinSemantic(value.toFixed(2)),
-              onSetExplain: setExplain,
-              onSetTopK: setTopK,
-              onSetRecallTopK: setRecallTopK,
-              onSetBudget: setBudget,
-              onSetMinTotal: setMinTotal,
-              onSetMinConfidence: setMinConfidence,
-              onSetOutcome: setOutcome,
-              onToggleType: (memoryType, checked) => {
-                const next2 = new Set(types);
-                if (checked) next2.add(memoryType);
-                else next2.delete(memoryType);
-                setTypes(next2);
-              },
-              onToggleTier: (tier, checked) => {
-                const next2 = new Set(tiers);
-                if (checked) next2.add(tier);
-                else next2.delete(tier);
-                setTiers(next2);
-              },
-              onCollapseOptions: () => setWikiOptionsOpen(false)
-            }
-          ) : null,
-          (surface === "search" || surface === "recall") && messages.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(QueryEmptyState, { mode, onOpenOverview: () => setSurface("overview") }) : null,
-          (surface === "search" || surface === "recall") && messages.map((m2) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-            Message,
-            {
-              m: m2,
-              theme,
-              selectedId: selectedMemory == null ? void 0 : selectedMemory.id,
-              onSelectMemory: setSelectedMemory
-            },
-            m2.id
-          ))
-        ] }),
-        surface !== "wiki" ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
-          "div",
+        surface === "sessions" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+          SessionsPanel,
           {
-            className: dashboardWikiLauncher ? "composerDock composerDockLauncher" : composerExpanded ? "composerDock composerDockExpanded" : "composerDock composerDockCollapsed",
-            ref: composerRef,
-            onFocusCapture: () => setComposerFocused(true),
-            onBlurCapture: (e2) => {
-              var _a3;
-              const nextTarget = e2.relatedTarget;
-              if (nextTarget instanceof Node && ((_a3 = composerRef.current) == null ? void 0 : _a3.contains(nextTarget))) return;
-              setComposerFocused(false);
-              if (!draft.trim()) setAdvancedOpen(false);
+            workspace,
+            sessions,
+            sessionsBusy,
+            sessionsErr,
+            sessionsUnavailable,
+            selectedSessionID: (selectedSession == null ? void 0 : selectedSession.session_id) ?? "",
+            observations,
+            observationsBusy,
+            observationsErr,
+            promotionResult: selectedSession ? promotionResults[selectedSession.session_id] : void 0,
+            promotionBusy: Boolean(selectedSession && promotionBusyFor === selectedSession.session_id),
+            onSelectSession: setSelectedSessionID,
+            onPromote: promoteSelectedSession
+          }
+        ) : null,
+        surface === "diagnostics" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+          DiagnosticsPanel,
+          {
+            workspaceLabel: projectLabel,
+            project: selectedProject,
+            stats,
+            statsErr,
+            healthState,
+            onOpenRaw: () => setRawStatsOpen(true)
+          }
+        ) : null,
+        surface === "benchmark" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+          BenchmarkPanel,
+          {
+            workspace,
+            runs: benchmarkRuns,
+            busy: benchmarkBusy,
+            error: benchmarkErr
+          }
+        ) : null,
+        surface === "lifecycle" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+          LifecyclePanel,
+          {
+            workspace,
+            scheduler: stats == null ? void 0 : stats.scheduler,
+            history: schedulerHistory,
+            busy: schedulerBusy,
+            error: schedulerErr
+          }
+        ) : null,
+        surface === "wiki" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+          WikiPanel,
+          {
+            theme,
+            workspace,
+            projects,
+            mode: wikiMode,
+            query: wikiQuery,
+            scope: wikiScope,
+            viewMode: wikiViewMode,
+            optionsOpen: wikiOptionsOpen,
+            searched: wikiSearch.searched,
+            busy: wikiBusy,
+            error: wikiError,
+            results: wikiMainResults,
+            pinnedResults: wikiPinnedResults,
+            weakResults: wikiWeakResults,
+            recall: wikiRecall,
+            recentsBusy,
+            selectedCount: wikiSelectedFragments.length,
+            selectedIds: wikiSelectedIds,
+            explain,
+            topK,
+            recallTopK,
+            budget,
+            semanticThreshold,
+            minTotal,
+            minConfidence,
+            outcome,
+            types,
+            tiers,
+            onQueryChange: setWikiQuery,
+            onModeChange: (nextMode) => {
+              setWikiMode(nextMode);
+              setWikiError("");
+              setWikiSearch((current) => current.mode === nextMode ? current : { ...current, mode: nextMode, searched: false });
+              if (nextMode !== "recall") setWikiRecall(null);
+              if (nextMode === "recents") void showRecentsCapture();
             },
-            children: [
-              dashboardWikiLauncher ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "composerWikiLauncherBtn", type: "button", onClick: () => openWiki("search"), children: "Explore wiki" }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: composerExpanded ? "composer composerExpanded" : "composer composerCollapsed", children: [
-                advancedOpen ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "composerAdvanced", children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "composerRow", children: [
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "composerRowTitle", children: "Mode" }),
-                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "modePills modePillsInline", children: [
-                      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: mode === "search" ? "modePill modePillOn" : "modePill", onClick: openSearch, type: "button", children: "Search" }),
-                      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: mode === "recall" ? "modePill modePillOn" : "modePill", onClick: openRecall, type: "button", children: "Recall Preview" })
-                    ] })
-                  ] }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "check", children: [
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("input", { type: "checkbox", checked: explain, onChange: (e2) => setExplain(e2.target.checked) }),
-                    "Explain scoring"
-                  ] }),
-                  mode === "search" ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "row row2", children: [
-                      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-                        /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Top K" }),
-                        /* @__PURE__ */ jsxRuntimeExports.jsx("input", { className: "input", type: "number", min: 1, max: 200, value: topK, onChange: (e2) => setTopK(Number(e2.target.value)) })
-                      ] }),
-                      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-                        /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Outcome" }),
-                        /* @__PURE__ */ jsxRuntimeExports.jsxs("select", { className: "input", value: outcome, onChange: (e2) => setOutcome(e2.target.value), children: [
-                          /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: "any" }),
-                          /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "success", children: "success" }),
-                          /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "failure", children: "failure" }),
-                          /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "partial", children: "partial" })
-                        ] })
-                      ] })
-                    ] }),
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Types" }),
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "chips", children: allTypes.map((t2) => /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: types.has(t2.key) ? "chip chipOn" : "chip", children: [
-                      /* @__PURE__ */ jsxRuntimeExports.jsx(
-                        "input",
-                        {
-                          type: "checkbox",
-                          checked: types.has(t2.key),
-                          onChange: (e2) => {
-                            const next2 = new Set(types);
-                            if (e2.target.checked) next2.add(t2.key);
-                            else next2.delete(t2.key);
-                            setTypes(next2);
-                          }
-                        }
-                      ),
-                      t2.label
-                    ] }, t2.key)) }),
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Tiers" }),
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "chips", children: allTiers.map((t2) => /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: tiers.has(t2.key) ? "chip chipOn" : "chip", children: [
-                      /* @__PURE__ */ jsxRuntimeExports.jsx(
-                        "input",
-                        {
-                          type: "checkbox",
-                          checked: tiers.has(t2.key),
-                          onChange: (e2) => {
-                            const next2 = new Set(tiers);
-                            if (e2.target.checked) next2.add(t2.key);
-                            else next2.delete(t2.key);
-                            setTiers(next2);
-                          }
-                        }
-                      ),
-                      t2.label
-                    ] }, t2.key)) }),
-                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "row row2", children: [
-                      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-                        /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Min confidence" }),
-                        /* @__PURE__ */ jsxRuntimeExports.jsx("input", { className: "input", inputMode: "decimal", value: minConfidence, onChange: (e2) => setMinConfidence(e2.target.value), placeholder: "0.00 - 1.00" })
-                      ] }),
-                      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-                        /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Min decay" }),
-                        /* @__PURE__ */ jsxRuntimeExports.jsx("input", { className: "input", inputMode: "decimal", value: minDecay, onChange: (e2) => setMinDecay(e2.target.value), placeholder: "0.00 - 1.00" })
-                      ] })
-                    ] }),
-                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "semanticFilterCard", children: [
-                      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "semanticFilterHeader", children: [
-                        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-                          /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", htmlFor: "min-semantic-score", children: "Min semantic score" }),
-                          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "semanticFilterHint", children: "Search defaults to `0.30`. Raise it for stricter relevance or lower it only when diagnosing weak matches." })
-                        ] }),
-                        /* @__PURE__ */ jsxRuntimeExports.jsx(
-                          "button",
-                          {
-                            className: "btn btnGhost semanticPresetReset",
-                            type: "button",
-                            onClick: () => setMinSemantic(SEARCH_DEFAULT_MIN_SEMANTIC_SCORE.toFixed(2)),
-                            children: "reset 0.30"
-                          }
-                        )
-                      ] }),
-                      /* @__PURE__ */ jsxRuntimeExports.jsx(
-                        "input",
-                        {
-                          id: "min-semantic-score",
-                          className: "semanticSlider",
-                          type: "range",
-                          min: 0,
-                          max: 1,
-                          step: 0.05,
-                          value: semanticThreshold,
-                          onChange: (e2) => setMinSemantic(Number(e2.target.value).toFixed(2))
-                        }
-                      ),
-                      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "semanticFilterSummary", children: [
-                        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "semanticThresholdValue", children: semanticThreshold.toFixed(2) }),
-                        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "semanticThresholdCopy", children: [
-                          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "semanticThresholdLabel", children: "Active search floor" }),
-                          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "semanticThresholdHint", children: "Sent to backend as `min_semantic_score`." })
-                        ] }),
-                        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `memPill relevancePill relevancePill${toTitle(semanticThresholdRelevance.tone)}`, children: semanticThresholdRelevance.label })
-                      ] }),
-                      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "semanticPresetRow", children: semanticFloorPresets.map((preset) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-                        "button",
-                        {
-                          className: semanticThreshold === preset.value ? "semanticPreset semanticPresetOn" : "semanticPreset",
-                          type: "button",
-                          onClick: () => setMinSemantic(preset.value.toFixed(2)),
-                          children: preset.label
-                        },
-                        preset.label
-                      )) }),
-                      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "semanticFilterScale", children: "Weak < 0.30 | Low 0.30+ | Medium 0.40+ | High 0.55+" })
-                    ] }),
-                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "row row2", children: [
-                      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-                        /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Min total" }),
-                        /* @__PURE__ */ jsxRuntimeExports.jsx("input", { className: "input", inputMode: "decimal", value: minTotal, onChange: (e2) => setMinTotal(e2.target.value), placeholder: "0.00 - 1.00" })
-                      ] }),
-                      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-                        /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Relative cutoff" }),
-                        /* @__PURE__ */ jsxRuntimeExports.jsx("input", { className: "input", inputMode: "decimal", value: relativeCutoff, onChange: (e2) => setRelativeCutoff(e2.target.value), placeholder: "0.00 - 1.00" })
-                      ] })
-                    ] }),
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Entities (comma-separated)" }),
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("input", { className: "input", value: entities, onChange: (e2) => setEntities(e2.target.value), placeholder: "orders, kafka, schema" }),
-                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "row row2", children: [
-                      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-                        /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "From" }),
-                        /* @__PURE__ */ jsxRuntimeExports.jsx("input", { className: "input", type: "date", value: fromDate, onChange: (e2) => setFromDate(e2.target.value) })
-                      ] }),
-                      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-                        /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "To" }),
-                        /* @__PURE__ */ jsxRuntimeExports.jsx("input", { className: "input", type: "date", value: toDate, onChange: (e2) => setToDate(e2.target.value) })
-                      ] })
-                    ] })
-                  ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "row row2", children: [
-                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-                      /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Top K" }),
-                      /* @__PURE__ */ jsxRuntimeExports.jsx("input", { className: "input", type: "number", min: 1, max: 500, value: recallTopK, onChange: (e2) => setRecallTopK(Number(e2.target.value)) })
-                    ] }),
-                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-                      /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "label", children: "Budget" }),
-                      /* @__PURE__ */ jsxRuntimeExports.jsx("input", { className: "input", type: "number", min: 1, value: budget, onChange: (e2) => setBudget(Number(e2.target.value)) })
-                    ] })
-                  ] })
-                ] }) : null,
-                /* @__PURE__ */ jsxRuntimeExports.jsx(
-                  "textarea",
-                  {
-                    className: "composerInput",
-                    value: draft,
-                    onChange: (e2) => setDraft(e2.target.value),
-                    onFocus: () => setInputFocused(true),
-                    onBlur: () => setInputFocused(false),
-                    placeholder: mode === "search" ? "Explore wiki..." : "Describe the task to recall...",
-                    rows: inputFocused || composerFocused || draft.trim().length > 0 || advancedOpen ? 3 : 1,
-                    onKeyDown: (e2) => {
-                      if (e2.key === "Enter" && !e2.shiftKey) {
-                        e2.preventDefault();
-                        submit();
-                      }
-                    }
-                  }
-                ),
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: composerExpanded ? "composerToolbar" : "composerToolbar composerToolbarCollapsed", children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "composerToolbarLeft", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "muted small", children: surface === "overview" ? "Ready to explore wiki." : surface === "diagnostics" ? "Diagnostics open." : surface === "sessions" ? "Sessions open." : "Searching this workspace." }) }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "composerToolbarRight", children: [
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "btn btnGhost", type: "button", onClick: () => setAdvancedOpen((v2) => !v2), children: advancedOpen ? "[-] filters" : "[+] filters" }),
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "sendBtn", type: "button", onClick: submit, disabled: !workspace || busy || !draft.trim(), title: "Send query", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sendBtnLabel", children: "RUN" }) })
-                  ] })
-                ] })
-              ] }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: composerExpanded ? "composerFoot" : "composerFoot composerFootCollapsed", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "muted small", style: { display: "block", textAlign: "center" }, children: [
-                "Served locally by ",
-                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mono", children: "agent-memory serve" }),
-                ". Markdown is sanitized; Mermaid renders when present."
-              ] }) })
-            ]
+            onScopeChange: setWikiScope,
+            onViewModeChange: setWikiViewMode,
+            onClearView: clearWikiView,
+            onToggleOptions: () => setWikiOptionsOpen((current) => !current),
+            onSubmit: () => {
+              if (wikiMode === "recall") {
+                void runWikiRecall();
+                return;
+              }
+              if (wikiMode === "recents") {
+                void showRecentsCapture();
+                return;
+              }
+              void runWikiSearch();
+            },
+            onSuggestion: (query) => void runWikiSearch(query),
+            onToggleSelection: toggleWikiSelection,
+            onOpenMemory: setSelectedMemory,
+            onOpenDiagram: setWikiDiagramMemory,
+            onTogglePin: (memory) => void toggleWikiPin(memory),
+            isPinned: (memory) => memory.pinned,
+            isPinBusy: (memory) => wikiPinBusyIds.has(buildMemoryKey(memory)),
+            onOpenConsolidated: () => setWikiConsolidatedOpen(true),
+            onDownloadSelection: exportWikiSelection,
+            onPrintSelection: printWikiSelection,
+            onDeleteSelection: () => void deleteWikiSelection(),
+            deleteBusy: wikiDeleteBusy,
+            onSetMinSemantic: (value) => setMinSemantic(value.toFixed(2)),
+            onSetExplain: setExplain,
+            onSetTopK: setTopK,
+            onSetRecallTopK: setRecallTopK,
+            onSetBudget: setBudget,
+            onSetMinTotal: setMinTotal,
+            onSetMinConfidence: setMinConfidence,
+            onSetOutcome: setOutcome,
+            onToggleType: (memoryType, checked) => {
+              const next2 = new Set(types);
+              if (checked) next2.add(memoryType);
+              else next2.delete(memoryType);
+              setTypes(next2);
+            },
+            onToggleTier: (tier, checked) => {
+              const next2 = new Set(tiers);
+              if (checked) next2.add(tier);
+              else next2.delete(tier);
+              setTiers(next2);
+            },
+            onCollapseOptions: () => setWikiOptionsOpen(false)
           }
         ) : null
-      ] }),
+      ] }) }),
       selectedMemory ? /* @__PURE__ */ jsxRuntimeExports.jsxs("aside", { className: "detailDrawer", "aria-label": "Memory details", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "detailDrawerTop", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "detailDrawerHeader", children: [
@@ -36890,81 +36540,6 @@ function App() {
             ] }),
             statsErr ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "callout calloutBad", children: statsErr }) : null,
             /* @__PURE__ */ jsxRuntimeExports.jsx("pre", { className: "pre", children: stats ? JSON.stringify(stats, null, 2) : "Loading..." })
-          ] })
-        ] })
-      }
-    ) : null,
-    deepSearchPrompt.open ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-      "div",
-      {
-        className: "modalBackdrop",
-        onMouseDown: (e2) => {
-          if (e2.target === e2.currentTarget) setDeepSearchPrompt({ open: false, query: "" });
-        },
-        role: "presentation",
-        children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "modalPanel", role: "dialog", "aria-modal": "true", "aria-label": "Deep search", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "modalTop", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "modalTitle", children: "No results" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "btn btnGhost", onClick: () => setDeepSearchPrompt({ open: false, query: "" }), children: "Close" })
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "modalBody", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "muted", children: "Try a deep search (Recall Preview) for:" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mono", style: { marginTop: 8, marginBottom: 12 }, children: deepSearchPrompt.query }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "modalActions", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "btn", onClick: () => setDeepSearchPrompt({ open: false, query: "" }), children: "Cancel" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "btn btnPrimary", onClick: () => runDeepSearch(deepSearchPrompt.query), children: "Deep Search" })
-            ] })
-          ] })
-        ] })
-      }
-    ) : null,
-    diagramPreviewOpen ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-      "div",
-      {
-        className: "modalBackdrop",
-        onMouseDown: (e2) => {
-          if (e2.target === e2.currentTarget) setDiagramPreviewOpen(false);
-        },
-        role: "presentation",
-        children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "modalPanel", role: "dialog", "aria-modal": "true", "aria-label": "Diagrams list", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "modalTop", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "modalTitle", children: [
-              "Available Diagrams (",
-              diagramMemories.length,
-              ")"
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "btn btnGhost", onClick: () => setDiagramPreviewOpen(false), children: "Close" })
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "modalBody", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "muted", children: "Tap a card to instantly open its full detail view and interactive architecture canvas:" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "diagramPreviewGrid", children: diagramMemories.map((m2) => {
-              var _a3, _b2;
-              const snippet2 = ((_a3 = m2.diagram) == null ? void 0 : _a3.code) || ((_b2 = m2.content.split("```mermaid")[1]) == null ? void 0 : _b2.split("```")[0]) || m2.content;
-              return /* @__PURE__ */ jsxRuntimeExports.jsxs(
-                "div",
-                {
-                  className: "diagramPreviewCard",
-                  onClick: () => {
-                    setSelectedMemory(m2);
-                    setDiagramPreviewOpen(false);
-                  },
-                  children: [
-                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "diagramPreviewHeader", children: [
-                      /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "diagramPreviewID", children: [
-                        m2.id.slice(0, 16),
-                        "..."
-                      ] }),
-                      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "memPill", children: m2.type })
-                    ] }),
-                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "diagramPreviewSnippet", children: [
-                      snippet2.trim().slice(0, 140),
-                      "..."
-                    ] })
-                  ]
-                },
-                m2.id
-              );
-            }) })
           ] })
         ] })
       }
@@ -37291,13 +36866,42 @@ function BenchmarkPanel({
   const operationalCostWithoutMemory = benchmarkEconomicNumber(latest, "operational_cost_without_memory");
   const amortizedAcquisitionCost = benchmarkEconomicNumber(latest, "amortized_acquisition_cost");
   const memoryROI = benchmarkEconomicNumber(latest, "memory_roi");
+  const [metricExplanationOpen, setMetricExplanationOpen] = reactExports.useState(false);
+  reactExports.useEffect(() => {
+    const handleEscape = (e2) => {
+      if (e2.key === "Escape") {
+        setMetricExplanationOpen(false);
+      }
+    };
+    if (metricExplanationOpen) {
+      window.addEventListener("keydown", handleEscape);
+    }
+    return () => {
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, [metricExplanationOpen]);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "surfaceStack", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "diagnosticsHero", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "overviewEyebrow", children: "Benchmark" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("h2", { className: "sectionTitle", children: [
-          workspace || "Workspace",
-          " Quality Benchmark"
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", alignItems: "center", gap: "10px" }, children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("h2", { className: "sectionTitle", children: [
+            workspace || "Workspace",
+            " Quality Benchmark"
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              className: "btnInfoCircle",
+              onClick: () => setMetricExplanationOpen(true),
+              title: "How metrics are calculated",
+              children: /* @__PURE__ */ jsxRuntimeExports.jsxs("svg", { width: "15", height: "15", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "2.5", strokeLinecap: "round", strokeLinejoin: "round", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("circle", { cx: "12", cy: "12", r: "10" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M12 16v-4" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M12 8h.01" })
+              ] })
+            }
+          )
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "sectionText", children: "Measure the latest ON/OFF delta first, then use diagnostic signals to understand where memory helps, where it hurts, and what should improve." })
       ] }),
@@ -37415,7 +37019,100 @@ function BenchmarkPanel({
           run2.run_id
         )) })
       ] })
-    ] }) : null
+    ] }) : null,
+    metricExplanationOpen ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "div",
+      {
+        className: "modalBackdrop",
+        onMouseDown: (e2) => {
+          if (e2.target === e2.currentTarget) setMetricExplanationOpen(false);
+        },
+        role: "presentation",
+        children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "modalPanel metricExplanationModal", role: "dialog", "aria-modal": "true", "aria-label": "Metric Calculations Explanation", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "modalTop", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "modalTitle", children: "Metric Calculations Guide" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "btn btnGhost", onClick: () => setMetricExplanationOpen(false), children: "Close" })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "modalBody", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "metricExplanationGrid", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "metricExplanationCategory", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "metricExplanationCategoryTitle", children: "Economic Model (Savings & ROI)" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "metricExplanationItem", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "metricExplanationName", children: "Memory ROI (Return on Investment)" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "metricExplanationFormula", children: "Memory ROI = Estimated OFF Operational Cost - Estimated ON Operational Cost - Amortized Acquisition Cost" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "metricExplanationDesc", children: "The net financial savings/value gained by enabling agent memory. Weighs the manual labor savings (from avoided searches, rediscovery, and validation steps) against operational token costs and the amortized cost to acquire/write memories." })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "metricExplanationItem", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "metricExplanationName", children: "Estimated Operational Cost (ON vs. OFF)" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "metricExplanationFormula", children: "Operational Cost = token_cost(Returned Tokens + Operational Effort × 200 tokens)" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "metricExplanationDesc", children: "Combines the actual execution token cost with estimated human labor effort. The labor effort (total steps for lookup, verification, and rediscovery) is converted to a token proxy at a standard rate of 200 tokens per effort unit." })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "metricExplanationItem", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "metricExplanationName", children: "Amortized Acquisition Cost" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "metricExplanationDesc", children: "The token-equivalent cost of initial seeding / fixture runs that initially acquired/wrote the memories, amortized (divided) by the number of times those memories are reused." })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "metricExplanationItem", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "metricExplanationName", children: "Retrieval Context Cost Delta (Context Bloat Penalty)" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "metricExplanationFormula", children: "Retrieval Cost Delta = token_cost(OFF Tokens) - token_cost(ON Tokens)" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "metricExplanationDesc", children: [
+                  'The raw token cost difference between the disabled baseline run and the memory-enabled run. A negative delta represents the "Context Bloat Penalty" from retrieved memories injected into prompts. ',
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("i", { children: "Note: This penalty is already mathematically accounted for inside the Estimated ON Operational Cost." })
+                ] })
+              ] })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "metricExplanationCategory", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "metricExplanationCategoryTitle", children: "Primary Continuation Signals" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "metricExplanationItem", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "metricExplanationName", children: "Task Success Delta" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "metricExplanationDesc", children: "The change in task success rate (ON % - OFF %). A task is marked successful if the answer achieves high fact coverage (≥ 75%) or full completeness (100%)." })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "metricExplanationItem", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "metricExplanationName", children: "Fact Coverage Delta" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "metricExplanationDesc", children: "The change in the proportion of expected gold-standard facts successfully identified/addressed in the generated answer (ON % - OFF %)." })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "metricExplanationItem", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "metricExplanationName", children: "Completeness Delta" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "metricExplanationDesc", children: "The change in the proportion of logical groups of expected facts that were fully covered in the answer (ON % - OFF %)." })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "metricExplanationItem", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "metricExplanationName", children: "Locator Success Delta" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "metricExplanationDesc", children: "The change in source code files or tool commands correctly referenced in the answers (ON % - OFF %)." })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "metricExplanationItem", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "metricExplanationName", children: "Verification & Rediscovery Effort" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "metricExplanationDesc", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("b", { children: "Verification Effort:" }),
+                  " Remaining incomplete logical groups of facts (representing the manual verification checks needed).",
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("br", {}),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("b", { children: "Rediscovery Effort:" }),
+                  " Missing locator targets plus missing gold memory references (representing the manual code search/rediscovery steps needed)."
+                ] })
+              ] })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "metricExplanationCategory", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "metricExplanationCategoryTitle", children: "Secondary Retrieval Diagnostics" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "metricExplanationItem", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "metricExplanationName", children: "Precision@K & Gold Recall" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "metricExplanationDesc", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("b", { children: "Precision@K:" }),
+                  " Proportion of retrieved memories that are relevant.",
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("br", {}),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("b", { children: "Gold Recall:" }),
+                  " Proportion of target gold memories retrieved."
+                ] })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "metricExplanationItem", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "metricExplanationName", children: "NDCG@K (Normalized Discounted Cumulative Gain)" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "metricExplanationDesc", children: "Measures ranking quality, penalizing relevant memories if they are retrieved at lower ranks in the list." })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "metricExplanationItem", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "metricExplanationName", children: "Keyword Coverage" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "metricExplanationDesc", children: "The proportion of required keywords successfully present in the retrieved memory text context." })
+              ] })
+            ] })
+          ] }) })
+        ] })
+      }
+    ) : null
   ] });
 }
 function BenchmarkClusterCard({ cluster, index }) {
@@ -37750,9 +37447,6 @@ function WikiPanel({
   onModeChange,
   onScopeChange,
   onViewModeChange,
-  onExitWiki,
-  onOpenRaw,
-  onToggleTheme,
   onClearView,
   onToggleOptions,
   onSubmit,
@@ -37826,16 +37520,7 @@ function WikiPanel({
           /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: mode === "recall" ? "memPill memPillAccent wikiModePill" : "memPill wikiModePill", type: "button", onClick: () => onModeChange("recall"), children: "recall" }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: mode === "recents" ? "memPill memPillAccent wikiModePill" : "memPill wikiModePill", type: "button", onClick: () => onModeChange("recents"), children: "recents" })
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "wikiUtilityActions", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "btn btnGhost", type: "button", onClick: onExitWiki, children: "[dashboard]" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "btn btnGhost", type: "button", onClick: onClearView, children: "[clear]" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "btn btnGhost", type: "button", onClick: onOpenRaw, children: "[raw]" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { className: "btn btnGhost", type: "button", onClick: onToggleTheme, children: [
-            "[",
-            theme === "dark" ? "light" : "dark",
-            "]"
-          ] })
-        ] })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "wikiUtilityActions", children: /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "btn btnGhost", type: "button", onClick: onClearView, children: "[clear]" }) })
       ] }),
       !showResultSurface ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "wikiHero", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "wikiHeroMark", children: [
@@ -38255,14 +37940,6 @@ function WikiMemoryFragment({
     }
   );
 }
-function QueryEmptyState({ mode, onOpenOverview }) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "emptyStateCard", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "overviewEyebrow", children: mode === "search" ? "Search" : "Recall" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "sectionTitle", children: mode === "search" ? "Start a memory search" : "Build a recall preview" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "sectionText", children: "Use the composer below to query the selected workspace." }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "btn", type: "button", onClick: onOpenOverview, children: "Overview" })
-  ] });
-}
 function MetricCard({ title, value, detail }) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "metricCard", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "metricLabel", children: title }),
@@ -38285,7 +37962,7 @@ function PieChartBreakdown({ entries: entries2, emptyLabel }) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "pieChartBlock", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "pieChartWrap", "aria-hidden": "true", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "pieChartVisual", style: { background: buildPieGradient(entries2) }, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "pieChartCenter", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "pieChartTotal", children: formatNumber(total) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "pieChartCaption", children: "total" })
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "pieChartTotalCaption", children: "total" })
     ] }) }) }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "breakdownList", children: entries2.map(([label, value], index) => {
       const percent = total > 0 ? value / total * 100 : 0;
@@ -38387,150 +38064,6 @@ function DiagnosticRow({ label, value }) {
       /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "diagnosticLeader", "aria-hidden": "true" })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "diagnosticValue", children: value })
-  ] });
-}
-function Message({
-  m: m2,
-  theme,
-  selectedId,
-  onSelectMemory
-}) {
-  var _a2, _b2, _c2, _d2, _e3, _f2, _g2, _h2, _i2, _j2, _k2;
-  const isUser = m2.role === "user";
-  const isSystem = m2.role === "system";
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: isSystem ? "msg msgSystem" : isUser ? "msg msgUser" : "msg msgAssistant", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "msgInner", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "msgMeta", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "msgRole", children: isSystem ? "System" : isUser ? "You" : "Memory" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "msgTime", children: formatClock(m2.createdAt) })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "msgBody", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(MarkdownView, { markdown: m2.text, clamp: false, theme }),
-      m2.error ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "callout calloutBad", children: m2.error }) : null,
-      ((_a2 = m2.payload) == null ? void 0 : _a2.results) ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "assistantBlock", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "assistantHdr", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "assistantTitle", children: "Results" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "muted small", children: m2.payload.results.length })
-        ] }),
-        ((_b2 = m2.payload.search) == null ? void 0 : _b2.retrieval_policy) ? /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "detailsFold", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "detailsSum", children: "Retrieval policy" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("pre", { className: "pre", children: JSON.stringify(m2.payload.search.retrieval_policy, null, 2) })
-        ] }) : null,
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "assistantList", children: m2.payload.results.map((r2) => /* @__PURE__ */ jsxRuntimeExports.jsx(ResultCard, { m: r2, theme, isSelected: r2.id === selectedId, onSelect: onSelectMemory }, r2.id)) }),
-        ((_d2 = (_c2 = m2.payload.search) == null ? void 0 : _c2.weak_results) == null ? void 0 : _d2.length) ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "assistantHdr", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "assistantTitle", children: "Weak familiarity" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "muted small", children: m2.payload.search.weak_results.length })
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "assistantList", children: m2.payload.search.weak_results.map((r2) => /* @__PURE__ */ jsxRuntimeExports.jsx(ResultCard, { m: r2, theme, isSelected: r2.id === selectedId, onSelect: onSelectMemory }, r2.id)) })
-        ] }) : null,
-        ((_f2 = (_e3 = m2.payload.search) == null ? void 0 : _e3.suppressed_results) == null ? void 0 : _f2.length) ? /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "detailsFold", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("summary", { className: "detailsSum", children: [
-            "Suppressed (",
-            m2.payload.search.suppressed_results.length,
-            ")"
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "assistantList", children: m2.payload.search.suppressed_results.map((r2) => /* @__PURE__ */ jsxRuntimeExports.jsx(ResultCard, { m: r2, theme, isSelected: r2.id === selectedId, onSelect: onSelectMemory }, r2.id)) })
-        ] }) : null
-      ] }) : null,
-      ((_g2 = m2.payload) == null ? void 0 : _g2.recall) ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "assistantBlock", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "assistantHdr", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "assistantTitle", children: "Recall context" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "muted small", children: [
-            m2.payload.recall.tokens_used,
-            "/",
-            m2.payload.recall.tokens_budget
-          ] })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "detailsFold", open: true, children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "detailsSum", children: "Context block" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "detailsTools", children: /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "btn btnGhost", onClick: () => navigator.clipboard.writeText(m2.payload.recall.context_block), children: "Copy" }) }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("pre", { className: "pre preTall", children: m2.payload.recall.context_block })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "assistantHdr", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "assistantTitle", children: "Included memories" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "muted small", children: ((_h2 = m2.payload.recall.memories_included_full) == null ? void 0 : _h2.length) ?? 0 })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "assistantList", children: (m2.payload.recall.memories_included_full ?? []).map((r2) => /* @__PURE__ */ jsxRuntimeExports.jsx(ResultCard, { m: r2, theme, isSelected: r2.id === selectedId, onSelect: onSelectMemory }, r2.id)) }),
-        m2.payload.recall.retrieval_policy ? /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "detailsFold", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "detailsSum", children: "Retrieval policy" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("pre", { className: "pre", children: JSON.stringify(m2.payload.recall.retrieval_policy, null, 2) })
-        ] }) : null,
-        ((_i2 = m2.payload.recall.weak_memories) == null ? void 0 : _i2.length) ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "assistantHdr", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "assistantTitle", children: "Weak familiarity" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "muted small", children: m2.payload.recall.weak_memories.length })
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "assistantList", children: m2.payload.recall.weak_memories.map((r2) => /* @__PURE__ */ jsxRuntimeExports.jsx(ResultCard, { m: r2, theme, isSelected: r2.id === selectedId, onSelect: onSelectMemory }, r2.id)) })
-        ] }) : null,
-        ((_j2 = m2.payload.recall.suppressed_memories) == null ? void 0 : _j2.length) ? /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "detailsFold", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("summary", { className: "detailsSum", children: [
-            "Suppressed (",
-            m2.payload.recall.suppressed_memories.length,
-            ")"
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "assistantList", children: m2.payload.recall.suppressed_memories.map((r2) => /* @__PURE__ */ jsxRuntimeExports.jsx(ResultCard, { m: r2, theme, isSelected: r2.id === selectedId, onSelect: onSelectMemory }, r2.id)) })
-        ] }) : null,
-        ((_k2 = m2.payload.recall.memories_clipped) == null ? void 0 : _k2.length) ? /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "detailsFold", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("summary", { className: "detailsSum", children: [
-            "Clipped (",
-            m2.payload.recall.memories_clipped.length,
-            ")"
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("pre", { className: "pre", children: JSON.stringify(m2.payload.recall.memories_clipped, null, 2) })
-        ] }) : null
-      ] }) : null
-    ] })
-  ] }) });
-}
-function ResultCard({
-  m: m2,
-  theme,
-  isSelected,
-  onSelect
-}) {
-  const timeStr = formatTS(m2.created_at || m2.updated_at);
-  const semanticSimilarity = getSemanticSimilarity(m2);
-  const semanticRelevance = getSemanticRelevance(semanticSimilarity);
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: isSelected ? "memCard memCardOn" : "memCard", onClick: () => onSelect(m2), children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memHdr", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memHdrLeft", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "memDot", "aria-hidden": "true" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "mono memID", title: m2.id, children: [
-          m2.id.slice(0, 16),
-          "..."
-        ] })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memHdrRight", children: timeStr ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "memTime", style: { fontSize: "12px", opacity: 0.7 }, children: timeStr }) : null })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memBody memBodyCompact", children: /* @__PURE__ */ jsxRuntimeExports.jsx(MarkdownView, { markdown: m2.content, clamp: true, theme }) }),
-    typeof semanticSimilarity === "number" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memSignal", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memSignalTop", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "memSignalLabel", children: "semantic similarity" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `memPill relevancePill relevancePill${toTitle(semanticRelevance.tone)}`, children: semanticRelevance.label })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memSignalValue", children: formatScore(semanticSimilarity, 3) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memSignalHint", children: "Primary relevance signal from `score_breakdown.semantic_similarity`." })
-    ] }) : null,
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memFooter", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memFooterLeft", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "memPill memPillAccent", children: m2.type }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "memPill", children: m2.storage_tier }),
-        hasDiagram(m2) ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "memPill memPillVisual", children: "visual" }) : null
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memFooterRight", children: [
-        typeof m2.score === "number" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "memMetric", children: [
-          "Blended: ",
-          /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: formatScore(m2.score, 3) })
-        ] }) : null,
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "memMetric", children: [
-          "Conf: ",
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("strong", { children: [
-            Math.round(m2.confidence * 100),
-            "%"
-          ] })
-        ] })
-      ] })
-    ] })
   ] });
 }
 const PRELOAD_RECOVERY_KEY = "agent-memory:vite-preload-recovery";

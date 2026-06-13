@@ -1,7 +1,7 @@
 APP := agent-memory
 BIN_DIR := bin
 
-.PHONY: help build test lint clean setup test-verbose test-coverage bench bench-mem bench-cpu fmt vet clean-all install-dev build-dashboard embed-dashboard build-with-dashboard
+.PHONY: help build test lint clean setup test-verbose test-coverage bench bench-mem bench-cpu fmt vet clean-all install-dev build-dashboard embed-dashboard build-with-dashboard hygiene-clean
 
 .DEFAULT_GOAL := help
 
@@ -93,3 +93,6 @@ clean: ## Remove build artifacts
 clean-all: clean ## Remove all build artifacts including coverage reports
 	rm -rf coverage.out coverage.html *.prof
 	@echo "✓ Cleaned all build artifacts"
+
+hygiene-clean: ## Remove scratch/debug files and stray committed binaries (see scripts/repo-hygiene-cleanup.sh)
+	bash scripts/repo-hygiene-cleanup.sh

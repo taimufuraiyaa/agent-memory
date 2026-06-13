@@ -4,6 +4,19 @@ dist/
 build/
 *.log
 
+# Root-level build output (use `make build` -> bin/ instead)
+/agent-memory
+/agent-memory.exe
+
+# Backup / scratch files left over from refactors or manual debugging
+*.backup
+*.backup-final
+*.bak
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
 
 # Dashboard source build (not embedded)
 tools/agent-memory/dashboard/dist/

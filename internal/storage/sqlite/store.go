@@ -587,6 +587,142 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 
 	return nil
 }
 
+// InsertMemoryByHashWithVector inserts a memory and its embedding atomically
+// in a single transaction, enforcing workspace+content_hash idempotency the
+// same way InsertMemoryByHash does. It returns ErrDuplicateContent (without
+// touching memory_vectors) when the hash already exists in the workspace.
+//
+// Combining the memory insert and vector upsert into one transaction closes
+// a window where a memory row could exist without its embedding -- e.g. if
+// the process crashed between two separate statements -- which the write
+// pipeline previously only guarded against with a manual compensating
+// delete after the fact.
+func (s *Store) InsertMemoryByHashWithVector(ctx context.Context, m *core.MemoryEntry, contentHash, embeddingProvider, embeddingModelVersion string, embedding []float32) error {
+	if strings.TrimSpace(contentHash) == "" {
+		return errors.New("content hash is required")
+	}
+	if err := m.Validate(); err != nil {
+		return err
+	}
+	if strings.TrimSpace(embeddingProvider) == "" {
+		return errors.New("embedding provider is required")
+	}
+	if strings.TrimSpace(embeddingModelVersion) == "" {
+		embeddingModelVersion = "unknown"
+	}
+
+	sourceJSON, err := json.Marshal(m.Source)
+	if err != nil {
+		return fmt.Errorf("marshal source: %w", err)
+	}
+	entitiesJSON, err := json.Marshal(m.Entities)
+	if err != nil {
+		return fmt.Errorf("marshal entities: %w", err)
+	}
+	tagsJSON, err := json.Marshal(m.Tags)
+	if err != nil {
+		return fmt.Errorf("marshal tags: %w", err)
+	}
+	var outcomeJSON []byte
+	if m.Outcome != nil {
+		outcomeJSON, err = json.Marshal(m.Outcome)
+		if err != nil {
+			return fmt.Errorf("marshal outcome: %w", err)
+		}
+	}
+	embJSON, err := json.Marshal(embedding)
+	if err != nil {
+		return fmt.Errorf("marshal embedding: %w", err)
+	}
+
+	if m.CreatedAt.IsZero() {
+		m.CreatedAt = time.Now().UTC()
+	}
+	m.UpdatedAt = time.Now().UTC()
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback()
+		}
+	}()
+
+	_startInsert := time.Now()
+	res, err := tx.ExecContext(
+		ctx,
+		`
+INSERT OR IGNORE INTO memories (id, type, content, diagram_lang, diagram_code, workspace, content_hash, source_json, entities_json, tags_json, confidence, storage_tier, pinned, superseded_by, access_count, last_accessed, decay_score, salience_score, suppression_score, useful_count, ignored_count, rejected_count, harmful_count, last_helpful_at, last_rejected_at, suppression_until, familiarity_band_last, outcome_json, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		m.ID,
+		string(m.Type),
+		m.Content,
+		nullDiagramLang(m),
+		nullDiagramCode(m),
+		m.Workspace,
+		contentHash,
+		string(sourceJSON),
+		string(entitiesJSON),
+		string(tagsJSON),
+		m.Confidence,
+		string(m.StorageTier),
+		boolToInt(m.Pinned),
+		nullIfEmptyString(m.SupersededBy),
+		m.AccessCount,
+		m.LastAccessedAt.Format(time.RFC3339Nano),
+		m.DecayScore,
+		m.SalienceScore,
+		m.SuppressionScore,
+		m.UsefulCount,
+		m.IgnoredCount,
+		m.RejectedCount,
+		m.HarmfulCount,
+		timeStringOrEmpty(m.LastHelpfulAt),
+		timeStringOrEmpty(m.LastRejectedAt),
+		nullTimeString(m.SuppressionUntil),
+		strings.TrimSpace(m.FamiliarityBandLast),
+		nullIfEmpty(outcomeJSON),
+		m.CreatedAt.Format(time.RFC3339Nano),
+		m.UpdatedAt.Format(time.RFC3339Nano),
+	)
+	s.logSlowQuery(ctx, "insert_memory", m.Workspace, time.Since(_startInsert))
+	if err != nil {
+		return fmt.Errorf("insert memory: %w", err)
+	}
+	affected, err = res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("insert memory rows: %w", err)
+	}
+	if affected == 0 {
+		return ErrDuplicateContent
+	}
+
+	_startVec := time.Now()
+	_, err = tx.ExecContext(ctx, `
+INSERT INTO memory_vectors (memory_id, workspace, embedding_json, embedding_provider, embedding_model_version, updated_at)
+VALUES (?, ?, ?, ?, ?, ?)
+ON CONFLICT(memory_id) DO UPDATE SET
+	workspace=excluded.workspace,
+	embedding_json=excluded.embedding_json,
+	embedding_provider=excluded.embedding_provider,
+	embedding_model_version=excluded.embedding_model_version,
+	updated_at=excluded.updated_at
+`, m.ID, m.Workspace, string(embJSON), strings.TrimSpace(embeddingProvider), strings.TrimSpace(embeddingModelVersion), m.UpdatedAt.Format(time.RFC3339Nano))
+	s.logSlowQuery(ctx, "upsert_memory_vector", m.Workspace, time.Since(_startVec))
+	if err != nil {
+		return fmt.Errorf("upsert memory vector: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit insert memory with vector: %w", err)
+	}
+	committed = true
+	return nil
+}
+
 func (s *Store) upsertMemory(ctx context.Context, m *core.MemoryEntry, contentHash string) error {
 	if err := m.Validate(); err != nil {
 		return err
@@ -1300,6 +1436,62 @@ WHERE workspace = ? AND storage_tier != 'cold'`, workspace)
 	defer func() { _ = rows.Close() }()
 
 	out := make([]core.MemoryEntry, 0)
+	for rows.Next() {
+		var m core.MemoryEntry
+		var entitiesJSON string
+		var createdAt string
+		if err := rows.Scan(
+			&m.ID,
+			&entitiesJSON,
+			&m.StorageTier,
+			&createdAt,
+		); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal([]byte(entitiesJSON), &m.Entities); err != nil {
+			return nil, err
+		}
+		if t, err := time.Parse(time.RFC3339Nano, createdAt); err == nil {
+			m.CreatedAt = t
+		}
+		out = append(out, m)
+	}
+	return out, rows.Err()
+}
+
+// ListMemoryLightweightForInferenceRecent returns lightweight (ID, Entities,
+// StorageTier, CreatedAt) records for the most recently created non-cold
+// memories in a workspace, most-recent first, capped at limit.
+//
+// This exists for the write pipeline's entity co-occurrence inference
+// (FR-SDO-12, see WritePipeline.inferRelationships), which runs
+// synchronously on every Write(). ListMemoryLightweightForInference loads
+// and JSON-decodes every non-cold memory's entity list on every write -- an
+// O(N) cost per write that grows with the size of the workspace. Bounding
+// the candidate set to the most recently created memories keeps per-write
+// cost roughly constant while still covering the memories most likely to be
+// contextually related to a brand-new entry.
+func (s *Store) ListMemoryLightweightForInferenceRecent(ctx context.Context, workspace string, limit int) ([]core.MemoryEntry, error) {
+	if limit <= 0 {
+		limit = 500
+	}
+	_startList := time.Now()
+	rows, err := s.db.QueryContext(ctx, `
+SELECT id, entities_json, storage_tier, created_at
+FROM memories
+WHERE workspace = ? AND storage_tier != 'cold'
+ORDER BY created_at DESC
+LIMIT ?`, workspace, limit)
+	if err != nil {
+		s.logSlowQuery(ctx, "list_memory_lightweight_for_inference_recent", workspace, time.Since(_startList))
+		return nil, err
+	}
+	defer func() {
+		s.logSlowQuery(ctx, "list_memory_lightweight_for_inference_recent", workspace, time.Since(_startList))
+	}()
+	defer func() { _ = rows.Close() }()
+
+	out := make([]core.MemoryEntry, 0, limit)
 	for rows.Next() {
 		var m core.MemoryEntry
 		var entitiesJSON string

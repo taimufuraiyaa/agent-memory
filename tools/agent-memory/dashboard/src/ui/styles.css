@@ -4880,3 +4880,109 @@ body.light .wikiConsolidatedFragment {
 .wikiDockButtonGroup .sendBtn {
   flex: 0 0 auto;
 }
+
+/* Quality Benchmark Metric Explanation Guide Modal */
+.btnInfoCircle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  padding: 0;
+  margin-top: 4px;
+}
+
+.btnInfoCircle:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+  transform: scale(1.08);
+}
+
+.btnInfoCircle:active {
+  transform: scale(0.95);
+}
+
+.metricExplanationModal {
+  max-width: 760px;
+}
+
+.metricExplanationGrid {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  text-align: left;
+}
+
+.metricExplanationCategory {
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.02);
+  padding: 20px;
+}
+
+body.light .metricExplanationCategory {
+  background: rgba(0, 0, 0, 0.01);
+}
+
+.metricExplanationCategoryTitle {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--accent-primary);
+  margin-bottom: 16px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 8px;
+}
+
+.metricExplanationItem {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 20px;
+}
+
+.metricExplanationItem:last-child {
+  margin-bottom: 0;
+}
+
+.metricExplanationName {
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--text-main);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.metricExplanationFormula {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 8px 12px;
+  border-radius: 10px;
+  color: var(--text-subtle);
+  border: 1px solid var(--border);
+  display: inline-block;
+  align-self: flex-start;
+  word-break: break-all;
+}
+
+body.light .metricExplanationFormula {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.metricExplanationDesc {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+

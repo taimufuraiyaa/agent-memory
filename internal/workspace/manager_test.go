@@ -523,3 +523,16 @@ func TestWriteAgentFilesUpsertsCursorRulesFile(t *testing.T) {
 		t.Fatalf("expected result (2)")
 	}
 }
+
+func TestDebugList(t *testing.T) {
+	mgr, err := NewManager("/Users/time/.agent-memory")
+	if err != nil {
+		t.Fatalf("new manager: %v", err)
+	}
+	items, err := mgr.List(context.Background())
+	if err != nil {
+		t.Fatalf("list failed: %v", err)
+	}
+	t.Logf("List succeeded: %d items", len(items))
+}
+

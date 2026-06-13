@@ -36,25 +36,9 @@ import {
 import { DiagramViewer, renderDiagramMarkupForExport } from './DiagramViewer'
 import { MarkdownView } from './MarkdownView'
 
-type ChatMode = 'search' | 'recall'
-type Surface = 'overview' | 'search' | 'recall' | 'diagnostics' | 'sessions' | 'benchmark' | 'wiki' | 'lifecycle'
+type Surface = 'overview' | 'sessions' | 'diagnostics' | 'benchmark' | 'wiki' | 'lifecycle'
 type WikiViewMode = 'article' | 'raw'
 type WikiMode = 'search' | 'recall' | 'recents'
-
-type ChatMessage = {
-  id: string
-  role: 'user' | 'assistant' | 'system'
-  mode: ChatMode
-  text: string
-  createdAt: number
-  payload?: {
-    results?: MemoryEntry[]
-    search?: SearchResponse
-    recall?: RecallPreviewResponse
-  }
-  pending?: boolean
-  error?: string
-}
 
 type WikiSearchState = {
   mode: WikiMode
@@ -379,8 +363,7 @@ function getHealthState(stats: DashboardStats | null, statsErr: string) {
 }
 
 export function App() {
-  const [surface, setSurface] = useState<Surface>('wiki')
-  const [mode, setMode] = useState<ChatMode>('search')
+  const [surface, setSurface] = useState<Surface>('overview')
 
   const [projects, setProjects] = useState<ProjectListItem[]>([])
   const [workspace, setWorkspace] = useState<string>('')
@@ -403,15 +386,9 @@ export function App() {
   const [promotionResults, setPromotionResults] = useState<Record<string, ObservationPromotionResult>>({})
   const [overviewExperimentFocusKey, setOverviewExperimentFocusKey] = useState<number>(0)
   const [rawStatsOpen, setRawStatsOpen] = useState<boolean>(false)
-  const [deepSearchPrompt, setDeepSearchPrompt] = useState<{ open: boolean; query: string }>({
-    open: false,
-    query: '',
-  })
 
-  const [draft, setDraft] = useState<string>('')
   const [topK, setTopK] = useState<number>(10)
   const [explain, setExplain] = useState<boolean>(true)
-  const [advancedOpen, setAdvancedOpen] = useState<boolean>(false)
 
   const [types, setTypes] = useState<Set<MemoryType>>(new Set(['semantic']))
   const [tiers, setTiers] = useState<Set<StorageTier>>(new Set(['vector']))
@@ -430,12 +407,8 @@ export function App() {
   const [budget, setBudget] = useState<number>(4000)
   const [busy, setBusy] = useState<boolean>(false)
   const [recentsBusy, setRecentsBusy] = useState<boolean>(false)
-  const [messages, setMessages] = useState<ChatMessage[]>([])
   const [theme, setTheme] = useState<'light' | 'dark'>('dark')
   const [selectedMemory, setSelectedMemory] = useState<MemoryEntry | null>(null)
-  const [diagramPreviewOpen, setDiagramPreviewOpen] = useState<boolean>(false)
-  const [inputFocused, setInputFocused] = useState<boolean>(false)
-  const [composerFocused, setComposerFocused] = useState<boolean>(false)
   const [wikiQuery, setWikiQuery] = useState<string>('')
   const [wikiMode, setWikiMode] = useState<WikiMode>('search')
   const [wikiScope, setWikiScope] = useState<string>(ALL_PROJECTS_SCOPE)
@@ -451,21 +424,6 @@ export function App() {
   const [wikiDeleteBusy, setWikiDeleteBusy] = useState<boolean>(false)
   const [wikiDiagramMemory, setWikiDiagramMemory] = useState<MemoryEntry | null>(null)
   const threadRef = useRef<HTMLDivElement>(null)
-  const composerRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent | TouchEvent) => {
-      if (composerRef.current && !composerRef.current.contains(event.target as Node)) {
-        setAdvancedOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    document.addEventListener('touchstart', handleClickOutside)
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside)
-      document.removeEventListener('touchstart', handleClickOutside)
-    }
-  }, [])
 
   useEffect(() => {
     document.body.classList.remove('light', 'dark')
@@ -479,12 +437,6 @@ export function App() {
   }, [surface])
 
   useEffect(() => {
-    if ((surface === 'search' || surface === 'recall') && threadRef.current) {
-      threadRef.current.scrollTop = threadRef.current.scrollHeight
-    }
-  }, [messages, surface])
-
-  useEffect(() => {
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
       if (wikiDiagramMemory) {
@@ -493,14 +445,6 @@ export function App() {
       }
       if (wikiConsolidatedOpen) {
         setWikiConsolidatedOpen(false)
-        return
-      }
-      if (diagramPreviewOpen) {
-        setDiagramPreviewOpen(false)
-        return
-      }
-      if (deepSearchPrompt.open) {
-        setDeepSearchPrompt({ open: false, query: '' })
         return
       }
       if (rawStatsOpen) {
@@ -513,7 +457,7 @@ export function App() {
     }
     window.addEventListener('keydown', handleEscape)
     return () => window.removeEventListener('keydown', handleEscape)
-  }, [deepSearchPrompt.open, diagramPreviewOpen, rawStatsOpen, selectedMemory, wikiConsolidatedOpen, wikiDiagramMemory])
+  }, [rawStatsOpen, selectedMemory, wikiConsolidatedOpen, wikiDiagramMemory])
 
   const selectedProject = useMemo(() => projects.find((x) => x.name === workspace), [projects, workspace])
 
@@ -528,8 +472,6 @@ export function App() {
     () => sessions.find((session) => session.session_id === selectedSessionID) ?? sessions[0],
     [selectedSessionID, sessions],
   )
-  const dashboardWikiLauncher = surface !== 'wiki' && mode === 'search'
-  const composerExpanded = composerFocused || advancedOpen || draft.trim().length > 0
   const semanticThreshold = useMemo(() => parseUnitScore(minSemantic) ?? SEARCH_DEFAULT_MIN_SEMANTIC_SCORE, [minSemantic])
   const semanticThresholdRelevance = useMemo(() => getSemanticRelevance(semanticThreshold), [semanticThreshold])
   const selectedSemanticSimilarity = useMemo(
@@ -540,23 +482,6 @@ export function App() {
     () => getSemanticRelevance(selectedSemanticSimilarity),
     [selectedSemanticSimilarity],
   )
-
-  const diagramMemories = useMemo(() => {
-    const map = new Map<string, MemoryEntry>()
-    for (const msg of messages) {
-      if (msg.payload?.results) {
-        for (const m of msg.payload.results) {
-          if (hasDiagram(m)) map.set(m.id, m)
-        }
-      }
-      if (msg.payload?.recall?.memories_included_full) {
-        for (const m of msg.payload.recall.memories_included_full) {
-          if (hasDiagram(m)) map.set(m.id, m)
-        }
-      }
-    }
-    return Array.from(map.values())
-  }, [messages])
   const wikiAllFragments = useMemo(() => mergeMemoryResults([...wikiSearch.results, ...wikiSearch.weakResults]), [wikiSearch])
   const wikiPinnedResults = useMemo(() => wikiAllFragments.filter((memory) => memory.pinned), [wikiAllFragments])
   const wikiPinnedKeys = useMemo(() => new Set(wikiPinnedResults.map((memory) => buildMemoryKey(memory))), [wikiPinnedResults])
@@ -750,14 +675,12 @@ export function App() {
   }, [entities, fromDate, minConfidence, minDecay, minTotal, outcome, relativeCutoff, semanticThreshold, tiers, toDate, types])
 
   function openSearch() {
-    setMode('search')
     setWikiMode('search')
     setSurface('wiki')
     setSelectedMemory(null)
   }
 
   function openRecall() {
-    setMode('recall')
     setWikiMode('recall')
     setSurface('wiki')
     setSelectedMemory(null)
@@ -776,12 +699,17 @@ export function App() {
   function openWiki(modeOverride?: WikiMode) {
     if (modeOverride) {
       setWikiMode(modeOverride)
-      if (modeOverride === 'search' || modeOverride === 'recall') {
-        setMode(modeOverride)
-      }
     }
     setSurface('wiki')
     setSelectedMemory(null)
+  }
+
+  function triggerWikiSearch(query: string) {
+    setWikiMode('search')
+    setWikiQuery(query)
+    setSurface('wiki')
+    setSelectedMemory(null)
+    void runWikiSearch(query)
   }
 
   function resetWikiTransientState() {
@@ -861,50 +789,9 @@ export function App() {
     }
   }
 
-  async function runSearchFlow(query: string) {
-    openSearch()
-    await runWikiSearch(query)
-  }
-
-  async function runRecallFlow(task: string) {
-    openRecall()
-    await runWikiRecall(task)
-  }
-
-  async function runDeepSearch(query: string) {
-    const q = query.trim()
-    if (!q) return
-    openRecall()
-    setDeepSearchPrompt({ open: false, query: '' })
-    await runWikiRecall(q)
-  }
-
-  async function submit() {
-    const text = draft.trim()
-    if (!text) return
-    setDraft('')
-    if (mode === 'search') {
-      await runSearchFlow(text)
-      return
-    }
-    await runRecallFlow(text)
-  }
-
   function focusExperimentComparisons() {
     setSurface('overview')
     setOverviewExperimentFocusKey((current) => current + 1)
-  }
-
-  function openGuidedDiagrams() {
-    if (diagramMemories.length > 0) {
-      if (diagramMemories.length === 1) {
-        setSelectedMemory(diagramMemories[0])
-      } else {
-        setDiagramPreviewOpen(true)
-      }
-      return
-    }
-    void runSearchFlow('architecture diagram mermaid flow')
   }
 
   function toggleWikiSelection(memory: MemoryEntry) {
@@ -1114,8 +1001,7 @@ export function App() {
 
   return (
     <div className={surface === 'wiki' ? 'shell chatShell shellWikiMode' : 'shell chatShell'}>
-      {surface !== 'wiki' ? (
-        <header className="topbar chatTopbar">
+      <header className="topbar chatTopbar">
         <div className="topbarLeft">
           <div className="brand">
             <div className="brandMark" aria-hidden="true">
@@ -1131,7 +1017,9 @@ export function App() {
             className="projectSelect"
             value={workspace}
             onChange={(e) => {
-              setWorkspace(e.target.value)
+              const val = e.target.value
+              setWorkspace(val)
+              setWikiScope(val)
               setSelectedMemory(null)
             }}
             aria-label="Switch workspace"
@@ -1166,7 +1054,7 @@ export function App() {
             <span className="navKey">[05]</span>
             <span className="navLabel">Lifecycle</span>
           </button>
-          <button className="navItem" onClick={() => openWiki()} type="button" aria-label="Wiki">
+          <button className={surface === 'wiki' ? 'navItem navItemOn' : 'navItem'} onClick={() => openWiki()} type="button" aria-label="Wiki">
             <span className="navKey">[06]</span>
             <span className="navLabel">Wiki</span>
           </button>
@@ -1190,30 +1078,11 @@ export function App() {
             <span>{theme === 'dark' ? 'light' : 'dark'}</span>
           </button>
         </div>
-        </header>
-      ) : null}
+      </header>
 
       <div className="chatLayout">
         <main className="chatMain">
           <div className="chatFeed">
-            {diagramMemories.length > 0 && (surface === 'search' || surface === 'recall') ? (
-              <button
-                className="floatingDiagramBtn"
-                onClick={() => {
-                  if (diagramMemories.length === 1) {
-                    setSelectedMemory(diagramMemories[0])
-                  } else {
-                    setDiagramPreviewOpen(true)
-                  }
-                }}
-                aria-label="View diagrams"
-                title="Quick access to diagrams"
-              >
-                <span>[diagrams]</span>
-                <span className="floatingDiagramBadge">{diagramMemories.length}</span>
-              </button>
-            ) : null}
-
             <div className="thread" ref={threadRef}>
               {surface === 'overview' ? (
                 <OverviewPanel
@@ -1222,12 +1091,12 @@ export function App() {
                   stats={stats}
                   statsErr={statsErr}
                   healthState={healthState}
-                  diagramCount={diagramMemories.length}
+                  diagramCount={stats?.diagram_count || 0}
                   experimentFocusKey={overviewExperimentFocusKey}
                   onCompareRuns={focusExperimentComparisons}
-                  onInspectFailures={() => void runSearchFlow('recent failures errors regressions')}
+                  onInspectFailures={() => triggerWikiSearch('recent failures errors regressions')}
                   onReviewLastSession={openSessions}
-                  onRunDiagramAction={openGuidedDiagrams}
+                  onRunDiagramAction={() => triggerWikiSearch('architecture diagram mermaid flow')}
                 />
               ) : null}
 
@@ -1315,15 +1184,10 @@ export function App() {
                     setWikiError('')
                     setWikiSearch((current) => (current.mode === nextMode ? current : { ...current, mode: nextMode, searched: false }))
                     if (nextMode !== 'recall') setWikiRecall(null)
-                    if (nextMode === 'search') setMode('search')
-                    if (nextMode === 'recall') setMode('recall')
                     if (nextMode === 'recents') void showRecentsCapture()
                   }}
                   onScopeChange={setWikiScope}
                   onViewModeChange={setWikiViewMode}
-                  onExitWiki={() => setSurface('overview')}
-                  onOpenRaw={() => setRawStatsOpen(true)}
-                  onToggleTheme={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
                   onClearView={clearWikiView}
                   onToggleOptions={() => setWikiOptionsOpen((current) => !current)}
                   onSubmit={() => {
@@ -1373,264 +1237,7 @@ export function App() {
                 />
               ) : null}
 
-              {(surface === 'search' || surface === 'recall') && messages.length === 0 ? (
-                <QueryEmptyState mode={mode} onOpenOverview={() => setSurface('overview')} />
-              ) : null}
-
-              {(surface === 'search' || surface === 'recall') &&
-                messages.map((m) => (
-                  <Message
-                    key={m.id}
-                    m={m}
-                    theme={theme}
-                    selectedId={selectedMemory?.id}
-                    onSelectMemory={setSelectedMemory}
-                  />
-                ))}
             </div>
-
-            {surface !== 'wiki' ? (
-              <div
-                className={dashboardWikiLauncher ? 'composerDock composerDockLauncher' : (composerExpanded ? 'composerDock composerDockExpanded' : 'composerDock composerDockCollapsed')}
-                ref={composerRef}
-                onFocusCapture={() => setComposerFocused(true)}
-                onBlurCapture={(e) => {
-                  const nextTarget = e.relatedTarget
-                  if (nextTarget instanceof Node && composerRef.current?.contains(nextTarget)) return
-                  setComposerFocused(false)
-                  if (!draft.trim()) setAdvancedOpen(false)
-                }}
-              >
-                {dashboardWikiLauncher ? (
-                  <button className="composerWikiLauncherBtn" type="button" onClick={() => openWiki('search')}>
-                    Explore wiki
-                  </button>
-                ) : (
-                  <div className={composerExpanded ? 'composer composerExpanded' : 'composer composerCollapsed'}>
-                    {advancedOpen ? (
-                      <div className="composerAdvanced">
-                        <div className="composerRow">
-                          <div className="composerRowTitle">Mode</div>
-                          <div className="modePills modePillsInline">
-                            <button className={mode === 'search' ? 'modePill modePillOn' : 'modePill'} onClick={openSearch} type="button">
-                              Search
-                            </button>
-                            <button className={mode === 'recall' ? 'modePill modePillOn' : 'modePill'} onClick={openRecall} type="button">
-                              Recall Preview
-                            </button>
-                          </div>
-                        </div>
-                        <label className="check">
-                          <input type="checkbox" checked={explain} onChange={(e) => setExplain(e.target.checked)} />
-                          Explain scoring
-                        </label>
-                        {mode === 'search' ? (
-                          <>
-                            <div className="row row2">
-                              <div>
-                                <label className="label">Top K</label>
-                                <input className="input" type="number" min={1} max={200} value={topK} onChange={(e) => setTopK(Number(e.target.value))} />
-                              </div>
-                              <div>
-                                <label className="label">Outcome</label>
-                                <select className="input" value={outcome} onChange={(e) => setOutcome(e.target.value as OutcomeResult | '')}>
-                                  <option value="">any</option>
-                                  <option value="success">success</option>
-                                  <option value="failure">failure</option>
-                                  <option value="partial">partial</option>
-                                </select>
-                              </div>
-                            </div>
-
-                            <label className="label">Types</label>
-                            <div className="chips">
-                              {allTypes.map((t) => (
-                                <label key={t.key} className={types.has(t.key) ? 'chip chipOn' : 'chip'}>
-                                  <input
-                                    type="checkbox"
-                                    checked={types.has(t.key)}
-                                    onChange={(e) => {
-                                      const next = new Set(types)
-                                      if (e.target.checked) next.add(t.key)
-                                      else next.delete(t.key)
-                                      setTypes(next)
-                                    }}
-                                  />
-                                  {t.label}
-                                </label>
-                              ))}
-                            </div>
-
-                            <label className="label">Tiers</label>
-                            <div className="chips">
-                              {allTiers.map((t) => (
-                                <label key={t.key} className={tiers.has(t.key) ? 'chip chipOn' : 'chip'}>
-                                  <input
-                                    type="checkbox"
-                                    checked={tiers.has(t.key)}
-                                    onChange={(e) => {
-                                      const next = new Set(tiers)
-                                      if (e.target.checked) next.add(t.key)
-                                      else next.delete(t.key)
-                                      setTiers(next)
-                                    }}
-                                  />
-                                  {t.label}
-                                </label>
-                              ))}
-                            </div>
-
-                            <div className="row row2">
-                              <div>
-                                <label className="label">Min confidence</label>
-                                <input className="input" inputMode="decimal" value={minConfidence} onChange={(e) => setMinConfidence(e.target.value)} placeholder="0.00 - 1.00" />
-                              </div>
-                              <div>
-                                <label className="label">Min decay</label>
-                                <input className="input" inputMode="decimal" value={minDecay} onChange={(e) => setMinDecay(e.target.value)} placeholder="0.00 - 1.00" />
-                              </div>
-                            </div>
-
-                            <div className="semanticFilterCard">
-                              <div className="semanticFilterHeader">
-                                <div>
-                                  <label className="label" htmlFor="min-semantic-score">
-                                    Min semantic score
-                                  </label>
-                                  <div className="semanticFilterHint">
-                                    Search defaults to `0.30`. Raise it for stricter relevance or lower it only when diagnosing weak matches.
-                                  </div>
-                                </div>
-                                <button
-                                  className="btn btnGhost semanticPresetReset"
-                                  type="button"
-                                  onClick={() => setMinSemantic(SEARCH_DEFAULT_MIN_SEMANTIC_SCORE.toFixed(2))}
-                                >
-                                  reset 0.30
-                                </button>
-                              </div>
-                              <input
-                                id="min-semantic-score"
-                                className="semanticSlider"
-                                type="range"
-                                min={0}
-                                max={1}
-                                step={0.05}
-                                value={semanticThreshold}
-                                onChange={(e) => setMinSemantic(Number(e.target.value).toFixed(2))}
-                              />
-                              <div className="semanticFilterSummary">
-                                <div className="semanticThresholdValue">{semanticThreshold.toFixed(2)}</div>
-                                <div className="semanticThresholdCopy">
-                                  <div className="semanticThresholdLabel">Active search floor</div>
-                                  <div className="semanticThresholdHint">Sent to backend as `min_semantic_score`.</div>
-                                </div>
-                                <span className={`memPill relevancePill relevancePill${toTitle(semanticThresholdRelevance.tone)}`}>
-                                  {semanticThresholdRelevance.label}
-                                </span>
-                              </div>
-                              <div className="semanticPresetRow">
-                                {semanticFloorPresets.map((preset) => (
-                                  <button
-                                    key={preset.label}
-                                    className={semanticThreshold === preset.value ? 'semanticPreset semanticPresetOn' : 'semanticPreset'}
-                                    type="button"
-                                    onClick={() => setMinSemantic(preset.value.toFixed(2))}
-                                  >
-                                    {preset.label}
-                                  </button>
-                                ))}
-                              </div>
-                              <div className="semanticFilterScale">
-                                Weak &lt; 0.30 | Low 0.30+ | Medium 0.40+ | High 0.55+
-                              </div>
-                            </div>
-
-                            <div className="row row2">
-                              <div>
-                                <label className="label">Min total</label>
-                                <input className="input" inputMode="decimal" value={minTotal} onChange={(e) => setMinTotal(e.target.value)} placeholder="0.00 - 1.00" />
-                              </div>
-                              <div>
-                                <label className="label">Relative cutoff</label>
-                                <input className="input" inputMode="decimal" value={relativeCutoff} onChange={(e) => setRelativeCutoff(e.target.value)} placeholder="0.00 - 1.00" />
-                              </div>
-                            </div>
-
-                            <label className="label">Entities (comma-separated)</label>
-                            <input className="input" value={entities} onChange={(e) => setEntities(e.target.value)} placeholder="orders, kafka, schema" />
-
-                            <div className="row row2">
-                              <div>
-                                <label className="label">From</label>
-                                <input className="input" type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
-                              </div>
-                              <div>
-                                <label className="label">To</label>
-                                <input className="input" type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
-                              </div>
-                            </div>
-                          </>
-                        ) : (
-                          <div className="row row2">
-                            <div>
-                              <label className="label">Top K</label>
-                              <input className="input" type="number" min={1} max={500} value={recallTopK} onChange={(e) => setRecallTopK(Number(e.target.value))} />
-                            </div>
-                            <div>
-                              <label className="label">Budget</label>
-                              <input className="input" type="number" min={1} value={budget} onChange={(e) => setBudget(Number(e.target.value))} />
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    ) : null}
-
-                    <textarea
-                      className="composerInput"
-                      value={draft}
-                      onChange={(e) => setDraft(e.target.value)}
-                      onFocus={() => setInputFocused(true)}
-                      onBlur={() => setInputFocused(false)}
-                      placeholder={mode === 'search' ? 'Explore wiki...' : 'Describe the task to recall...'}
-                      rows={inputFocused || composerFocused || draft.trim().length > 0 || advancedOpen ? 3 : 1}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && !e.shiftKey) {
-                          e.preventDefault()
-                          submit()
-                        }
-                      }}
-                    />
-                    <div className={composerExpanded ? 'composerToolbar' : 'composerToolbar composerToolbarCollapsed'}>
-                      <div className="composerToolbarLeft">
-                        <span className="muted small">
-                          {surface === 'overview'
-                            ? 'Ready to explore wiki.'
-                            : surface === 'diagnostics'
-                              ? 'Diagnostics open.'
-                              : surface === 'sessions'
-                                ? 'Sessions open.'
-                                : 'Searching this workspace.'}
-                        </span>
-                      </div>
-                      <div className="composerToolbarRight">
-                        <button className="btn btnGhost" type="button" onClick={() => setAdvancedOpen((v) => !v)}>
-                          {advancedOpen ? '[-] filters' : '[+] filters'}
-                        </button>
-                        <button className="sendBtn" type="button" onClick={submit} disabled={!workspace || busy || !draft.trim()} title="Send query">
-                          <span className="sendBtnLabel">RUN</span>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-                <div className={composerExpanded ? 'composerFoot' : 'composerFoot composerFootCollapsed'}>
-                  <span className="muted small" style={{ display: 'block', textAlign: 'center' }}>
-                    Served locally by <span className="mono">agent-memory serve</span>. Markdown is sanitized; Mermaid renders when present.
-                  </span>
-                </div>
-              </div>
-            ) : null}
           </div>
 
           {selectedMemory ? (
@@ -1772,82 +1379,6 @@ export function App() {
               </div>
               {statsErr ? <div className="callout calloutBad">{statsErr}</div> : null}
               <pre className="pre">{stats ? JSON.stringify(stats, null, 2) : 'Loading...'}</pre>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {deepSearchPrompt.open ? (
-        <div
-          className="modalBackdrop"
-          onMouseDown={(e) => {
-            if (e.target === e.currentTarget) setDeepSearchPrompt({ open: false, query: '' })
-          }}
-          role="presentation"
-        >
-          <div className="modalPanel" role="dialog" aria-modal="true" aria-label="Deep search">
-            <div className="modalTop">
-              <div className="modalTitle">No results</div>
-              <button className="btn btnGhost" onClick={() => setDeepSearchPrompt({ open: false, query: '' })}>
-                Close
-              </button>
-            </div>
-            <div className="modalBody">
-              <div className="muted">Try a deep search (Recall Preview) for:</div>
-              <div className="mono" style={{ marginTop: 8, marginBottom: 12 }}>
-                {deepSearchPrompt.query}
-              </div>
-              <div className="modalActions">
-                <button className="btn" onClick={() => setDeepSearchPrompt({ open: false, query: '' })}>
-                  Cancel
-                </button>
-                <button className="btn btnPrimary" onClick={() => runDeepSearch(deepSearchPrompt.query)}>
-                  Deep Search
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {diagramPreviewOpen ? (
-        <div
-          className="modalBackdrop"
-          onMouseDown={(e) => {
-            if (e.target === e.currentTarget) setDiagramPreviewOpen(false)
-          }}
-          role="presentation"
-        >
-          <div className="modalPanel" role="dialog" aria-modal="true" aria-label="Diagrams list">
-            <div className="modalTop">
-              <div className="modalTitle">Available Diagrams ({diagramMemories.length})</div>
-              <button className="btn btnGhost" onClick={() => setDiagramPreviewOpen(false)}>
-                Close
-              </button>
-            </div>
-            <div className="modalBody">
-              <div className="muted">Tap a card to instantly open its full detail view and interactive architecture canvas:</div>
-              <div className="diagramPreviewGrid">
-                {diagramMemories.map((m) => {
-                  const snippet = m.diagram?.code || m.content.split('```mermaid')[1]?.split('```')[0] || m.content
-                  return (
-                    <div
-                      key={m.id}
-                      className="diagramPreviewCard"
-                      onClick={() => {
-                        setSelectedMemory(m)
-                        setDiagramPreviewOpen(false)
-                      }}
-                    >
-                      <div className="diagramPreviewHeader">
-                        <span className="diagramPreviewID">{m.id.slice(0, 16)}...</span>
-                        <span className="memPill">{m.type}</span>
-                      </div>
-                      <div className="diagramPreviewSnippet">{snippet.trim().slice(0, 140)}...</div>
-                    </div>
-                  )
-                })}
-              </div>
             </div>
           </div>
         </div>
@@ -2311,12 +1842,41 @@ function BenchmarkPanel({
   const amortizedAcquisitionCost = benchmarkEconomicNumber(latest, 'amortized_acquisition_cost')
   const memoryROI = benchmarkEconomicNumber(latest, 'memory_roi')
 
+  const [metricExplanationOpen, setMetricExplanationOpen] = useState(false)
+
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setMetricExplanationOpen(false)
+      }
+    }
+    if (metricExplanationOpen) {
+      window.addEventListener('keydown', handleEscape)
+    }
+    return () => {
+      window.removeEventListener('keydown', handleEscape)
+    }
+  }, [metricExplanationOpen])
+
   return (
     <section className="surfaceStack">
       <div className="diagnosticsHero">
         <div>
           <div className="overviewEyebrow">Benchmark</div>
-          <h2 className="sectionTitle">{workspace || 'Workspace'} Quality Benchmark</h2>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <h2 className="sectionTitle">{workspace || 'Workspace'} Quality Benchmark</h2>
+            <button
+              className="btnInfoCircle"
+              onClick={() => setMetricExplanationOpen(true)}
+              title="How metrics are calculated"
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10" />
+                <path d="M12 16v-4" />
+                <path d="M12 8h.01" />
+              </svg>
+            </button>
+          </div>
           <p className="sectionText">Measure the latest ON/OFF delta first, then use diagnostic signals to understand where memory helps, where it hurts, and what should improve.</p>
         </div>
         {latest ? (
@@ -2435,6 +1995,135 @@ function BenchmarkPanel({
             </div>
           </section>
         </>
+      ) : null}
+
+      {metricExplanationOpen ? (
+        <div
+          className="modalBackdrop"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setMetricExplanationOpen(false)
+          }}
+          role="presentation"
+        >
+          <div className="modalPanel metricExplanationModal" role="dialog" aria-modal="true" aria-label="Metric Calculations Explanation">
+            <div className="modalTop">
+              <div className="modalTitle">Metric Calculations Guide</div>
+              <button className="btn btnGhost" onClick={() => setMetricExplanationOpen(false)}>
+                Close
+              </button>
+            </div>
+            <div className="modalBody">
+              <div className="metricExplanationGrid">
+                <div className="metricExplanationCategory">
+                  <div className="metricExplanationCategoryTitle">Economic Model (Savings & ROI)</div>
+                  
+                  <div className="metricExplanationItem">
+                    <div className="metricExplanationName">Memory ROI (Return on Investment)</div>
+                    <div className="metricExplanationFormula">
+                      Memory ROI = Estimated OFF Operational Cost - Estimated ON Operational Cost - Amortized Acquisition Cost
+                    </div>
+                    <div className="metricExplanationDesc">
+                      The net financial savings/value gained by enabling agent memory. Weighs the manual labor savings (from avoided searches, rediscovery, and validation steps) against operational token costs and the amortized cost to acquire/write memories.
+                    </div>
+                  </div>
+
+                  <div className="metricExplanationItem">
+                    <div className="metricExplanationName">Estimated Operational Cost (ON vs. OFF)</div>
+                    <div className="metricExplanationFormula">
+                      Operational Cost = token_cost(Returned Tokens + Operational Effort × 200 tokens)
+                    </div>
+                    <div className="metricExplanationDesc">
+                      Combines the actual execution token cost with estimated human labor effort. The labor effort (total steps for lookup, verification, and rediscovery) is converted to a token proxy at a standard rate of 200 tokens per effort unit.
+                    </div>
+                  </div>
+
+                  <div className="metricExplanationItem">
+                    <div className="metricExplanationName">Amortized Acquisition Cost</div>
+                    <div className="metricExplanationDesc">
+                      The token-equivalent cost of initial seeding / fixture runs that initially acquired/wrote the memories, amortized (divided) by the number of times those memories are reused.
+                    </div>
+                  </div>
+
+                  <div className="metricExplanationItem">
+                    <div className="metricExplanationName">Retrieval Context Cost Delta (Context Bloat Penalty)</div>
+                    <div className="metricExplanationFormula">
+                      Retrieval Cost Delta = token_cost(OFF Tokens) - token_cost(ON Tokens)
+                    </div>
+                    <div className="metricExplanationDesc">
+                      The raw token cost difference between the disabled baseline run and the memory-enabled run. A negative delta represents the "Context Bloat Penalty" from retrieved memories injected into prompts. <i>Note: This penalty is already mathematically accounted for inside the Estimated ON Operational Cost.</i>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="metricExplanationCategory">
+                  <div className="metricExplanationCategoryTitle">Primary Continuation Signals</div>
+                  
+                  <div className="metricExplanationItem">
+                    <div className="metricExplanationName">Task Success Delta</div>
+                    <div className="metricExplanationDesc">
+                      The change in task success rate (ON % - OFF %). A task is marked successful if the answer achieves high fact coverage (≥ 75%) or full completeness (100%).
+                    </div>
+                  </div>
+
+                  <div className="metricExplanationItem">
+                    <div className="metricExplanationName">Fact Coverage Delta</div>
+                    <div className="metricExplanationDesc">
+                      The change in the proportion of expected gold-standard facts successfully identified/addressed in the generated answer (ON % - OFF %).
+                    </div>
+                  </div>
+
+                  <div className="metricExplanationItem">
+                    <div className="metricExplanationName">Completeness Delta</div>
+                    <div className="metricExplanationDesc">
+                      The change in the proportion of logical groups of expected facts that were fully covered in the answer (ON % - OFF %).
+                    </div>
+                  </div>
+
+                  <div className="metricExplanationItem">
+                    <div className="metricExplanationName">Locator Success Delta</div>
+                    <div className="metricExplanationDesc">
+                      The change in source code files or tool commands correctly referenced in the answers (ON % - OFF %).
+                    </div>
+                  </div>
+
+                  <div className="metricExplanationItem">
+                    <div className="metricExplanationName">Verification & Rediscovery Effort</div>
+                    <div className="metricExplanationDesc">
+                      <b>Verification Effort:</b> Remaining incomplete logical groups of facts (representing the manual verification checks needed).<br />
+                      <b>Rediscovery Effort:</b> Missing locator targets plus missing gold memory references (representing the manual code search/rediscovery steps needed).
+                    </div>
+                  </div>
+                </div>
+
+                <div className="metricExplanationCategory">
+                  <div className="metricExplanationCategoryTitle">Secondary Retrieval Diagnostics</div>
+                  
+                  <div className="metricExplanationItem">
+                    <div className="metricExplanationName">Precision@K & Gold Recall</div>
+                    <div className="metricExplanationDesc">
+                      <b>Precision@K:</b> Proportion of retrieved memories that are relevant.<br />
+                      <b>Gold Recall:</b> Proportion of target gold memories retrieved.
+                    </div>
+                  </div>
+
+                  <div className="metricExplanationItem">
+                    <div className="metricExplanationName">NDCG@K (Normalized Discounted Cumulative Gain)</div>
+                    <div className="metricExplanationDesc">
+                      Measures ranking quality, penalizing relevant memories if they are retrieved at lower ranks in the list.
+                    </div>
+                  </div>
+
+                  <div className="metricExplanationItem">
+                    <div className="metricExplanationName">Keyword Coverage</div>
+                    <div className="metricExplanationDesc">
+                      The proportion of required keywords successfully present in the retrieved memory text context.
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       ) : null}
     </section>
   )
@@ -2848,9 +2537,6 @@ function WikiPanel({
   onModeChange,
   onScopeChange,
   onViewModeChange,
-  onExitWiki,
-  onOpenRaw,
-  onToggleTheme,
   onClearView,
   onToggleOptions,
   onSubmit,
@@ -2910,9 +2596,6 @@ function WikiPanel({
   onModeChange: (value: WikiMode) => void
   onScopeChange: (value: string) => void
   onViewModeChange: (value: WikiViewMode) => void
-  onExitWiki: () => void
-  onOpenRaw: () => void
-  onToggleTheme: () => void
   onClearView: () => void
   onToggleOptions: () => void
   onSubmit: () => void
@@ -2997,17 +2680,8 @@ function WikiPanel({
             </button>
           </div>
           <div className="wikiUtilityActions">
-            <button className="btn btnGhost" type="button" onClick={onExitWiki}>
-              [dashboard]
-            </button>
             <button className="btn btnGhost" type="button" onClick={onClearView}>
               [clear]
-            </button>
-            <button className="btn btnGhost" type="button" onClick={onOpenRaw}>
-              [raw]
-            </button>
-            <button className="btn btnGhost" type="button" onClick={onToggleTheme}>
-              [{theme === 'dark' ? 'light' : 'dark'}]
             </button>
           </div>
         </div>
@@ -3499,21 +3173,6 @@ function WikiMemoryFragment({
   )
 }
 
-function QueryEmptyState({ mode, onOpenOverview }: { mode: ChatMode; onOpenOverview: () => void }) {
-  return (
-    <div className="emptyStateCard">
-      <div className="overviewEyebrow">{mode === 'search' ? 'Search' : 'Recall'}</div>
-      <div className="sectionTitle">{mode === 'search' ? 'Start a memory search' : 'Build a recall preview'}</div>
-      <p className="sectionText">
-        Use the composer below to query the selected workspace.
-      </p>
-      <button className="btn" type="button" onClick={onOpenOverview}>
-        Overview
-      </button>
-    </div>
-  )
-}
-
 function MetricCard({ title, value, detail }: { title: string; value: string; detail: string }) {
   return (
     <article className="metricCard">
@@ -3545,7 +3204,7 @@ function PieChartBreakdown({ entries, emptyLabel }: { entries: Array<[string, nu
         <div className="pieChartVisual" style={{ background: buildPieGradient(entries) }}>
           <div className="pieChartCenter">
             <span className="pieChartTotal">{formatNumber(total)}</span>
-            <span className="pieChartCaption">total</span>
+            <span className="pieChartTotalCaption">total</span>
           </div>
         </div>
       </div>
@@ -3659,198 +3318,3 @@ function DiagnosticRow({ label, value }: { label: string; value: string }) {
   )
 }
 
-function Message({
-  m,
-  theme,
-  selectedId,
-  onSelectMemory,
-}: {
-  m: ChatMessage
-  theme: 'light' | 'dark'
-  selectedId?: string
-  onSelectMemory: (m: MemoryEntry) => void
-}) {
-  const isUser = m.role === 'user'
-  const isSystem = m.role === 'system'
-  return (
-    <div className={isSystem ? 'msg msgSystem' : isUser ? 'msg msgUser' : 'msg msgAssistant'}>
-      <div className="msgInner">
-        <div className="msgMeta">
-          <span className="msgRole">{isSystem ? 'System' : isUser ? 'You' : 'Memory'}</span>
-          <span className="msgTime">{formatClock(m.createdAt)}</span>
-        </div>
-        <div className="msgBody">
-          <MarkdownView markdown={m.text} clamp={false} theme={theme} />
-          {m.error ? <div className="callout calloutBad">{m.error}</div> : null}
-
-          {m.payload?.results ? (
-            <div className="assistantBlock">
-              <div className="assistantHdr">
-                <div className="assistantTitle">Results</div>
-                <div className="muted small">{m.payload.results.length}</div>
-              </div>
-              {m.payload.search?.retrieval_policy ? (
-                <details className="detailsFold">
-                  <summary className="detailsSum">Retrieval policy</summary>
-                  <pre className="pre">{JSON.stringify(m.payload.search.retrieval_policy, null, 2)}</pre>
-                </details>
-              ) : null}
-              <div className="assistantList">
-                {m.payload.results.map((r) => (
-                  <ResultCard key={r.id} m={r} theme={theme} isSelected={r.id === selectedId} onSelect={onSelectMemory} />
-                ))}
-              </div>
-              {m.payload.search?.weak_results?.length ? (
-                <>
-                  <div className="assistantHdr">
-                    <div className="assistantTitle">Weak familiarity</div>
-                    <div className="muted small">{m.payload.search.weak_results.length}</div>
-                  </div>
-                  <div className="assistantList">
-                    {m.payload.search.weak_results.map((r) => (
-                      <ResultCard key={r.id} m={r} theme={theme} isSelected={r.id === selectedId} onSelect={onSelectMemory} />
-                    ))}
-                  </div>
-                </>
-              ) : null}
-              {m.payload.search?.suppressed_results?.length ? (
-                <details className="detailsFold">
-                  <summary className="detailsSum">Suppressed ({m.payload.search.suppressed_results.length})</summary>
-                  <div className="assistantList">
-                    {m.payload.search.suppressed_results.map((r) => (
-                      <ResultCard key={r.id} m={r} theme={theme} isSelected={r.id === selectedId} onSelect={onSelectMemory} />
-                    ))}
-                  </div>
-                </details>
-              ) : null}
-            </div>
-          ) : null}
-
-          {m.payload?.recall ? (
-            <div className="assistantBlock">
-              <div className="assistantHdr">
-                <div className="assistantTitle">Recall context</div>
-                <div className="muted small">
-                  {m.payload.recall.tokens_used}/{m.payload.recall.tokens_budget}
-                </div>
-              </div>
-              <details className="detailsFold" open>
-                <summary className="detailsSum">Context block</summary>
-                <div className="detailsTools">
-                  <button className="btn btnGhost" onClick={() => navigator.clipboard.writeText(m.payload!.recall!.context_block)}>
-                    Copy
-                  </button>
-                </div>
-                <pre className="pre preTall">{m.payload.recall.context_block}</pre>
-              </details>
-
-              <div className="assistantHdr">
-                <div className="assistantTitle">Included memories</div>
-                <div className="muted small">{m.payload.recall.memories_included_full?.length ?? 0}</div>
-              </div>
-              <div className="assistantList">
-                {(m.payload.recall.memories_included_full ?? []).map((r) => (
-                  <ResultCard key={r.id} m={r} theme={theme} isSelected={r.id === selectedId} onSelect={onSelectMemory} />
-                ))}
-              </div>
-
-              {m.payload.recall.retrieval_policy ? (
-                <details className="detailsFold">
-                  <summary className="detailsSum">Retrieval policy</summary>
-                  <pre className="pre">{JSON.stringify(m.payload.recall.retrieval_policy, null, 2)}</pre>
-                </details>
-              ) : null}
-
-              {m.payload.recall.weak_memories?.length ? (
-                <>
-                  <div className="assistantHdr">
-                    <div className="assistantTitle">Weak familiarity</div>
-                    <div className="muted small">{m.payload.recall.weak_memories.length}</div>
-                  </div>
-                  <div className="assistantList">
-                    {m.payload.recall.weak_memories.map((r) => (
-                      <ResultCard key={r.id} m={r} theme={theme} isSelected={r.id === selectedId} onSelect={onSelectMemory} />
-                    ))}
-                  </div>
-                </>
-              ) : null}
-
-              {m.payload.recall.suppressed_memories?.length ? (
-                <details className="detailsFold">
-                  <summary className="detailsSum">Suppressed ({m.payload.recall.suppressed_memories.length})</summary>
-                  <div className="assistantList">
-                    {m.payload.recall.suppressed_memories.map((r) => (
-                      <ResultCard key={r.id} m={r} theme={theme} isSelected={r.id === selectedId} onSelect={onSelectMemory} />
-                    ))}
-                  </div>
-                </details>
-              ) : null}
-
-              {m.payload.recall.memories_clipped?.length ? (
-                <details className="detailsFold">
-                  <summary className="detailsSum">Clipped ({m.payload.recall.memories_clipped.length})</summary>
-                  <pre className="pre">{JSON.stringify(m.payload.recall.memories_clipped, null, 2)}</pre>
-                </details>
-              ) : null}
-            </div>
-          ) : null}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function ResultCard({
-  m,
-  theme,
-  isSelected,
-  onSelect,
-}: {
-  m: MemoryEntry
-  theme: 'light' | 'dark'
-  isSelected: boolean
-  onSelect: (m: MemoryEntry) => void
-}) {
-  const timeStr = formatTS(m.created_at || m.updated_at)
-  const semanticSimilarity = getSemanticSimilarity(m)
-  const semanticRelevance = getSemanticRelevance(semanticSimilarity)
-  return (
-    <article className={isSelected ? 'memCard memCardOn' : 'memCard'} onClick={() => onSelect(m)}>
-      <div className="memHdr">
-        <div className="memHdrLeft">
-          <span className="memDot" aria-hidden="true" />
-          <span className="mono memID" title={m.id}>{m.id.slice(0, 16)}...</span>
-        </div>
-        <div className="memHdrRight">
-          {timeStr ? <span className="memTime" style={{ fontSize: '12px', opacity: 0.7 }}>{timeStr}</span> : null}
-        </div>
-      </div>
-      <div className="memBody memBodyCompact">
-        <MarkdownView markdown={m.content} clamp={true} theme={theme} />
-      </div>
-      {typeof semanticSimilarity === 'number' ? (
-        <div className="memSignal">
-          <div className="memSignalTop">
-            <span className="memSignalLabel">semantic similarity</span>
-            <span className={`memPill relevancePill relevancePill${toTitle(semanticRelevance.tone)}`}>{semanticRelevance.label}</span>
-          </div>
-          <div className="memSignalValue">{formatScore(semanticSimilarity, 3)}</div>
-          <div className="memSignalHint">Primary relevance signal from `score_breakdown.semantic_similarity`.</div>
-        </div>
-      ) : null}
-      <div className="memFooter">
-        <div className="memFooterLeft">
-          <span className="memPill memPillAccent">{m.type}</span>
-          <span className="memPill">{m.storage_tier}</span>
-          {hasDiagram(m) ? <span className="memPill memPillVisual">visual</span> : null}
-        </div>
-        <div className="memFooterRight">
-          {typeof m.score === 'number' ? (
-            <span className="memMetric">Blended: <strong>{formatScore(m.score, 3)}</strong></span>
-          ) : null}
-          <span className="memMetric">Conf: <strong>{Math.round(m.confidence * 100)}%</strong></span>
-        </div>
-      </div>
-    </article>
-  )
-}

@@ -405,9 +405,10 @@ func TestMergePreservesDefaults(t *testing.T) {
 	originalPort := cfg.Dashboard.Port
 	originalTopK := cfg.Retrieval.DefaultTopK
 
-	// Merge empty config
+	// Merge empty config with no presence information (simulates a layer
+	// that did not set any keys at all).
 	other := &Config{}
-	cfg.merge(other)
+	cfg.merge(other, nil)
 
 	// Verify defaults preserved
 	if cfg.Dashboard.Port != originalPort {
@@ -415,6 +416,164 @@ func TestMergePreservesDefaults(t *testing.T) {
 	}
 	if cfg.Retrieval.DefaultTopK != originalTopK {
 		t.Errorf("expected top-k %d preserved, got %d", originalTopK, cfg.Retrieval.DefaultTopK)
+	}
+	// Zero-ambiguous boolean defaults must also be preserved when nothing
+	// was explicitly present in the merged-in layer.
+	if !cfg.Enabled {
+		t.Error("expected Enabled to remain true after merging an empty layer")
+	}
+	if !cfg.Storage.AutoVacuum {
+		t.Error("expected Storage.AutoVacuum to remain true after merging an empty layer")
+	}
+	if !cfg.Embeddings.CacheEnabled {
+		t.Error("expected Embeddings.CacheEnabled to remain true after merging an empty layer")
+	}
+	if !cfg.Dashboard.Enabled {
+		t.Error("expected Dashboard.Enabled to remain true after merging an empty layer")
+	}
+	if !cfg.Server.EnableCORS {
+		t.Error("expected Server.EnableCORS to remain true after merging an empty layer")
+	}
+	if !cfg.Observe.Enabled {
+		t.Error("expected Observe.Enabled to remain true after merging an empty layer")
+	}
+	if !cfg.Adaptive.Enabled {
+		t.Error("expected Adaptive.Enabled to remain true after merging an empty layer")
+	}
+}
+
+func TestLoadFromFile_PreservesUnspecifiedBooleanDefaults(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	// A realistic minimal config file: it only sets one unrelated field.
+	// None of the true-by-default booleans are mentioned, and loading this
+	// file must not flip any of them to false.
+	configYAML := `
+dashboard:
+  port: 9999
+`
+	if err := os.WriteFile(configPath, []byte(configYAML), 0644); err != nil {
+		t.Fatalf("writing test config: %v", err)
+	}
+
+	cfg := DefaultConfig()
+	if err := cfg.loadFromFile(configPath); err != nil {
+		t.Fatalf("loading config: %v", err)
+	}
+
+	if cfg.Dashboard.Port != 9999 {
+		t.Errorf("expected dashboard port 9999, got %d", cfg.Dashboard.Port)
+	}
+	if !cfg.Enabled {
+		t.Error("expected Enabled to remain true when not specified in config file")
+	}
+	if !cfg.Storage.AutoVacuum {
+		t.Error("expected Storage.AutoVacuum to remain true when not specified in config file")
+	}
+	if !cfg.Embeddings.CacheEnabled {
+		t.Error("expected Embeddings.CacheEnabled to remain true when not specified in config file")
+	}
+	if !cfg.Dashboard.Enabled {
+		t.Error("expected Dashboard.Enabled to remain true when not specified in config file")
+	}
+	if !cfg.Server.EnableCORS {
+		t.Error("expected Server.EnableCORS to remain true when not specified in config file")
+	}
+	if !cfg.Observe.Enabled {
+		t.Error("expected Observe.Enabled to remain true when not specified in config file")
+	}
+	if !cfg.Adaptive.Enabled {
+		t.Error("expected Adaptive.Enabled to remain true when not specified in config file")
+	}
+}
+
+func TestLoadFromFile_CanExplicitlyDisableTrueDefaults(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	// Explicitly setting these booleans to false must still take effect.
+	configYAML := `
+enabled: false
+storage:
+  auto_vacuum: false
+embeddings:
+  cache_enabled: false
+dashboard:
+  enabled: false
+server:
+  enable_cors: false
+observe:
+  enabled: false
+adaptive:
+  enabled: false
+`
+	if err := os.WriteFile(configPath, []byte(configYAML), 0644); err != nil {
+		t.Fatalf("writing test config: %v", err)
+	}
+
+	cfg := DefaultConfig()
+	if err := cfg.loadFromFile(configPath); err != nil {
+		t.Fatalf("loading config: %v", err)
+	}
+
+	if cfg.Enabled {
+		t.Error("expected Enabled to be false")
+	}
+	if cfg.Storage.AutoVacuum {
+		t.Error("expected Storage.AutoVacuum to be false")
+	}
+	if cfg.Embeddings.CacheEnabled {
+		t.Error("expected Embeddings.CacheEnabled to be false")
+	}
+	if cfg.Dashboard.Enabled {
+		t.Error("expected Dashboard.Enabled to be false")
+	}
+	if cfg.Server.EnableCORS {
+		t.Error("expected Server.EnableCORS to be false")
+	}
+	if cfg.Observe.Enabled {
+		t.Error("expected Observe.Enabled to be false")
+	}
+	if cfg.Adaptive.Enabled {
+		t.Error("expected Adaptive.Enabled to be false")
+	}
+}
+
+func TestLoadFromFile_ReenableAfterUserConfigDisabled(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// User-level config disables the system entirely.
+	userConfigPath := filepath.Join(tmpDir, "user-config.yaml")
+	userYAML := `
+enabled: false
+`
+	if err := os.WriteFile(userConfigPath, []byte(userYAML), 0644); err != nil {
+		t.Fatalf("writing user config: %v", err)
+	}
+
+	// Workspace-level config re-enables it for this project.
+	workspaceConfigPath := filepath.Join(tmpDir, "workspace-config.yaml")
+	workspaceYAML := `
+enabled: true
+`
+	if err := os.WriteFile(workspaceConfigPath, []byte(workspaceYAML), 0644); err != nil {
+		t.Fatalf("writing workspace config: %v", err)
+	}
+
+	cfg := DefaultConfig()
+	if err := cfg.loadFromFile(userConfigPath); err != nil {
+		t.Fatalf("loading user config: %v", err)
+	}
+	if cfg.Enabled {
+		t.Fatal("expected Enabled to be false after user config")
+	}
+
+	if err := cfg.loadFromFile(workspaceConfigPath); err != nil {
+		t.Fatalf("loading workspace config: %v", err)
+	}
+	if !cfg.Enabled {
+		t.Error("expected Enabled to be true after workspace config explicitly re-enables it")
 	}
 }
 
@@ -436,7 +595,7 @@ func TestAdaptivePolicyMerge(t *testing.T) {
 		},
 	}
 
-	cfg.merge(other)
+	cfg.merge(other, nil)
 
 	// Verify search policy was updated
 	if cfg.Adaptive.PolicyDefaults["search"].MinSemanticScore != 0.40 {
