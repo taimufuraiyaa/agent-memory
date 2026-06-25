@@ -9,6 +9,10 @@ import (
 	"testing"
 )
 
+func init() {
+	os.Setenv("ANTIGRAVITY_AGENT", "")
+}
+
 func TestValidateProjectName(t *testing.T) {
 	got, err := ValidateProjectName(" My Project_1 ")
 	if err != nil {

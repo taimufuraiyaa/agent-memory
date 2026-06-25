@@ -59,6 +59,12 @@ type MetricsRegistry struct {
 	// Lifecycle metrics
 	LifecycleDuration *prometheus.HistogramVec
 
+	// Cold tier compression metrics (Task 4.3.3)
+	ColdSummarizationTotal    *prometheus.CounterVec
+	ColdSummarizationDuration *prometheus.HistogramVec
+	ColdCompressionRatio      *prometheus.HistogramVec
+	ColdCompressionOrigBytes  *prometheus.HistogramVec
+
 	// API metrics
 	HTTPRequestsTotal    *prometheus.CounterVec
 	HTTPRequestDuration  *prometheus.HistogramVec
@@ -352,6 +358,39 @@ func newMetricsRegistry() *MetricsRegistry {
 				Buckets: []float64{0.1, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0},
 			},
 			[]string{"workspace", "status"},
+		),
+
+		// Cold tier compression metrics (Task 4.3.3)
+		ColdSummarizationTotal: promauto.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "agent_memory_cold_summarization_total",
+				Help: "Total number of cold-tier summarization operations",
+			},
+			[]string{"workspace", "method", "status"},
+		),
+		ColdSummarizationDuration: promauto.NewHistogramVec(
+			prometheus.HistogramOpts{
+				Name:    "agent_memory_cold_summarization_duration_seconds",
+				Help:    "Duration of cold-tier summarization operations",
+				Buckets: []float64{0.05, 0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0},
+			},
+			[]string{"workspace", "method"},
+		),
+		ColdCompressionRatio: promauto.NewHistogramVec(
+			prometheus.HistogramOpts{
+				Name:    "agent_memory_cold_compression_ratio",
+				Help:    "Ratio of summary size to original size (lower is better compression)",
+				Buckets: []float64{0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0},
+			},
+			[]string{"workspace", "method"},
+		),
+		ColdCompressionOrigBytes: promauto.NewHistogramVec(
+			prometheus.HistogramOpts{
+				Name:    "agent_memory_cold_compression_original_bytes",
+				Help:    "Original content size in bytes before cold-tier summarization",
+				Buckets: []float64{100, 500, 1000, 2000, 5000, 10000, 50000},
+			},
+			[]string{"workspace"},
 		),
 	}
 }

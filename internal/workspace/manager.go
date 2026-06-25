@@ -604,7 +604,7 @@ func detectDefaultRuleTargets(cwd string) []string {
 	if dirExists(filepath.Join(cwd, ".cursor")) {
 		targets = append(targets, "cursor")
 	}
-	if dirExists(filepath.Join(cwd, ".agents")) {
+	if dirExists(filepath.Join(cwd, ".agents")) || os.Getenv("ANTIGRAVITY_AGENT") == "1" {
 		targets = append(targets, "antigravity")
 	}
 	if fileExists(filepath.Join(cwd, ".aierules")) {
@@ -685,7 +685,7 @@ Commands:
 - `+"`"+`agent-memory recall --task "<one-line task>" --budget 800 --format raw --include-observations`+"`"+`
 - `+"`"+`agent-memory write --type semantic --content "<durable fact + source>"`+"`"+`
 - `+"`"+`agent-memory write --type procedural --content "<repeatable steps/checklist>"`+"`"+`
-- `+"`"+`agent-memory write --type outcome --content "<what you tried>" --outcome-result success|failure|partial --outcome-approach "<how>" --outcome-reason "<why>"`+"`"+`
+- `+"`"+`agent-memory write --type outcome --content "<what you tried> (result: success|failure|partial, approach: <how>, reason: <why>)"`+"`"+`
 - `+"`"+`agent-memory session-end --transcript "<session summary or transcript>" --format json`+"`"+`
 `, workspace)
 }
@@ -810,7 +810,7 @@ func HippocampusHooks() []HookFile {
   },
   "then": {
     "type": "askAgent",
-    "prompt": "Review what happened in this session and do the following:\n1. Identify anything worth keeping using this filter:\n   - Structural delta: new service, integration, or data flow discovered\n   - Hidden why: non-obvious design decision or trade-off\n   - Interface contract: API schema, data model, or protocol change\n   - Systemic insight: complex logic spanning multiple files\n   - ANY failure: always write failures, no filter applies\n2. For each qualifying item, write it with the correct type:\n   - Fact about the system -> agent-memory write --type semantic --content \"<fact>\"\n   - Convention or repeatable process -> agent-memory write --type procedural --content \"<steps>\"\n   - Attempt result (success or failure) -> agent-memory write --type outcome --content \"<what was tried>\" --outcome-result success|failure|partial --outcome-approach \"<how>\" --outcome-reason \"<why>\"\n3. Run session-end compaction: agent-memory session-end --transcript \"<one paragraph summary of this session>\" --format json\nDo not skip step 3 even if nothing was written in step 2."
+    "prompt": "Review what happened in this session and do the following:\n1. Identify anything worth keeping using this filter:\n   - Structural delta: new service, integration, or data flow discovered\n   - Hidden why: non-obvious design decision or trade-off\n   - Interface contract: API schema, data model, or protocol change\n   - Systemic insight: complex logic spanning multiple files\n   - ANY failure: always write failures, no filter applies\n2. For each qualifying item, write it with the correct type:\n   - Fact about the system -> agent-memory write --type semantic --content \"<fact>\"\n   - Convention or repeatable process -> agent-memory write --type procedural --content \"<steps>\"\n   - Attempt result (success or failure) -> agent-memory write --type outcome --content \"<what was tried> (result: success|failure|partial, approach: <how>, reason: <why>)\"\n3. Run session-end compaction: agent-memory session-end --transcript \"<one paragraph summary of this session>\" --format json\nDo not skip step 3 even if nothing was written in step 2."
   }
 }
 `,

@@ -98,7 +98,15 @@ func (s *Store) DeleteByIDs(ctx context.Context, ids []string) error {
 			return err
 		}
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	if s.useTurbovec && s.turbovecIndex != nil {
+		for _, id := range ids {
+			s.turbovecIndex.Delete(id)
+		}
+	}
+	return nil
 }
 
 // UpdateTier changes storage tier for one memory.

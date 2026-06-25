@@ -86,8 +86,8 @@ func (s *VectorSearcher) SearchWithOptions(ctx context.Context, opt VectorSearch
 	}
 	activeProvider := strings.TrimSpace(s.provider.Name())
 	
-	// Fast path: SQL-based vector search inside SQLite
-	sqlScores, err := s.store.SearchMemoryVectorsSQL(ctx, opt.Workspace, activeProvider, qv, opt.TopK, opt.Types, opt.Tiers)
+	// Fast path: Go-based vector search over binary SQLite blobs
+	sqlScores, err := s.store.SearchMemoryVectorsGo(ctx, opt.Workspace, activeProvider, qv, opt.TopK, opt.Types, opt.Tiers)
 	if err == nil && len(sqlScores) > 0 {
 		ids := make([]string, len(sqlScores))
 		for i, sc := range sqlScores {

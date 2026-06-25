@@ -1,0 +1,313 @@
+package cli
+
+import (
+	"fmt"
+	"io"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/spf13/cobra"
+	"github.com/time/timebooks/agent-memory/internal/bootstrap"
+	"github.com/time/timebooks/agent-memory/internal/workspace"
+	"github.com/time/timebooks/agent-memory/internal/api/dashboard"
+)
+
+func newInstallCommand() *cobra.Command {
+	var dataDir string
+	var binDir string
+	var src string
+	var skipModel bool
+	var skipONNXRuntime bool
+	var noDashboard bool
+	var dashboardSrc string
+	var dashboardDir string
+	var writeEnvFile bool
+	var projectName string
+	var ideTargets []string
+	var noInit bool
+	var force bool
+
+	cmd := &cobra.Command{
+		Use:   "install",
+		Short: "Install data directories, dependencies, and initialize project workspace rules",
+		Long: `Install data directories, the MiniLM model, ONNX Runtime libraries, the standalone dashboard,
+configure environment variables, and initialize the current directory as a project workspace.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			out := cmd.OutOrStdout()
+			errOut := cmd.OutOrStderr()
+
+			if binDir == "" {
+				binDir = defaultBinDir()
+			}
+			if dataDir == "" {
+				dataDir = defaultAgentMemoryDataDir()
+			}
+			if dashboardDir == "" {
+				dashboardDir = filepath.Join(dataDir, "dashboard")
+			}
+
+			fmt.Fprintln(errOut, "— agent-memory installer —")
+
+			// Step 1: Data directories
+			fmt.Fprintln(errOut, "\n▶ 1/5 data directories")
+			for _, sub := range []string{"", "models", "logs", "onnxruntime"} {
+				if err := os.MkdirAll(filepath.Join(dataDir, sub), 0o755); err != nil {
+					return fmt.Errorf("failed to create data dir %s: %w", sub, err)
+				}
+			}
+			fmt.Fprintf(errOut, "  ✓ ready at %s\n", dataDir)
+
+			// Step 2: Binary installation / copy
+			fmt.Fprintln(errOut, "\n▶ 2/5 binary")
+			installed, err := installOrCopyBinary(out, errOut, binDir, src)
+			if err != nil {
+				return err
+			}
+			fmt.Fprintf(errOut, "  ✓ installed: %s\n", installed)
+			checkPATHAdvice(errOut, filepath.Dir(installed))
+
+			// Step 3: ONNX runtime
+			fmt.Fprintln(errOut, "\n▶ 3/5 onnx runtime")
+			runtimePath := ""
+			if skipONNXRuntime {
+				fmt.Fprintln(errOut, "    skipped (--skip-onnx-runtime)")
+			} else {
+				p, err := bootstrap.EnsureONNXRuntime(dataDir, false)
+				if err != nil {
+					fmt.Fprintf(errOut, "  ! onnx runtime install failed: %v\n", err)
+					fmt.Fprintln(errOut, "  ! semantic embeddings will stay unavailable until this succeeds")
+				} else {
+					runtimePath = p
+					fmt.Fprintf(errOut, "  ✓ installed: %s\n", runtimePath)
+				}
+			}
+
+			// Step 4: Model download
+			fmt.Fprintln(errOut, "\n▶ 4/5 local embedding model")
+			if skipModel {
+				fmt.Fprintln(errOut, "    skipped (--no-model)")
+			} else {
+				if err := bootstrap.EnsureModel(dataDir, false); err != nil {
+					fmt.Fprintf(errOut, "  ! model download failed: %v\n", err)
+					fmt.Fprintln(errOut, "  ! agent-memory will work for everything except local embeddings until this succeeds")
+				} else {
+					fmt.Fprintf(errOut, "  ✓ ready at %s\n", filepath.Join(dataDir, "models", "all-MiniLM-L6-v2"))
+				}
+			}
+
+			// Step 5: Dashboard
+			fmt.Fprintln(errOut, "\n▶ 5/5 dashboard (React + TypeScript)")
+			dashInstalled := ""
+			if noDashboard {
+				fmt.Fprintln(errOut, "    skipped (--no-dashboard)")
+			} else {
+				srcExists := false
+				if _, err := os.Stat(dashboardSrc); err == nil {
+					srcExists = true
+				}
+				if !srcExists && dashboard.HasEmbeddedAssets() {
+					fmt.Fprintln(errOut, "  ✓ ready: using embedded dashboard assets (no local install required)")
+				} else if !srcExists {
+					fmt.Fprintf(errOut, "  ! dashboard: source folder not found at %s and no embedded assets found, skipping\n", dashboardSrc)
+				} else {
+					if err := bootstrap.EnsureDashboard(dashboardSrc, dashboardDir, out, errOut); err != nil {
+						fmt.Fprintf(errOut, "  ! dashboard setup failed: %v\n", err)
+					} else {
+						dashInstalled = dashboardDir
+						fmt.Fprintf(errOut, "  ✓ ready at %s\n", dashInstalled)
+					}
+				}
+			}
+
+			// Env file setup
+			if writeEnvFile {
+				vars := map[string]string{
+					"AGENT_MEMORY_UPGRADE_YES":     "1",
+					"AGENT_MEMORY_OBSERVE_ENABLED": "1",
+					"AGENT_MEMORY_ENABLED":         "1",
+				}
+				if strings.TrimSpace(runtimePath) != "" {
+					vars["AGENT_MEMORY_ONNX_RUNTIME_PATH"] = runtimePath
+				}
+				if strings.TrimSpace(dashInstalled) != "" {
+					vars["AGENT_MEMORY_DASHBOARD_DIR"] = dashboardDir
+				}
+				if root := detectRepoRoot(src); strings.TrimSpace(root) != "" {
+					vars["AGENT_MEMORY_SRC_DIR"] = root
+				}
+
+				envPath := filepath.Join(dataDir, "agent-memory.env")
+				_, err := upsertEnvFile(envPath, vars)
+				if err != nil {
+					fmt.Fprintf(errOut, "  ! env file write failed: %v\n", err)
+				}
+				if err := ensureShellAutoload(envPath); err != nil {
+					fmt.Fprintf(errOut, "  ! shell setup skipped: %v\n", err)
+				}
+			}
+
+			// Project workspace initialization (init-here / reinstall)
+			if !noInit {
+				fmt.Fprintln(errOut, "\n▶ project rules setup")
+				cwd, err := os.Getwd()
+				if err != nil {
+					return err
+				}
+				name := projectName
+				if strings.TrimSpace(name) == "" {
+					name = filepath.Base(cwd)
+				}
+
+				mgr, err := workspace.NewManager(dataDir)
+				if err != nil {
+					return fmt.Errorf("failed to create workspace manager: %w", err)
+				}
+
+				// Run Init
+				initOut, err := mgr.Init(cmd.Context(), workspace.InitOptions{
+					CWD:         cwd,
+					ProjectName: name,
+					Force:       force,
+					IDEs:        ideTargets,
+				})
+
+				if err == nil {
+					fmt.Fprintf(errOut, "  ✓ initialized workspace project: %s\n", initOut.Project)
+					if len(initOut.RuleFiles) > 0 {
+						fmt.Fprintf(errOut, "  ✓ wrote rule files: %s\n", strings.Join(initOut.RuleFiles, ", "))
+					}
+				} else if strings.Contains(err.Error(), "project already exists") {
+					fmt.Fprintf(errOut, "  ! project already exists; running reinstall to update IDE rule files\n")
+					reinstOut, err := mgr.Reinstall(cmd.Context(), workspace.ReinstallOptions{
+						CWD:         cwd,
+						ProjectName: name,
+						Force:       true, // overwrite existing rules
+						IDEs:        ideTargets,
+					})
+					if err != nil {
+						return fmt.Errorf("reinstall failed: %w", err)
+					}
+					fmt.Fprintf(errOut, "  ✓ reinstalled workspace project: %s\n", reinstOut.Project)
+					if reinstOut.AgentFiles != nil {
+						for _, ide := range reinstOut.AgentFiles.IDEs {
+							if len(ide.Written) > 0 {
+								fmt.Fprintf(errOut, "  ✓ [%s] written: %s\n", ide.IDE, strings.Join(ide.Written, ", "))
+							}
+						}
+					}
+				} else {
+					return fmt.Errorf("init failed: %w", err)
+				}
+			}
+
+			fmt.Fprintln(errOut, "\n✓ Installation and rules setup complete!")
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVarP(&dataDir, "data-dir", "d", "", "data directory (default: ~/.agent-memory)")
+	cmd.Flags().StringVarP(&binDir, "bin-dir", "b", "", "binary install directory")
+	cmd.Flags().StringVarP(&src, "src", "s", "./cmd/agent-memory", "path to local agent-memory main package")
+	cmd.Flags().BoolVar(&skipModel, "no-model", false, "skip downloading the MiniLM ONNX model")
+	cmd.Flags().BoolVar(&skipONNXRuntime, "skip-onnx-runtime", false, "skip downloading ONNX Runtime libraries")
+	cmd.Flags().BoolVar(&noDashboard, "no-dashboard", false, "skip installing the standalone dashboard")
+	cmd.Flags().StringVar(&dashboardSrc, "dashboard-src", "./tools/agent-memory/dashboard", "path to local dashboard source folder")
+	cmd.Flags().StringVar(&dashboardDir, "dashboard-dir", "", "dashboard install directory")
+	cmd.Flags().BoolVar(&writeEnvFile, "write-env", true, "write an env file with environment settings")
+	cmd.Flags().StringVarP(&projectName, "project-name", "n", "", "project name for workspace setup (default: cwd basename)")
+	cmd.Flags().StringSliceVar(&ideTargets, "ide", nil, "IDE rule targets (repeatable, default: auto-detect): cursor|antigravity|claude|aierules|cursorrules|trae|windsurfrules|generic|all")
+	cmd.Flags().BoolVar(&noInit, "no-init", false, "skip workspace project auto-initialization")
+	cmd.Flags().BoolVar(&force, "force", false, "force recreate project workspace if it already exists")
+
+	return cmd
+}
+
+func installOrCopyBinary(out, errOut io.Writer, binDir, src string) (string, error) {
+	finalBin := filepath.Join(binDir, binNameWithExt("agent-memory"))
+
+	// Try to build from local source if available
+	if dirExists(src) {
+		fmt.Fprintln(errOut, "    building binary from source...")
+		tmpBin := filepath.Join(binDir, ".agent-memory-install."+time.Now().UTC().Format("20060102T150405Z"))
+		if err := os.MkdirAll(binDir, 0o755); err != nil {
+			return "", err
+		}
+		buildCmd := exec.Command("go", "build", "-trimpath", "-ldflags", "-s -w", "-o", tmpBin, src)
+		buildCmd.Stdout = out
+		buildCmd.Stderr = errOut
+		buildCmd.Env = append(os.Environ(), "CGO_ENABLED=1")
+		if err := buildCmd.Run(); err != nil {
+			_ = os.Remove(tmpBin)
+			return "", fmt.Errorf("go build: %w", err)
+		}
+		if err := replaceFileAtomic(finalBin, tmpBin); err != nil {
+			_ = os.Remove(tmpBin)
+			return "", fmt.Errorf("install rename: %w", err)
+		}
+		if err := os.Chmod(finalBin, 0o755); err != nil {
+			return "", err
+		}
+		return finalBin, nil
+	}
+
+	// Otherwise copy currently running executable to finalBin
+	fmt.Fprintln(errOut, "    copying executable to installation directory...")
+	exe, err := os.Executable()
+	if err != nil {
+		return "", fmt.Errorf("failed to get executable path: %w", err)
+	}
+
+	// Skip copy if already running from target path
+	if absExe, err := filepath.Abs(exe); err == nil {
+		if absFinal, err := filepath.Abs(finalBin); err == nil && absExe == absFinal {
+			return finalBin, nil
+		}
+	}
+
+	if err := replaceFileAtomic(finalBin, exe); err != nil {
+		return "", fmt.Errorf("copy failed: %w", err)
+	}
+	return finalBin, nil
+}
+
+func detectRepoRoot(src string) string {
+	cwd, err := os.Getwd()
+	if err == nil && fileExists(filepath.Join(cwd, "go.mod")) && fileExists(filepath.Join(cwd, "cmd", "agent-memory", "main.go")) {
+		if abs, err := filepath.Abs(cwd); err == nil {
+			return abs
+		}
+		return cwd
+	}
+	if strings.TrimSpace(src) == "" {
+		return ""
+	}
+	if abs, err := filepath.Abs(src); err == nil {
+		src = abs
+	}
+	if filepath.Base(src) == "agent-memory" && filepath.Base(filepath.Dir(src)) == "cmd" {
+		return filepath.Dir(filepath.Dir(src))
+	}
+	return ""
+}
+
+func isOnPath(dir string) bool {
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return false
+	}
+	for _, p := range filepath.SplitList(os.Getenv("PATH")) {
+		pAbs, err := filepath.Abs(p)
+		if err == nil && pAbs == abs {
+			return true
+		}
+	}
+	return false
+}
+
+func dirExists(path string) bool {
+	st, err := os.Stat(path)
+	return err == nil && st.IsDir()
+}

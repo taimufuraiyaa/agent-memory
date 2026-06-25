@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/time/timebooks/agent-memory/internal/embeddings"
 	"github.com/time/timebooks/agent-memory/internal/observability"
 )
 
@@ -22,7 +23,7 @@ type QueryCache struct {
 
 // CachedEmbedding wraps an embedding with expiration metadata.
 type CachedEmbedding struct {
-	Vector    []float32
+	Quantized *embeddings.QuantizedVector
 	CachedAt  time.Time
 	ExpiresAt time.Time
 }
@@ -91,7 +92,11 @@ func (c *QueryCache) GetEmbedding(ctx context.Context, queryText string) []float
 	}
 
 	observability.GetRegistry().CacheHits.WithLabelValues("embedding").Inc()
-	return cached.Vector
+	vector, err := embeddings.DequantizeTurbo(cached.Quantized)
+	if err != nil {
+		return nil
+	}
+	return vector
 }
 
 // SetEmbedding stores an embedding in the cache.
@@ -105,8 +110,14 @@ func (c *QueryCache) SetEmbedding(ctx context.Context, queryText string, vector 
 
 	key := hashQueryText(queryText)
 	now := time.Now()
+	
+	qvec, err := embeddings.QuantizeTurbo(vector)
+	if err != nil {
+		return
+	}
+
 	cached := CachedEmbedding{
-		Vector:    vector,
+		Quantized: qvec,
 		CachedAt:  now,
 		ExpiresAt: now.Add(c.ttl),
 	}

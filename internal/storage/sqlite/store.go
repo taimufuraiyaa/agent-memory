@@ -12,13 +12,16 @@ import (
 
 	_ "modernc.org/sqlite"
 
+	"github.com/time/timebooks/agent-memory/internal/config"
 	"github.com/time/timebooks/agent-memory/internal/core"
 	"github.com/time/timebooks/agent-memory/internal/observability"
 )
 
 // Store provides SQLite-backed persistence for memory entries.
 type Store struct {
-	db *sql.DB
+	db            *sql.DB
+	turbovecIndex *TurbovecIndex
+	useTurbovec   bool
 }
 
 // ErrDuplicateContent indicates idempotency duplicate detection hit.
@@ -54,6 +57,16 @@ func Open(ctx context.Context, dbPath string) (*Store, error) {
 		_ = db.Close()
 		return nil, err
 	}
+
+	// Load configuration to check if we should use turbovec
+	if cfg, err := config.Load(""); err == nil && cfg != nil {
+		if cfg.Storage.VectorBackend == "turbovec" {
+			s.useTurbovec = true
+			s.turbovecIndex = NewTurbovecIndex()
+			_ = s.hydrateTurbovecIndex(ctx)
+		}
+	}
+
 	return s, nil
 }
 
@@ -430,6 +443,9 @@ func (s *Store) Migrate(ctx context.Context) error {
 	if err := s.ensureColumn(ctx, "memory_vectors", "embedding_model_version", `ALTER TABLE memory_vectors ADD COLUMN embedding_model_version TEXT NOT NULL DEFAULT 'unknown'`); err != nil {
 		return err
 	}
+	if err := s.ensureColumn(ctx, "memory_vectors", "embedding_blob", `ALTER TABLE memory_vectors ADD COLUMN embedding_blob BLOB`); err != nil {
+		return err
+	}
 	if err := s.ensureColumn(ctx, "token_metrics", "run_label", `ALTER TABLE token_metrics ADD COLUMN run_label TEXT NOT NULL DEFAULT ''`); err != nil {
 		return err
 	}
@@ -493,6 +509,11 @@ func (s *Store) Migrate(ctx context.Context) error {
 	}
 	if _, err := s.db.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_memory_vectors_model_version ON memory_vectors(embedding_model_version)`); err != nil {
 		return fmt.Errorf("create embedding_model_version index: %w", err)
+	}
+	
+	// Migrate existing memory vectors from json to blob
+	if err := s.migrateJSONVectorsToBlobs(ctx); err != nil {
+		return fmt.Errorf("migrate JSON vectors to blobs: %w", err)
 	}
 	return nil
 }
@@ -1525,6 +1546,71 @@ func (s *Store) ensureColumn(ctx context.Context, table, column, alterSQL string
 	}
 	if _, err := s.db.ExecContext(ctx, alterSQL); err != nil {
 		return err
+	}
+	return nil
+}
+
+func (s *Store) migrateJSONVectorsToBlobs(ctx context.Context) error {
+	rows, err := s.db.QueryContext(ctx, "SELECT memory_id, embedding_json FROM memory_vectors WHERE embedding_blob IS NULL OR length(embedding_blob) = 0")
+	if err != nil {
+		return fmt.Errorf("query unmigrated memory vectors: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	type migrationItem struct {
+		id   string
+		json string
+	}
+	var items []migrationItem
+	for rows.Next() {
+		var item migrationItem
+		if err := rows.Scan(&item.id, &item.json); err != nil {
+			return fmt.Errorf("scan unmigrated memory vector: %w", err)
+		}
+		items = append(items, item)
+	}
+	_ = rows.Close()
+
+	for _, item := range items {
+		var emb []float32
+		if err := json.Unmarshal([]byte(item.json), &emb); err != nil {
+			// If JSON is invalid, skip instead of failing the entire migration
+			continue
+		}
+		if len(emb) == 0 {
+			continue
+		}
+		blob := encodeFloat32Slice(emb)
+		_, err = s.db.ExecContext(ctx, "UPDATE memory_vectors SET embedding_blob = ? WHERE memory_id = ?", blob, item.id)
+		if err != nil {
+			return fmt.Errorf("migrate memory vector %s: %w", item.id, err)
+		}
+	}
+	return nil
+}
+
+func (s *Store) hydrateTurbovecIndex(ctx context.Context) error {
+	rows, err := s.db.QueryContext(ctx, "SELECT memory_id, embedding_blob, embedding_json FROM memory_vectors")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = rows.Close() }()
+
+	for rows.Next() {
+		var id string
+		var blob []byte
+		var jsonStr string
+		if err := rows.Scan(&id, &blob, &jsonStr); err == nil {
+			var vec []float32
+			if len(blob) > 0 {
+				vec, _ = decodeFloat32Slice(blob)
+			} else if len(jsonStr) > 0 {
+				_ = json.Unmarshal([]byte(jsonStr), &vec)
+			}
+			if len(vec) > 0 {
+				_ = s.turbovecIndex.Upsert(id, vec)
+			}
+		}
 	}
 	return nil
 }

@@ -1,0 +1,83 @@
+package cli
+
+import (
+	"bytes"
+	"context"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+func TestInstallCommandBasic(t *testing.T) {
+	dataDir := t.TempDir()
+	binDir := t.TempDir()
+	cwd := t.TempDir()
+
+	// Switch working directory to cwd for workspace init testing
+	oldCwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	defer func() { _ = os.Chdir(oldCwd) }()
+	if err := os.Chdir(cwd); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+
+	cmd := newInstallCommand()
+	var stdout, stderr bytes.Buffer
+	cmd.SetOut(&stdout)
+	cmd.SetErr(&stderr)
+
+	cmd.SetArgs([]string{
+		"--data-dir", dataDir,
+		"--bin-dir", binDir,
+		"--src", "", // skip building
+		"--no-model",
+		"--skip-onnx-runtime",
+		"--no-dashboard",
+		"--write-env",
+		"--project-name", "test-install-proj",
+		"--ide", "cursor",
+	})
+
+	if err := cmd.ExecuteContext(context.Background()); err != nil {
+		t.Fatalf("execute failed: %v, stderr: %s", err, stderr.String())
+	}
+
+	// Verify data directories created
+	for _, sub := range []string{"models", "logs", "onnxruntime"} {
+		path := filepath.Join(dataDir, sub)
+		if st, err := os.Stat(path); err != nil || !st.IsDir() {
+			t.Fatalf("expected data dir %s: %v", path, err)
+		}
+	}
+
+	// Verify env file created
+	envFile := filepath.Join(dataDir, "agent-memory.env")
+	if _, err := os.Stat(envFile); err != nil {
+		t.Fatalf("expected env file: %v", err)
+	}
+	b, err := os.ReadFile(envFile)
+	if err != nil {
+		t.Fatalf("read env file: %v", err)
+	}
+	envContent := string(b)
+	if !strings.Contains(envContent, "AGENT_MEMORY_ENABLED") {
+		t.Fatalf("expected AGENT_MEMORY_ENABLED in env file, got: %s", envContent)
+	}
+
+	// Verify cursor rule created
+	cursorRule := filepath.Join(cwd, ".cursor", "rules", "agent-memory.mdc")
+	if _, err := os.Stat(cursorRule); err != nil {
+		t.Fatalf("expected cursor rule file: %v", err)
+	}
+	ruleBytes, err := os.ReadFile(cursorRule)
+	if err != nil {
+		t.Fatalf("read cursor rule: %v", err)
+	}
+	ruleContent := string(ruleBytes)
+	if !strings.Contains(ruleContent, "workspace: test-install-proj") {
+		t.Fatalf("expected workspace name in cursor rule, got: %s", ruleContent)
+	}
+}

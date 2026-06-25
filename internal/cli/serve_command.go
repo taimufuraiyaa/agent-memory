@@ -581,6 +581,7 @@ func (s *serveScheduler) runWorkspace(ctx context.Context, item workspace.ListIt
 
 	pipeline := engine.NewWritePipelineWithEmbedder(store, s.provider)
 	manager := engine.NewLifecycleManager(store, pipeline)
+	manager.WithArchive(filepath.Dir(s.cfg.dbPath))
 	metrics, err := manager.Run(ctx, item.Name)
 	completedAt := s.now().UTC()
 	run := api.SchedulerRun{

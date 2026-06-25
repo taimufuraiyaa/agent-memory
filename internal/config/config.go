@@ -55,6 +55,7 @@ type StorageConfig struct {
 	DefaultTier      string `yaml:"default_tier"`
 	AutoVacuum       bool   `yaml:"auto_vacuum"`
 	VacuumIntervalMs int    `yaml:"vacuum_interval_ms"`
+	VectorBackend    string `yaml:"vector_backend"` // "sqlite" or "turbovec"
 }
 
 // EmbeddingConfig contains embedding-related configuration.
@@ -159,6 +160,7 @@ func DefaultConfig() *Config {
 			DefaultTier:      "vector",
 			AutoVacuum:       true,
 			VacuumIntervalMs: 3600000, // 1 hour
+			VectorBackend:    "sqlite",
 		},
 		Embeddings: EmbeddingConfig{
 			Provider:       "local",
