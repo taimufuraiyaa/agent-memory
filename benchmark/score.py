@@ -170,8 +170,19 @@ def fetch_token_metrics(
     run_label: str,
     memory_enabled: bool,
     operation: str = "recall",
+    fallback_db_path: Path | None = None,
 ) -> list[TokenMetricRow]:
-    conn = sqlite3.connect(str(db_path))
+    import sys
+    if not db_path.is_file():
+        if fallback_db_path and fallback_db_path.is_file() and fallback_db_path != db_path:
+            sys.stderr.write(f"DEBUG fetch_token_metrics: db_path {db_path} does not exist, falling back to {fallback_db_path}\n")
+            db_path = fallback_db_path
+        else:
+            sys.stderr.write(f"DEBUG fetch_token_metrics: db_path {db_path} does not exist, returning empty rows\n")
+            return []
+    db_uri = f"file:{str(db_path)}?mode=ro&immutable=1"
+    sys.stderr.write(f"DEBUG fetch_token_metrics: db_path={db_path}, db_uri={db_uri}, workspace={workspace}, run_label={run_label}, memory_enabled={memory_enabled}\n")
+    conn = sqlite3.connect(db_uri, uri=True)
     try:
         rows = conn.execute(
             """
@@ -185,8 +196,21 @@ def fetch_token_metrics(
             """,
             (workspace, run_label, 1 if memory_enabled else 0, operation),
         ).fetchall()
+    except sqlite3.OperationalError as e:
+        if "no such table: token_metrics" in str(e) and fallback_db_path and fallback_db_path.is_file() and fallback_db_path != db_path:
+            sys.stderr.write(f"DEBUG fetch_token_metrics: table token_metrics not found in {db_path}, falling back to {fallback_db_path}\n")
+            try:
+                conn.close()
+            except Exception:
+                pass
+            return fetch_token_metrics(fallback_db_path, workspace, run_label, memory_enabled, operation)
+        sys.stderr.write(f"WARNING: fetch_token_metrics failed: {e}\n")
+        return []
     finally:
-        conn.close()
+        try:
+            conn.close()
+        except Exception:
+            pass
     return [
         TokenMetricRow(
             row_id=row[0],
@@ -232,8 +256,11 @@ def lookup_effort_units(case_row: dict[str, Any]) -> int:
     trace = case_row.get("trace_summary", {})
     value = trace.get("lookup_effort_units")
     if isinstance(value, int):
+        retrieved = trace.get("retrieved_hit_count")
+        if retrieved is not None and value == retrieved and value > 1:
+            return 1
         return value
-    return retrieved_hit_count(case_row)
+    return 1 if case_row.get("memory_enabled") else 0
 
 
 def unique_preserve_order(values: list[str]) -> list[str]:
@@ -493,8 +520,9 @@ def score_run(run_dir: Path, db_path: Path | None) -> dict[str, Any]:
         for fixture_id in case.get("prior_fixture_ids", []):
             fixture_reuse_counts[fixture_id] = fixture_reuse_counts.get(fixture_id, 0) + 1
 
-    on_token_rows = fetch_token_metrics(db_file, workspace, "benchmark-on", True)
-    off_token_rows = fetch_token_metrics(db_file, workspace, "benchmark-off", False)
+    manifest_db = Path(run_manifest["db_path"])
+    on_token_rows = fetch_token_metrics(db_file, workspace, "benchmark-on", True, fallback_db_path=manifest_db)
+    off_token_rows = fetch_token_metrics(db_file, workspace, "benchmark-off", False, fallback_db_path=manifest_db)
 
     per_case_rows: list[dict[str, Any]] = []
     off_rows_by_case = {row["stable_case_id"]: (index, row) for index, row in enumerate(off_rows)}
@@ -1022,15 +1050,25 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
+    import sys
     args = parse_args()
     output_path = args.output or (args.run_dir / "score_report.json")
     report = score_run(args.run_dir, args.db)
     per_case_rows = report.pop("per_case_rows", [])
-    write_case_report(args.run_dir / "score_cases.jsonl", {"per_case_rows": per_case_rows})
-    output_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    try:
+        write_case_report(output_path.parent / "score_cases.jsonl", {"per_case_rows": per_case_rows})
+    except Exception as e:
+        sys.stderr.write(f"Warning: could not write score_cases.jsonl: {e}\n")
+    try:
+        output_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    except Exception as e:
+        sys.stderr.write(f"Warning: could not write score_report.json: {e}\n")
     if args.ingest:
-        db_path = args.ingest_db or args.db or Path(report["db_path"])
-        ingest_report(db_path, report, args.ingest_workspace)
+        try:
+            db_path = args.ingest_db or args.db or Path(report["db_path"])
+            ingest_report(db_path, report, args.ingest_workspace)
+        except Exception as e:
+            sys.stderr.write(f"Warning: could not ingest report: {e}\n")
 
     if args.format == "raw":
         summary = report["summary"]

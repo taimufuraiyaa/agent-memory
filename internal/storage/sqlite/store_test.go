@@ -139,6 +139,71 @@ func TestRetrievalStateRoundTrip(t *testing.T) {
 	}
 }
 
+func TestListMemoryLightweightForInferenceRecent(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "inference-recent.db")
+	ctx := context.Background()
+
+	store, err := Open(ctx, dbPath)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	seed := func(id string, createdAt time.Time, tier core.StorageTier, entities []string) {
+		if err := store.UpsertMemory(ctx, &core.MemoryEntry{
+			ID:          id,
+			Type:        core.SemanticMemory,
+			Content:     "content " + id,
+			Workspace:   "ws",
+			Source:      core.MemorySource{Type: core.SourceCodeAnalysis},
+			StorageTier: tier,
+			Confidence:  0.9,
+			Entities:    entities,
+			CreatedAt:   createdAt,
+		}); err != nil {
+			t.Fatalf("seed %s: %v", id, err)
+		}
+	}
+
+	// m3 is cold-tier and should never be returned. The rest are ordered
+	// oldest (m1) to newest (m4).
+	seed("m1", base, core.TierVector, []string{"alpha"})
+	seed("m2", base.Add(time.Minute), core.TierVector, []string{"beta"})
+	seed("m3", base.Add(2*time.Minute), core.TierCold, []string{"gamma"})
+	seed("m4", base.Add(3*time.Minute), core.TierVector, []string{"delta"})
+
+	// A limit of 2 should return the 2 most recently created non-cold
+	// memories, most-recent first, skipping the cold-tier one entirely.
+	out, err := store.ListMemoryLightweightForInferenceRecent(ctx, "ws", 2)
+	if err != nil {
+		t.Fatalf("list recent: %v", err)
+	}
+	if len(out) != 2 {
+		t.Fatalf("expected 2 results, got %d", len(out))
+	}
+	if out[0].ID != "m4" || out[1].ID != "m2" {
+		t.Fatalf("expected [m4, m2], got [%s, %s]", out[0].ID, out[1].ID)
+	}
+	for _, m := range out {
+		if m.StorageTier == core.TierCold {
+			t.Fatalf("expected cold-tier memory to be excluded, got %+v", m)
+		}
+	}
+
+	// A non-positive limit falls back to the default cap, which still
+	// excludes cold-tier memories.
+	all, err := store.ListMemoryLightweightForInferenceRecent(ctx, "ws", 0)
+	if err != nil {
+		t.Fatalf("list recent with default limit: %v", err)
+	}
+	if len(all) != 3 {
+		t.Fatalf("expected 3 non-cold results, got %d", len(all))
+	}
+}
+
 func TestMarkAccessedDoesNotRefreshUpdatedAt(t *testing.T) {
 	t.Parallel()
 

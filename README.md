@@ -6,324 +6,174 @@ A persistent, multi-tier memory layer for AI coding agents (Cursor, Claude Code,
 <img width="2978" height="1794" alt="CleanShot 2026-05-29 at 01 47 06@2x" src="https://github.com/user-attachments/assets/61f29202-54bc-496d-b249-d592f0809d13" />
 
 ## Status
-- Core implementation is actively in progress and runnable in this repository.
-- CLI + local HTTP dashboard are available.
+- **Core Implementation**: Complete, optimized, and ready to run.
+- **Tools**: CLI, local HTTP dashboard, and test automation scripts are available.
+- **Integration**: Supports Cursor, Trae, Claude Code, and custom agent integrations out-of-the-box.
 
-## Why This Exists
-Current agents are mostly stateless between sessions. Markdown-only notes and vector-only stores each solve part of the problem, but not the full memory lifecycle.
+---
 
-### Hybrid Design
+## Architecture & Hybrid Design
+Current agents are mostly stateless between sessions. Markdown-only notes and vector-only stores each solve part of the problem, but not the full memory lifecycle. `agent-memory` solves this with a **local-first, hybrid storage system** (databases stored locally under `~/.agent-memory/`):
+
 | Tier | What It Holds | Why |
 |---|---|---|
-| Markdown | Pinned conventions, project rules, AGENTS.md-style facts | Always loaded, zero retrieval cost |
-| Vector | Semantic recall over discovered facts (SQLite-backed; deterministic and local) | Fast similarity search without mandatory cloud |
-| Graph | Service/topic/file relationships | Captures structural links vectors miss |
-| Document | Raw episodic transcripts, larger analyses | Cold archive referenced by other tiers |
-| Tombstones + Reconstruction | Markers of forgotten memories + recovery strategies | "Tip of the tongue" graceful re-investigation |
+| **Markdown** | Pinned conventions, project rules, `AGENTS.md`-style facts | Zero retrieval cost, always loaded |
+| **Vector** | Semantic recall over discovered facts (SQLite-backed) | Fast similarity search without mandatory cloud dependencies |
+| **Graph** | Service/topic/file relationships | Captures structural links vectors miss |
+| **Document** | Raw episodic transcripts, larger logs, and reports | Cold archive referenced by other tiers |
+| **Tombstones** | Markers of forgotten memories | Graceful recovery of previously evicted context |
 
-Local-first by default: per-workspace SQLite databases under `~/.agent-memory/`, plus an embeddings layer (local model support is evolving).
+---
 
-## How Recall Works (System Design)
-At a high level, `agent-memory` treats recall as a ranked retrieval problem under a strict token budget.
+## Core Features
 
-### 1) Search vs Recall
-- `search` is for interactive inspection: find relevant memories for a query.
-- `recall` is for session start and continuation: it now probes `search` first for non-continuation tasks and only escalates to deep recall when search is empty, weak, ambiguous, or not confident enough.
+### 1. Multi-Signal Explainable Recall
+Retrieval starts with a semantic candidate set, then re-ranks using:
+- **Semantic Similarity**: Vector-based relevance.
+- **Recency**: Weighting newer updates higher.
+- **Outcome Signal**: Boosts successful approaches and flags failures.
+- **Decay Penalty**: Graceful fading of stale/unaccessed items.
+- **Tier Bias**: Prefers specific tiers (e.g. Markdown) for stability.
+Explain mode provides a granular score breakdown for inspection.
 
-### 2) Retrieval signals (explainable)
-Retrieval starts with a semantic candidate set, then re-ranks with multiple signals:
-- Semantic similarity (vector-based)
-- Recency (recently updated items matter more)
-- Outcome signal (successful/failure outcomes can be boosted depending on mode)
-- Decay penalty (old/unhelpful items fade)
-- Tier bias (some tiers are preferred for recall stability)
+### 2. Graph-Expand Retrieval Mode
+Captures structural relationships between files, systems, and topics using a configurable Breadth-First Search (BFS) traversal. It performs depth-controlled expansion to capture related components that a purely semantic vector search would miss.
 
-These signals are combined with mode-specific weights (e.g., recall weights differ from search weights) and returned with a per-item breakdown when `explain` is enabled.
+### 3. Smart Token-Budgeted Assembly
+Ranked memories are balanced by task intent, checked against a strict token budget, and emitted as a stable, sectioned `context_block` that can be fed directly into your agent's system prompt. Over-budget memories are reported as "clipped" with clear reasons.
 
-### 3) Budgeted recall assembly
-For `recall`, ranked hits are then:
-- Rebalanced by task intent (prioritize procedural vs outcome vs semantic depending on the task wording)
-- Clipped to a hard token budget (deterministic baseline counter today)
-- Emitted as a stable, sectioned `context_block` so the agent can paste it directly into the system prompt
+### 4. Cache Invalidation & Bulk Retrieval
+Optimized with workspace-scoped cache invalidation, lightweight inference lists, and high-performance bulk memory retrieval to handle active developer workspaces without latency.
 
-If something doesn’t fit, it is reported as “clipped” with a reason (budget exceeded vs item too large).
+---
 
-## Forgetting, Decay, and Reconstruction
-Forgetting is an explicit part of the system so the memory store stays useful over time.
-
-### Decay scoring
-Each memory gets a decay score in `[0, 1]` (higher = more decayed) based on:
-- Time since update (type-specific half-lives)
-- Access frequency (frequently used memories decay slower)
-- Pins and successful outcomes (can slow decay)
-
-Decay is used both as a ranking signal and as an input to lifecycle decisions.
-
-### Lifecycle (REM cycle)
-The lifecycle manager periodically performs maintenance steps like:
-- Consolidation (merge overlapping items into cleaner “facts”)
-- Conflict detection/resolution
-- Tier movement (promote/demote between Markdown/Vector, and keep Markdown within a token budget)
-- Eviction when the store exceeds limits
-
-### Tombstones and reconstruction
-When an item is evicted, the system leaves a small tombstone (a breadcrumb). If a later query matches a “gap” signal (you’re asking about something the store used to contain), the reconstruction engine can propose or create a reconstructed semantic memory derived from those historical fragments (with safeguards to avoid reconstruction loops).
-
-## Quickstart
-```bash
-cd agent-memory
-go test ./...
-go build ./...
-```
-
-## Install
+## Installation & Setup
 
 ### Prerequisites
 - Go toolchain matching [go.mod](go.mod) (currently `go 1.26.3`)
 
-### Install via Homebrew (tap)
+### Install Options
 
-This repo includes a Homebrew formula at `Formula/agent-memory.rb` for `--HEAD` installs (build from source).
-
+#### Option A: Via Homebrew (Source Tap)
 ```bash
 brew tap taimufuraiyaa/agent-memory https://github.com/taimufuraiyaa/agent-memory.git
 brew install --HEAD taimufuraiyaa/agent-memory/agent-memory
 ```
 
-Notes:
-- Do not wrap the URL in backticks; backticks execute a command in your shell.
-
-### Install the CLI binary
-
-From this repo:
-
+#### Option B: CLI Binary Installation
 ```bash
-cd agent-memory
 go install ./cmd/agent-memory
 ```
 
-Or use the installer (also downloads the local embedding model):
-
+#### Option C: Installer Script (Auto-downloads local embedding model)
 ```bash
-cd agent-memory
 # Unix/Linux/macOS:
 go run install.go install_unix.go
 
 # Windows:
 go run install.go install_windows.go
 ```
+Ensure your Go bin directory (`$(go env GOPATH)/bin` or `~/go/bin`) is in your system `PATH`. Verify with `agent-memory --help`.
 
-This installs `agent-memory` into your Go bin directory (usually `$(go env GOPATH)/bin`). Ensure that directory is on your `PATH`.
+---
 
-Verify:
+## Workspace Integration
 
-```bash
-agent-memory --help
-```
-
-### Enable `agent-memory` for any project
-
-Inside each project’s root directory (the place you run your agent from):
-
-```bash
-agent-memory init
-```
-
-If you want a one-shot install + initialize-the-current-folder flow, run:
-
-```bash
-# Unix/Linux/macOS:
-go run install.go install_unix.go --init-here
-
-# Windows:
-go run install.go install_windows.go --init-here
-```
-
-Common options:
+Initialize any workspace/project root to register the database and configure IDE rules:
 
 ```bash
 agent-memory init --project-name my-project
-agent-memory init --project-name my-project --ide trae
-agent-memory reinstall --project-name my-project
-agent-memory reinstall --project-name my-project --ide trae
-go run install.go install_unix.go --init-here --ide trae  # or install_windows.go on Windows
-agent-memory init --study
-agent-memory init --reuse
-agent-memory init --force
 ```
 
-Use `agent-memory init` for a new workspace registration.
-Use `agent-memory reinstall` when the project already exists and you just need to repair or refresh IDE files.
-Use `--ide trae` when you want to create or refresh Trae AI project rules explicitly.
+### Common Flags & Operations:
+- `agent-memory init --study` - Register and bootstrap learning from local docs/code immediately.
+- `agent-memory init --ide trae` - Configure Trae-specific rules explicitly.
+- `agent-memory reinstall` - Refresh or repair IDE configuration rules in an existing project.
 
-What `init` does:
-- Registers the project under `~/.agent-memory/workspaces.json`
-- Creates/uses a per-workspace SQLite DB under `~/.agent-memory/<workspace>.db`
-- Writes IDE rule files for detected project IDEs (for example Cursor, Trae, Claude, Antigravity) unless `--no-rule`
-- Falls back to writing the Cursor rule at `.cursor/rules/agent-memory.mdc` when no IDE markers are present
+**What `init` does**:
+- Registers the project inside `~/.agent-memory/workspaces.json`.
+- Creates a per-workspace SQLite database under `~/.agent-memory/<workspace>.db`.
+- Automatically writes rule files (e.g., Cursor rules at `.cursor/rules/agent-memory.mdc`, Trae rules, etc.) to prompt the agent to use `agent-memory`.
 
-### Day-to-day usage (inside a project)
+---
+
+## Command Catalog
+
+| Command | Purpose |
+|---|---|
+| `agent-memory init` (`i`) | Register current project, set up DB and IDE rules |
+| `agent-memory rename --to <name>`| Rename a registered workspace |
+| `agent-memory list` | List all registered workspaces and memory counts |
+| `agent-memory delete --project-name <name>` | Deregister workspace (`--keep-data` preserves DB) |
+| `agent-memory write` | Store a semantic, procedural, episodic, or outcome memory |
+| `agent-memory search` | Query memories using multi-signal retrieval |
+| `agent-memory recall` | Retrieve stable, token-budgeted prompt context for a task |
+| `agent-memory session-end` | Parse a session transcript to extract clean learnings |
+| `agent-memory study` | Bootstrap/learn from project documents and code files |
+| `agent-memory dashboard` (`ui`) | Start and open the local web-based dashboard |
+
+---
+
+## Day-to-Day CLI Examples
 
 ```bash
-agent-memory write --type semantic --content "orders service publishes order.created"
-agent-memory search --query "order event" --top-k 5
-agent-memory recall --task "debug order event regression" --budget 400 --format raw
-agent-memory session-end --transcript "we found the root cause..." --format json
+# Write a fact
+agent-memory write --type semantic --content "Authentication service handles JWT validation"
+
+# Store an outcome memory (with approach and reasoning details)
+agent-memory write --type outcome \
+  --content "Upgraded Node.js client package" \
+  --outcome-result success \
+  --outcome-approach "Updated package.json and ran npm install"
+
+# Search memories
+agent-memory search --query "auth validation" --top-k 5
+
+# Recall context for a task (within a 4000-token budget)
+agent-memory recall --task "debug JWT token validation failure" --budget 4000 --format raw
+
+# Extract learnings at the end of a session
+cat session_transcript.txt | agent-memory session-end --format json
 ```
 
-Recommended retrieval policy:
-- Start with `agent-memory search` for focused discovery.
-- Run `agent-memory recall` only when you are continuing previous work, or when search returns no useful / weak / insufficient results.
-- For prompts like `continue`, `resume`, or `what were we doing`, escalate directly to `recall`.
+---
 
-### Dashboard (optional)
+## Local HTTP Dashboard
+The dashboard is served locally by the Go binary (no separate servers required) and matches the core API engine path exactly:
 
 ```bash
-agent-memory dashboard --addr :3210
-```
+# Start and open in browser
+agent-memory dashboard
 
-To print the URL without opening a browser:
-
-```bash
-agent-memory dashboard --addr :3210 --no-open
-```
-
-Background start/stop:
-
-```bash
-agent-memory dashboard --start
+# Run headlessly in the background
+agent-memory dashboard --start --addr :3210
 agent-memory dashboard --stop
 ```
 
-What you can do in the dashboard:
-- Switch workspaces/projects from the dropdown (this comes from `agent-memory init` / `agent-memory list`).
-- Run natural-language search with optional filters (type, tier, outcome, confidence, decay, entities, date range).
-- Toggle explain mode to see the score breakdown fields (`semantic_similarity`, `recency`, `outcome_boost`, `decay_weight`, `tier_bias`) plus `match_reason`.
-- Use Recall Preview to see the exact `context_block` the agent would load for a task, plus which memories were clipped by the token budget (`memories_clipped`) and why.
+### Dashboard Capabilities:
+- **Workspace Navigation**: Swap databases/projects instantly via the UI.
+- **Interactive Search**: Run queries with precise type, tier, outcome, and date filters.
+- **Explain Mode**: Click to inspect calculated scores (`semantic_similarity`, `recency`, `outcome_boost`, `decay_weight`, `tier_bias`).
+- **Recall Preview**: Preview the formatted prompt block that will be injected into the agent, highlighting clipped memories and tokens used.
 
-Notes:
-- The dashboard is local-only and served by the same Go binary; there is no separate Node/React dev server required.
-- The dashboard uses the same in-process retrieval engine path as the CLI (parity-tested).
-- You do not need `--workspace` just to open the dashboard; start it normally and switch projects from the dropdown when needed.
+---
 
-### Managing multiple projects
+## Benchmark & Test Automation
+The repository includes automated test suites and metric runners to measure recall efficiency, operational token costs, and search quality under the `benchmark/` directory:
 
 ```bash
-agent-memory list --format text
-agent-memory rename --to new-project-name
-agent-memory delete --project-name old-project-name --keep-data --yes
+# Execute the benchmark suite
+./benchmark/run_benchmark.sh
+
+# Run scoring and analyze token metrics
+python3 benchmark/score.py --run-dir benchmark/results/continuation-full-10000 --db benchmark/results/continuation-full-10000/benchmark.db --ingest
 ```
 
-## Planned Command Catalog (V1)
-| Command | Purpose | Run From |
-|---|---|---|
-| `agent-memory init` (`i`) | Wire current project (create DB + IDE rule files) | Inside project |
-| `agent-memory rename --to <new>` | Rename project (move DB, update rule) | Anywhere |
-| `agent-memory list` | List registered projects | Anywhere |
-| `agent-memory delete --project-name <name>` | Remove project (`--keep-data` archives DB) | Anywhere |
-| `agent-memory write` | Store semantic/procedural/episodic/outcome memory | Agent/Human |
-| `agent-memory search` | Multi-signal retrieval | Agent |
-| `agent-memory recall` | Session-start context within token budget | Agent |
-| `agent-memory reconstruct` | Forgotten-memory recovery | Agent |
-| `agent-memory session-end` | Extract learnings from session transcript | Agent |
-| `agent-memory study` | Bootstrap from README/docs/code | One-off + incremental |
-| `agent-memory help agent-prompt` | Print recommended agent prompt snippet | One-off |
-| `agent-memory dashboard` (`ui`) | Open the local dashboard (starts the HTTP server) | Engineer inspection |
+---
 
-Planned CLI contract:
-- Deterministic JSON envelope on stdout with `--format json`.
-- Progress/logging on stderr.
-- Stable exit codes (`0/1/2/3/4/5/124`).
-
-## Engineer Dashboard (Search + Recall Preview)
-Run `agent-memory dashboard` to start the local HTTP server and open `http://localhost:3210/dashboard/` for human inspection.
-
-| Engineer Can... | How |
-|---|---|
-| Search across markdown/vector/vector+graph/document | `POST /api/v1/memories/search` (`filters.tiers`, optional `explain: true`) |
-| Inspect why results ranked | Per-signal score breakdown |
-| Filter by type/tier/date/outcome/decay | Search panel filters |
-| Preview exact agent recall block | `POST /api/v1/memories/recall/preview` |
-| Inspect clipped-by-budget memories | Recall preview side panel |
-
-Hard contract: dashboard and CLI search use the same in-process retrieval engine path (parity-tested in CI).
-
-## AI Agent Integration (V1 Plan)
-V1 is CLI-first. No daemon, MCP, or Node is required for the agent path.
-
-Example planned usage:
-
-```bash
-# session start
-agent-memory recall -w <ws> --task "<one-line task>" --budget 4000 --format raw
-
-# learned a fact
-echo "<fact>" | agent-memory write -w <ws> --type semantic --content - --format json
-
-# outcome memory
-agent-memory write -w <ws> --type outcome \
-  --content "<what you tried>" \
-  --outcome-result success|failure|partial \
-  --outcome-approach "<how>" \
-  --outcome-reason "<why>" \
-  --format json
-
-# session end
-cat <transcript.json> | agent-memory session-end -w <ws> --from-stdin --format json
-```
-
-MCP is deferred to V1.5+ as a thin TypeScript wrapper over the same CLI contract.
-
-## Data Layout (Planned)
-```text
-~/.agent-memory/
-├── workspaces.json
-├── <project>.db
-├── archived/
-│   └── <project>.<RFC3339>.db
-├── models/all-MiniLM-L6-v2/
-└── logs/
-```
-
-Per project:
-- `.cursor/rules/agent-memory.mdc` stores workspace hint for agents.
-
-## Roadmap
-### V1
-- Local-first SQLite storage per project with deterministic local embeddings
-- CLI-first workflow: write/search/recall/session-end + project lifecycle commands
-- Optional local dashboard for search + recall preview
-- Study/bootstrap from local files and directories
-
-### V1.5
-- Optional MCP integration as a thin wrapper over the CLI contract
-
-### V2+
-- External connectors (Confluence/Jira/Notion), shared/team memory, cross-workspace recall
-
-## Privacy / Security
-
-agent-memory follows a **local-first** security model:
-- **Local-first by default** - All data stored in `~/.agent-memory/` on your machine
-- **No telemetry** - We don't collect usage data
-- **Secret/PII filtering** - Automatic detection and filtering of API keys, passwords, credentials
-- **Optional cloud services** - External APIs (OpenAI embeddings) are opt-in only
-- **Transparent operation** - All storage locations documented
-
-### Security Features
-
-- ✅ Automatic secret detection (API keys, tokens, private keys)
-- ✅ PII filtering (credit cards, SSNs, emails in sensitive contexts)
-- ✅ Localhost-only dashboard binding by default
-- ✅ Input validation and sanitization
-- ✅ Parameterized SQL queries (injection prevention)
-- ✅ Path traversal protection
-
-### For More Information
-
-- **Report vulnerabilities**: See [SECURITY.md](SECURITY.md) for responsible disclosure
-- **Security guide**: See [docs/security.md](docs/security.md) for comprehensive security documentation
-- **Best practices**: Use full-disk encryption, review stored content periodically, use local embeddings for sensitive data
-
-Data leaves local machine only when explicitly configured (e.g., OpenAI embeddings provider).
-
+## Privacy & Local-First Security
+- **Local Storage Only**: All data is saved inside `~/.agent-memory/` on your system.
+- **No Telemetry**: Absolutely no data collection or tracking.
+- **Secret & PII Redaction**: Automatic scanning and filtering of API keys (`sk-`, `ghp_`, etc.), private keys, credit cards, and emails on ingest.
+- **Transparent Local Host**: The local dashboard binds to `127.0.0.1` by default.
+- Refer to [docs/security.md](docs/security.md) and [SECURITY.md](SECURITY.md) for more details.

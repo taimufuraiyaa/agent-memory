@@ -187,6 +187,62 @@ func TestWritePipelineDedupByHash(t *testing.T) {
 	}
 }
 
+func TestWritePipelineDedupByHashWithEmbedder(t *testing.T) {
+	store := mustOpenStore(t)
+	t.Cleanup(func() { _ = store.Close() })
+
+	provider := &stubProvider{
+		name:   "test-provider",
+		vector: []float32{1, 0, 0},
+	}
+	p := NewWritePipelineWithEmbedder(store, provider)
+	in := WriteInput{
+		Workspace: "ws",
+		Type:      core.SemanticMemory,
+		Content:   "OPS consumes orders.events",
+		Source:    core.MemorySource{Type: core.SourceCodeAnalysis},
+		Mode:      ExtractFast,
+	}
+	first, err := p.Write(context.Background(), in)
+	if err != nil {
+		t.Fatalf("first write failed: %v", err)
+	}
+	if first.Deduplicated {
+		t.Fatalf("expected first write not to be deduplicated")
+	}
+
+	second, err := p.Write(context.Background(), in)
+	if err != nil {
+		t.Fatalf("second write failed: %v", err)
+	}
+	if !second.Deduplicated {
+		t.Fatalf("expected deduplicated=true")
+	}
+	if first.ID != second.ID {
+		t.Fatalf("expected same entry ID for deduped write")
+	}
+
+	// The dedup path must not have inserted a second memory or vector row,
+	// and must not have called the embedder again (InsertMemoryByHashWithVector
+	// returns ErrDuplicateContent before any new vector would be written, but
+	// the embed call itself happens before that check -- so this asserts the
+	// resulting state rather than the call count).
+	memories, err := store.ListMemoriesByWorkspace(context.Background(), "ws")
+	if err != nil {
+		t.Fatalf("list memories: %v", err)
+	}
+	if len(memories) != 1 {
+		t.Fatalf("expected 1 memory after deduped write, got %d", len(memories))
+	}
+	rows, err := store.ListMemoryVectorRowsByWorkspace(context.Background(), "ws")
+	if err != nil {
+		t.Fatalf("list vectors: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 vector row after deduped write, got %d", len(rows))
+	}
+}
+
 func TestWritePipelineModes(t *testing.T) {
 	store := mustOpenStore(t)
 	t.Cleanup(func() { _ = store.Close() })

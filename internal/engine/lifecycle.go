@@ -18,6 +18,7 @@ type LifecycleMetrics struct {
 	Evicted        int `json:"evicted"`
 	Promoted       int `json:"promoted"`
 	Demoted        int `json:"demoted"`
+	Summarized     int `json:"summarized"`
 }
 
 type LifecycleManager struct {
@@ -25,6 +26,9 @@ type LifecycleManager struct {
 	decay          *DecayEngine
 	consolidation  *ConsolidationEngine
 	conflicts      *ConflictEngine
+	pipeline       *WritePipeline
+	summarizer     *ColdTierSummarizer
+	archive        *ColdArchive // nil = archiving disabled
 	maxEntries     int
 	markdownBudget int
 }
@@ -35,9 +39,18 @@ func NewLifecycleManager(store *sqlite.Store, pipeline *WritePipeline) *Lifecycl
 		decay:          NewDecayEngine(store),
 		consolidation:  NewConsolidationEngine(store, pipeline),
 		conflicts:      NewConflictEngine(store),
+		pipeline:       pipeline,
+		summarizer:     NewColdTierSummarizer(),
 		maxEntries:     5000,
 		markdownBudget: 4000,
 	}
+}
+
+// WithArchive enables cold-tier archive storage.  dataDir is the root data
+// directory (e.g. ~/.agent-memory); archives are stored in dataDir/archives/.
+func (m *LifecycleManager) WithArchive(dataDir string) *LifecycleManager {
+	m.archive = NewColdArchive(dataDir)
+	return m
 }
 
 func (m *LifecycleManager) Run(ctx context.Context, workspace string) (*LifecycleMetrics, error) {
@@ -78,7 +91,7 @@ func (m *LifecycleManager) Run(ctx context.Context, workspace string) (*Lifecycl
 	}
 	metrics.ConflictsFound = len(conflicts)
 
-	evicted, promoted, demoted, err := m.applyEvictionPromotion(ctx, workspace)
+	evicted, promoted, demoted, summarized, err := m.applyEvictionPromotion(ctx, workspace)
 	if err != nil {
 		runErr = err
 		return nil, err
@@ -86,13 +99,14 @@ func (m *LifecycleManager) Run(ctx context.Context, workspace string) (*Lifecycl
 	metrics.Evicted = evicted
 	metrics.Promoted = promoted
 	metrics.Demoted = demoted
+	metrics.Summarized = summarized
 	return metrics, nil
 }
 
-func (m *LifecycleManager) applyEvictionPromotion(ctx context.Context, workspace string) (evicted int, promoted int, demoted int, err error) {
+func (m *LifecycleManager) applyEvictionPromotion(ctx context.Context, workspace string) (evicted int, promoted int, demoted int, summarized int, err error) {
 	memories, err := m.store.ListMemoriesByWorkspace(ctx, workspace)
 	if err != nil {
-		return 0, 0, 0, err
+		return 0, 0, 0, 0, err
 	}
 	// Promote successful outcomes and frequently accessed facts.
 	for _, mm := range memories {
@@ -102,7 +116,7 @@ func (m *LifecycleManager) applyEvictionPromotion(ctx context.Context, workspace
 		if (mm.Outcome != nil && mm.Outcome.Result == core.OutcomeSuccess) || mm.AccessCount >= 5 {
 			from := mm.StorageTier
 			if err := m.store.UpdateTier(ctx, mm.ID, core.TierVectorGraph); err != nil {
-				return evicted, promoted, demoted, err
+				return evicted, promoted, demoted, summarized, err
 			}
 			_ = m.store.AddTierTransition(ctx, mm.ID, from, core.TierVectorGraph, "promoted by successful outcome or frequent access")
 			promoted++
@@ -110,11 +124,11 @@ func (m *LifecycleManager) applyEvictionPromotion(ctx context.Context, workspace
 	}
 	demoted, err = m.applyTierRebalance(ctx, workspace, memories)
 	if err != nil {
-		return evicted, promoted, demoted, err
+		return evicted, promoted, demoted, summarized, err
 	}
 
 	if len(memories) <= m.maxEntries {
-		return evicted, promoted, demoted, nil
+		return evicted, promoted, demoted, summarized, nil
 	}
 	over := len(memories) - m.maxEntries
 	toDelete := make([]string, 0, over)
@@ -130,6 +144,59 @@ func (m *LifecycleManager) applyEvictionPromotion(ctx context.Context, workspace
 		toDelete = append(toDelete, mm.ID)
 		toDeleteSet[mm.ID] = struct{}{}
 	}
+
+	// Archive original content (gzip) before eviction so it can be recovered.
+	if m.archive != nil {
+		for _, mm := range memories {
+			if _, ok := toDeleteSet[mm.ID]; !ok {
+				continue
+			}
+			rec := ArchiveRecord{
+				MemoryID:    mm.ID,
+				Workspace:   mm.Workspace,
+				Type:        string(mm.Type),
+				Content:     mm.Content,
+				Entities:    mm.Entities,
+				Tags:        mm.Tags,
+				Confidence:  mm.Confidence,
+				StorageTier: string(mm.StorageTier),
+				ArchivedAt:  time.Now().UTC(),
+			}
+			// Non-fatal: if archiving fails, proceed with eviction anyway.
+			_ = m.archive.Store(rec)
+		}
+	}
+
+	// Before evicting, summarize eligible memories into the cold tier so key
+	// facts survive even after the original is purged.
+	if m.summarizer != nil {
+		for _, mm := range memories {
+			if _, ok := toDeleteSet[mm.ID]; !ok {
+				continue
+			}
+			result, serr := m.summarizer.Summarize(ctx, mm)
+			if serr != nil {
+				// Non-fatal: proceed to evict without a cold summary.
+				continue
+			}
+			wr, werr := m.pipeline.Write(ctx, WriteInput{
+				Workspace: workspace,
+				Type:      mm.Type,
+				Content:   result.Summary,
+				Source:    core.MemorySource{Type: core.SourceConsolidation},
+				Tags:      mm.Tags,
+				Entities:  mm.Entities,
+				Mode:      ExtractFast,
+			})
+			if werr == nil {
+				// Override router-assigned tier to cold.
+				_ = m.store.UpdateTier(ctx, wr.ID, core.TierCold)
+				_ = m.store.AddTierTransition(ctx, wr.ID, wr.StorageTier, core.TierCold, "cold summary created before eviction")
+				summarized++
+			}
+		}
+	}
+
 	for _, mm := range memories {
 		if _, ok := toDeleteSet[mm.ID]; !ok {
 			continue
@@ -137,10 +204,10 @@ func (m *LifecycleManager) applyEvictionPromotion(ctx context.Context, workspace
 		_ = m.store.AddTombstone(ctx, mm, "evict", "")
 	}
 	if err := m.store.DeleteByIDs(ctx, toDelete); err != nil {
-		return evicted, promoted, demoted, err
+		return evicted, promoted, demoted, summarized, err
 	}
 	evicted = len(toDelete)
-	return evicted, promoted, demoted, nil
+	return evicted, promoted, demoted, summarized, nil
 }
 
 func (m *LifecycleManager) applyTierRebalance(ctx context.Context, workspace string, memories []core.MemoryEntry) (int, error) {

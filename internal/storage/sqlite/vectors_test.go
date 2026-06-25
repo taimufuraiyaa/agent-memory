@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"testing"
 
@@ -123,5 +124,77 @@ func TestSearchMemoryVectorsSQL(t *testing.T) {
 	}
 	if len(legacyFiltered) != 1 || legacyFiltered[0].MemoryID != "m1" {
 		t.Fatalf("expected provider-filtered result to exclude legacy rows, got %+v", legacyFiltered)
+	}
+}
+
+func TestInsertMemoryByHashWithVector(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "vectors-atomic.db")
+	store, err := Open(context.Background(), dbPath)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer func() { _ = store.Close() }()
+	ctx := context.Background()
+
+	entry := &core.MemoryEntry{
+		ID:          "m1",
+		Type:        core.SemanticMemory,
+		Content:     "OPS consumes orders.events",
+		Workspace:   "ws",
+		Source:      core.MemorySource{Type: core.SourceCodeAnalysis},
+		StorageTier: core.TierVector,
+		Confidence:  0.9,
+	}
+	if err := store.InsertMemoryByHashWithVector(ctx, entry, "hash-1", "test-provider", "test-v1", []float32{0.1, 0.2, 0.3}); err != nil {
+		t.Fatalf("insert memory with vector: %v", err)
+	}
+
+	memories, err := store.ListMemoriesByWorkspace(ctx, "ws")
+	if err != nil {
+		t.Fatalf("list memories: %v", err)
+	}
+	if len(memories) != 1 {
+		t.Fatalf("expected 1 memory, got %d", len(memories))
+	}
+
+	rows, err := store.ListMemoryVectorRowsByWorkspace(ctx, "ws")
+	if err != nil {
+		t.Fatalf("list vector rows: %v", err)
+	}
+	if len(rows) != 1 || rows[0].MemoryID != "m1" || rows[0].EmbeddingProvider != "test-provider" {
+		t.Fatalf("expected vector row for m1, got %+v", rows)
+	}
+
+	// Inserting the same content hash again should report ErrDuplicateContent
+	// and must not create a second memory or vector row -- the insert and the
+	// vector upsert happen in the same transaction, so a duplicate memory
+	// insert rolls back the vector write too.
+	dup := &core.MemoryEntry{
+		ID:          "m2",
+		Type:        core.SemanticMemory,
+		Content:     "OPS consumes orders.events",
+		Workspace:   "ws",
+		Source:      core.MemorySource{Type: core.SourceCodeAnalysis},
+		StorageTier: core.TierVector,
+		Confidence:  0.9,
+	}
+	if err := store.InsertMemoryByHashWithVector(ctx, dup, "hash-1", "test-provider", "test-v1", []float32{0.4, 0.5, 0.6}); !errors.Is(err, ErrDuplicateContent) {
+		t.Fatalf("expected ErrDuplicateContent, got %v", err)
+	}
+
+	memories, err = store.ListMemoriesByWorkspace(ctx, "ws")
+	if err != nil {
+		t.Fatalf("list memories after dup: %v", err)
+	}
+	if len(memories) != 1 {
+		t.Fatalf("expected dup insert to add no memory rows, got %d", len(memories))
+	}
+
+	rows, err = store.ListMemoryVectorRowsByWorkspace(ctx, "ws")
+	if err != nil {
+		t.Fatalf("list vector rows after dup: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected dup insert to add no vector rows, got %d", len(rows))
 	}
 }

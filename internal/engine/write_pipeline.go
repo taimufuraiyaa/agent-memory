@@ -28,6 +28,14 @@ const (
 	ExtractLLMAssisted ExtractMode = "llm-assisted"
 )
 
+// entityInferenceCandidateLimit bounds how many of the most recently created
+// non-cold memories are considered for entity co-occurrence relationship
+// inference on each write (see inferRelationships and
+// Store.ListMemoryLightweightForInferenceRecent). Without a bound, this scan
+// is O(N) in the size of the workspace and runs synchronously on every
+// Write().
+const entityInferenceCandidateLimit = 500
+
 // WriteInput represents write pipeline input.
 type WriteInput struct {
 	Workspace string
@@ -302,35 +310,27 @@ func (p *WritePipeline) Write(ctx context.Context, in WriteInput) (res *WriteRes
 		Importance:  decision.Importance,
 	}
 
-	if err := p.store.InsertMemoryByHash(ctx, entry, hash); err != nil {
-		if errors.Is(err, sqlite.ErrDuplicateContent) {
-			existing, getErr := p.store.GetMemoryByHash(ctx, in.Workspace, hash)
-			if getErr != nil {
-				return nil, getErr
-			}
-			return &WriteResult{
-				ID:           existing.ID,
-				Deduplicated: true,
-				StorageTier:  existing.StorageTier,
-				RouteRule:    decision.Rule,
-				RouteReason:  decision.Reason,
-				ContentHash:  hash,
-			}, nil
-		}
-		return nil, err
-	}
+	// Compute the embedding (if any) before writing the memory row. Doing
+	// this first means an embedding failure never leaves an orphaned memory
+	// row behind, and a successful embedding can be persisted in the same
+	// transaction as the memory insert (see InsertMemoryByHashWithVector).
+	var (
+		vec           []float32
+		haveVec       bool
+		embedProvider string
+		embedModelVer string
+	)
 	if p.embedder != nil {
 		text := memoryVectorText(*entry)
 		if strings.TrimSpace(text) != "" {
 			embedTimer := observability.NewTimer()
 			provider := p.embedder.Name()
-			vec, err := p.embedder.Embed(ctx, text)
+			v, err := p.embedder.Embed(ctx, text)
 			metrics := observability.GetRegistry()
 			if err != nil {
 				metrics.EmbeddingTotal.WithLabelValues(provider, "error").Inc()
 				metrics.EmbeddingErrors.WithLabelValues(provider, "embed_failed").Inc()
 				metrics.WriteEmbeddingErrors.WithLabelValues(entry.Workspace, provider, "embed_failed").Inc()
-				_ = p.store.DeleteByIDs(ctx, []string{entry.ID})
 				return nil, fmt.Errorf("persist eager vector: embed memory %s: %w", entry.ID, err)
 			}
 			metrics.EmbeddingTotal.WithLabelValues(provider, "success").Inc()
@@ -338,14 +338,51 @@ func (p *WritePipeline) Write(ctx context.Context, in WriteInput) (res *WriteRes
 			embedTimer.ObserveDuration(metrics.WriteEmbeddingDuration.WithLabelValues(entry.Workspace, provider))
 			metrics.EmbeddingBatchSize.WithLabelValues(provider).Observe(1.0)
 			metrics.WriteEmbeddingSuccess.WithLabelValues(entry.Workspace, provider).Inc()
-
-			if err := p.store.UpsertMemoryVector(ctx, entry.ID, entry.Workspace, p.embedder.Name(), p.embedder.ModelVersion(), vec); err != nil {
-				metrics.WriteEmbeddingErrors.WithLabelValues(entry.Workspace, provider, "db_upsert_failed").Inc()
-				_ = p.store.DeleteByIDs(ctx, []string{entry.ID})
-				return nil, fmt.Errorf("persist eager vector: upsert memory %s: %w", entry.ID, err)
-			}
+			vec = v
+			haveVec = true
+			embedProvider = provider
+			embedModelVer = p.embedder.ModelVersion()
 		}
 	}
+
+	// dedupResult builds the WriteResult for a content-hash collision, shared
+	// by both the with-vector and without-vector insert paths below.
+	dedupResult := func() (*WriteResult, error) {
+		existing, getErr := p.store.GetMemoryByHash(ctx, in.Workspace, hash)
+		if getErr != nil {
+			return nil, getErr
+		}
+		return &WriteResult{
+			ID:           existing.ID,
+			Deduplicated: true,
+			StorageTier:  existing.StorageTier,
+			RouteRule:    decision.Rule,
+			RouteReason:  decision.Reason,
+			ContentHash:  hash,
+		}, nil
+	}
+
+	if haveVec {
+		// Insert the memory and its embedding atomically: either both are
+		// persisted, or neither is, so there's never a window where a memory
+		// row exists without its vector.
+		if err := p.store.InsertMemoryByHashWithVector(ctx, entry, hash, embedProvider, embedModelVer, vec); err != nil {
+			if errors.Is(err, sqlite.ErrDuplicateContent) {
+				return dedupResult()
+			}
+			metrics := observability.GetRegistry()
+			metrics.WriteEmbeddingErrors.WithLabelValues(entry.Workspace, embedProvider, "db_upsert_failed").Inc()
+			return nil, fmt.Errorf("persist eager vector: insert memory %s: %w", entry.ID, err)
+		}
+	} else {
+		if err := p.store.InsertMemoryByHash(ctx, entry, hash); err != nil {
+			if errors.Is(err, sqlite.ErrDuplicateContent) {
+				return dedupResult()
+			}
+			return nil, err
+		}
+	}
+
 	if p.markdown != nil && tier == core.TierMarkdown {
 		if err := p.markdown.Upsert(entry.ID, entry.Content); err != nil {
 			_ = p.store.DeleteByIDs(ctx, []string{entry.ID})
@@ -410,7 +447,7 @@ func (p *WritePipeline) inferRelationships(ctx context.Context, entry *core.Memo
 
 	// 2. Entity co-occurrence (Jaccard similarity > 0)
 	if len(entry.Entities) > 0 {
-		workspaceMemories, err := p.store.ListMemoryLightweightForInference(ctx, entry.Workspace)
+		workspaceMemories, err := p.store.ListMemoryLightweightForInferenceRecent(ctx, entry.Workspace, entityInferenceCandidateLimit)
 		if err == nil {
 			for _, m := range workspaceMemories {
 				if m.ID == entry.ID || m.StorageTier == core.TierCold {

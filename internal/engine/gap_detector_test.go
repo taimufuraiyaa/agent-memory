@@ -29,7 +29,7 @@ func TestLifecycleEvictionWritesTombstones(t *testing.T) {
 
 	lm := NewLifecycleManager(store, pipe)
 	lm.maxEntries = 1
-	if _, _, _, err := lm.applyEvictionPromotion(ctx, "ws"); err != nil {
+	if _, _, _, _, err := lm.applyEvictionPromotion(ctx, "ws"); err != nil {
 		t.Fatalf("eviction/promotion run: %v", err)
 	}
 
