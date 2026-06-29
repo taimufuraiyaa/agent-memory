@@ -1,0 +1,86 @@
+package api
+
+import (
+	"encoding/json"
+	"net/http"
+	"strings"
+)
+
+// requestsFeedbackHandler implements POST /api/v1/requests/feedback:
+// submits a retrieval request feedback score (0-5) for a specific request ID.
+func requestsFeedbackHandler(svc *Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeErr(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+			return
+		}
+		var req struct {
+			Workspace string `json:"workspace"`
+			RequestID string `json:"request_id"`
+			Score     int    `json:"score"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
+			return
+		}
+		requestID := strings.TrimSpace(req.RequestID)
+		if requestID == "" {
+			writeErr(w, http.StatusBadRequest, "validation", "request_id is required")
+			return
+		}
+		if req.Score < 0 || req.Score > 5 {
+			writeErr(w, http.StatusBadRequest, "validation", "score must be between 0 and 5")
+			return
+		}
+		ws := strings.TrimSpace(req.Workspace)
+		if ws == "" {
+			ws = workspaceFromRequest(r, svc.Workspace)
+		}
+		assets, err := svc.resolve(r.Context(), ws)
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
+			return
+		}
+		if assets.Store == nil {
+			writeErr(w, http.StatusInternalServerError, "runtime", "store is not available")
+			return
+		}
+		if err := assets.Store.RecordRequestFeedback(r.Context(), requestID, req.Score); err != nil {
+			writeErr(w, http.StatusBadRequest, "runtime", err.Error())
+			return
+		}
+		writeOK(w, http.StatusOK, map[string]any{
+			"workspace":  ws,
+			"request_id": requestID,
+			"score":      req.Score,
+			"ok":         true,
+		})
+	}
+}
+
+// feedbackStatsHandler implements GET /api/v1/feedback/stats:
+// returns retrieval feedback score statistics (week, month, year averages).
+func feedbackStatsHandler(svc *Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			writeErr(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+			return
+		}
+		ws := workspaceFromRequest(r, svc.Workspace)
+		assets, err := svc.resolve(r.Context(), ws)
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
+			return
+		}
+		if assets.Store == nil {
+			writeErr(w, http.StatusInternalServerError, "runtime", "store is not available")
+			return
+		}
+		stats, err := assets.Store.GetFeedbackStats(r.Context(), ws)
+		if err != nil {
+			writeErr(w, http.StatusBadRequest, "runtime", err.Error())
+			return
+		}
+		writeOK(w, http.StatusOK, stats)
+	}
+}

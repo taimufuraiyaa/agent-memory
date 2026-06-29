@@ -368,6 +368,15 @@ func (s *Store) Migrate(ctx context.Context) error {
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_scheduler_run_history_workspace_started ON scheduler_run_history(workspace, started_at DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_scheduler_run_history_started ON scheduler_run_history(started_at DESC)`,
+		`CREATE TABLE IF NOT EXISTS retrieval_requests (
+			id TEXT PRIMARY KEY,
+			workspace TEXT NOT NULL,
+			request_type TEXT NOT NULL,
+			query TEXT NOT NULL,
+			score INTEGER NOT NULL DEFAULT -1,
+			created_at TEXT NOT NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_retrieval_requests_workspace_created ON retrieval_requests(workspace, created_at)`,
 	}
 	for _, stmt := range stmts {
 		if _, err := s.db.ExecContext(ctx, stmt); err != nil {

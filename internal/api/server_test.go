@@ -1335,3 +1335,74 @@ func TestServerProjectsList(t *testing.T) {
 	}
 }
 
+func TestRequestFeedbackAPI(t *testing.T) {
+	baseDir := t.TempDir()
+	modelDir := filepath.Join(t.TempDir(), "model")
+	if err := os.MkdirAll(modelDir, 0o755); err != nil {
+		t.Fatalf("mkdir model: %v", err)
+	}
+	provider, err := embeddings.NewLocalProvider(modelDir)
+	if err != nil {
+		t.Fatalf("provider: %v", err)
+	}
+	svc := &Service{
+		Workspace:         "ws",
+		BaseDir:           baseDir,
+		EmbeddingProvider: provider,
+	}
+	ts := httptest.NewServer(NewMux(svc))
+	defer ts.Close()
+
+	// 1. Perform a search to generate/log a request ID
+	searchBody, _ := json.Marshal(map[string]any{
+		"workspace": "ws",
+		"query":     "test request query",
+		"top_k":     5,
+	})
+	res, err := http.Post(ts.URL+"/api/v1/memories/search", "application/json", bytes.NewReader(searchBody))
+	if err != nil {
+		t.Fatalf("search post: %v", err)
+	}
+	defer func() { _ = res.Body.Close() }()
+	var searchEnv map[string]any
+	_ = json.NewDecoder(res.Body).Decode(&searchEnv)
+	searchData, _ := searchEnv["data"].(map[string]any)
+	requestID, _ := searchData["request_id"].(string)
+	if requestID == "" {
+		t.Fatalf("expected request_id in search response")
+	}
+
+	// 2. Submit feedback scoring
+	feedbackBody, _ := json.Marshal(map[string]any{
+		"workspace":  "ws",
+		"request_id": requestID,
+		"score":      4,
+	})
+	res2, err := http.Post(ts.URL+"/api/v1/requests/feedback", "application/json", bytes.NewReader(feedbackBody))
+	if err != nil {
+		t.Fatalf("feedback post: %v", err)
+	}
+	defer func() { _ = res2.Body.Close() }()
+	if res2.StatusCode != http.StatusOK {
+		t.Fatalf("expected feedback status 200, got %d", res2.StatusCode)
+	}
+
+	// 3. Query stats and check feedback_stats
+	res3, err := http.Get(ts.URL + "/api/v1/stats?workspace=ws")
+	if err != nil {
+		t.Fatalf("stats get: %v", err)
+	}
+	defer func() { _ = res3.Body.Close() }()
+	var statsEnv map[string]any
+	_ = json.NewDecoder(res3.Body).Decode(&statsEnv)
+	statsData, _ := statsEnv["data"].(map[string]any)
+	feedbackStats, _ := statsData["feedback_stats"].(map[string]any)
+	if total, _ := feedbackStats["total_feedback_count"].(float64); total != 1 {
+		t.Fatalf("expected total feedback count to be 1, got %f", total)
+	}
+	if avgWeek, _ := feedbackStats["average_week"].(float64); avgWeek != 4.0 {
+		t.Fatalf("expected weekly average to be 4.0, got %f", avgWeek)
+	}
+}
+
+

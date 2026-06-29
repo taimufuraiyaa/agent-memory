@@ -497,7 +497,7 @@ func TestRecallPreviewParityHTTPVsCLIRaw(t *testing.T) {
 		t.Fatalf("expected recall preview context block")
 	}
 	if contextBlock != cliText {
-		t.Fatalf("context parity mismatch between cli raw recall and recall preview")
+		t.Fatalf("context parity mismatch between cli raw recall and recall preview.\nCLI raw text:\n%q\n\nPreview text:\n%q", cliText, contextBlock)
 	}
 }
 

@@ -1,0 +1,95 @@
+package sqlite
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"time"
+
+	"github.com/time/timebooks/agent-memory/internal/core"
+)
+
+// LogRetrievalRequest inserts a new query/recall request log entry with a pending score of -1.
+func (s *Store) LogRetrievalRequest(ctx context.Context, id, workspace, requestType, query string) error {
+	if s == nil {
+		return errors.New("store is nil")
+	}
+	createdAt := time.Now().UTC().Format(time.RFC3339)
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO retrieval_requests (id, workspace, request_type, query, score, created_at)
+		VALUES (?, ?, ?, ?, -1, ?)`,
+		id, workspace, requestType, query, createdAt,
+	)
+	return err
+}
+
+// RecordRequestFeedback records a user score (0 to 5) for a specific request ID.
+func (s *Store) RecordRequestFeedback(ctx context.Context, id string, score int) error {
+	if s == nil {
+		return errors.New("store is nil")
+	}
+	if score < 0 || score > 5 {
+		return errors.New("invalid score: must be between 0 and 5")
+	}
+	res, err := s.db.ExecContext(ctx, `
+		UPDATE retrieval_requests
+		SET score = ?
+		WHERE id = ?`,
+		score, id,
+	)
+	if err != nil {
+		return err
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return fmt.Errorf("request %s not found", id)
+	}
+	return nil
+}
+
+// GetFeedbackStats aggregates feedback score averages for the past week, month, and year.
+func (s *Store) GetFeedbackStats(ctx context.Context, workspace string) (*core.FeedbackStats, error) {
+	if s == nil {
+		return nil, errors.New("store is nil")
+	}
+	row := s.db.QueryRowContext(ctx, `
+		SELECT 
+			COALESCE(AVG(CASE WHEN datetime(created_at) >= datetime('now', '-7 days') THEN score END), 0.0) as avg_week,
+			COALESCE(AVG(CASE WHEN datetime(created_at) >= datetime('now', '-30 days') THEN score END), 0.0) as avg_month,
+			COALESCE(AVG(CASE WHEN datetime(created_at) >= datetime('now', '-365 days') THEN score END), 0.0) as avg_year,
+			COUNT(CASE WHEN score >= 0 THEN 1 END) as total_count
+		FROM retrieval_requests
+		WHERE workspace = ? AND score >= 0`,
+		workspace,
+	)
+	var stats core.FeedbackStats
+	stats.Workspace = workspace
+	err := row.Scan(&stats.AverageWeek, &stats.AverageMonth, &stats.AverageYear, &stats.TotalFeedbackCount)
+	if err != nil {
+		return nil, err
+	}
+
+	dist := map[string]int{"0": 0, "1": 0, "2": 0, "3": 0, "4": 0, "5": 0}
+	rows, errQuery := s.db.QueryContext(ctx, `
+		SELECT score, COUNT(*)
+		FROM retrieval_requests
+		WHERE workspace = ? AND score >= 0 AND score <= 5
+		GROUP BY score`,
+		workspace,
+	)
+	if errQuery == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var scoreVal int
+			var countVal int
+			if errScan := rows.Scan(&scoreVal, &countVal); errScan == nil {
+				dist[fmt.Sprintf("%d", scoreVal)] = countVal
+			}
+		}
+	}
+	stats.ScoreDistribution = dist
+	return &stats, nil
+}

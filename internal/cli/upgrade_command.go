@@ -175,6 +175,7 @@ func replaceFileAtomic(dst string, src string) error {
 		_ = os.Remove(tmp)
 		return err
 	}
+	_ = os.Remove(dst)
 	return os.Rename(tmp, dst)
 }
 

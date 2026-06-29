@@ -267,6 +267,16 @@ func (m *MemoryEntry) Validate() error {
 	return nil
 }
 
+// FeedbackStats aggregates retrieval feedback scoring statistics.
+type FeedbackStats struct {
+	Workspace          string         `json:"workspace"`
+	AverageWeek        float64        `json:"average_week"`
+	AverageMonth       float64        `json:"average_month"`
+	AverageYear        float64        `json:"average_year"`
+	TotalFeedbackCount int            `json:"total_feedback_count"`
+	ScoreDistribution  map[string]int `json:"score_distribution"`
+}
+
 func IsMemoryType(v MemoryType) bool {
 	return isMemoryType(v)
 }

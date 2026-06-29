@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 
 	"github.com/time/timebooks/agent-memory/internal/config"
@@ -190,8 +191,11 @@ Use --explain to see per-signal score breakdowns.`,
 					return err
 				}
 				defer func() { _ = store.Close() }()
+				requestID := uuid.New().String()
+				_ = store.LogRetrievalRequest(ctx, requestID, cfg.workspace, "search", query)
 				_ = store.AddTokenMetricV2(ctx, cfg.workspace, "search", 0, 0, engine.RunLabel(), false)
 				return writeSuccessEnvelope(cmd.OutOrStdout(), "search", map[string]any{
+					"request_id": requestID,
 					"disabled":  true,
 					"workspace": cfg.workspace,
 					"results":   []any{},
@@ -319,6 +323,9 @@ Use --explain to see per-signal score breakdowns.`,
 			// Check for model version mismatches and warn user
 			checkAndWarnModelVersion(ctx, cfg.workspace, store, provider)
 
+			requestID := uuid.New().String()
+			_ = store.LogRetrievalRequest(ctx, requestID, cfg.workspace, "search", query)
+
 			searcher := engine.NewVectorSearcher(store, provider)
 			retrieval := engine.NewRetrievalEngine(searcher)
 			res, err := retrieval.Retrieve(ctx, engine.RetrievalOptions{
@@ -346,6 +353,7 @@ Use --explain to see per-signal score breakdowns.`,
 			if err != nil {
 				return err
 			}
+			res.RequestID = requestID
 			_ = store.AddTokenMetricV2(ctx, cfg.workspace, "search", sumHitTokens(res.Hits), sumHitTokens(res.Hits), engine.RunLabel(), true)
 			return writeSuccessEnvelope(cmd.OutOrStdout(), "search", res)
 		},
@@ -453,14 +461,18 @@ Budget Configuration:
 					return err
 				}
 				defer func() { _ = store.Close() }()
+				requestID := uuid.New().String()
+				_ = store.LogRetrievalRequest(ctx, requestID, cfg.workspace, "recall", task)
 				contextBlock := engine.AssembleRecallSections(task, nil)
 				disabledTokens := len(strings.Fields(contextBlock))
 				_ = store.AddTokenMetricV2(ctx, cfg.workspace, "recall", disabledTokens, disabledTokens, engine.RunLabel(), false)
 				if strings.EqualFold(flags.format, formatRaw) {
+					_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "[agent-memory] request_id: "+requestID)
 					_, err := fmt.Fprint(cmd.OutOrStdout(), contextBlock)
 					return err
 				}
 				return writeSuccessEnvelope(cmd.OutOrStdout(), "recall", map[string]any{
+					"request_id":         requestID,
 					"disabled":           true,
 					"workspace":          cfg.workspace,
 					"context_block":      contextBlock,
@@ -486,6 +498,9 @@ Budget Configuration:
 					return err
 				}
 				if strings.EqualFold(flags.format, formatRaw) {
+					if reqID, _ := out["request_id"].(string); reqID != "" {
+						_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "[agent-memory] request_id: "+reqID)
+					}
 					if text, _ := out["text"].(string); text != "" {
 						_, err := fmt.Fprint(cmd.OutOrStdout(), text)
 						return err
@@ -529,6 +544,9 @@ Budget Configuration:
 				return err
 			}
 			if strings.EqualFold(flags.format, formatRaw) {
+				if reqID, _ := payload["request_id"].(string); reqID != "" {
+					_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "[agent-memory] request_id: "+reqID)
+				}
 				_, err := fmt.Fprint(cmd.OutOrStdout(), contextBlock)
 				return err
 			}
@@ -551,6 +569,8 @@ Budget Configuration:
 func newFeedbackCommand() *cobra.Command {
 	var flags commonFlags
 	var memoryID, outcome, validator, reasonCategory, occurredAt, reconsolidationAction, successorMemoryID string
+	var requestID string
+	var score int
 	cmd := &cobra.Command{
 		Use:   "feedback",
 		Short: "Record retrieval feedback for a memory",
@@ -562,6 +582,37 @@ func newFeedbackCommand() *cobra.Command {
 			}
 			if err := validateOutputFormat(flags.format, false); err != nil {
 				return err
+			}
+			if requestID != "" {
+				if score < 0 || score > 5 {
+					return errors.New("score must be between 0 and 5")
+				}
+				if cfg.apiURL != "" {
+					body := map[string]any{
+						"workspace":  cfg.workspace,
+						"request_id": requestID,
+						"score":      score,
+					}
+					var out any
+					if err := postAPI(ctx, cfg.apiURL, "/api/v1/requests/feedback", body, &out); err != nil {
+						return err
+					}
+					return writeSuccessEnvelope(cmd.OutOrStdout(), "feedback", out)
+				}
+				store, _, err := openDeps(ctx, cfg)
+				if err != nil {
+					return err
+				}
+				defer func() { _ = store.Close() }()
+				if err := store.RecordRequestFeedback(ctx, requestID, score); err != nil {
+					return err
+				}
+				return writeSuccessEnvelope(cmd.OutOrStdout(), "feedback", map[string]any{
+					"workspace":  cfg.workspace,
+					"request_id": requestID,
+					"score":      score,
+					"ok":         true,
+				})
 			}
 			if strings.TrimSpace(memoryID) == "" {
 				return errors.New("memory-id is required")
@@ -643,6 +694,8 @@ func newFeedbackCommand() *cobra.Command {
 	cmd.Flags().StringVar(&occurredAt, "occurred-at", "", "Optional feedback timestamp (RFC3339 or YYYY-MM-DD)")
 	cmd.Flags().StringVar(&reconsolidationAction, "reconsolidation-action", "", "Optional reconsolidation: confirmed|clarified|contradicted|superseded")
 	cmd.Flags().StringVar(&successorMemoryID, "successor-memory-id", "", "Optional successor memory ID for contradicted/superseded flows")
+	cmd.Flags().StringVar(&requestID, "request-id", "", "Request ID for scoring feedback")
+	cmd.Flags().IntVar(&score, "score", -1, "Feedback score: 0 (useless) to 5 (helpful)")
 	return cmd
 }
 

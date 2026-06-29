@@ -146,8 +146,18 @@ export type SchedulerSummary = {
   workspace?: SchedulerWorkspaceSummary
 }
 
+export type FeedbackStats = {
+  workspace: string
+  average_week: number
+  average_month: number
+  average_year: number
+  total_feedback_count: number
+  score_distribution?: Record<string, number>
+}
+
 export type DashboardStats = {
   workspace: string
+  feedback_stats?: FeedbackStats
   memory_count: number
   db_size_bytes: number
   memory_type_counts?: CountMap

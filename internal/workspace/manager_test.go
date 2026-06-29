@@ -528,6 +528,41 @@ func TestWriteAgentFilesUpsertsCursorRulesFile(t *testing.T) {
 	}
 }
 
+func TestWriteAgentFilesDeploysSkillPackager(t *testing.T) {
+	cwd := t.TempDir()
+
+	// Create .agents directory to trigger antigravity rule generation
+	if err := os.MkdirAll(filepath.Join(cwd, ".agents"), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	res, err := WriteAgentFiles(WriteAgentFilesOptions{
+		CWD:       cwd,
+		Workspace: "skill-deploy-test",
+		Force:     true,
+	})
+	if err != nil {
+		t.Fatalf("WriteAgentFiles: %v", err)
+	}
+	if res == nil {
+		t.Fatalf("expected result")
+	}
+
+	skillPath := filepath.Join(cwd, ".agents", "skills", "skill-packager", "SKILL.md")
+	if _, err := os.Stat(skillPath); err != nil {
+		t.Fatalf("missing skill-packager SKILL.md: %v", err)
+	}
+
+	b, err := os.ReadFile(skillPath)
+	if err != nil {
+		t.Fatalf("read SKILL.md: %v", err)
+	}
+	s := string(b)
+	if !strings.Contains(s, "name: skill-packager") {
+		t.Fatalf("expected skill-packager name in SKILL.md frontmatter, got: %s", s)
+	}
+}
+
 func TestDebugList(t *testing.T) {
 	mgr, err := NewManager("/Users/time/.agent-memory")
 	if err != nil {

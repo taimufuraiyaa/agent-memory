@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/time/timebooks/agent-memory/internal/embeddings"
 	"github.com/time/timebooks/agent-memory/internal/engine"
 	"github.com/time/timebooks/agent-memory/internal/storage/sqlite"
@@ -128,6 +129,9 @@ func executeRecall(
 		return nil, "", errors.New("task is required")
 	}
 
+	requestID := uuid.New().String()
+	_ = store.LogRetrievalRequest(ctx, requestID, cfg.workspace, "recall", task)
+
 	if !memoryEnabled {
 		contextBlock := engine.AssembleRecallSections(task, nil)
 		disabledTokens := len(strings.Fields(contextBlock))
@@ -135,6 +139,7 @@ func executeRecall(
 			return nil, "", err
 		}
 		payload := map[string]any{
+			"request_id":         requestID,
 			"disabled":           true,
 			"workspace":          cfg.workspace,
 			"context_block":      contextBlock,
@@ -235,6 +240,7 @@ func executeRecall(
 	}
 	contextBlock := engine.AssembleRecallSectionsWithObservations(task, observationBlock, included)
 	payload := map[string]any{
+		"request_id":             requestID,
 		"mode":                   retrieved.Mode,
 		"weights":                retrieved.Weights,
 		"hits":                   included,

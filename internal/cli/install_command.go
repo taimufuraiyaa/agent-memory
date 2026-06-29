@@ -284,11 +284,14 @@ func detectRepoRoot(src string) string {
 	if strings.TrimSpace(src) == "" {
 		return ""
 	}
+	var absSrc string
 	if abs, err := filepath.Abs(src); err == nil {
-		src = abs
+		absSrc = abs
+	} else {
+		absSrc = src
 	}
-	if filepath.Base(src) == "agent-memory" && filepath.Base(filepath.Dir(src)) == "cmd" {
-		return filepath.Dir(filepath.Dir(src))
+	if fileExists(filepath.Join(absSrc, "main.go")) && filepath.Base(absSrc) == "agent-memory" && filepath.Base(filepath.Dir(absSrc)) == "cmd" {
+		return filepath.Dir(filepath.Dir(absSrc))
 	}
 	return ""
 }

@@ -107,5 +107,6 @@ func NewRootCommand() *cobra.Command {
 	cmd.AddCommand(newVersionCommand())
 	cmd.AddCommand(newUpgradeCommand())
 	cmd.AddCommand(newInstallCommand())
+	cmd.AddCommand(newDistillCommand())
 	return cmd
 }

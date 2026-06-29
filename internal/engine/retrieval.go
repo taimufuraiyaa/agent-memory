@@ -107,6 +107,7 @@ type RetrievalHit struct {
 
 // RetrievalResult is a ranked response with explainability.
 type RetrievalResult struct {
+	RequestID      string                  `json:"request_id,omitempty"`
 	Mode           RetrievalMode           `json:"mode"`
 	Weights        SignalWeights           `json:"weights"`
 	Policy         RetrievalPolicySnapshot `json:"policy"`

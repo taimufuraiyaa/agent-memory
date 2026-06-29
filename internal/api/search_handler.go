@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/time/timebooks/agent-memory/internal/core"
 	"github.com/time/timebooks/agent-memory/internal/engine"
 )
@@ -80,6 +81,10 @@ func searchHandler(svc *Service) http.HandlerFunc {
 				writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
 				return
 			}
+		}
+		requestID := uuid.New().String()
+		if ws != allProjectsScope && assets != nil && assets.Store != nil {
+			_ = assets.Store.LogRetrievalRequest(r.Context(), requestID, ws, "search", req.Query)
 		}
 		topK := req.TopK
 		if topK <= 0 {
@@ -286,6 +291,7 @@ func searchHandler(svc *Service) http.HandlerFunc {
 		weakResults := renderSearchResults(weakHits, req.Explain)
 		suppressedResults := renderSearchResults(suppressedHits, req.Explain)
 		writeOK(w, http.StatusOK, map[string]any{
+			"request_id":         requestID,
 			"results":            results,
 			"strong_results":     strongResults,
 			"weak_results":       weakResults,

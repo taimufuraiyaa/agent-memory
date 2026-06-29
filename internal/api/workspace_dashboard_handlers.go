@@ -223,9 +223,14 @@ func workspaceStatsHandler(svc *Service) http.HandlerFunc {
 		} else {
 			schedulerSummary = externalSchedulerSummary(r.Context(), svc.BaseDir, workspace)
 		}
+		feedbackStats, err := assets.Store.GetFeedbackStats(r.Context(), workspace)
+		if err != nil {
+			feedbackStats = &core.FeedbackStats{Workspace: workspace}
+		}
 		cacheStats := assets.Retrieval.CacheStats()
 		writeOK(w, http.StatusOK, map[string]any{
 			"workspace":                     workspace,
+			"feedback_stats":                feedbackStats,
 			"memory_count":                  len(memories),
 			"db_size_bytes":                 dbSize,
 			"memory_type_counts":            typeCounts,
