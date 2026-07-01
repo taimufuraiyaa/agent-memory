@@ -35,6 +35,7 @@ import {
   compareMemoryRecency,
   compareMemoryRelevance,
   buildConsolidatedExportHTML,
+  formatNumber,
   formatScore,
   formatTS,
   getHealthState,
@@ -60,6 +61,7 @@ import { WikiPanel } from './WikiPanel'
 
 export function App() {
   const [surface, setSurface] = useState<Surface>('overview')
+  const [viewingJSON, setViewingJSON] = useState<any | null>(null)
 
   const [projects, setProjects] = useState<ProjectListItem[]>([])
   const [workspace, setWorkspace] = useState<string>('')
@@ -878,7 +880,13 @@ export function App() {
                   onModeChange={(nextMode: WikiMode) => {
                     setWikiMode(nextMode)
                     setWikiError('')
-                    setWikiSearch((current) => (current.mode === nextMode ? current : { ...current, mode: nextMode, searched: false }))
+                    setWikiSearch((current) => {
+                      if (current.mode === nextMode) return current
+                      if (current.mode === 'recents' && nextMode === 'search') {
+                        return { ...current, mode: nextMode }
+                      }
+                      return { ...current, mode: nextMode, searched: false }
+                    })
                     if (nextMode !== 'recall') setWikiRecall(null)
                     if (nextMode === 'recents') void showRecentsCapture()
                   }}
@@ -960,17 +968,34 @@ export function App() {
                   ) : null}
                 </div>
 
-                <div className="detailSection">
-                  <div className="detailSectionTitle">Content</div>
-                  <div className="detailContentCard">
-                    <MarkdownView markdown={selectedMemory.content} clamp={false} theme={theme} />
-                    {selectedMemory.diagram ? (
-                      <div className="diagramBlock">
-                        <DiagramViewer diagram={selectedMemory.diagram} theme={theme} />
+                {(() => {
+                  const parsedJSON = tryParseJSON(selectedMemory.content)
+                  return (
+                    <div className="detailSection">
+                      <div className="detailSectionTitle">Content</div>
+                      <div
+                        className={`detailContentCard ${parsedJSON ? 'clickableJSONCard' : ''}`}
+                        onClick={() => {
+                          if (parsedJSON) setViewingJSON({ id: selectedMemory.id, data: parsedJSON })
+                        }}
+                        style={parsedJSON ? { cursor: 'pointer', border: '1px dashed var(--accent-primary)', position: 'relative' } : undefined}
+                        title={parsedJSON ? "Click to view beautiful JSON" : undefined}
+                      >
+                        {parsedJSON ? (
+                          <div style={{ position: 'absolute', right: '12px', top: '8px', fontSize: '10px', color: 'var(--accent-primary)', fontWeight: 'bold', background: 'var(--bg-input)', padding: '2px 6px', borderRadius: '4px' }}>
+                            JSON 🔍
+                          </div>
+                        ) : null}
+                        <MarkdownView markdown={selectedMemory.content} clamp={false} theme={theme} />
+                        {selectedMemory.diagram ? (
+                          <div className="diagramBlock">
+                            <DiagramViewer diagram={selectedMemory.diagram} theme={theme} />
+                          </div>
+                        ) : null}
                       </div>
-                    ) : null}
-                  </div>
-                </div>
+                    </div>
+                  )
+                })()}
 
                 <div className="detailSection">
                   <div className="detailSectionTitle">Memory Facts</div>
@@ -1165,6 +1190,41 @@ export function App() {
           </div>
         </div>
       ) : null}
+
+      {viewingJSON ? (
+        <div
+          className="modalBackdrop"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setViewingJSON(null)
+          }}
+          role="presentation"
+        >
+          <div className="modalPanel" role="dialog" aria-modal="true" aria-label="Beautified JSON content" style={{ maxWidth: '800px', width: '90%' }}>
+            <div className="modalTop">
+              <div className="modalTitle">Details</div>
+              <button className="btn btnGhost" onClick={() => setViewingJSON(null)}>
+                Close
+              </button>
+            </div>
+            <div className="modalBody" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
+              <div className="muted small" style={{ marginBottom: '8px' }}>
+                Memory ID: <span className="mono">{viewingJSON.id}</span>
+              </div>
+              <pre className="pre" style={{ margin: 0, padding: '12px', background: 'var(--bg-input)', borderRadius: '6px', fontSize: '12px', lineHeight: '1.5', whiteSpace: 'pre-wrap', overflowWrap: 'break-word' }}>
+                <code>{JSON.stringify(viewingJSON.data, null, 2)}</code>
+              </pre>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
+}
+
+function tryParseJSON(str: string): any {
+  try {
+    return JSON.parse(str)
+  } catch (e) {
+    return null
+  }
 }

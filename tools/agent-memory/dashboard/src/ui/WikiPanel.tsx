@@ -428,7 +428,11 @@ export function WikiPanel({
               value={query}
               onChange={(e) => onQueryChange(e.target.value)}
               placeholder={inputPlaceholder}
-              disabled={isRecentsMode}
+              onFocus={() => {
+                if (isRecentsMode) {
+                  onModeChange('search')
+                }
+              }}
               rows={dockExpanded || query.trim().length > 0 ? 3 : 1}
               aria-label="Wiki query"
               onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onSubmit() } }}

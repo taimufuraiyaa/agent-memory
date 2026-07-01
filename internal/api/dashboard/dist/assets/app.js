@@ -35394,7 +35394,7 @@ function formatTS(s2) {
   if (Number.isNaN(d2.getTime())) return s2;
   return d2.toLocaleString();
 }
-function formatNumber$1(value) {
+function formatNumber(value) {
   return typeof value === "number" ? value.toLocaleString() : "0";
 }
 function formatPercent(value) {
@@ -35638,7 +35638,7 @@ function PieChartBreakdown({ entries: entries2, emptyLabel }) {
   if (entries2.length === 0) return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "muted", children: emptyLabel });
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "pieChartBlock", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "pieChartWrap", "aria-hidden": "true", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "pieChartVisual", style: { background: buildPieGradient(entries2) }, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "pieChartCenter", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "pieChartTotal", children: formatNumber$1(total) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "pieChartTotal", children: formatNumber(total) }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "pieChartTotalCaption", children: "total" })
     ] }) }) }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "breakdownList", children: entries2.map(([label, value], index) => {
@@ -35652,7 +35652,7 @@ function PieChartBreakdown({ entries: entries2, emptyLabel }) {
           /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "breakdownLeader", "aria-hidden": "true" })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "mono breakdownValue", children: [
-          formatNumber$1(value),
+          formatNumber(value),
           " / ",
           formatPercent(percent)
         ] })
@@ -35701,7 +35701,7 @@ function TokenGroupCard({ group, index }) {
       /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: group.memory_enabled ? "groupBadge groupBadgeOn" : "groupBadge groupBadgeOff", children: group.memory_enabled ? "memory on" : "memory off" })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "groupMetric", children: [
-      formatNumber$1(totals.saved_tokens),
+      formatNumber(totals.saved_tokens),
       " saved"
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "groupSub", children: [
@@ -35709,13 +35709,13 @@ function TokenGroupCard({ group, index }) {
       " ",
       savingsLabel,
       " across ",
-      formatNumber$1(totals.records),
+      formatNumber(totals.records),
       " ",
       recordsLabel
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "groupStats", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Returned", value: formatNumber$1(totals.returned_tokens) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Baseline", value: formatNumber$1(totals.baseline_tokens) })
+      /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Returned", value: formatNumber(totals.returned_tokens) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Baseline", value: formatNumber(totals.baseline_tokens) })
     ] })
   ] });
 }
@@ -35730,16 +35730,16 @@ function LLMGroupCard({ group, index }) {
       /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: group.memory_enabled ? "groupBadge groupBadgeOn" : "groupBadge groupBadgeOff", children: group.memory_enabled ? "memory on" : "memory off" })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "groupMetric", children: [
-      formatNumber$1(group.total_tokens),
+      formatNumber(group.total_tokens),
       " total"
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "groupSub", children: [
-      formatNumber$1(group.records),
+      formatNumber(group.records),
       " usage reports captured"
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "groupStats", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Prompt", value: formatNumber$1(group.prompt_tokens) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Completion", value: formatNumber$1(group.completion_tokens) })
+      /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Prompt", value: formatNumber(group.prompt_tokens) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Completion", value: formatNumber(group.completion_tokens) })
     ] })
   ] });
 }
@@ -35763,7 +35763,7 @@ function BenchmarkClusterCard({ cluster, index }) {
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "groupTitle", children: cluster.cluster_title })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "groupBadge groupBadgeOn", children: [
-        formatNumber$1(cluster.cases),
+        formatNumber(cluster.cases),
         " cases"
       ] })
     ] }),
@@ -35787,7 +35787,7 @@ function BenchmarkHistoryRow({ run: run2, index }) {
       /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "benchmarkHistoryRun", children: run2.run_id }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "benchmarkHistoryMeta", children: formatTS(run2.created_at) || "n/a" }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "benchmarkHistoryMeta", children: [
-        formatNumber$1(run2.case_count),
+        formatNumber(run2.case_count),
         " cases"
       ] })
     ] }),
@@ -35883,19 +35883,19 @@ function BenchmarkPanel({
             ] }),
             /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "overviewMetaItem", children: [
               "cases ",
-              formatNumber$1(latest.case_count)
+              formatNumber(latest.case_count)
             ] }),
             /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "overviewMetaItem", children: [
               "top_k ",
-              formatNumber$1(latest.top_k)
+              formatNumber(latest.top_k)
             ] }),
             /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "overviewMetaItem", children: [
               "budget ",
-              formatNumber$1(latest.budget)
+              formatNumber(latest.budget)
             ] }),
             /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "overviewMetaItem", children: [
               "clusters ",
-              formatNumber$1(clusterCount)
+              formatNumber(clusterCount)
             ] })
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "diagnosticsList", children: [
@@ -35924,9 +35924,9 @@ function BenchmarkPanel({
           /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Gold Recall", value: latest.gold_recall.toFixed(3) }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "NDCG@K", value: latest.ndcg.toFixed(3) }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Keyword Coverage", value: formatUnitPercent(latest.keyword_coverage) }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "ON Retrieval Context Tokens", value: formatNumber$1(latest.returned_tokens) }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "OFF Retrieval Context Tokens", value: formatNumber$1(latest.off_returned_tokens) }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Retrieval Context Delta", value: formatNumber$1(latest.saved_tokens) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "ON Retrieval Context Tokens", value: formatNumber(latest.returned_tokens) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "OFF Retrieval Context Tokens", value: formatNumber(latest.off_returned_tokens) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Retrieval Context Delta", value: formatNumber(latest.saved_tokens) }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Retrieval Context Cost Delta", value: formatMoney(latest.cost_saved) })
         ] }) })
       ] }),
@@ -35935,7 +35935,7 @@ function BenchmarkPanel({
           /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "breakdownTitle", children: "Per-Cluster Breakdown" }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "breakdownSubtitle", children: [
             "Diagnostic rollups by topic cluster (",
-            formatNumber$1(clusterCount),
+            formatNumber(clusterCount),
             " clusters)"
           ] })
         ] }) }),
@@ -35946,7 +35946,7 @@ function BenchmarkPanel({
           /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "breakdownTitle", children: "Run History" }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "breakdownSubtitle", children: [
             "Secondary combined-score trend over time (",
-            formatNumber$1(runs.length),
+            formatNumber(runs.length),
             " runs)"
           ] })
         ] }) }),
@@ -36088,31 +36088,31 @@ function DiagnosticsPanel({
       /* @__PURE__ */ jsxRuntimeExports.jsx(MetricCard, { title: "DB Size", value: formatBytes((stats == null ? void 0 : stats.db_size_bytes) ?? (project == null ? void 0 : project.size_bytes)), detail: "Local store footprint" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(MetricCard, { title: "Last Activity", value: formatTS((stats == null ? void 0 : stats.last_activity) || (project == null ? void 0 : project.last_activity)) || "n/a", detail: "Most recent update or access" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(MetricCard, { title: "Last Memory Update", value: formatTS(stats == null ? void 0 : stats.last_memory_updated_at) || "n/a", detail: "Latest memory write timestamp" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(MetricCard, { title: "Memories", value: formatNumber$1(totalMemories), detail: "Current workspace volume" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(MetricCard, { title: "Retrieved", value: formatNumber$1(retrievedMemoryCount), detail: `${formatPercent(retrievalCoveragePercent)} ever surfaced` }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(MetricCard, { title: "Never Reached", value: formatNumber$1(neverReachedMemoryCount), detail: "Memories with zero retrieval count" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(MetricCard, { title: "Low Reach", value: formatNumber$1(lowReachMemoryCount), detail: `Bottom ${formatNumber$1(lowReachPercentile)}% of reached memories` })
+      /* @__PURE__ */ jsxRuntimeExports.jsx(MetricCard, { title: "Memories", value: formatNumber(totalMemories), detail: "Current workspace volume" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(MetricCard, { title: "Retrieved", value: formatNumber(retrievedMemoryCount), detail: `${formatPercent(retrievalCoveragePercent)} ever surfaced` }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(MetricCard, { title: "Never Reached", value: formatNumber(neverReachedMemoryCount), detail: "Memories with zero retrieval count" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(MetricCard, { title: "Low Reach", value: formatNumber(lowReachMemoryCount), detail: `Bottom ${formatNumber(lowReachPercentile)}% of reached memories` })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "diagnosticsGrid", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(BreakdownCard, { title: "Memory Footprint", subtitle: "Current retained memory shape", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "diagnosticsList", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Pinned Memories", value: formatNumber$1(stats == null ? void 0 : stats.pinned_count) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Diagram Memories", value: formatNumber$1(stats == null ? void 0 : stats.diagram_count) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Pinned Memories", value: formatNumber(stats == null ? void 0 : stats.pinned_count) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Diagram Memories", value: formatNumber(stats == null ? void 0 : stats.diagram_count) }),
         /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Default Workspace", value: workspaceLabel || "n/a" })
       ] }) }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(BreakdownCard, { title: "Experiment Signals", subtitle: "Quick operational summary", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "diagnosticsList", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Recall Records", value: formatNumber$1(recallTokenTotals.records) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Recall Tokens Saved", value: formatNumber$1(recallTokenTotals.saved_tokens) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Recall Records", value: formatNumber(recallTokenTotals.records) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Recall Tokens Saved", value: formatNumber(recallTokenTotals.saved_tokens) }),
         /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Recall Savings Rate", value: formatPercent(recallTokenSavingsPercent) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Search Records", value: formatNumber$1(searchTokenTotals.records) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "LLM Records", value: formatNumber$1(stats == null ? void 0 : stats.llm_usage_totals.records) })
+        /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Search Records", value: formatNumber(searchTokenTotals.records) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "LLM Records", value: formatNumber(stats == null ? void 0 : stats.llm_usage_totals.records) })
       ] }) }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs(BreakdownCard, { title: "Retrieval Reachability", subtitle: "Which memories are reached and which remain untouched", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "diagnosticsList", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Total Retrieval Events", value: formatNumber$1(retrieveCountTotal) }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Retrieved Memories", value: formatNumber$1(retrievedMemoryCount) }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Never Reached Memories", value: formatNumber$1(neverReachedMemoryCount) }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: `Low Reach Memories (P${formatNumber$1(lowReachPercentile)})`, value: formatNumber$1(lowReachMemoryCount) }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Low-Reach Threshold", value: `<= ${formatNumber$1(lowReachThreshold)} hits` }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Total Retrieval Events", value: formatNumber(retrieveCountTotal) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Retrieved Memories", value: formatNumber(retrievedMemoryCount) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Never Reached Memories", value: formatNumber(neverReachedMemoryCount) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: `Low Reach Memories (P${formatNumber(lowReachPercentile)})`, value: formatNumber(lowReachMemoryCount) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Low-Reach Threshold", value: `<= ${formatNumber(lowReachThreshold)} hits` }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Coverage Rate", value: formatPercent(retrievalCoveragePercent) }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Last Accessed Memory", value: formatTS(stats == null ? void 0 : stats.last_memory_accessed_at) || "n/a" })
         ] }),
@@ -36120,7 +36120,7 @@ function DiagnosticsPanel({
           DiagnosticRow,
           {
             label: `${memory.preview} (${toTitle(memory.type)} / ${toTitle(memory.storage_tier)}${memory.pinned ? " / pinned" : ""})`,
-            value: `${formatNumber$1(memory.access_count)} hits`
+            value: `${formatNumber(memory.access_count)} hits`
           },
           memory.id
         )) }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "muted", children: "No memories have been retrieved yet for this workspace." })
@@ -36190,14 +36190,14 @@ function LifecyclePanel({
             ")"
           ] }) : run2.result === "failed" ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "tone-bad", children: "Failed" }) : /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "tone-warn", children: run2.result }) }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("td", { children: formatDuration(run2.duration_ms) }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("td", { children: run2.decay_updated > 0 ? formatNumber$1(run2.decay_updated) : /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "muted", children: "-" }) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("td", { children: run2.decay_updated > 0 ? formatNumber(run2.decay_updated) : /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "muted", children: "-" }) }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("td", { children: run2.promoted > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "tone-good", children: [
             "+",
-            formatNumber$1(run2.promoted)
+            formatNumber(run2.promoted)
           ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "muted", children: "-" }) }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("td", { children: run2.evicted > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "tone-bad", children: [
             "-",
-            formatNumber$1(run2.evicted)
+            formatNumber(run2.evicted)
           ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "muted", children: "-" }) })
         ] }, run2.id)) })
       ] })
@@ -36323,33 +36323,33 @@ function OverviewPanel({
       ] })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "statsGrid", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(MetricCard, { title: "Memories", value: formatNumber$1(totalMemories), detail: "Current workspace volume" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(MetricCard, { title: "Memories", value: formatNumber(totalMemories), detail: "Current workspace volume" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(MetricCard, { title: "Storage", value: formatBytes((stats == null ? void 0 : stats.db_size_bytes) ?? (project == null ? void 0 : project.size_bytes)), detail: "SQLite footprint on disk" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(MetricCard, { title: "Recall Savings", value: formatPercent(recallTokenSavingsPercent), detail: `${formatNumber$1(recallTokenTotals.records)} recall operations` }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(MetricCard, { title: "LLM Usage", value: formatNumber$1(stats == null ? void 0 : stats.llm_usage_totals.total_tokens), detail: `${formatNumber$1(stats == null ? void 0 : stats.llm_usage_totals.records)} provider reports` }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(MetricCard, { title: "Retrieved", value: formatNumber$1(retrievedMemoryCount), detail: `${formatPercent(retrievalCoveragePercent)} ever surfaced` }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(MetricCard, { title: "Never Reached", value: formatNumber$1(neverReachedMemoryCount), detail: `${formatNumber$1(retrieveCountTotal)} total retrieval events` }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(MetricCard, { title: "Low Reach", value: formatNumber$1(lowReachMemoryCount), detail: `Bottom ${formatNumber$1(lowReachPercentile)}% of reached memories` }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(MetricCard, { title: "Pinned", value: formatNumber$1(stats == null ? void 0 : stats.pinned_count), detail: "Pinned memories retained" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(MetricCard, { title: "Diagrams", value: formatNumber$1(stats == null ? void 0 : stats.diagram_count), detail: "Memories with visual payloads" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(MetricCard, { title: "Recall Savings", value: formatPercent(recallTokenSavingsPercent), detail: `${formatNumber(recallTokenTotals.records)} recall operations` }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(MetricCard, { title: "LLM Usage", value: formatNumber(stats == null ? void 0 : stats.llm_usage_totals.total_tokens), detail: `${formatNumber(stats == null ? void 0 : stats.llm_usage_totals.records)} provider reports` }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(MetricCard, { title: "Retrieved", value: formatNumber(retrievedMemoryCount), detail: `${formatPercent(retrievalCoveragePercent)} ever surfaced` }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(MetricCard, { title: "Never Reached", value: formatNumber(neverReachedMemoryCount), detail: `${formatNumber(retrieveCountTotal)} total retrieval events` }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(MetricCard, { title: "Low Reach", value: formatNumber(lowReachMemoryCount), detail: `Bottom ${formatNumber(lowReachPercentile)}% of reached memories` }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(MetricCard, { title: "Pinned", value: formatNumber(stats == null ? void 0 : stats.pinned_count), detail: "Pinned memories retained" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(MetricCard, { title: "Diagrams", value: formatNumber(stats == null ? void 0 : stats.diagram_count), detail: "Memories with visual payloads" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(
         MetricCard,
         {
           title: "Avg Feedback",
           value: (stats == null ? void 0 : stats.feedback_stats) && stats.feedback_stats.total_feedback_count > 0 ? `${stats.feedback_stats.average_week.toFixed(1)} / 5` : "n/a",
-          detail: `${formatNumber$1(((_a2 = stats == null ? void 0 : stats.feedback_stats) == null ? void 0 : _a2.total_feedback_count) ?? 0)} request scores`
+          detail: `${formatNumber(((_a2 = stats == null ? void 0 : stats.feedback_stats) == null ? void 0 : _a2.total_feedback_count) ?? 0)} request scores`
         }
       )
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "overviewColumns", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(BreakdownCard, { title: "Memory Types", subtitle: `${formatNumber$1(sumCounts(stats == null ? void 0 : stats.memory_type_counts))} total`, children: /* @__PURE__ */ jsxRuntimeExports.jsx(PieChartBreakdown, { entries: typeEntries, emptyLabel: "No type distribution yet." }) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(BreakdownCard, { title: "Storage Tiers", subtitle: `${formatNumber$1(sumCounts(stats == null ? void 0 : stats.storage_tier_counts))} classified`, children: /* @__PURE__ */ jsxRuntimeExports.jsx(PieChartBreakdown, { entries: tierEntries, emptyLabel: "No tier distribution yet." }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(BreakdownCard, { title: "Memory Types", subtitle: `${formatNumber(sumCounts(stats == null ? void 0 : stats.memory_type_counts))} total`, children: /* @__PURE__ */ jsxRuntimeExports.jsx(PieChartBreakdown, { entries: typeEntries, emptyLabel: "No type distribution yet." }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(BreakdownCard, { title: "Storage Tiers", subtitle: `${formatNumber(sumCounts(stats == null ? void 0 : stats.storage_tier_counts))} classified`, children: /* @__PURE__ */ jsxRuntimeExports.jsx(PieChartBreakdown, { entries: tierEntries, emptyLabel: "No tier distribution yet." }) }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(BreakdownCard, { title: "Retrieval Reach", subtitle: `${formatPercent(retrievalCoveragePercent)} coverage`, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "diagnosticsList", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Retrieved Memories", value: formatNumber$1(retrievedMemoryCount) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Never Reached", value: formatNumber$1(neverReachedMemoryCount) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: `Low Reach (P${formatNumber$1(lowReachMemoryCount)})`, value: formatNumber$1(lowReachMemoryCount) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Total Retrieval Events", value: formatNumber$1(retrieveCountTotal) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Low-Reach Threshold", value: `<= ${formatNumber$1(lowReachThreshold)} hits` }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Retrieved Memories", value: formatNumber(retrievedMemoryCount) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Never Reached", value: formatNumber(neverReachedMemoryCount) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: `Low Reach (P${formatNumber(lowReachMemoryCount)})`, value: formatNumber(lowReachMemoryCount) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Total Retrieval Events", value: formatNumber(retrieveCountTotal) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Low-Reach Threshold", value: `<= ${formatNumber(lowReachThreshold)} hits` }),
         /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Last Accessed", value: formatTS(stats == null ? void 0 : stats.last_memory_accessed_at) || "n/a" })
       ] }) }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(BreakdownCard, { title: "Scheduler", subtitle: (scheduler2 == null ? void 0 : scheduler2.enabled) ? `Next tick ${formatTS(scheduler2 == null ? void 0 : scheduler2.next_tick_at) || "n/a"}` : "Background lifecycle disabled", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "diagnosticsList", children: [
@@ -36361,12 +36361,12 @@ function OverviewPanel({
         /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Last Duration", value: formatDuration(schedulerWorkspace == null ? void 0 : schedulerWorkspace.last_duration_ms) }),
         /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Last Impacts", value: (schedulerWorkspace == null ? void 0 : schedulerWorkspace.last_impacts) != null ? String(schedulerWorkspace.last_impacts) : "-" })
       ] }) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { gridColumn: "1 / -1" }, children: /* @__PURE__ */ jsxRuntimeExports.jsx(BreakdownCard, { title: "Retrieval Feedback Quality", subtitle: `${formatNumber$1(((_b2 = stats == null ? void 0 : stats.feedback_stats) == null ? void 0 : _b2.total_feedback_count) ?? 0)} request scores`, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "24px", padding: "16px 12px" }, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { gridColumn: "1 / -1" }, children: /* @__PURE__ */ jsxRuntimeExports.jsx(BreakdownCard, { title: "Retrieval Feedback Quality", subtitle: `${formatNumber(((_b2 = stats == null ? void 0 : stats.feedback_stats) == null ? void 0 : _b2.total_feedback_count) ?? 0)} request scores`, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "24px", padding: "16px 12px" }, children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "diagnosticsList", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Weekly Average (Last 7d)", value: (stats == null ? void 0 : stats.feedback_stats) && stats.feedback_stats.total_feedback_count > 0 ? `${stats.feedback_stats.average_week.toFixed(2)} / 5.0` : "n/a" }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Monthly Average (Last 30d)", value: (stats == null ? void 0 : stats.feedback_stats) && stats.feedback_stats.total_feedback_count > 0 ? `${stats.feedback_stats.average_month.toFixed(2)} / 5.0` : "n/a" }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Yearly Average (Last 365d)", value: (stats == null ? void 0 : stats.feedback_stats) && stats.feedback_stats.total_feedback_count > 0 ? `${stats.feedback_stats.average_year.toFixed(2)} / 5.0` : "n/a" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Total Feedbacks Given", value: formatNumber$1(((_c2 = stats == null ? void 0 : stats.feedback_stats) == null ? void 0 : _c2.total_feedback_count) ?? 0) })
+          /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Total Feedbacks Given", value: formatNumber(((_c2 = stats == null ? void 0 : stats.feedback_stats) == null ? void 0 : _c2.total_feedback_count) ?? 0) })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", flexDirection: "column", justifyContent: "center" }, children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "12px", fontWeight: "bold", color: "var(--text-muted)", marginBottom: "12px", textAlign: "center" }, children: "Score Distribution" }),
@@ -36383,7 +36383,7 @@ function OverviewPanel({
         DiagnosticRow,
         {
           label: `${memory.preview} (${toTitle(memory.type)} / ${toTitle(memory.storage_tier)}${memory.pinned ? " / pinned" : ""})`,
-          value: `${formatNumber$1(memory.access_count)} hits`
+          value: `${formatNumber(memory.access_count)} hits`
         },
         memory.id
       )) })
@@ -36453,7 +36453,7 @@ function SessionsPanel({
                     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "sessionRailTitle", children: session.session_id })
                   ] }),
                   /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "groupBadge groupBadgeOn", children: [
-                    formatNumber$1(session.observation_count),
+                    formatNumber(session.observation_count),
                     " obs"
                   ] })
                 ] }),
@@ -36482,7 +36482,7 @@ function SessionsPanel({
                   /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "asciiChipIndex", children: "[01]" }),
                   /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "asciiChipLead", children: ".-" }),
                   /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "overviewMetaItem", children: [
-                    formatNumber$1(selectedSession.observation_count),
+                    formatNumber(selectedSession.observation_count),
                     " observations"
                   ] })
                 ] }),
@@ -36520,7 +36520,7 @@ function SessionsPanel({
                 }
               ),
               /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Created ID", value: promotionResult.created_id || "n/a" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Observations", value: formatNumber$1(promotionResult.observations) }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Observations", value: formatNumber(promotionResult.observations) }),
               /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Storage Tier", value: promotionResult.storage_tier || "n/a" }),
               /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Confidence", value: typeof promotionResult.confidence === "number" ? promotionResult.confidence.toFixed(2) : "n/a" }),
               promotionResult.reject_reason ? /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Reason", value: promotionResult.reject_reason }) : null
@@ -36800,13 +36800,13 @@ function WikiPanel({
               /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "memPill", children: mode }),
               /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "memPill", children: viewMode === "article" ? "wiki article" : "raw" }),
               /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "memPill", children: [
-                formatNumber$1(results.length + weakResults.length),
+                formatNumber(results.length + weakResults.length),
                 " fragments"
               ] }),
               isRecallMode && recall ? /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "memPill", children: [
-                formatNumber$1(recall.tokens_used),
+                formatNumber(recall.tokens_used),
                 " / ",
-                formatNumber$1(recall.tokens_budget),
+                formatNumber(recall.tokens_budget),
                 " tokens"
               ] }) : null
             ] })
@@ -36848,11 +36848,11 @@ function WikiPanel({
             /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "memPill", children: "context block" }),
             /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "memPill", children: [
               "top-k ",
-              formatNumber$1(recall.requested_top_k)
+              formatNumber(recall.requested_top_k)
             ] }),
             /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "memPill", children: [
               "budget ",
-              formatNumber$1(recall.requested_budget)
+              formatNumber(recall.requested_budget)
             ] })
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("pre", { className: "wikiRecallContext", children: recall.context_block })
@@ -36869,7 +36869,7 @@ function WikiPanel({
               /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "memPill wikiQuietBadge", children: "tail" }),
               /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "memPill wikiQuietBadge", children: "lower confidence" }),
               /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "memPill wikiQuietBadge", children: [
-                formatNumber$1(weakResults.length),
+                formatNumber(weakResults.length),
                 " fragments"
               ] })
             ] }),
@@ -36902,7 +36902,11 @@ function WikiPanel({
               value: query,
               onChange: (e2) => onQueryChange(e2.target.value),
               placeholder: inputPlaceholder,
-              disabled: isRecentsMode,
+              onFocus: () => {
+                if (isRecentsMode) {
+                  onModeChange("search");
+                }
+              },
               rows: dockExpanded || query.trim().length > 0 ? 3 : 1,
               "aria-label": "Wiki query",
               onKeyDown: (e2) => {
@@ -37035,6 +37039,7 @@ function WikiPanel({
 function App() {
   var _a2;
   const [surface, setSurface] = reactExports.useState("overview");
+  const [viewingJSON, setViewingJSON] = reactExports.useState(null);
   const [projects, setProjects] = reactExports.useState([]);
   const [workspace, setWorkspace] = reactExports.useState("");
   const [stats, setStats] = reactExports.useState(null);
@@ -37791,7 +37796,13 @@ function App() {
             onModeChange: (nextMode) => {
               setWikiMode(nextMode);
               setWikiError("");
-              setWikiSearch((current) => current.mode === nextMode ? current : { ...current, mode: nextMode, searched: false });
+              setWikiSearch((current) => {
+                if (current.mode === nextMode) return current;
+                if (current.mode === "recents" && nextMode === "search") {
+                  return { ...current, mode: nextMode };
+                }
+                return { ...current, mode: nextMode, searched: false };
+              });
               if (nextMode !== "recall") setWikiRecall(null);
               if (nextMode === "recents") void showRecentsCapture();
             },
@@ -37865,13 +37876,28 @@ function App() {
               formatScore(selectedSemanticSimilarity, 2)
             ] }) : null
           ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "detailSection", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "detailSectionTitle", children: "Content" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "detailContentCard", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx(MarkdownView, { markdown: selectedMemory.content, clamp: false, theme }),
-              selectedMemory.diagram ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "diagramBlock", children: /* @__PURE__ */ jsxRuntimeExports.jsx(DiagramViewer, { diagram: selectedMemory.diagram, theme }) }) : null
-            ] })
-          ] }),
+          (() => {
+            const parsedJSON = tryParseJSON(selectedMemory.content);
+            return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "detailSection", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "detailSectionTitle", children: "Content" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                "div",
+                {
+                  className: `detailContentCard ${parsedJSON ? "clickableJSONCard" : ""}`,
+                  onClick: () => {
+                    if (parsedJSON) setViewingJSON({ id: selectedMemory.id, data: parsedJSON });
+                  },
+                  style: parsedJSON ? { cursor: "pointer", border: "1px dashed var(--accent-primary)", position: "relative" } : void 0,
+                  title: parsedJSON ? "Click to view beautiful JSON" : void 0,
+                  children: [
+                    parsedJSON ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { position: "absolute", right: "12px", top: "8px", fontSize: "10px", color: "var(--accent-primary)", fontWeight: "bold", background: "var(--bg-input)", padding: "2px 6px", borderRadius: "4px" }, children: "JSON 🔍" }) : null,
+                    /* @__PURE__ */ jsxRuntimeExports.jsx(MarkdownView, { markdown: selectedMemory.content, clamp: false, theme }),
+                    selectedMemory.diagram ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "diagramBlock", children: /* @__PURE__ */ jsxRuntimeExports.jsx(DiagramViewer, { diagram: selectedMemory.diagram, theme }) }) : null
+                  ]
+                }
+              )
+            ] });
+          })(),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "detailSection", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "detailSectionTitle", children: "Memory Facts" }),
             /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memMetaGrid", children: [
@@ -38031,8 +38057,38 @@ function App() {
           ] })
         ] })
       }
+    ) : null,
+    viewingJSON ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "div",
+      {
+        className: "modalBackdrop",
+        onMouseDown: (e2) => {
+          if (e2.target === e2.currentTarget) setViewingJSON(null);
+        },
+        role: "presentation",
+        children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "modalPanel", role: "dialog", "aria-modal": "true", "aria-label": "Beautified JSON content", style: { maxWidth: "800px", width: "90%" }, children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "modalTop", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "modalTitle", children: "Details" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "btn btnGhost", onClick: () => setViewingJSON(null), children: "Close" })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "modalBody", style: { maxHeight: "70vh", overflowY: "auto" }, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "muted small", style: { marginBottom: "8px" }, children: [
+              "Memory ID: ",
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mono", children: viewingJSON.id })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("pre", { className: "pre", style: { margin: 0, padding: "12px", background: "var(--bg-input)", borderRadius: "6px", fontSize: "12px", lineHeight: "1.5", whiteSpace: "pre-wrap", overflowWrap: "break-word" }, children: /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: JSON.stringify(viewingJSON.data, null, 2) }) })
+          ] })
+        ] })
+      }
     ) : null
   ] });
+}
+function tryParseJSON(str2) {
+  try {
+    return JSON.parse(str2);
+  } catch (e2) {
+    return null;
+  }
 }
 const PRELOAD_RECOVERY_KEY = "agent-memory:vite-preload-recovery";
 const PRELOAD_RECOVERY_OVERLAY_ID = "agent-memory-preload-recovery";
