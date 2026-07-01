@@ -23,8 +23,8 @@ func (s *Store) LogRetrievalRequest(ctx context.Context, id, workspace, requestT
 	return err
 }
 
-// RecordRequestFeedback records a user score (0 to 5) for a specific request ID.
-func (s *Store) RecordRequestFeedback(ctx context.Context, id string, score int) error {
+// RecordRequestFeedback records a user score (0 to 5) and a reason for a specific request ID.
+func (s *Store) RecordRequestFeedback(ctx context.Context, id string, score int, reason string) error {
 	if s == nil {
 		return errors.New("store is nil")
 	}
@@ -33,9 +33,9 @@ func (s *Store) RecordRequestFeedback(ctx context.Context, id string, score int)
 	}
 	res, err := s.db.ExecContext(ctx, `
 		UPDATE retrieval_requests
-		SET score = ?
+		SET score = ?, reason = ?
 		WHERE id = ?`,
-		score, id,
+		score, reason, id,
 	)
 	if err != nil {
 		return err

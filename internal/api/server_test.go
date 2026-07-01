@@ -1372,11 +1372,12 @@ func TestRequestFeedbackAPI(t *testing.T) {
 		t.Fatalf("expected request_id in search response")
 	}
 
-	// 2. Submit feedback scoring
+	// 2. Submit feedback scoring (score >= 4, optional reason)
 	feedbackBody, _ := json.Marshal(map[string]any{
 		"workspace":  "ws",
 		"request_id": requestID,
 		"score":      4,
+		"reason":     "great matches",
 	})
 	res2, err := http.Post(ts.URL+"/api/v1/requests/feedback", "application/json", bytes.NewReader(feedbackBody))
 	if err != nil {
@@ -1385,6 +1386,51 @@ func TestRequestFeedbackAPI(t *testing.T) {
 	defer func() { _ = res2.Body.Close() }()
 	if res2.StatusCode != http.StatusOK {
 		t.Fatalf("expected feedback status 200, got %d", res2.StatusCode)
+	}
+
+	// 2b. Generate a second request ID to test low score feedback validation
+	resSecond, err := http.Post(ts.URL+"/api/v1/memories/search", "application/json", bytes.NewReader(searchBody))
+	if err != nil {
+		t.Fatalf("search post 2: %v", err)
+	}
+	defer func() { _ = resSecond.Body.Close() }()
+	var searchEnv2 map[string]any
+	_ = json.NewDecoder(resSecond.Body).Decode(&searchEnv2)
+	searchData2, _ := searchEnv2["data"].(map[string]any)
+	requestID2, _ := searchData2["request_id"].(string)
+	if requestID2 == "" {
+		t.Fatalf("expected request_id in second search response")
+	}
+
+	// 2c. Submit feedback scoring below 4 without reason (should fail)
+	badFeedbackBody, _ := json.Marshal(map[string]any{
+		"workspace":  "ws",
+		"request_id": requestID2,
+		"score":      2,
+	})
+	resBad, err := http.Post(ts.URL+"/api/v1/requests/feedback", "application/json", bytes.NewReader(badFeedbackBody))
+	if err != nil {
+		t.Fatalf("bad feedback post: %v", err)
+	}
+	defer func() { _ = resBad.Body.Close() }()
+	if resBad.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected feedback status 400, got %d", resBad.StatusCode)
+	}
+
+	// 2d. Submit feedback scoring below 4 with reason (should succeed)
+	goodFeedbackBody, _ := json.Marshal(map[string]any{
+		"workspace":  "ws",
+		"request_id": requestID2,
+		"score":      2,
+		"reason":     "some irrelevant results",
+	})
+	resGood, err := http.Post(ts.URL+"/api/v1/requests/feedback", "application/json", bytes.NewReader(goodFeedbackBody))
+	if err != nil {
+		t.Fatalf("good feedback post: %v", err)
+	}
+	defer func() { _ = resGood.Body.Close() }()
+	if resGood.StatusCode != http.StatusOK {
+		t.Fatalf("expected feedback status 200, got %d", resGood.StatusCode)
 	}
 
 	// 3. Query stats and check feedback_stats
@@ -1397,11 +1443,11 @@ func TestRequestFeedbackAPI(t *testing.T) {
 	_ = json.NewDecoder(res3.Body).Decode(&statsEnv)
 	statsData, _ := statsEnv["data"].(map[string]any)
 	feedbackStats, _ := statsData["feedback_stats"].(map[string]any)
-	if total, _ := feedbackStats["total_feedback_count"].(float64); total != 1 {
-		t.Fatalf("expected total feedback count to be 1, got %f", total)
+	if total, _ := feedbackStats["total_feedback_count"].(float64); total != 2 {
+		t.Fatalf("expected total feedback count to be 2, got %f", total)
 	}
-	if avgWeek, _ := feedbackStats["average_week"].(float64); avgWeek != 4.0 {
-		t.Fatalf("expected weekly average to be 4.0, got %f", avgWeek)
+	if avgWeek, _ := feedbackStats["average_week"].(float64); avgWeek != 3.0 {
+		t.Fatalf("expected weekly average to be 3.0, got %f", avgWeek)
 	}
 }
 

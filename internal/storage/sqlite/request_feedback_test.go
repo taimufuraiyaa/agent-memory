@@ -28,31 +28,33 @@ func TestRequestFeedback(t *testing.T) {
 
 	// Verify it exists in db with score = -1
 	var score int
+	var reason string
 	err = store.db.QueryRowContext(ctx, "SELECT score FROM retrieval_requests WHERE id = ?", reqID).Scan(&score)
 	require.NoError(t, err)
 	assert.Equal(t, -1, score)
 
 	// 2. Verify RecordRequestFeedback updates score correctly
-	err = store.RecordRequestFeedback(ctx, reqID, 4)
+	err = store.RecordRequestFeedback(ctx, reqID, 4, "helpful results")
 	require.NoError(t, err)
 
-	err = store.db.QueryRowContext(ctx, "SELECT score FROM retrieval_requests WHERE id = ?", reqID).Scan(&score)
+	err = store.db.QueryRowContext(ctx, "SELECT score, reason FROM retrieval_requests WHERE id = ?", reqID).Scan(&score, &reason)
 	require.NoError(t, err)
 	assert.Equal(t, 4, score)
+	assert.Equal(t, "helpful results", reason)
 
 	// Verify error on invalid score
-	err = store.RecordRequestFeedback(ctx, reqID, 10)
+	err = store.RecordRequestFeedback(ctx, reqID, 10, "")
 	assert.Error(t, err)
 
 	// Verify error on non-existent request ID
-	err = store.RecordRequestFeedback(ctx, "non-existent", 3)
+	err = store.RecordRequestFeedback(ctx, "non-existent", 3, "some reason")
 	assert.Error(t, err)
 
 	// 3. Verify GetFeedbackStats aggregates scores correctly
 	// Add more scored requests
 	err = store.LogRetrievalRequest(ctx, "req-2", ws, "recall", "deploy stack")
 	require.NoError(t, err)
-	err = store.RecordRequestFeedback(ctx, "req-2", 2)
+	err = store.RecordRequestFeedback(ctx, "req-2", 2, "insufficient details")
 	require.NoError(t, err)
 
 	// Add an unscored request (score = -1) - should not affect the average

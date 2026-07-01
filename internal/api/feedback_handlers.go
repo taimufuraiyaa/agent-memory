@@ -18,6 +18,7 @@ func requestsFeedbackHandler(svc *Service) http.HandlerFunc {
 			Workspace string `json:"workspace"`
 			RequestID string `json:"request_id"`
 			Score     int    `json:"score"`
+			Reason    string `json:"reason"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
@@ -30,6 +31,10 @@ func requestsFeedbackHandler(svc *Service) http.HandlerFunc {
 		}
 		if req.Score < 0 || req.Score > 5 {
 			writeErr(w, http.StatusBadRequest, "validation", "score must be between 0 and 5")
+			return
+		}
+		if req.Score < 4 && strings.TrimSpace(req.Reason) == "" {
+			writeErr(w, http.StatusBadRequest, "validation", "reason is required for scores below 4")
 			return
 		}
 		ws := strings.TrimSpace(req.Workspace)
@@ -45,7 +50,7 @@ func requestsFeedbackHandler(svc *Service) http.HandlerFunc {
 			writeErr(w, http.StatusInternalServerError, "runtime", "store is not available")
 			return
 		}
-		if err := assets.Store.RecordRequestFeedback(r.Context(), requestID, req.Score); err != nil {
+		if err := assets.Store.RecordRequestFeedback(r.Context(), requestID, req.Score, req.Reason); err != nil {
 			writeErr(w, http.StatusBadRequest, "runtime", err.Error())
 			return
 		}
@@ -53,6 +58,7 @@ func requestsFeedbackHandler(svc *Service) http.HandlerFunc {
 			"workspace":  ws,
 			"request_id": requestID,
 			"score":      req.Score,
+			"reason":     req.Reason,
 			"ok":         true,
 		})
 	}

@@ -568,7 +568,7 @@ Budget Configuration:
 
 func newFeedbackCommand() *cobra.Command {
 	var flags commonFlags
-	var memoryID, outcome, validator, reasonCategory, occurredAt, reconsolidationAction, successorMemoryID string
+	var memoryID, outcome, validator, reasonCategory, occurredAt, reconsolidationAction, successorMemoryID, reason string
 	var requestID string
 	var score int
 	cmd := &cobra.Command{
@@ -587,11 +587,15 @@ func newFeedbackCommand() *cobra.Command {
 				if score < 0 || score > 5 {
 					return errors.New("score must be between 0 and 5")
 				}
+				if score < 4 && strings.TrimSpace(reason) == "" {
+					return errors.New("reason is required for scores below 4")
+				}
 				if cfg.apiURL != "" {
 					body := map[string]any{
 						"workspace":  cfg.workspace,
 						"request_id": requestID,
 						"score":      score,
+						"reason":     reason,
 					}
 					var out any
 					if err := postAPI(ctx, cfg.apiURL, "/api/v1/requests/feedback", body, &out); err != nil {
@@ -604,13 +608,14 @@ func newFeedbackCommand() *cobra.Command {
 					return err
 				}
 				defer func() { _ = store.Close() }()
-				if err := store.RecordRequestFeedback(ctx, requestID, score); err != nil {
+				if err := store.RecordRequestFeedback(ctx, requestID, score, reason); err != nil {
 					return err
 				}
 				return writeSuccessEnvelope(cmd.OutOrStdout(), "feedback", map[string]any{
 					"workspace":  cfg.workspace,
 					"request_id": requestID,
 					"score":      score,
+					"reason":     reason,
 					"ok":         true,
 				})
 			}
@@ -696,6 +701,7 @@ func newFeedbackCommand() *cobra.Command {
 	cmd.Flags().StringVar(&successorMemoryID, "successor-memory-id", "", "Optional successor memory ID for contradicted/superseded flows")
 	cmd.Flags().StringVar(&requestID, "request-id", "", "Request ID for scoring feedback")
 	cmd.Flags().IntVar(&score, "score", -1, "Feedback score: 0 (useless) to 5 (helpful)")
+	cmd.Flags().StringVar(&reason, "reason", "", "Explanation / reason for the feedback score")
 	return cmd
 }
 

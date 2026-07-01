@@ -374,6 +374,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 			request_type TEXT NOT NULL,
 			query TEXT NOT NULL,
 			score INTEGER NOT NULL DEFAULT -1,
+			reason TEXT NOT NULL DEFAULT '',
 			created_at TEXT NOT NULL
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_retrieval_requests_workspace_created ON retrieval_requests(workspace, created_at)`,
@@ -510,6 +511,9 @@ func (s *Store) Migrate(ctx context.Context) error {
 		return err
 	}
 	if err := s.ensureColumn(ctx, "benchmark_runs", "continuation_verdict", `ALTER TABLE benchmark_runs ADD COLUMN continuation_verdict TEXT NOT NULL DEFAULT ''`); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "retrieval_requests", "reason", `ALTER TABLE retrieval_requests ADD COLUMN reason TEXT NOT NULL DEFAULT ''`); err != nil {
 		return err
 	}
 	// Add indexes for vector provenance columns

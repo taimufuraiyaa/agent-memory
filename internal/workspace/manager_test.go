@@ -528,7 +528,7 @@ func TestWriteAgentFilesUpsertsCursorRulesFile(t *testing.T) {
 	}
 }
 
-func TestWriteAgentFilesDeploysSkillPackager(t *testing.T) {
+func TestWriteAgentFilesDeploysPredefinedSkills(t *testing.T) {
 	cwd := t.TempDir()
 
 	// Create .agents directory to trigger antigravity rule generation
@@ -548,18 +548,33 @@ func TestWriteAgentFilesDeploysSkillPackager(t *testing.T) {
 		t.Fatalf("expected result")
 	}
 
-	skillPath := filepath.Join(cwd, ".agents", "skills", "skill-packager", "SKILL.md")
-	if _, err := os.Stat(skillPath); err != nil {
-		t.Fatalf("missing skill-packager SKILL.md: %v", err)
+	skills := []string{
+		"skill-packager",
+		"spec-driven-development",
+		"planning-and-task-breakdown",
+		"incremental-implementation",
+		"test-driven-development",
+		"code-simplification",
+		"debugging-and-error-recovery",
 	}
 
-	b, err := os.ReadFile(skillPath)
-	if err != nil {
-		t.Fatalf("read SKILL.md: %v", err)
-	}
-	s := string(b)
-	if !strings.Contains(s, "name: skill-packager") {
-		t.Fatalf("expected skill-packager name in SKILL.md frontmatter, got: %s", s)
+	for _, name := range skills {
+		skillPath := filepath.Join(cwd, ".agents", "skills", name, "SKILL.md")
+		if _, err := os.Stat(skillPath); err != nil {
+			t.Errorf("missing %s SKILL.md: %v", name, err)
+			continue
+		}
+
+		b, err := os.ReadFile(skillPath)
+		if err != nil {
+			t.Errorf("read %s SKILL.md: %v", name, err)
+			continue
+		}
+		s := string(b)
+		expectedNameLine := "name: " + name
+		if !strings.Contains(s, expectedNameLine) {
+			t.Errorf("expected '%s' in SKILL.md frontmatter, got: %s", expectedNameLine, s)
+		}
 	}
 }
 

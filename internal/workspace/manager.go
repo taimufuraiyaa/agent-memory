@@ -2,9 +2,11 @@ package workspace
 
 import (
 	"context"
+	"embed"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -276,8 +278,9 @@ func (m *Manager) Init(ctx context.Context, opt InitOptions) (*InitResult, error
 						return nil, err
 					}
 					written = append(written, p)
-					skillP := filepath.Join(opt.CWD, ".agents", "skills", "skill-packager", "SKILL.md")
-					if err := writeRuleFile(skillP, defaultSkillPackagerContent()); err != nil {
+
+					var ir IDEUpgradeResult
+					if err := deployPredefinedSkills(opt.CWD, opt.Force, &ir); err != nil {
 						return nil, err
 					}
 				case "aierules":
@@ -680,16 +683,20 @@ workspace: %s
 
 Always use `+"`"+`agent-memory`+"`"+` as the memory system:
 - Before doing any self-research: run memory `+"`"+`search`+"`"+` first. Run task `+"`"+`recall`+"`"+` only when the task is about continuing previous work, or when search returns no useful / weak / insufficient results.
-- After running search or recall: you MUST immediately submit a feedback score from 0 (useless) to 5 (extremely helpful) using command `+"`"+`agent-memory feedback --request-id <request_id> --score <0-5>`+"`"+`. You MUST score honestly and objectively based on the true usefulness of the retrieved memories (e.g., score 0 if retrieved memories were completely irrelevant or did not help, score 5 if they directly contained the solution or crucial context). Do not default to high scores.
+- After running search or recall: you MUST immediately submit a feedback score from 0 (useless) to 5 (extremely helpful) using command `+"`"+`agent-memory feedback --request-id <request_id> --score <0-5> --reason "<explanation>"`+"`"+`. You MUST score honestly and objectively based on the true usefulness of the retrieved memories (e.g., score 0 if retrieved memories were completely irrelevant or did not help, score 5 if they directly contained the solution or crucial context). Do not default to high scores. You MUST always provide a reason regardless of the score; if the score is below 4, you MUST provide a detailed explanation (the command will fail if reason is omitted for scores below 4).
 - After learning durable new knowledge: write it to memory immediately.
 - Be self-aware of reusable scripts, grep queries, or workflows: package them into custom skills under `+"`"+`.agents/skills/`+"`"+` (using `+"`"+`agent-memory distill`+"`"+` or manual packaging) for later reuse.
+- When packaging or organizing custom agent skills (e.g. under `+"`"+`.agents/skills/`+"`"+`):
+  - Do NOT use generic, numbered, or index-based filenames (like `+"`"+`part1.md`+"`"+`, `+"`"+`workflows_part1.md`+"`"+`).
+  - Always use clear, descriptive, and meaningful names for all custom skill reference files (e.g., `+"`"+`db_performance.md`+"`"+`, `+"`"+`ui_fixes.md`+"`"+`) that represent their respective feature, domain, or component.
+  - Limit every individual skill file's size strictly to a maximum of 12,000 characters. If a skill grows beyond this, partition it by domain/feature and place the detailed references into a `+"`"+`references/`+"`"+` subdirectory with descriptive, meaningful filenames.
 - At the end of a session: store a short session summary via `+"`"+`session-end`+"`"+`.
 
 Commands:
 - `+"`"+`agent-memory init`+"`"+`
 - `+"`"+`agent-memory search --query "<keywords/entities>" --top-k 8`+"`"+`
 - `+"`"+`agent-memory recall --task "<one-line task>" --budget 800 --format raw --include-observations`+"`"+`
-- `+"`"+`agent-memory feedback --request-id "<id>" --score <0-5>`+"`"+`
+- `+"`"+`agent-memory feedback --request-id "<id>" --score <0-5> --reason "<explanation>"`+"`"+`
 - `+"`"+`agent-memory write --type semantic --content "<durable fact + source>"`+"`"+`
 - `+"`"+`agent-memory write --type procedural --content "<repeatable steps/checklist>"`+"`"+`
 - `+"`"+`agent-memory write --type outcome --content "<what you tried> (result: success|failure|partial, approach: <how>, reason: <why>)"`+"`"+`
@@ -1025,24 +1032,9 @@ func WriteAgentFiles(opt WriteAgentFilesOptions) (*WriteAgentFilesResult, error)
 			ir.Written = append(ir.Written, ".agents/rules/agent-memory.md")
 		}
 
-		// Deploy skill-packager custom skill
-		skillPath := filepath.Join(opt.CWD, ".agents", "skills", "skill-packager", "SKILL.md")
-		skillContent := defaultSkillPackagerContent()
-		if !opt.Force {
-			if existing, err := os.ReadFile(skillPath); err == nil &&
-				strings.TrimSpace(string(existing)) == strings.TrimSpace(skillContent) {
-				ir.Skipped = append(ir.Skipped, ".agents/skills/skill-packager/SKILL.md")
-			} else {
-				if err := writeRuleFile(skillPath, skillContent); err != nil {
-					return nil, fmt.Errorf("antigravity skill-packager: %w", err)
-				}
-				ir.Written = append(ir.Written, ".agents/skills/skill-packager/SKILL.md")
-			}
-		} else {
-			if err := writeRuleFile(skillPath, skillContent); err != nil {
-				return nil, fmt.Errorf("antigravity skill-packager: %w", err)
-			}
-			ir.Written = append(ir.Written, ".agents/skills/skill-packager/SKILL.md")
+		// Deploy predefined skills
+		if err := deployPredefinedSkills(opt.CWD, opt.Force, &ir); err != nil {
+			return nil, fmt.Errorf("predefined skills: %w", err)
 		}
 
 		res.IDEs = append(res.IDEs, ir)
@@ -1201,38 +1193,49 @@ func upsertRuleSection(path, marker, section string, force bool) (bool, error) {
 	return true, os.WriteFile(path, []byte(replaced), 0o644)
 }
 
-func defaultSkillPackagerContent() string {
-	return `---
-name: skill-packager
-description: Package reusable learnings, scripts, or workflows into custom agent skills
----
-# Skill Packager
+//go:embed predefined_skills
+var predefinedSkillsFS embed.FS
 
-Use this skill when you have solved a complex task, written a helper script, or established a reusable workflow that would benefit future agents.
+func deployPredefinedSkills(cwd string, force bool, ir *IDEUpgradeResult) error {
+	err := fs.WalkDir(predefinedSkillsFS, "predefined_skills", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
 
-## Self-Awareness Trigger Checklist
-Ask yourself: *"Is this technique, script, or workflow generalizable/reusable for other workspaces or future agents?"*
-You should package a skill after:
-- Writing a complex Python or Bash script (e.g. calculation, cleanup, automation).
-- Defining a complex grep/regex query or search command.
-- Solving a difficult debugging case (e.g. permission issues, memory leaks).
-- Implementing a multi-step architectural migration (e.g. DB schemas, plugins).
+		relPath, err := filepath.Rel("predefined_skills", path)
+		if err != nil {
+			return err
+		}
 
-## Step-by-Step Packaging Process
-1. **Choose a unique name**: Pick a descriptive, lowercase, kebab-case name (e.g., sqlite-blob-migration).
-2. **Create the directory structure**:
-   * Location: .agents/skills/<skill-name>/
-   * Subdirectories: scripts/ (for helper scripts), examples/ (for usage examples), references/ (for detailed documentation).
-3. **Write the SKILL.md file**:
-   * It must contain YAML frontmatter:
-     ` + "```" + `yaml
-     ---
-     name: <skill-name>
-     description: <2-3 sentence summary of what this skill does and when to trigger it>
-     ---
-     ` + "```" + `
-   * Write the body in clean Markdown, detailing instructions and references.
-4. **Copy supporting assets**: Place any associated Python scripts, Bash scripts, or configs inside the scripts/ folder. Make sure scripts are executable and documented.
-5. **Durable Memory Write**: Write a semantic memory in agent-memory explaining that this skill has been added, so future agents can search and retrieve it.
-`
+		content, err := predefinedSkillsFS.ReadFile(path)
+		if err != nil {
+			return err
+		}
+
+		destPath := filepath.Join(cwd, ".agents", "skills", relPath)
+		destDir := filepath.Dir(destPath)
+		if err := os.MkdirAll(destDir, 0o755); err != nil {
+			return err
+		}
+
+		displayPath := filepath.Join(".agents", "skills", relPath)
+
+		if !force {
+			if existing, err := os.ReadFile(destPath); err == nil &&
+				strings.TrimSpace(string(existing)) == strings.TrimSpace(string(content)) {
+				ir.Skipped = append(ir.Skipped, displayPath)
+				return nil
+			}
+		}
+
+		if err := os.WriteFile(destPath, content, 0o644); err != nil {
+			return fmt.Errorf("failed to write %s: %w", displayPath, err)
+		}
+		ir.Written = append(ir.Written, displayPath)
+		return nil
+	})
+	return err
 }
