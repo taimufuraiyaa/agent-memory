@@ -277,6 +277,17 @@ type FeedbackStats struct {
 	ScoreDistribution  map[string]int `json:"score_distribution"`
 }
 
+// RetrievalRequestLog represents a logged search or recall request with optional feedback.
+type RetrievalRequestLog struct {
+	ID          string `json:"id"`
+	Workspace   string `json:"workspace"`
+	RequestType string `json:"request_type"`
+	Query       string `json:"query"`
+	Score       int    `json:"score"`
+	Reason      string `json:"reason"`
+	CreatedAt   string `json:"created_at"`
+}
+
 func IsMemoryType(v MemoryType) bool {
 	return isMemoryType(v)
 }

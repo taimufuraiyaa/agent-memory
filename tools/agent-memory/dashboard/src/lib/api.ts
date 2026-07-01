@@ -532,3 +532,19 @@ export function recallPreview(input: {
     body: JSON.stringify(input),
   })
 }
+
+export type RetrievalRequestLog = {
+  id: string
+  workspace: string
+  request_type: string
+  query: string
+  score: number
+  reason: string
+  created_at: string
+}
+
+export function listFeedback(input: { workspace: string }): Promise<RetrievalRequestLog[]> {
+  return api(`/api/v1/feedback?workspace=${encodeURIComponent(input.workspace)}`, {
+    method: 'GET',
+  })
+}

@@ -90,3 +90,30 @@ func feedbackStatsHandler(svc *Service) http.HandlerFunc {
 		writeOK(w, http.StatusOK, stats)
 	}
 }
+
+// listFeedbackHandler implements GET /api/v1/feedback:
+// returns list of all retrieval requests (with their feedback score and reason).
+func listFeedbackHandler(svc *Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			writeErr(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+			return
+		}
+		ws := workspaceFromRequest(r, svc.Workspace)
+		assets, err := svc.resolve(r.Context(), ws)
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
+			return
+		}
+		if assets.Store == nil {
+			writeErr(w, http.StatusInternalServerError, "runtime", "store is not available")
+			return
+		}
+		list, err := assets.Store.ListRetrievalRequests(r.Context(), ws)
+		if err != nil {
+			writeErr(w, http.StatusBadRequest, "runtime", err.Error())
+			return
+		}
+		writeOK(w, http.StatusOK, list)
+	}
+}

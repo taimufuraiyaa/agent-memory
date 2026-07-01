@@ -12,6 +12,7 @@ import {
   recallPreview,
   searchMemories,
   setMemoryPinned,
+  listFeedback,
   type BenchmarkRun,
   type DashboardStats,
   type MemoryEntry,
@@ -24,6 +25,7 @@ import {
   type SchedulerRunHistory,
   type SessionEntry,
   type StorageTier,
+  type RetrievalRequestLog,
 } from '../lib/api'
 import { DiagramViewer } from './DiagramViewer'
 import { MarkdownView } from './MarkdownView'
@@ -58,6 +60,7 @@ import { LifecyclePanel } from './LifecyclePanel'
 import { OverviewPanel } from './OverviewPanel'
 import { SessionsPanel } from './SessionsPanel'
 import { WikiPanel } from './WikiPanel'
+import { FeedbackPanel } from './FeedbackPanel'
 
 export function App() {
   const [surface, setSurface] = useState<Surface>('overview')
@@ -84,6 +87,9 @@ export function App() {
   const [promotionResults, setPromotionResults] = useState<Record<string, ObservationPromotionResult>>({})
   const [overviewExperimentFocusKey, setOverviewExperimentFocusKey] = useState<number>(0)
   const [rawStatsOpen, setRawStatsOpen] = useState<boolean>(false)
+  const [feedbackLogs, setFeedbackLogs] = useState<RetrievalRequestLog[]>([])
+  const [feedbackBusy, setFeedbackBusy] = useState<boolean>(false)
+  const [feedbackErr, setFeedbackErr] = useState<string>('')
 
   const [topK, setTopK] = useState<number>(10)
   const [explain, setExplain] = useState<boolean>(true)
@@ -312,6 +318,30 @@ export function App() {
       cancelled = true
     }
   }, [workspace])
+
+  useEffect(() => {
+    let cancelled = false
+    if (!workspace || surface !== 'feedback') return
+    setFeedbackBusy(true)
+    setFeedbackErr('')
+    listFeedback({ workspace })
+      .then((data) => {
+        if (cancelled) return
+        setFeedbackLogs(data)
+      })
+      .catch((e) => {
+        if (cancelled) return
+        setFeedbackLogs([])
+        setFeedbackErr(e instanceof Error ? e.message : String(e))
+      })
+      .finally(() => {
+        if (cancelled) return
+        setFeedbackBusy(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [workspace, surface])
 
   useEffect(() => {
     if (!sessions.length) {
@@ -698,7 +728,7 @@ export function App() {
   }
 
   return (
-    <div className={surface === 'wiki' ? 'shell chatShell shellWikiMode' : 'shell chatShell'}>
+    <div className={surface === 'wiki' ? 'shell chatShell shellWikiMode' : surface === 'feedback' ? 'shell chatShell shellFeedbackMode' : 'shell chatShell'}>
       <header className="topbar chatTopbar">
         <div className="topbarLeft">
           <div className="brand">
@@ -755,6 +785,10 @@ export function App() {
           <button className={surface === 'wiki' ? 'navItem navItemOn' : 'navItem'} onClick={() => openWiki()} type="button" aria-label="Wiki">
             <span className="navKey">[06]</span>
             <span className="navLabel">Wiki</span>
+          </button>
+          <button className={surface === 'feedback' ? 'navItem navItemOn' : 'navItem'} onClick={() => { setSurface('feedback'); setSelectedMemory(null); }} type="button" aria-label="Feedback">
+            <span className="navKey">[07]</span>
+            <span className="navLabel">Feedback</span>
           </button>
         </nav>
 
@@ -843,6 +877,15 @@ export function App() {
                   history={schedulerHistory}
                   busy={schedulerBusy}
                   error={schedulerErr}
+                />
+              ) : null}
+
+              {surface === 'feedback' ? (
+                <FeedbackPanel
+                  workspace={workspace}
+                  feedback={feedbackLogs}
+                  busy={feedbackBusy}
+                  error={feedbackErr}
                 />
               ) : null}
 

@@ -7156,6 +7156,11 @@ function recallPreview(input) {
     body: JSON.stringify(input)
   });
 }
+function listFeedback(input) {
+  return api(`/api/v1/feedback?workspace=${encodeURIComponent(input.workspace)}`, {
+    method: "GET"
+  });
+}
 const scriptRel = "modulepreload";
 const assetsURL = function(dep) {
   return "/" + dep;
@@ -37036,6 +37041,239 @@ function WikiPanel({
     ) })
   ] });
 }
+function FeedbackPanel({
+  workspace,
+  feedback,
+  busy,
+  error
+}) {
+  const [statusFilter, setStatusFilter] = reactExports.useState("all");
+  const [typeFilter, setTypeFilter] = reactExports.useState("all");
+  const [searchQuery, setSearchQuery] = reactExports.useState("");
+  const [selectedLog, setSelectedLog] = reactExports.useState(null);
+  const [copiedId, setCopiedId] = reactExports.useState(null);
+  const stats = reactExports.useMemo(() => {
+    const total = feedback.length;
+    const scoredList = feedback.filter((f2) => f2.score >= 0);
+    const scored = scoredList.length;
+    const pending = total - scored;
+    const average = scored > 0 ? (scoredList.reduce((acc, f2) => acc + f2.score, 0) / scored).toFixed(1) : "-";
+    return { total, scored, pending, average };
+  }, [feedback]);
+  const filteredFeedback = reactExports.useMemo(() => {
+    return feedback.filter((item) => {
+      const matchesStatus = statusFilter === "all" || statusFilter === "scored" && item.score >= 0 || statusFilter === "pending" && item.score < 0;
+      const matchesType = typeFilter === "all" || item.request_type === typeFilter;
+      const queryLower = searchQuery.toLowerCase();
+      const matchesSearch = !searchQuery || item.query.toLowerCase().includes(queryLower) || item.reason.toLowerCase().includes(queryLower) || item.id.toLowerCase().includes(queryLower);
+      return matchesStatus && matchesType && matchesSearch;
+    });
+  }, [feedback, statusFilter, typeFilter, searchQuery]);
+  const handleCopy = (id33) => {
+    void navigator.clipboard.writeText(id33);
+    setCopiedId(id33);
+    setTimeout(() => setCopiedId(null), 2e3);
+  };
+  if (!workspace) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "surfacePanel", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "emptyState", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "emptyTitle", children: "No Workspace Selected" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "emptyBody", children: "Select a workspace to view its retrieval feedback logs." })
+    ] }) });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "surfacePanel", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "panelHeader", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "panelTitle", children: "Retrieval Feedback" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "panelSubtitle", children: "Logged search and recall requests with AI Agent quality scoring and comments." })
+    ] }),
+    error ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "errAlert", children: [
+      "Failed to load feedback logs: ",
+      error
+    ] }) : busy && feedback.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "emptyState", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "emptyBody", children: "Loading feedback logs..." }) }) : feedback.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "emptyState", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "emptyBody", children: "No retrieval requests or feedback logged yet for this workspace." }) }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "feedbackContainer", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "feedbackSummaryGrid", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "feedbackSummaryCard", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "feedbackSummaryLabel", children: "Total Queries" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "feedbackSummaryValue", children: stats.total })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "feedbackSummaryCard", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "feedbackSummaryLabel", children: "Average Score" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "feedbackSummaryValue", style: { color: stats.average !== "-" && Number(stats.average) >= 4 ? "#2ecc71" : "inherit" }, children: stats.average !== "-" ? `${stats.average}/5` : "-" })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "feedbackSummaryCard", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "feedbackSummaryLabel", children: "Scored Requests" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "feedbackSummaryValue", style: { color: "#2ecc71" }, children: stats.scored })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "feedbackSummaryCard", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "feedbackSummaryLabel", children: "Pending Scoring" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "feedbackSummaryValue", style: { color: stats.pending > 0 ? "#e67e22" : "inherit" }, children: stats.pending })
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "feedbackControls", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "feedbackSearchWrapper", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "input",
+          {
+            type: "text",
+            className: "feedbackSearchInput",
+            placeholder: "Search query, reason, or request ID...",
+            value: searchQuery,
+            onChange: (e2) => setSearchQuery(e2.target.value)
+          }
+        ) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", gap: "16px", flexWrap: "wrap" }, children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "feedbackFilterGroup", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "feedbackFilterLabel", children: "Type:" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "feedbackFilterOptions", children: ["all", "search", "recall"].map((t2) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                type: "button",
+                className: `feedbackFilterBtn ${typeFilter === t2 ? "feedbackFilterBtnActive" : ""}`,
+                onClick: () => setTypeFilter(t2),
+                children: t2
+              },
+              t2
+            )) })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "feedbackFilterGroup", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "feedbackFilterLabel", children: "Status:" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "feedbackFilterOptions", children: ["all", "scored", "pending"].map((s2) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                type: "button",
+                className: `feedbackFilterBtn ${statusFilter === s2 ? "feedbackFilterBtnActive" : ""}`,
+                onClick: () => setStatusFilter(s2),
+                children: s2
+              },
+              s2
+            )) })
+          ] })
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", gap: "20px", width: "100%", position: "relative", alignItems: "flex-start" }, children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { flex: 1, minWidth: 0, border: "1px dashed var(--border)", background: "var(--bg-surface)" }, children: filteredFeedback.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "emptyState", style: { padding: "40px" }, children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "emptyBody", children: "No matching feedback logs found for this selection." }) }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("table", { className: "feedbackTable", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("thead", { children: /* @__PURE__ */ jsxRuntimeExports.jsxs("tr", { style: { borderBottom: "1px dashed var(--border)", background: "var(--bg-input)" }, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "feedbackTableCell", style: { width: "180px", fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--text-muted)" }, children: "Time" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "feedbackTableCell", style: { width: "90px", fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--text-muted)" }, children: "Type" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "feedbackTableCell", style: { width: "45%", fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--text-muted)" }, children: "Query / Task" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "feedbackTableCell", style: { width: "90px", textAlign: "center", fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--text-muted)" }, children: "Score" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "feedbackTableCell", style: { width: "35%", fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--text-muted)" }, children: "Explanation Reason" })
+          ] }) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("tbody", { children: filteredFeedback.map((req) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "tr",
+            {
+              className: `feedbackTableRow ${(selectedLog == null ? void 0 : selectedLog.id) === req.id ? "feedbackTableRowActive" : ""}`,
+              onClick: () => setSelectedLog(req),
+              children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "feedbackTableCell mono", style: { fontSize: "11px", color: "var(--text-muted)" }, children: formatTS(req.created_at) }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "feedbackTableCell", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: req.request_type === "search" ? "feedbackBadgeSearch" : "feedbackBadgeRecall", children: req.request_type }) }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "feedbackTableCell", style: { whiteSpace: "normal", wordBreak: "break-word", fontSize: "13px" }, children: req.query }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "feedbackTableCell", style: { textAlign: "center" }, children: req.score >= 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: `feedbackScoreBadge ${req.score >= 4 ? "feedbackScoreHigh" : "feedbackScoreLow"}`, children: [
+                  req.score,
+                  "/5"
+                ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "feedbackScoreBadge feedbackScorePending", children: "Pending" }) }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "feedbackTableCell", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "feedbackReasonText", title: req.reason, children: req.reason || /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "muted", children: "-" }) }) })
+              ]
+            },
+            req.id
+          )) })
+        ] }) }),
+        selectedLog && /* @__PURE__ */ jsxRuntimeExports.jsxs("aside", { className: "detailDrawer", style: { width: "380px", flexShrink: 0, position: "sticky", top: "20px", minHeight: "300px", display: "flex", flexDirection: "column" }, children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "detailDrawerTop", style: { display: "flex", justifyContent: "space-between", alignItems: "center" }, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "detailDrawerTitle", style: { fontFamily: "var(--font-mono)", fontSize: "12px", fontWeight: "bold", textTransform: "uppercase", color: "var(--accent-primary)" }, children: "..query details" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                type: "button",
+                className: "closeBtn",
+                style: { background: "transparent", border: "none", color: "var(--text-muted)", fontSize: "18px", cursor: "pointer", padding: "0 4px" },
+                onClick: () => setSelectedLog(null),
+                "aria-label": "Close details",
+                children: "×"
+              }
+            )
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "detailDrawerBody", style: { overflowY: "auto", display: "flex", flexDirection: "column", gap: "16px", padding: "18px" }, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "detailSection", style: { display: "flex", justifyContent: "space-between", alignItems: "center", background: "var(--bg-input)", padding: "12px", border: "1px dotted var(--border)" }, children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--text-muted)" }, children: "QUALITY SCORE" }),
+              selectedLog.score >= 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "4px" }, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: `feedbackScoreBadge ${selectedLog.score >= 4 ? "feedbackScoreHigh" : "feedbackScoreLow"}`, style: { fontSize: "14px", padding: "6px 12px" }, children: [
+                selectedLog.score,
+                " / 5"
+              ] }) }) : /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "feedbackScoreBadge feedbackScorePending", style: { padding: "6px 12px" }, children: "PENDING FEEDBACK" })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "detailSection", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memMetaLabel", style: { marginBottom: "6px" }, children: "Request ID" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", gap: "8px", alignItems: "center" }, children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mono", style: { fontSize: "11px", wordBreak: "break-all", flex: 1, background: "var(--bg-input)", padding: "6px 8px", border: "1px solid var(--border)" }, children: selectedLog.id }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "button",
+                  {
+                    type: "button",
+                    className: "btn",
+                    style: { padding: "6px 10px", fontSize: "11px", fontFamily: "var(--font-mono)", cursor: "pointer" },
+                    onClick: () => handleCopy(selectedLog.id),
+                    children: copiedId === selectedLog.id ? "Copied" : "Copy"
+                  }
+                )
+              ] })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", gap: "16px" }, children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { flex: 1 }, children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memMetaLabel", style: { marginBottom: "4px" }, children: "Logged Time" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontFamily: "var(--font-mono)", fontSize: "12px" }, children: formatTS(selectedLog.created_at) })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { flex: 1 }, children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memMetaLabel", style: { marginBottom: "4px" }, children: "Action Type" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: selectedLog.request_type === "search" ? "feedbackBadgeSearch" : "feedbackBadgeRecall", children: selectedLog.request_type }) })
+              ] })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "detailSection", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memMetaLabel", style: { marginBottom: "6px" }, children: "Query / Task Description" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "div",
+                {
+                  className: "pre",
+                  style: {
+                    padding: "12px",
+                    background: "var(--bg-input)",
+                    border: "1px dotted var(--border)",
+                    fontFamily: "var(--font-mono)",
+                    fontSize: "12px",
+                    whiteSpace: "pre-wrap",
+                    wordBreak: "break-word",
+                    maxHeight: "150px",
+                    overflowY: "auto"
+                  },
+                  children: selectedLog.query
+                }
+              )
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "detailSection", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memMetaLabel", style: { marginBottom: "6px" }, children: "Feedback Reason / Explanation" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "div",
+                {
+                  className: "pre",
+                  style: {
+                    padding: "12px",
+                    background: "var(--bg-input)",
+                    border: "1px dotted var(--border)",
+                    fontFamily: "var(--font-mono)",
+                    fontSize: "12px",
+                    whiteSpace: "pre-wrap",
+                    wordBreak: "break-word",
+                    minHeight: "80px",
+                    maxHeight: "180px",
+                    overflowY: "auto",
+                    color: selectedLog.reason ? "var(--text-main)" : "var(--text-muted)"
+                  },
+                  children: selectedLog.reason || "No explanation comments provided for this request."
+                }
+              )
+            ] })
+          ] })
+        ] })
+      ] })
+    ] })
+  ] });
+}
 function App() {
   var _a2;
   const [surface, setSurface] = reactExports.useState("overview");
@@ -37061,6 +37299,9 @@ function App() {
   const [promotionResults, setPromotionResults] = reactExports.useState({});
   const [overviewExperimentFocusKey, setOverviewExperimentFocusKey] = reactExports.useState(0);
   const [rawStatsOpen, setRawStatsOpen] = reactExports.useState(false);
+  const [feedbackLogs, setFeedbackLogs] = reactExports.useState([]);
+  const [feedbackBusy, setFeedbackBusy] = reactExports.useState(false);
+  const [feedbackErr, setFeedbackErr] = reactExports.useState("");
   const [topK, setTopK] = reactExports.useState(10);
   const [explain, setExplain] = reactExports.useState(true);
   const [types, setTypes] = reactExports.useState(/* @__PURE__ */ new Set(["semantic"]));
@@ -37263,6 +37504,26 @@ function App() {
       cancelled = true;
     };
   }, [workspace]);
+  reactExports.useEffect(() => {
+    let cancelled = false;
+    if (!workspace || surface !== "feedback") return;
+    setFeedbackBusy(true);
+    setFeedbackErr("");
+    listFeedback({ workspace }).then((data) => {
+      if (cancelled) return;
+      setFeedbackLogs(data);
+    }).catch((e2) => {
+      if (cancelled) return;
+      setFeedbackLogs([]);
+      setFeedbackErr(e2 instanceof Error ? e2.message : String(e2));
+    }).finally(() => {
+      if (cancelled) return;
+      setFeedbackBusy(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [workspace, surface]);
   reactExports.useEffect(() => {
     if (!sessions.length) {
       setSelectedSessionID("");
@@ -37612,7 +37873,7 @@ function App() {
     setWikiDiagramMemory(null);
     setWikiOptionsOpen(false);
   }
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: surface === "wiki" ? "shell chatShell shellWikiMode" : "shell chatShell", children: [
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: surface === "wiki" ? "shell chatShell shellWikiMode" : surface === "feedback" ? "shell chatShell shellFeedbackMode" : "shell chatShell", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("header", { className: "topbar chatTopbar", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "topbarLeft", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "brand", children: [
@@ -37670,6 +37931,13 @@ function App() {
         /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { className: surface === "wiki" ? "navItem navItemOn" : "navItem", onClick: () => openWiki(), type: "button", "aria-label": "Wiki", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "navKey", children: "[06]" }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "navLabel", children: "Wiki" })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { className: surface === "feedback" ? "navItem navItemOn" : "navItem", onClick: () => {
+          setSurface("feedback");
+          setSelectedMemory(null);
+        }, type: "button", "aria-label": "Feedback", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "navKey", children: "[07]" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "navLabel", children: "Feedback" })
         ] })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "topbarRight", children: [
@@ -37759,6 +38027,15 @@ function App() {
             history: schedulerHistory,
             busy: schedulerBusy,
             error: schedulerErr
+          }
+        ) : null,
+        surface === "feedback" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+          FeedbackPanel,
+          {
+            workspace,
+            feedback: feedbackLogs,
+            busy: feedbackBusy,
+            error: feedbackErr
           }
         ) : null,
         surface === "wiki" ? /* @__PURE__ */ jsxRuntimeExports.jsx(

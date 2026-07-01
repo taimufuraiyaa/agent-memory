@@ -93,3 +93,31 @@ func (s *Store) GetFeedbackStats(ctx context.Context, workspace string) (*core.F
 	stats.ScoreDistribution = dist
 	return &stats, nil
 }
+
+// ListRetrievalRequests returns all retrieval requests in the database (ordered by created_at DESC).
+func (s *Store) ListRetrievalRequests(ctx context.Context, workspace string) ([]core.RetrievalRequestLog, error) {
+	if s == nil {
+		return nil, errors.New("store is nil")
+	}
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, workspace, request_type, query, score, reason, created_at
+		FROM retrieval_requests
+		WHERE workspace = ?
+		ORDER BY datetime(created_at) DESC`,
+		workspace,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []core.RetrievalRequestLog
+	for rows.Next() {
+		var r core.RetrievalRequestLog
+		if err := rows.Scan(&r.ID, &r.Workspace, &r.RequestType, &r.Query, &r.Score, &r.Reason, &r.CreatedAt); err != nil {
+			return nil, err
+		}
+		list = append(list, r)
+	}
+	return list, nil
+}

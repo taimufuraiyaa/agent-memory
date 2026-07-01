@@ -1449,6 +1449,37 @@ func TestRequestFeedbackAPI(t *testing.T) {
 	if avgWeek, _ := feedbackStats["average_week"].(float64); avgWeek != 3.0 {
 		t.Fatalf("expected weekly average to be 3.0, got %f", avgWeek)
 	}
+
+	// 4. Query list of feedbacks and check reason is returned
+	res4, err := http.Get(ts.URL + "/api/v1/feedback?workspace=ws")
+	if err != nil {
+		t.Fatalf("feedback list get: %v", err)
+	}
+	defer func() { _ = res4.Body.Close() }()
+	if res4.StatusCode != http.StatusOK {
+		t.Fatalf("expected feedback list status 200, got %d", res4.StatusCode)
+	}
+	var listEnv map[string]any
+	_ = json.NewDecoder(res4.Body).Decode(&listEnv)
+	listData, _ := listEnv["data"].([]any)
+	if len(listData) != 2 {
+		t.Fatalf("expected feedback list length to be 2, got %d", len(listData))
+	}
+	var found1, found2 bool
+	for _, item := range listData {
+		m, _ := item.(map[string]any)
+		score, _ := m["score"].(float64)
+		reason, _ := m["reason"].(string)
+		if score == 4 && reason == "great matches" {
+			found1 = true
+		}
+		if score == 2 && reason == "some irrelevant results" {
+			found2 = true
+		}
+	}
+	if !found1 || !found2 {
+		t.Fatalf("expected to find both feedback entries in response list, got: %v", listData)
+	}
 }
 
 

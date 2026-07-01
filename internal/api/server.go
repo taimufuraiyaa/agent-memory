@@ -204,6 +204,7 @@ func NewMux(svc *Service) *http.ServeMux {
 	mux.HandleFunc("/api/v1/stats", workspaceStatsHandler(svc))
 	mux.HandleFunc("/api/v1/requests/feedback", requestsFeedbackHandler(svc))
 	mux.HandleFunc("/api/v1/feedback/stats", feedbackStatsHandler(svc))
+	mux.HandleFunc("/api/v1/feedback", listFeedbackHandler(svc))
 
 	// Visualization endpoints
 	mux.HandleFunc("/api/v1/visualizations/graph", handleMemoryGraph(svc))

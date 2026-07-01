@@ -285,31 +285,31 @@ func (m *Manager) Init(ctx context.Context, opt InitOptions) (*InitResult, error
 					}
 				case "aierules":
 					p := filepath.Join(opt.CWD, ".aierules")
-					if err := appendRuleSectionIfMissing(p, "## agent-memory (MANDATORY)", genericRulesSection(name)); err != nil {
+					if _, err := upsertRuleSection(p, "## agent-memory (MANDATORY)", genericRulesSection(name), opt.Force); err != nil {
 						return nil, err
 					}
 					written = append(written, p)
 				case "cursorrules":
 					p := filepath.Join(opt.CWD, ".cursorrules")
-					if err := appendRuleSectionIfMissing(p, "## agent-memory (MANDATORY)", genericRulesSection(name)); err != nil {
+					if _, err := upsertRuleSection(p, "## agent-memory (MANDATORY)", genericRulesSection(name), opt.Force); err != nil {
 						return nil, err
 					}
 					written = append(written, p)
 				case "windsurfrules":
 					p := filepath.Join(opt.CWD, ".windsurfrules")
-					if err := appendRuleSectionIfMissing(p, "## agent-memory (MANDATORY)", genericRulesSection(name)); err != nil {
+					if _, err := upsertRuleSection(p, "## agent-memory (MANDATORY)", genericRulesSection(name), opt.Force); err != nil {
 						return nil, err
 					}
 					written = append(written, p)
 				case "claude":
 					p := filepath.Join(opt.CWD, "CLAUDE.md")
-					if err := appendRuleSectionIfMissing(p, "## agent-memory (MANDATORY)", genericRulesSection(name)); err != nil {
+					if _, err := upsertRuleSection(p, "## agent-memory (MANDATORY)", genericRulesSection(name), opt.Force); err != nil {
 						return nil, err
 					}
 					written = append(written, p)
 				case "trae":
 					p := filepath.Join(opt.CWD, ".trae", "rules", "project_rules.md")
-					if err := appendRuleSectionIfMissing(p, "## agent-memory (MANDATORY)", genericRulesSection(name)); err != nil {
+					if _, err := upsertRuleSection(p, "## agent-memory (MANDATORY)", genericRulesSection(name), opt.Force); err != nil {
 						return nil, err
 					}
 					written = append(written, p)
