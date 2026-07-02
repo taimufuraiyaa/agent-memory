@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	amconfig "github.com/time/timebooks/agent-memory/internal/config"
+	amconfig "github.com/taimufuraiyaa/agent-memory/internal/config"
 )
 
 func TestEnsureAdaptiveTuningGuidanceAppendsManagedBlock(t *testing.T) {

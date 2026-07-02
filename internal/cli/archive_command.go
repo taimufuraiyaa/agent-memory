@@ -9,7 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/time/timebooks/agent-memory/internal/engine"
+	"github.com/taimufuraiyaa/agent-memory/internal/engine"
 )
 
 // newArchiveCommand returns the top-level `archive` command with subcommands

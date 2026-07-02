@@ -16,8 +16,8 @@ package main
 
 import (
     "context"
-    "github.com/time/timebooks/agent-memory/examples/plugins/audit-logger"
-    "github.com/time/timebooks/agent-memory/internal/plugin"
+    "github.com/taimufuraiyaa/agent-memory/examples/plugins/audit-logger"
+    "github.com/taimufuraiyaa/agent-memory/internal/plugin"
 )
 
 func main() {

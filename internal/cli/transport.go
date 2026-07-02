@@ -13,7 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/time/timebooks/agent-memory/internal/embeddings"
+	"github.com/taimufuraiyaa/agent-memory/internal/embeddings"
 )
 
 type apiEnvelope struct {

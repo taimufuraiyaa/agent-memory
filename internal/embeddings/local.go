@@ -12,7 +12,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/time/timebooks/agent-memory/internal/observability"
+	"github.com/taimufuraiyaa/agent-memory/internal/observability"
 )
 
 const (

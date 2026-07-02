@@ -3,7 +3,7 @@ package engine
 import (
 	"testing"
 
-	"github.com/time/timebooks/agent-memory/internal/core"
+	"github.com/taimufuraiyaa/agent-memory/internal/core"
 )
 
 func TestHybridRouterDeterministicRules(t *testing.T) {

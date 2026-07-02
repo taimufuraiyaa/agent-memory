@@ -30,8 +30,8 @@ package main
 
 import (
     "context"
-    "github.com/time/timebooks/agent-memory/examples/plugins/custom-embedder"
-    "github.com/time/timebooks/agent-memory/internal/plugin"
+    "github.com/taimufuraiyaa/agent-memory/examples/plugins/custom-embedder"
+    "github.com/taimufuraiyaa/agent-memory/internal/plugin"
 )
 
 func main() {
@@ -97,7 +97,7 @@ package main
 import (
     "context"
     "github.com/openai/openai-go"
-    "github.com/time/timebooks/agent-memory/internal/embeddings"
+    "github.com/taimufuraiyaa/agent-memory/internal/embeddings"
 )
 
 // OpenAIEmbedder wraps OpenAI embedding API.

@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/time/timebooks/agent-memory/internal/core"
+	"github.com/taimufuraiyaa/agent-memory/internal/core"
 )
 
 // AssembleRecallSections emits stable sectioned recall text for session start.

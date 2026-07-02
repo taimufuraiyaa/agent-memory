@@ -6,9 +6,9 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/time/timebooks/agent-memory/internal/core"
-	"github.com/time/timebooks/agent-memory/internal/engine"
-	"github.com/time/timebooks/agent-memory/internal/validation"
+	"github.com/taimufuraiyaa/agent-memory/internal/core"
+	"github.com/taimufuraiyaa/agent-memory/internal/engine"
+	"github.com/taimufuraiyaa/agent-memory/internal/validation"
 )
 
 // sanitizeImportedMemory applies the same input-validation, secret/PII

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/time/timebooks/agent-memory/internal/cli"
+	"github.com/taimufuraiyaa/agent-memory/internal/cli"
 )
 
 func main() {

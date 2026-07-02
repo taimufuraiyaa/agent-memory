@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/time/timebooks/agent-memory/internal/core"
-	"github.com/time/timebooks/agent-memory/internal/storage/sqlite"
-	"github.com/time/timebooks/agent-memory/internal/workspace"
+	"github.com/taimufuraiyaa/agent-memory/internal/core"
+	"github.com/taimufuraiyaa/agent-memory/internal/storage/sqlite"
+	"github.com/taimufuraiyaa/agent-memory/internal/workspace"
 )
 
 func TestDistillCommand(t *testing.T) {

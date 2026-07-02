@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/time/timebooks/agent-memory/internal/engine"
+	"github.com/taimufuraiyaa/agent-memory/internal/engine"
 )
 
 // sessionEndHandler implements POST /api/v1/memories/session-end and

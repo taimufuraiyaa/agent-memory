@@ -9,7 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/time/timebooks/agent-memory/internal/core"
+	"github.com/taimufuraiyaa/agent-memory/internal/core"
 )
 
 // AddTombstone stores a compact breadcrumb for a removed memory.

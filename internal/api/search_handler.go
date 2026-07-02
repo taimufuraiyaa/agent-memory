@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/time/timebooks/agent-memory/internal/core"
-	"github.com/time/timebooks/agent-memory/internal/engine"
+	"github.com/taimufuraiyaa/agent-memory/internal/core"
+	"github.com/taimufuraiyaa/agent-memory/internal/engine"
 )
 
 // searchHandler implements POST /api/v1/memories/search: runs a

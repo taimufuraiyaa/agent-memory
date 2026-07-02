@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/time/timebooks/agent-memory/internal/embeddings"
-	"github.com/time/timebooks/agent-memory/internal/storage/sqlite"
+	"github.com/taimufuraiyaa/agent-memory/internal/embeddings"
+	"github.com/taimufuraiyaa/agent-memory/internal/storage/sqlite"
 )
 
 // ModelVersionCheck represents the result of checking model version consistency.

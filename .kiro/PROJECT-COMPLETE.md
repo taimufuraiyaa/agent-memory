@@ -535,7 +535,7 @@ The agent-memory system is ready for:
 ---
 
 **Project:** agent-memory  
-**Repository:** github.com/time/timebooks/agent-memory  
+**Repository:** github.com/taimufuraiyaa/agent-memory  
 **License:** MIT  
 **Maintainer:** Time  
 **Completion Date:** June 9, 2026  

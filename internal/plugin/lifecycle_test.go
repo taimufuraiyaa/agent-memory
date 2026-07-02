@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/time/timebooks/agent-memory/internal/core"
+	"github.com/taimufuraiyaa/agent-memory/internal/core"
 )
 
 // MockLifecyclePlugin is a test lifecycle plugin.

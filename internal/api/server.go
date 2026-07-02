@@ -11,12 +11,12 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	"github.com/time/timebooks/agent-memory/internal/api/dashboard"
-	"github.com/time/timebooks/agent-memory/internal/embeddings"
-	"github.com/time/timebooks/agent-memory/internal/engine"
-	"github.com/time/timebooks/agent-memory/internal/observability"
-	"github.com/time/timebooks/agent-memory/internal/storage/sqlite"
-	"github.com/time/timebooks/agent-memory/internal/workspace"
+	"github.com/taimufuraiyaa/agent-memory/internal/api/dashboard"
+	"github.com/taimufuraiyaa/agent-memory/internal/embeddings"
+	"github.com/taimufuraiyaa/agent-memory/internal/engine"
+	"github.com/taimufuraiyaa/agent-memory/internal/observability"
+	"github.com/taimufuraiyaa/agent-memory/internal/storage/sqlite"
+	"github.com/taimufuraiyaa/agent-memory/internal/workspace"
 )
 
 type Service struct {

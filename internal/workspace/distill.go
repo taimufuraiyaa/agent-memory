@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/time/timebooks/agent-memory/internal/core"
-	"github.com/time/timebooks/agent-memory/internal/storage/sqlite"
+	"github.com/taimufuraiyaa/agent-memory/internal/core"
+	"github.com/taimufuraiyaa/agent-memory/internal/storage/sqlite"
 )
 
 // DistillOptions holds parameters for packaging workspace memories into a skill.

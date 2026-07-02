@@ -1,4 +1,4 @@
-module github.com/time/timebooks/agent-memory
+module github.com/taimufuraiyaa/agent-memory
 
 go 1.26.3
 

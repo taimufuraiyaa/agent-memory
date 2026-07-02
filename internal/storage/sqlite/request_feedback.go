@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/time/timebooks/agent-memory/internal/core"
+	"github.com/taimufuraiyaa/agent-memory/internal/core"
 )
 
 // LogRetrievalRequest inserts a new query/recall request log entry with a pending score of -1.

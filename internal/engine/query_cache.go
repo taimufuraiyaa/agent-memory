@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/time/timebooks/agent-memory/internal/embeddings"
-	"github.com/time/timebooks/agent-memory/internal/observability"
+	"github.com/taimufuraiyaa/agent-memory/internal/embeddings"
+	"github.com/taimufuraiyaa/agent-memory/internal/observability"
 )
 
 // QueryCache implements TTL-based caching for query embeddings and retrieval results.

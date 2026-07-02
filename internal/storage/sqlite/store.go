@@ -12,9 +12,9 @@ import (
 
 	_ "modernc.org/sqlite"
 
-	"github.com/time/timebooks/agent-memory/internal/config"
-	"github.com/time/timebooks/agent-memory/internal/core"
-	"github.com/time/timebooks/agent-memory/internal/observability"
+	"github.com/taimufuraiyaa/agent-memory/internal/config"
+	"github.com/taimufuraiyaa/agent-memory/internal/core"
+	"github.com/taimufuraiyaa/agent-memory/internal/observability"
 )
 
 // Store provides SQLite-backed persistence for memory entries.

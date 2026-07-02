@@ -20,8 +20,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/time/timebooks/agent-memory/internal/api"
-	"github.com/time/timebooks/agent-memory/internal/embeddings"
+	"github.com/taimufuraiyaa/agent-memory/internal/api"
+	"github.com/taimufuraiyaa/agent-memory/internal/embeddings"
 )
 
 func openInBrowser(url string) error {

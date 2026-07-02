@@ -20,11 +20,11 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/time/timebooks/agent-memory/internal/api"
-	"github.com/time/timebooks/agent-memory/internal/embeddings"
-	"github.com/time/timebooks/agent-memory/internal/engine"
-	"github.com/time/timebooks/agent-memory/internal/storage/sqlite"
-	"github.com/time/timebooks/agent-memory/internal/workspace"
+	"github.com/taimufuraiyaa/agent-memory/internal/api"
+	"github.com/taimufuraiyaa/agent-memory/internal/embeddings"
+	"github.com/taimufuraiyaa/agent-memory/internal/engine"
+	"github.com/taimufuraiyaa/agent-memory/internal/storage/sqlite"
+	"github.com/taimufuraiyaa/agent-memory/internal/workspace"
 )
 
 type servePID struct {

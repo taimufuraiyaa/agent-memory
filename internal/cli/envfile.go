@@ -5,7 +5,7 @@ import (
 	"os"
 	"strings"
 
-	amconfig "github.com/time/timebooks/agent-memory/internal/config"
+	amconfig "github.com/taimufuraiyaa/agent-memory/internal/config"
 )
 
 func upsertEnvFile(path string, vars map[string]string) (bool, error) {

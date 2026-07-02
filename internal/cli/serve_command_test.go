@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/time/timebooks/agent-memory/internal/storage/sqlite"
-	"github.com/time/timebooks/agent-memory/internal/workspace"
+	"github.com/taimufuraiyaa/agent-memory/internal/storage/sqlite"
+	"github.com/taimufuraiyaa/agent-memory/internal/workspace"
 )
 
 func TestBuildServeProcessArgsOmitsWorkspaceWhenEmpty(t *testing.T) {

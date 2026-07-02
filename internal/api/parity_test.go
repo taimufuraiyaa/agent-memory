@@ -12,12 +12,12 @@ import (
 	"path/filepath"
 	"testing"
 
-	apipkg "github.com/time/timebooks/agent-memory/internal/api"
-	clicmd "github.com/time/timebooks/agent-memory/internal/cli"
-	"github.com/time/timebooks/agent-memory/internal/core"
-	"github.com/time/timebooks/agent-memory/internal/embeddings"
-	"github.com/time/timebooks/agent-memory/internal/engine"
-	"github.com/time/timebooks/agent-memory/internal/storage/sqlite"
+	apipkg "github.com/taimufuraiyaa/agent-memory/internal/api"
+	clicmd "github.com/taimufuraiyaa/agent-memory/internal/cli"
+	"github.com/taimufuraiyaa/agent-memory/internal/core"
+	"github.com/taimufuraiyaa/agent-memory/internal/embeddings"
+	"github.com/taimufuraiyaa/agent-memory/internal/engine"
+	"github.com/taimufuraiyaa/agent-memory/internal/storage/sqlite"
 )
 
 func TestSearchParityHTTPVsEngine(t *testing.T) {

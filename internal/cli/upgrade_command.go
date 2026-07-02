@@ -15,7 +15,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/time/timebooks/agent-memory/internal/workspace"
+	"github.com/taimufuraiyaa/agent-memory/internal/workspace"
 )
 
 type upgradeResult struct {
@@ -103,21 +103,39 @@ func resolveGoBinDir(ctxPath string) (string, error) {
 }
 
 func findSourceRoot(start string) string {
-	if strings.TrimSpace(start) == "" {
-		return ""
+	if strings.TrimSpace(start) != "" {
+		dir := start
+		for i := 0; i < 12; i++ {
+			goMod := filepath.Join(dir, "go.mod")
+			cmdMain := filepath.Join(dir, "cmd", "agent-memory", "main.go")
+			if fileExists(goMod) && fileExists(cmdMain) {
+				return dir
+			}
+			next := filepath.Dir(dir)
+			if next == dir {
+				break
+			}
+			dir = next
+		}
 	}
-	dir := start
-	for i := 0; i < 12; i++ {
-		goMod := filepath.Join(dir, "go.mod")
-		cmdMain := filepath.Join(dir, "cmd", "agent-memory", "main.go")
+
+	// Fallback to well-known source repository checkouts on the user's machine
+	fallbacks := []string{
+		"/Users/time/timebooks/agent-memory",
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		fallbacks = append(fallbacks,
+			filepath.Join(home, "timebooks", "agent-memory"),
+			filepath.Join(home, "workspace", "agent-memory"),
+			filepath.Join(home, "agent-memory"),
+		)
+	}
+	for _, f := range fallbacks {
+		goMod := filepath.Join(f, "go.mod")
+		cmdMain := filepath.Join(f, "cmd", "agent-memory", "main.go")
 		if fileExists(goMod) && fileExists(cmdMain) {
-			return dir
+			return f
 		}
-		next := filepath.Dir(dir)
-		if next == dir {
-			break
-		}
-		dir = next
 	}
 	return ""
 }
@@ -395,7 +413,7 @@ Use --hooks-only to push hooks without touching the binary (useful for existing 
 
 			v := collectVersionInfo()
 			if strings.TrimSpace(module) == "" {
-				module = "github.com/time/timebooks/agent-memory/cmd/agent-memory"
+				module = "github.com/taimufuraiyaa/agent-memory/cmd/agent-memory"
 			}
 			if strings.TrimSpace(to) == "" {
 				to = "latest"
@@ -567,7 +585,7 @@ Use --hooks-only to push hooks without touching the binary (useful for existing 
 	}
 
 	cmd.Flags().StringVarP(&format, "format", "f", "text", "Output format: json|text")
-	cmd.Flags().StringVar(&module, "module", "github.com/time/timebooks/agent-memory/cmd/agent-memory", "Go module path to install (advanced)")
+	cmd.Flags().StringVar(&module, "module", "github.com/taimufuraiyaa/agent-memory/cmd/agent-memory", "Go module path to install (advanced)")
 	cmd.Flags().StringVar(&to, "to", "latest", "Go version specifier (e.g. latest, v1.2.3)")
 	cmd.Flags().StringVar(&target, "target", "", "Target path to replace (default: current executable)")
 	cmd.Flags().StringVar(&srcDir, "src", "", "Build from local source checkout (repo root containing go.mod and cmd/agent-memory)")

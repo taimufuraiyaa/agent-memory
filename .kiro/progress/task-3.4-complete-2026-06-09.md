@@ -142,7 +142,7 @@ $ go test ./internal/api/dashboard -v
 === RUN   TestEmbeddedAssetsStructure
 --- PASS: TestEmbeddedAssetsStructure (0.00s)
 PASS
-ok      github.com/time/timebooks/agent-memory/internal/api/dashboard  0.476s
+ok      github.com/taimufuraiyaa/agent-memory/internal/api/dashboard  0.476s
 ```
 
 ### Full Test Suite

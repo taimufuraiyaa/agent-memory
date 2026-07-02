@@ -48,7 +48,7 @@ Use custom error types from `internal/core/errors.go` for domain-specific errors
 For well-known error conditions:
 
 ```go
-import "github.com/time/timebooks/agent-memory/internal/core"
+import "github.com/taimufuraiyaa/agent-memory/internal/core"
 
 // Return sentinel error
 if workspace == "" {

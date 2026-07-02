@@ -4,8 +4,8 @@ import (
 	"context"
 	"strings"
 
-	"github.com/time/timebooks/agent-memory/internal/core"
-	"github.com/time/timebooks/agent-memory/internal/storage/sqlite"
+	"github.com/taimufuraiyaa/agent-memory/internal/core"
+	"github.com/taimufuraiyaa/agent-memory/internal/storage/sqlite"
 )
 
 type MergeMode string

@@ -3,7 +3,7 @@ package plugin
 import (
 	"context"
 
-	"github.com/time/timebooks/agent-memory/internal/core"
+	"github.com/taimufuraiyaa/agent-memory/internal/core"
 )
 
 // LifecyclePlugin provides hooks into memory lifecycle events.

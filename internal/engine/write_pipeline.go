@@ -12,12 +12,12 @@ import (
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/attribute"
 
-	"github.com/time/timebooks/agent-memory/internal/core"
-	"github.com/time/timebooks/agent-memory/internal/embeddings"
-	"github.com/time/timebooks/agent-memory/internal/observability"
-	"github.com/time/timebooks/agent-memory/internal/storage/markdown"
-	"github.com/time/timebooks/agent-memory/internal/storage/sqlite"
-	"github.com/time/timebooks/agent-memory/internal/validation"
+	"github.com/taimufuraiyaa/agent-memory/internal/core"
+	"github.com/taimufuraiyaa/agent-memory/internal/embeddings"
+	"github.com/taimufuraiyaa/agent-memory/internal/observability"
+	"github.com/taimufuraiyaa/agent-memory/internal/storage/markdown"
+	"github.com/taimufuraiyaa/agent-memory/internal/storage/sqlite"
+	"github.com/taimufuraiyaa/agent-memory/internal/validation"
 )
 
 // ExtractMode selects extraction strategy.

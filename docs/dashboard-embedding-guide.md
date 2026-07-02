@@ -103,7 +103,7 @@ internal/api/dashboard/dist/
 // internal/api/server.go
 
 import (
-	"github.com/time/timebooks/agent-memory/internal/api/dashboard"
+	"github.com/taimufuraiyaa/agent-memory/internal/api/dashboard"
 )
 
 func (s *Service) serveDashboard(mux *http.ServeMux, dashboardDir string) {

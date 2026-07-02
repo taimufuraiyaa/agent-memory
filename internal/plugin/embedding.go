@@ -3,7 +3,7 @@ package plugin
 import (
 	"context"
 
-	"github.com/time/timebooks/agent-memory/internal/embeddings"
+	"github.com/taimufuraiyaa/agent-memory/internal/embeddings"
 )
 
 // EmbeddingPlugin extends Plugin with embedding capabilities.

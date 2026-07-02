@@ -9,8 +9,8 @@ import (
 	"math"
 	"strings"
 
-	"github.com/time/timebooks/agent-memory/internal/embeddings"
-	"github.com/time/timebooks/agent-memory/internal/plugin"
+	"github.com/taimufuraiyaa/agent-memory/internal/embeddings"
+	"github.com/taimufuraiyaa/agent-memory/internal/plugin"
 )
 
 // SimpleHashEmbedder is an example embedding provider that uses hash-based embeddings.

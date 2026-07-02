@@ -197,7 +197,7 @@
 //	// plugin/myplugin/plugin.go
 //	package myplugin
 //
-//	import "github.com/time/timebooks/agent-memory/internal/plugin"
+//	import "github.com/taimufuraiyaa/agent-memory/internal/plugin"
 //
 //	func init() {
 //	    p := NewMyPlugin()

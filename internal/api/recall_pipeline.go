@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/time/timebooks/agent-memory/internal/engine"
-	"github.com/time/timebooks/agent-memory/internal/storage/sqlite"
+	"github.com/taimufuraiyaa/agent-memory/internal/engine"
+	"github.com/taimufuraiyaa/agent-memory/internal/storage/sqlite"
 )
 
 // recallParams are the inputs shared by /api/v1/memories/recall and

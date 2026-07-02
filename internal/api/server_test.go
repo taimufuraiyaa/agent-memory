@@ -13,10 +13,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/time/timebooks/agent-memory/internal/api/dashboard"
-	"github.com/time/timebooks/agent-memory/internal/core"
-	"github.com/time/timebooks/agent-memory/internal/embeddings"
-	"github.com/time/timebooks/agent-memory/internal/engine"
+	"github.com/taimufuraiyaa/agent-memory/internal/api/dashboard"
+	"github.com/taimufuraiyaa/agent-memory/internal/core"
+	"github.com/taimufuraiyaa/agent-memory/internal/embeddings"
+	"github.com/taimufuraiyaa/agent-memory/internal/engine"
 )
 
 type fakeScheduler struct {

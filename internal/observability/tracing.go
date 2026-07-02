@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	tracerName = "github.com/time/timebooks/agent-memory"
+	tracerName = "github.com/taimufuraiyaa/agent-memory"
 )
 
 // TracingConfig holds tracing configuration.

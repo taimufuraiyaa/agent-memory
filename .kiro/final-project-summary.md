@@ -521,7 +521,7 @@ The agent-memory project is ready for:
 ---
 
 **Project:** agent-memory  
-**Repository:** github.com/time/timebooks/agent-memory  
+**Repository:** github.com/taimufuraiyaa/agent-memory  
 **License:** MIT  
 **Maintained By:** Time  
 **Last Updated:** June 9, 2026  

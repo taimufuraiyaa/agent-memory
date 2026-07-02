@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/time/timebooks/agent-memory/internal/core"
-	"github.com/time/timebooks/agent-memory/internal/engine"
+	"github.com/taimufuraiyaa/agent-memory/internal/core"
+	"github.com/taimufuraiyaa/agent-memory/internal/engine"
 )
 
 func parseIntOrDefault(raw string, def int) int {
