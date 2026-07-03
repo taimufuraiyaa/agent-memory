@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/time/timebooks/agent-memory/internal/core"
-	"github.com/time/timebooks/agent-memory/internal/storage/sqlite"
+	"github.com/taimufuraiyaa/agent-memory/internal/core"
+	"github.com/taimufuraiyaa/agent-memory/internal/storage/sqlite"
 )
 
 // workspaceDashboardHandler implements GET /api/v1/dashboard: a minimal
@@ -223,9 +223,14 @@ func workspaceStatsHandler(svc *Service) http.HandlerFunc {
 		} else {
 			schedulerSummary = externalSchedulerSummary(r.Context(), svc.BaseDir, workspace)
 		}
+		feedbackStats, err := assets.Store.GetFeedbackStats(r.Context(), workspace)
+		if err != nil {
+			feedbackStats = &core.FeedbackStats{Workspace: workspace}
+		}
 		cacheStats := assets.Retrieval.CacheStats()
 		writeOK(w, http.StatusOK, map[string]any{
 			"workspace":                     workspace,
+			"feedback_stats":                feedbackStats,
 			"memory_count":                  len(memories),
 			"db_size_bytes":                 dbSize,
 			"memory_type_counts":            typeCounts,

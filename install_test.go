@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/time/timebooks/agent-memory/internal/bootstrap"
-	amconfig "github.com/time/timebooks/agent-memory/internal/config"
+	"github.com/taimufuraiyaa/agent-memory/internal/bootstrap"
+	amconfig "github.com/taimufuraiyaa/agent-memory/internal/config"
 )
 
 func TestMergeEnvFileAddsAdaptiveTuningGuidance(t *testing.T) {

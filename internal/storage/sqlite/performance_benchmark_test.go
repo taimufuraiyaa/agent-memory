@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/time/timebooks/agent-memory/internal/core"
+	"github.com/taimufuraiyaa/agent-memory/internal/core"
 )
 
 // BenchmarkUpsertMemory benchmarks memory upsert operations

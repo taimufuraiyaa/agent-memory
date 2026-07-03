@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/time/timebooks/agent-memory/internal/core"
+	"github.com/taimufuraiyaa/agent-memory/internal/core"
 )
 
 func TestMigrateIsIdempotent(t *testing.T) {
@@ -532,3 +532,82 @@ func TestFeedbackCooldownRuntimeOverrides(t *testing.T) {
 		t.Fatalf("expected contradicted cooldown override, got %+v", contradicted.SuppressionUntil)
 	}
 }
+
+func TestStorePopulateSupersedesRelations(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "supersedes-populate.db")
+	ctx := context.Background()
+
+	store, err := Open(ctx, dbPath)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	base := &core.MemoryEntry{
+		ID:          "m1",
+		Type:        core.SemanticMemory,
+		Content:     "Original fact.",
+		Workspace:   "ws",
+		Source:      core.MemorySource{Type: core.SourceAgentObservation},
+		Confidence:  0.8,
+		StorageTier: core.TierVector,
+	}
+	successor := &core.MemoryEntry{
+		ID:          "m2",
+		Type:        core.SemanticMemory,
+		Content:     "Corrected fact.",
+		Workspace:   "ws",
+		Source:      core.MemorySource{Type: core.SourceCodeAnalysis},
+		Confidence:  0.95,
+		StorageTier: core.TierVector,
+	}
+
+	for _, entry := range []*core.MemoryEntry{base, successor} {
+		if err := store.UpsertMemory(ctx, entry); err != nil {
+			t.Fatalf("upsert %s: %v", entry.ID, err)
+		}
+	}
+
+	at := time.Date(2026, 5, 21, 20, 0, 0, 0, time.UTC)
+	// Apply reconsolidation to create supersedes relation and superseded_by pointer
+	_, err = store.ApplyReconsolidation(ctx, base.ID, core.ReconsolidateSuperseded, successor.ID, at)
+	if err != nil {
+		t.Fatalf("apply reconsolidation: %v", err)
+	}
+
+	// 1. GetMemoriesByIDs test
+	resMap, err := store.GetMemoriesByIDs(ctx, []string{"m1", "m2"})
+	if err != nil {
+		t.Fatalf("GetMemoriesByIDs: %v", err)
+	}
+	m1 := resMap["m1"]
+	m2 := resMap["m2"]
+
+	if m1.SupersededBy == nil || *m1.SupersededBy != "m2" {
+		t.Errorf("expected m1.SupersededBy to be 'm2', got %+v", m1.SupersededBy)
+	}
+	if len(m2.Relations) != 1 || m2.Relations[0].Type != core.RelSupersedes || m2.Relations[0].TargetID != "m1" {
+		t.Errorf("expected m2 to have one 'supersedes' relation to 'm1', got: %+v", m2.Relations)
+	}
+
+	// 2. ListRecentMemoriesByWorkspace test
+	recent, err := store.ListRecentMemoriesByWorkspace(ctx, "ws", 10)
+	if err != nil {
+		t.Fatalf("ListRecentMemoriesByWorkspace: %v", err)
+	}
+	var foundM2 bool
+	for _, m := range recent {
+		if m.ID == "m2" {
+			foundM2 = true
+			if len(m.Relations) != 1 || m.Relations[0].Type != core.RelSupersedes || m.Relations[0].TargetID != "m1" {
+				t.Errorf("expected listed m2 to have one 'supersedes' relation to 'm1', got: %+v", m.Relations)
+			}
+		}
+	}
+	if !foundM2 {
+		t.Errorf("expected to find m2 in recent memories list")
+	}
+}
+

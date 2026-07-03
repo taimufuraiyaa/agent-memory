@@ -1,140 +1,144 @@
-# Benchmark Workspace
+# Agent Memory & Benchmark System
 
-This directory contains the end-to-end benchmark pipeline for the Kiro spec in `.kiro/specs/benchmark-toggle-comparison/`.
+This directory contains the end-to-end benchmark pipeline and documentation for the **Agent Memory** system.
 
-## Files
+---
 
-- `generate_benchmark.py`: deterministic continuation-scenario generator
-- `run_benchmark.sh`: build, seed prior-session fixtures, and execute memory ON/OFF runs
-- `score.py`: score continuation outcomes plus supporting retrieval diagnostics and optionally ingest into SQLite
-- `test_benchmark.py`: focused benchmark tests
-- `testdata/`: generated seed memories, test cases, and manifests
-- `results/`: per-run raw outputs and score reports
+## Why We Need This Memory System (The Problem It Solves)
 
-## Dataset Shape
+AI coding agents often struggle with three critical limitations:
+1. **Context Window Amnesia**: Agents forget how they solved a problem in a previous session, leading to duplicate effort and repeating past mistakes.
+2. **Context Window Bloat**: Feeding entire files or logs into LLM contexts is extremely expensive, slow, and causes "lost in the middle" attention degradation.
+3. **Lack of Self-Improvement and Feedback**: Agents have no mechanism to package repeatable workflows (skills) or evaluate how helpful their retrieved knowledge actually was.
 
-The generator creates a fixed continuation benchmark corpus:
+### The Solution: Agent Memory
+This system provides a persistent, self-governing memory castle. It introduces:
+* **Hybrid Retrieval**: Computes relevance using semantic similarity, recency bias, outcome relevance, and exponential decay.
+* **Closed-Loop Feedback**: Forces agents to score the quality of each search or recall on a `0` (useless) to `5` (extremely helpful) scale, logging metrics directly to a local SQLite database.
+* **Self-Aware Skill Packager**: Automatically packages recurring patterns, scripts, and workflows into reusable skills.
+* **Global Hygiene Scheduler**: Runs in the background to handle memory consolidation, decay updates, conflict resolution, and memory eviction.
 
-- `25` topic clusters
-- `8` prior-session fixtures per cluster
-- `10` canonical questions per cluster
-- `40` deterministic variants per canonical question
+---
 
-This yields:
+## Core System Architecture
 
-- `200` prior-session fixtures
-- `10,000` labeled test cases
-
-## Typical Workflow
-
-Generate continuation benchmark inputs:
-
-```bash
-rtk python3 benchmark/generate_benchmark.py
+```mermaid
+graph TD
+    A["AI Agent Command / Action"] --> B{"Memory Query?"}
+    B -- "Yes" --> C["agent-memory search / recall"]
+    C --> D["Log Request to SQLite (default score: -1)"]
+    C --> E["Hybrid Retrieval (Semantic + Recency + Outcome + Decay)"]
+    E --> F["Return Context to Agent"]
+    F --> G["Agent Processes Task"]
+    G --> H["Agent runs: feedback --request-id ID --score 0-5"]
+    H --> I["Update SQLite: score 0..5"]
+    B -- "No / Learning" --> J["agent-memory write: semantic/procedural/outcome"]
+    J --> K["Write SQLite & Embed Vector"]
+    
+    L["Global Scheduler"] -- "Background Hygiene" --> M["Decay, Conflicts, Tombstones"]
+    N["React Dashboard"] -- "GET /api/v1/stats" --> O["Query SQLite Stats & Score Distribution"]
+    O --> P["Render UI Metrics & CSS Histogram Charts"]
 ```
 
-Run a reduced validation slice:
+---
 
+## Most Valuable Features
+
+* **Strict Honest Feedback Scoring**: Forces agents to score context usefulness dynamically. The rules explicitly instruct agents to score `0` for irrelevant queries and `5` for direct solutions, preventing lazy high-score bias.
+* **Real-time Web Dashboard**: Visualizes memory metrics, active workspaces, and weekly/monthly/yearly rolling feedback score averages with a built-in CSS histogram/chart.
+* **Mac OS Safe Self-Upgrades**: Atomic replacement logic safely unlinks active binary inodes before renaming, preventing codesigning violations (AMFI SIGKILL/Exit code 137) on macOS.
+* **Multi-Client Rules Auto-Deployment**: Automatically generates custom rules files for **all** popular AI clients/IDEs (Cursor, Claude Code, Trae, Windsurf, VSCode, Kiro hooks) in a single command.
+
+---
+
+## Installation Guide
+
+### 1. Build and Install Locally
+Compile the Go binary with the embedded dashboard assets:
 ```bash
-rtk bash benchmark/run_benchmark.sh --run-id reduced-check --case-limit 25 --skip-build
-rtk python3 benchmark/score.py --run-dir benchmark/results/reduced-check --db benchmark/results/reduced-check/benchmark.db --ingest --format raw
+make embed-dashboard
+make build
 ```
 
-Reset old benchmark artifacts and persisted benchmark history before a clean rerun:
-
+Copy the compiled binary to your local bin path and apply codesigning (crucial for macOS):
 ```bash
-rtk python3 benchmark/clean_results.py
+rm -f ~/.local/bin/agent-memory
+cp bin/agent-memory ~/.local/bin/agent-memory
+codesign --force --sign - ~/.local/bin/agent-memory
 ```
 
-Watch benchmark progress in a terminal:
-
+### 2. Deploy Rule Files to Workspace Projects
+Deploy rule files for **all** editor targets (Cursor, Windsurf, Trae, Claude CLI, Kiro hooks) in your project workspace:
 ```bash
-rtk bash benchmark/watch_progress.sh continuation-full-10000
+cd /path/to/your/project
+agent-memory reinstall --ide all
 ```
 
-Print a single snapshot instead of a live loop:
+---
 
-```bash
-rtk bash benchmark/watch_progress.sh continuation-full-10000 --once
-```
+## Commands to Use (CLI Reference)
 
-Run the full `10,000`-case comparison against the dashboard workspace DB:
+### Query Memory
+* **Semantic Search**: Find relevant context across the workspace:
+  ```bash
+  agent-memory search --query "keychain autofill fix"
+  ```
+* **Task Recall**: Recover details on how a past task was implemented:
+  ```bash
+  agent-memory recall --task "configure textContentType on securefields"
+  ```
 
-```bash
-rtk bash benchmark/run_benchmark.sh \
-  --run-id full-10000 \
-  --db ~/.agent-memory/benchmark-toggle-comparison.db \
-  --skip-build
+### Give Feedback
+* **Submit Score**: Rate the usefulness of the returned `request_id` from `0` to `5`:
+  ```bash
+  agent-memory feedback --request-id "316ac5f0-52b4-4cd8-8875-b81a2b726dd8" --score 5
+  ```
 
-rtk python3 benchmark/score.py \
-  --run-dir benchmark/results/full-10000 \
-  --db ~/.agent-memory/benchmark-toggle-comparison.db \
-  --ingest \
-  --format raw
-```
+### Write Memory
+* **Semantic Fact**:
+  ```bash
+  agent-memory write --type semantic --content "Master password fields need textContentType(nil) on macOS."
+  ```
+* **Outcome Log**:
+  ```bash
+  agent-memory write --type outcome --content "Attempted Keychain Autofill fix (result: success, approach: nil content type, reason: avoids sandbox violations)."
+  ```
 
-## Output Artifacts
+### Background Daemon & UI
+* **Start Server**: Run the API daemon and launch the dashboard:
+  ```bash
+  agent-memory serve --start
+  ```
+* **Stop Server**:
+  ```bash
+  agent-memory serve --stop
+  ```
 
-Each runner invocation writes a dedicated results directory containing:
+---
 
-- `seed_results.jsonl`: runtime IDs returned during prior-session fixture writes
-- `id_mapping.json`: stable benchmark IDs mapped to runtime memory UUIDs
-- `quality-on.jsonl`: per-case raw ON results
-- `quality-off.jsonl`: per-case raw OFF results
-- `run_manifest.json`: run configuration and artifact locations
-- `score_report.json`: aggregate score report
-- `score_cases.jsonl`: per-case score breakdown
+## E2E Benchmark Pipeline
 
-## Expected Runtime
+This directory contains deterministic validation tools to run quality tests on the memory retrieval system.
 
-Runtime depends on embedding model speed and local CPU capacity.
+### Dataset Shape
+* `200` prior-session fixtures
+* `10,000` labeled test cases across `25` topic clusters
 
-- Generator: a few seconds
-- Reduced validation run (`25` cases or fewer): usually under a minute
-- Full `10,000`-case run with concurrency `2` to `8`: expect a long-running local job and validate on a reduced slice first
-- Scoring and SQLite ingest: typically a few seconds
-
-## Notes On Throughput
-
-- The ON phase uses parallel recall execution with `--concurrency`.
-- The scaled benchmark path now uses persistent `benchmark-worker` subprocesses, so each worker reuses its SQLite connection and embedding-provider initialization across many cases instead of paying startup cost per case.
-- The OFF phase now executes the same real disabled recall command path rather than a synthetic placeholder row.
-- The runner retries transient `SQLITE_BUSY` failures so reduced and full runs stay stable under concurrency.
-- Per-case token totals, runtime, answer text, and trace summaries are stored in raw result artifacts so scoring stays deterministic.
-
-## Troubleshooting
-
-- `no such table: benchmark_runs`
-  - Re-run `score.py --ingest`. The scorer creates the table if it does not exist yet.
-
-- `seed file not found` or `cases file not found`
-  - Run `python3 benchmark/generate_benchmark.py` first, or omit `--skip-generate`.
-
-- Need a clean slate before re-running the reference benchmark
-  - Run `rtk python3 benchmark/clean_results.py` to remove stale `benchmark/results/*` directories and clear persisted `benchmark_runs` rows from the default dashboard databases.
-
-- Full run seems slow
-  - Lower `--concurrency` if the machine is resource-constrained, or use `--case-limit` for validation before the full run. The runner already reuses long-lived benchmark workers, so remaining slowness is usually retrieval/runtime cost or SQLite contention rather than per-case process startup.
-
-- Dashboard does not show benchmark history
-  - Make sure the run was scored with `--ingest` into the same workspace DB that the dashboard API serves, typically `~/.agent-memory/<workspace>.db`.
-
-- Continuation score is negative
-  - That means the measured deltas favored OFF, usually because ON returned more context, took longer, or required more memory review than the disabled baseline.
-
-- Retrieval metrics look good but continuation score stays weak
-  - That means memory retrieved relevant text, but the real ON-versus-OFF continuation benefit was still limited or negative.
-
-## Interpretation Guidance
-
-- `Task Success Delta`, `Fact Coverage Delta`, `Completeness Delta`, `Locator Success Delta`, `Verification Effort Delta`, and `Operational Cost Delta` are the primary benchmark outputs.
-- `Precision`, `Gold Recall`, `NDCG`, and `Keyword Coverage` remain supporting diagnostics that explain ranking quality without replacing the main continuation verdict.
-- Retrieval-context token and retrieval-context cost deltas are secondary diagnostics only. They describe context bloat or compression, not the whole end-to-end task economics.
-- Negative efficiency deltas are valid and should be preserved. They mean memory increased context size, runtime, verification burden, or estimated operational cost under the chosen baseline.
-- `combined_score` remains secondary. `continuation_score` and the paired benefit metrics are the main story.
-
-## Test Command
-
-```bash
-rtk python3 -m unittest benchmark.test_benchmark
-```
+### Benchmark Workflow
+1. **Generate Labeled Inputs**:
+   ```bash
+   python3 benchmark/generate_benchmark.py
+   ```
+2. **Run Validation Slice (25 Cases)**:
+   ```bash
+   bash benchmark/run_benchmark.sh --run-id check --case-limit 25 --skip-build
+   python3 benchmark/score.py --run-dir benchmark/results/check --db benchmark/results/check/benchmark.db --ingest
+   ```
+3. **Clean Benchmark History**:
+   ```bash
+   python3 benchmark/clean_results.py
+   ```
+4. **Run Labeled Test Suite**:
+   ```bash
+   python3 -m unittest benchmark.test_benchmark
+   ```

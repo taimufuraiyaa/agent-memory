@@ -3,7 +3,7 @@ package engine
 import (
 	"testing"
 
-	"github.com/time/timebooks/agent-memory/internal/core"
+	"github.com/taimufuraiyaa/agent-memory/internal/core"
 )
 
 func TestRebalanceRecallHitsProceduralIntent(t *testing.T) {
@@ -38,3 +38,49 @@ func TestRebalanceRecallHitsKeepsAllIDs(t *testing.T) {
 		}
 	}
 }
+
+func TestMemoryTextForRecallCorrectionFlags(t *testing.T) {
+	// 1. Regular memory
+	m1 := core.MemoryEntry{
+		ID:      "m1",
+		Type:    core.SemanticMemory,
+		Content: "This is a fact.",
+	}
+	t1 := memoryTextForRecall(m1)
+	if t1 != "This is a fact." {
+		t.Errorf("expected clean content, got: %q", t1)
+	}
+
+	// 2. Superseded memory
+	nextID := "m2"
+	m2 := core.MemoryEntry{
+		ID:           "m1",
+		Type:         core.SemanticMemory,
+		Content:      "This is a fact.",
+		SupersededBy: &nextID,
+	}
+	t2 := memoryTextForRecall(m2)
+	expectedT2 := "[OUT-OF-DATE: Superseded by memory m2]\nThis is a fact."
+	if t2 != expectedT2 {
+		t.Errorf("expected superseded prefix, got: %q", t2)
+	}
+
+	// 3. Successor (corrected) memory
+	m3 := core.MemoryEntry{
+		ID:      "m2",
+		Type:    core.SemanticMemory,
+		Content: "This is the corrected fact.",
+		Relations: []core.Relation{
+			{
+				TargetID: "m1",
+				Type:     core.RelSupersedes,
+			},
+		},
+	}
+	t3 := memoryTextForRecall(m3)
+	expectedT3 := "[CORRECTED: Supersedes memory m1]\nThis is the corrected fact."
+	if t3 != expectedT3 {
+		t.Errorf("expected corrected prefix, got: %q", t3)
+	}
+}
+

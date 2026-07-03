@@ -56,7 +56,7 @@ agent-memory provides comprehensive observability through three pillars:
 ### Usage Example
 
 ```go
-import "github.com/time/timebooks/agent-memory/internal/observability"
+import "github.com/taimufuraiyaa/agent-memory/internal/observability"
 
 // Get metrics registry
 metrics := observability.GetRegistry()
@@ -128,7 +128,7 @@ Key panels:
 Configure logging at startup:
 
 ```go
-import "github.com/time/timebooks/agent-memory/internal/observability"
+import "github.com/taimufuraiyaa/agent-memory/internal/observability"
 
 // Text format (human-readable)
 logger := observability.NewLogger(
@@ -215,7 +215,7 @@ export LOG_FORMAT=json
 Initialize tracing at startup:
 
 ```go
-import "github.com/time/timebooks/agent-memory/internal/observability"
+import "github.com/taimufuraiyaa/agent-memory/internal/observability"
 
 config := observability.TracingConfig{
     Enabled:     true,

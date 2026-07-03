@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/time/timebooks/agent-memory/internal/config"
-	"github.com/time/timebooks/agent-memory/internal/core"
+	"github.com/taimufuraiyaa/agent-memory/internal/config"
+	"github.com/taimufuraiyaa/agent-memory/internal/core"
 )
 
 func (s *Store) ApplyRetrievalFeedback(ctx context.Context, memoryID string, feedback core.RetrievalFeedback, at time.Time) (*core.MemoryEntry, error) {

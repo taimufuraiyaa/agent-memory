@@ -4036,6 +4036,13 @@ body.light {
   padding-bottom: 260px;
 }
 
+.shellFeedbackMode .thread {
+  max-width: 96% !important;
+  width: 96% !important;
+  padding-top: 18px;
+  padding-bottom: 260px;
+}
+
 .wikiCanvas {
   flex: 1 0 auto;
   display: flex;
@@ -4985,4 +4992,229 @@ body.light .metricExplanationFormula {
   color: var(--text-muted);
   line-height: 1.6;
 }
+
+/* ==========================================================================
+   Feedback Panel Redesign
+   ========================================================================== */
+.feedbackContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+}
+
+.feedbackSummaryGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  margin-bottom: 8px;
+}
+
+.feedbackSummaryCard {
+  background: var(--bg-card);
+  border: 1px dashed var(--border);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.feedbackSummaryCard:hover {
+  border-color: var(--border-hover);
+}
+
+.feedbackSummaryLabel {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.feedbackSummaryValue {
+  font-size: clamp(24px, 2.8vw, 36px);
+  line-height: 1;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.feedbackControls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 14px 18px;
+  background: var(--bg-input);
+  border: 1px dashed var(--border);
+}
+
+.feedbackSearchWrapper {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 300px;
+  min-width: 250px;
+}
+
+.feedbackSearchInput {
+  width: 100%;
+  padding: 8px 12px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  color: var(--text-main);
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+.feedbackSearchInput:focus {
+  border-color: var(--accent-primary);
+  outline: none;
+}
+
+.feedbackFilterGroup {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.feedbackFilterLabel {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.feedbackFilterOptions {
+  display: flex;
+  background: var(--bg-surface);
+  border: 1px dashed var(--border);
+}
+
+.feedbackFilterBtn {
+  background: transparent;
+  border: none;
+  border-right: 1px dashed var(--border);
+  color: var(--text-muted);
+  padding: 6px 12px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  cursor: pointer;
+  text-transform: lowercase;
+}
+
+.feedbackFilterBtn:last-child {
+  border-right: none;
+}
+
+.feedbackFilterBtn:hover {
+  background: var(--bg-card-hover);
+  color: var(--text-main);
+}
+
+.feedbackFilterBtnActive {
+  background: var(--accent-primary);
+  color: #fff !important;
+}
+
+body.light .feedbackFilterBtnActive {
+  color: #101010 !important;
+}
+
+.feedbackTable {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.feedbackTableRow {
+  border-bottom: 1px dashed var(--border);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.feedbackTableRow:hover {
+  background: var(--bg-card-hover);
+}
+
+.feedbackTableRowActive {
+  background: var(--bg-card-hover) !important;
+  outline: 1px solid var(--accent-primary);
+  outline-offset: -1px;
+}
+
+.feedbackTableCell {
+  padding: 12px;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.feedbackBadgeSearch {
+  background: rgba(52, 152, 219, 0.15);
+  color: #3498db;
+  border: 1px solid rgba(52, 152, 219, 0.3);
+  padding: 3px 8px;
+  font-size: 10px;
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.feedbackBadgeRecall {
+  background: rgba(155, 89, 182, 0.15);
+  color: #9b59b6;
+  border: 1px solid rgba(155, 89, 182, 0.3);
+  padding: 3px 8px;
+  font-size: 10px;
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+body.light .feedbackBadgeSearch {
+  background: rgba(52, 152, 219, 0.08);
+  color: #2980b9;
+}
+
+body.light .feedbackBadgeRecall {
+  background: rgba(155, 89, 182, 0.08);
+  color: #8e44ad;
+}
+
+.feedbackReasonText {
+  color: var(--text-main);
+  white-space: normal;
+  word-break: break-word;
+  font-size: 13px;
+}
+
+.feedbackScoreBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  border-style: solid;
+  border-width: 1px;
+}
+
+.feedbackScoreHigh {
+  background: rgba(46, 204, 113, 0.12);
+  color: #2ecc71;
+  border-color: rgba(46, 204, 113, 0.3);
+}
+
+.feedbackScoreLow {
+  background: rgba(231, 76, 60, 0.12);
+  color: #e74c3c;
+  border-color: rgba(231, 76, 60, 0.3);
+}
+
+.feedbackScorePending {
+  background: var(--bg-input);
+  color: var(--text-muted);
+  border-color: var(--border);
+  font-weight: normal;
+}
+
 

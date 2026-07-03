@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/time/timebooks/agent-memory/internal/embeddings"
+	"github.com/taimufuraiyaa/agent-memory/internal/embeddings"
 )
 
 func TestObserveIngestListDedupAndRedaction(t *testing.T) {

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/time/timebooks/agent-memory/internal/observability"
+	"github.com/taimufuraiyaa/agent-memory/internal/observability"
 )
 
 // ONNXMiniLMProvider loads the MiniLM tokenizer and runs inference through ONNX Runtime.

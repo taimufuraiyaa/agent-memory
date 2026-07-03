@@ -2,9 +2,11 @@ package workspace
 
 import (
 	"context"
+	"embed"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -12,16 +14,17 @@ import (
 	"strings"
 	"time"
 
-	"github.com/time/timebooks/agent-memory/internal/embeddings"
-	"github.com/time/timebooks/agent-memory/internal/engine"
-	"github.com/time/timebooks/agent-memory/internal/storage/sqlite"
+	"github.com/taimufuraiyaa/agent-memory/internal/embeddings"
+	"github.com/taimufuraiyaa/agent-memory/internal/engine"
+	"github.com/taimufuraiyaa/agent-memory/internal/storage/sqlite"
 )
 
 type Project struct {
-	Name       string    `json:"name"`
-	DBPath     string    `json:"db_path"`
-	CreatedAt  time.Time `json:"created_at"`
-	LastUsedAt time.Time `json:"last_used_at"`
+	Name          string    `json:"name"`
+	DBPath        string    `json:"db_path"`
+	WorkspaceRoot string    `json:"workspace_root,omitempty"`
+	CreatedAt     time.Time `json:"created_at"`
+	LastUsedAt    time.Time `json:"last_used_at"`
 }
 
 type Registry struct {
@@ -67,6 +70,7 @@ type RenameResult struct {
 type ListItem struct {
 	Name         string    `json:"name"`
 	DBPath       string    `json:"db_path"`
+	WorkspaceRoot string    `json:"workspace_root,omitempty"`
 	SizeBytes    int64     `json:"size_bytes"`
 	MemoryCount  int       `json:"memory_count"`
 	LastActivity time.Time `json:"last_activity"`
@@ -242,11 +246,17 @@ func (m *Manager) Init(ctx context.Context, opt InitOptions) (*InitResult, error
 		if _, err := sqlite.Open(ctx, dbPath); err != nil {
 			return nil, err
 		}
+		root := FindProjectRoot(opt.CWD)
+		absRoot, err := filepath.Abs(root)
+		if err != nil {
+			absRoot = root
+		}
 		upsertProject(reg, Project{
-			Name:       name,
-			DBPath:     dbPath,
-			CreatedAt:  nowOr(existing, true),
-			LastUsedAt: time.Now().UTC(),
+			Name:          name,
+			DBPath:        dbPath,
+			WorkspaceRoot: absRoot,
+			CreatedAt:     nowOr(existing, true),
+			LastUsedAt:    time.Now().UTC(),
 		})
 
 		out := &InitResult{Project: name, DBPath: dbPath}
@@ -276,33 +286,38 @@ func (m *Manager) Init(ctx context.Context, opt InitOptions) (*InitResult, error
 						return nil, err
 					}
 					written = append(written, p)
+
+					var ir IDEUpgradeResult
+					if err := deployPredefinedSkills(opt.CWD, opt.Force, &ir); err != nil {
+						return nil, err
+					}
 				case "aierules":
 					p := filepath.Join(opt.CWD, ".aierules")
-					if err := appendRuleSectionIfMissing(p, "## agent-memory (MANDATORY)", genericRulesSection(name)); err != nil {
+					if _, err := upsertRuleSection(p, "## agent-memory (MANDATORY)", genericRulesSection(name), opt.Force); err != nil {
 						return nil, err
 					}
 					written = append(written, p)
 				case "cursorrules":
 					p := filepath.Join(opt.CWD, ".cursorrules")
-					if err := appendRuleSectionIfMissing(p, "## agent-memory (MANDATORY)", genericRulesSection(name)); err != nil {
+					if _, err := upsertRuleSection(p, "## agent-memory (MANDATORY)", genericRulesSection(name), opt.Force); err != nil {
 						return nil, err
 					}
 					written = append(written, p)
 				case "windsurfrules":
 					p := filepath.Join(opt.CWD, ".windsurfrules")
-					if err := appendRuleSectionIfMissing(p, "## agent-memory (MANDATORY)", genericRulesSection(name)); err != nil {
+					if _, err := upsertRuleSection(p, "## agent-memory (MANDATORY)", genericRulesSection(name), opt.Force); err != nil {
 						return nil, err
 					}
 					written = append(written, p)
 				case "claude":
 					p := filepath.Join(opt.CWD, "CLAUDE.md")
-					if err := appendRuleSectionIfMissing(p, "## agent-memory (MANDATORY)", genericRulesSection(name)); err != nil {
+					if _, err := upsertRuleSection(p, "## agent-memory (MANDATORY)", genericRulesSection(name), opt.Force); err != nil {
 						return nil, err
 					}
 					written = append(written, p)
 				case "trae":
 					p := filepath.Join(opt.CWD, ".trae", "rules", "project_rules.md")
-					if err := appendRuleSectionIfMissing(p, "## agent-memory (MANDATORY)", genericRulesSection(name)); err != nil {
+					if _, err := upsertRuleSection(p, "## agent-memory (MANDATORY)", genericRulesSection(name), opt.Force); err != nil {
 						return nil, err
 					}
 					written = append(written, p)
@@ -401,11 +416,12 @@ func (m *Manager) List(_ context.Context) ([]ListItem, error) {
 			_ = store.Close()
 		}
 		out = append(out, ListItem{
-			Name:         p.Name,
-			DBPath:       p.DBPath,
-			SizeBytes:    size,
-			MemoryCount:  memCount,
-			LastActivity: p.LastUsedAt,
+			Name:          p.Name,
+			DBPath:        p.DBPath,
+			WorkspaceRoot: p.WorkspaceRoot,
+			SizeBytes:     size,
+			MemoryCount:   memCount,
+			LastActivity:  p.LastUsedAt,
 		})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
@@ -676,16 +692,28 @@ workspace: %s
 
 Always use `+"`"+`agent-memory`+"`"+` as the memory system:
 - Before doing any self-research: run memory `+"`"+`search`+"`"+` first. Run task `+"`"+`recall`+"`"+` only when the task is about continuing previous work, or when search returns no useful / weak / insufficient results.
+- After running search or recall: you MUST immediately submit a feedback score from 0 (useless) to 5 (extremely helpful) using command `+"`"+`agent-memory feedback --request-id <request_id> --score <0-5> --reason "<explanation>" --useful-count <useful_memories_count> --total-count <total_memories_retrieved>`+"`"+`. You MUST score honestly and objectively. If the score is below 4, you MUST provide a detailed explanation.
+- If a query receives a low score (0 to 3), proceed to investigate. After finding the correct information:
+  - If information was **missing**: Use `+"`"+`agent-memory write`+"`"+` to write the correct fact.
+  - If a retrieved memory was **incorrect or out-of-date**:
+    1. Write the new corrected memory first using `+"`"+`agent-memory write`+"`"+` and copy the new memory ID.
+    2. Link the old incorrect memory to the new one by running `+"`"+`agent-memory feedback --memory-id <old_id> --outcome rejected --reconsolidation-action superseded --successor-memory-id <new_id> --reason "<explanation>"`+"`"+`.
 - After learning durable new knowledge: write it to memory immediately.
+- Be self-aware of reusable scripts, grep queries, or workflows: package them into custom skills under `+"`"+`.agents/skills/`+"`"+` (using `+"`"+`agent-memory distill`+"`"+` or manual packaging) for later reuse.
+  - Do NOT use generic, numbered, or index-based filenames (like `+"`"+`part1.md`+"`"+`, `+"`"+`workflows_part1.md`+"`"+`).
+  - Always use clear, descriptive, and meaningful names for all custom skill reference files (e.g., `+"`"+`db_performance.md`+"`"+`, `+"`"+`ui_fixes.md`+"`"+`).
+  - Limit every individual skill file's size strictly to a maximum of 12,000 characters. If a skill grows beyond this, partition it by domain/feature and place the detailed references into a `+"`"+`references/`+"`"+` subdirectory with descriptive, meaningful filenames.
 - At the end of a session: store a short session summary via `+"`"+`session-end`+"`"+`.
 
 Commands:
 - `+"`"+`agent-memory init`+"`"+`
 - `+"`"+`agent-memory search --query "<keywords/entities>" --top-k 8`+"`"+`
 - `+"`"+`agent-memory recall --task "<one-line task>" --budget 800 --format raw --include-observations`+"`"+`
+- `+"`"+`agent-memory feedback --request-id "<id>" --score <0-5> --reason "<explanation>" --useful-count <useful_memories_count> --total-count <total_memories_retrieved>`+"`"+`
+- `+"`"+`agent-memory feedback --memory-id "<old_id>" --outcome rejected --reconsolidation-action superseded --successor-memory-id "<new_id>" --reason "<explanation>"`+"`"+`
 - `+"`"+`agent-memory write --type semantic --content "<durable fact + source>"`+"`"+`
 - `+"`"+`agent-memory write --type procedural --content "<repeatable steps/checklist>"`+"`"+`
-- `+"`"+`agent-memory write --type outcome --content "<what you tried> (result: success|failure|partial, approach: <how>, reason: <why>)"`+"`"+`
+- `+"`"+`agent-memory write --type outcome --content "<what you tried>" --outcome-result success|failure|partial --outcome-approach "<how>" --outcome-reason "<why>"`+"`"+`
 - `+"`"+`agent-memory session-end --transcript "<session summary or transcript>" --format json`+"`"+`
 `, workspace)
 }
@@ -842,14 +870,36 @@ Commands:
 - `+"`"+`agent-memory search --query "<keywords/entities>" --top-k 8`+"`"+`
 - `+"`"+`agent-memory recall --task "<one-line task>" --budget 800 --format raw`+"`"+`
 
+### After running search or recall
+
+- You MUST immediately submit a feedback score from 0 (useless) to 5 (extremely helpful), indicating how many retrieved memories were useful.
+- You MUST score honestly and objectively based on the true usefulness of the retrieved memories. Do not default to high scores.
+- You MUST always provide a reason regardless of the score; if the score is below 4, you MUST provide a detailed explanation (the command will fail if reason is omitted for scores below 4).
+
+Command:
+- `+"`"+`agent-memory feedback --request-id "<request_id>" --score <0-5> --reason "<explanation>" --useful-count <useful_memories_count> --total-count <total_memories_retrieved>`+"`"+`
+
 ### While working
 
 - If you discover durable new knowledge (facts, commands, config, constraints, architecture decisions), write it immediately.
 - Prefer short, atomic memories. Include the source (file path / command / URL) in the content when available.
+- Be self-aware of reusable scripts, grep queries, or workflows: package them into custom skills under `+"`"+`.agents/skills/`+"`"+` (using `+"`"+`agent-memory distill`+"`"+` or manual packaging) for later reuse.
+  - Do NOT use generic, numbered, or index-based filenames (like `+"`"+`part1.md`+"`"+`, `+"`"+`workflows_part1.md`+"`"+`).
+  - Always use clear, descriptive, and meaningful names for all custom skill reference files (e.g., `+"`"+`db_performance.md`+"`"+`, `+"`"+`ui_fixes.md`+"`"+`).
+  - Limit every individual skill file's size strictly to a maximum of 12,000 characters. If a skill grows beyond this, partition it by domain/feature and place the detailed references into a `+"`"+`references/`+"`"+` subdirectory with descriptive, meaningful filenames.
 
 Commands:
 - `+"`"+`agent-memory write --type semantic --content "<durable fact + source>"`+"`"+`
 - `+"`"+`agent-memory write --type procedural --content "<repeatable steps/checklist>"`+"`"+`
+
+### Corrective action on low-scoring queries (Score 0-3)
+
+If retrieval has a low score (0-3), proceed to investigate and solve the task. Once correct information is learned/verified:
+- **Missing information**: Write a new memory with `+"`"+`agent-memory write`+"`"+`.
+- **Out-of-date or incorrect memory**:
+  1. Write the corrected memory entry using `+"`"+`agent-memory write`+"`"+` and copy the returned memory ID.
+  2. Update the old memory by linking it to the new successor:
+     `+"`"+`agent-memory feedback --memory-id <old_id> --outcome rejected --reconsolidation-action superseded --successor-memory-id <new_id> --reason "<explanation>"`+"`"+`
 
 ### After attempts (success/failure)
 
@@ -1017,6 +1067,12 @@ func WriteAgentFiles(opt WriteAgentFilesOptions) (*WriteAgentFilesResult, error)
 			}
 			ir.Written = append(ir.Written, ".agents/rules/agent-memory.md")
 		}
+
+		// Deploy predefined skills
+		if err := deployPredefinedSkills(opt.CWD, opt.Force, &ir); err != nil {
+			return nil, fmt.Errorf("predefined skills: %w", err)
+		}
+
 		res.IDEs = append(res.IDEs, ir)
 	}
 
@@ -1171,4 +1227,51 @@ func upsertRuleSection(path, marker, section string, force bool) (bool, error) {
 		return false, nil
 	}
 	return true, os.WriteFile(path, []byte(replaced), 0o644)
+}
+
+//go:embed predefined_skills
+var predefinedSkillsFS embed.FS
+
+func deployPredefinedSkills(cwd string, force bool, ir *IDEUpgradeResult) error {
+	err := fs.WalkDir(predefinedSkillsFS, "predefined_skills", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+
+		relPath, err := filepath.Rel("predefined_skills", path)
+		if err != nil {
+			return err
+		}
+
+		content, err := predefinedSkillsFS.ReadFile(path)
+		if err != nil {
+			return err
+		}
+
+		destPath := filepath.Join(cwd, ".agents", "skills", relPath)
+		destDir := filepath.Dir(destPath)
+		if err := os.MkdirAll(destDir, 0o755); err != nil {
+			return err
+		}
+
+		displayPath := filepath.Join(".agents", "skills", relPath)
+
+		if !force {
+			if existing, err := os.ReadFile(destPath); err == nil &&
+				strings.TrimSpace(string(existing)) == strings.TrimSpace(string(content)) {
+				ir.Skipped = append(ir.Skipped, displayPath)
+				return nil
+			}
+		}
+
+		if err := os.WriteFile(destPath, content, 0o644); err != nil {
+			return fmt.Errorf("failed to write %s: %w", displayPath, err)
+		}
+		ir.Written = append(ir.Written, displayPath)
+		return nil
+	})
+	return err
 }

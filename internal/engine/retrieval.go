@@ -7,10 +7,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/time/timebooks/agent-memory/internal/config"
-	"github.com/time/timebooks/agent-memory/internal/core"
-	"github.com/time/timebooks/agent-memory/internal/embeddings"
-	"github.com/time/timebooks/agent-memory/internal/observability"
+	"github.com/taimufuraiyaa/agent-memory/internal/config"
+	"github.com/taimufuraiyaa/agent-memory/internal/core"
+	"github.com/taimufuraiyaa/agent-memory/internal/embeddings"
+	"github.com/taimufuraiyaa/agent-memory/internal/observability"
 )
 
 // RetrievalMode alters signal weighting depending on caller intent.
@@ -107,6 +107,7 @@ type RetrievalHit struct {
 
 // RetrievalResult is a ranked response with explainability.
 type RetrievalResult struct {
+	RequestID      string                  `json:"request_id,omitempty"`
 	Mode           RetrievalMode           `json:"mode"`
 	Weights        SignalWeights           `json:"weights"`
 	Policy         RetrievalPolicySnapshot `json:"policy"`

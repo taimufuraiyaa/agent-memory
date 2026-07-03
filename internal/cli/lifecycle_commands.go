@@ -8,7 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/time/timebooks/agent-memory/internal/workspace"
+	"github.com/taimufuraiyaa/agent-memory/internal/workspace"
 )
 
 type lifecycleFlags struct {
@@ -165,7 +165,7 @@ func newListCommand() *cobra.Command {
 				}
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), "PROJECT\tSIZE\tMEMORIES\tDB")
 				for _, r := range rows {
-					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s\t%d\t%d\t%s\n", r.Name, r.SizeBytes, r.MemoryCount, r.DBPath)
+					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s\t%s\t%d\t%s\n", r.Name, formatBytes(r.SizeBytes), r.MemoryCount, r.DBPath)
 				}
 				return nil
 			}
@@ -220,3 +220,21 @@ func newDeleteCommand() *cobra.Command {
 	_ = cmd.MarkFlagRequired("project-name")
 	return cmd
 }
+
+func formatBytes(bytes int64) string {
+	if bytes <= 0 {
+		return "0 B"
+	}
+	units := []string{"B", "KB", "MB", "GB", "TB", "PB"}
+	value := float64(bytes)
+	index := 0
+	for value >= 1024 && index < len(units)-1 {
+		value /= 1024
+		index++
+	}
+	if value >= 100 || index == 0 {
+		return fmt.Sprintf("%.0f %s", value, units[index])
+	}
+	return fmt.Sprintf("%.1f %s", value, units[index])
+}
+

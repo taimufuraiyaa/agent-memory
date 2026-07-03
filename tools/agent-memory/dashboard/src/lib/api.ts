@@ -32,6 +32,7 @@ export type MemoryEntry = {
   suppression_until?: string
   familiarity_band_last?: string
   superseded_by?: string
+  relations?: Relation[]
   storage_tier: StorageTier
   importance: number
   pinned: boolean
@@ -43,6 +44,13 @@ export type MemoryEntry = {
   match_reason?: string
   band?: string
   exclusion_reasons?: string[]
+}
+
+export type Relation = {
+  target_id: string
+  type: string
+  weight: number
+  metadata?: Record<string, string>
 }
 
 export type RetrievalPolicy = {
@@ -146,8 +154,21 @@ export type SchedulerSummary = {
   workspace?: SchedulerWorkspaceSummary
 }
 
+export type FeedbackStats = {
+  workspace: string
+  average_week: number
+  average_month: number
+  average_year: number
+  total_feedback_count: number
+  score_distribution?: Record<string, number>
+  average_useful_count?: number
+  average_total_count?: number
+  average_useful_ratio?: number
+}
+
 export type DashboardStats = {
   workspace: string
+  feedback_stats?: FeedbackStats
   memory_count: number
   db_size_bytes: number
   memory_type_counts?: CountMap
@@ -521,4 +542,50 @@ export function recallPreview(input: {
     method: 'POST',
     body: JSON.stringify(input),
   })
+}
+
+export type RetrievalRequestLog = {
+  id: string
+  workspace: string
+  request_type: string
+  query: string
+  score: number
+  reason: string
+  useful_count?: number
+  total_count?: number
+  created_at: string
+}
+
+export function listFeedback(input: { workspace: string }): Promise<RetrievalRequestLog[]> {
+  return api(`/api/v1/feedback?workspace=${encodeURIComponent(input.workspace)}`, {
+    method: 'GET',
+  })
+}
+
+export function submitRequestFeedback(input: {
+  workspace: string
+  request_id: string
+  score: number
+  reason: string
+  useful_count?: number
+  total_count?: number
+}): Promise<{ ok: boolean }> {
+  return api('/api/v1/requests/feedback', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+}
+
+export type SkillInfo = {
+  name: string
+  display_name: string
+  description: string
+  content: string
+  path: string
+}
+
+export function listSkills(input: { workspace: string }): Promise<SkillInfo[]> {
+  return api<{ skills: SkillInfo[] }>(`/api/v1/skills?workspace=${encodeURIComponent(input.workspace)}`, {
+    method: 'GET',
+  }).then((res) => res.skills || [])
 }

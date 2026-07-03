@@ -6,8 +6,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/time/timebooks/agent-memory/internal/core"
-	"github.com/time/timebooks/agent-memory/internal/engine"
+	"github.com/google/uuid"
+	"github.com/taimufuraiyaa/agent-memory/internal/core"
+	"github.com/taimufuraiyaa/agent-memory/internal/engine"
 )
 
 // memoriesRecentHandler implements GET /api/v1/memories/recent: returns the
@@ -123,6 +124,10 @@ func memoriesRecallHandler(svc *Service) http.HandlerFunc {
 		if task == "" {
 			task = strings.TrimSpace(req.Task)
 		}
+		requestID := uuid.New().String()
+		if assets.Store != nil {
+			_ = assets.Store.LogRetrievalRequest(r.Context(), requestID, ws, "recall", task)
+		}
 		budget := req.TokenBudget
 		if budget <= 0 {
 			budget = req.Budget
@@ -141,6 +146,7 @@ func memoriesRecallHandler(svc *Service) http.HandlerFunc {
 			return
 		}
 		data := map[string]any{
+			"request_id":             requestID,
 			"context_block":          result.contextBlock,
 			"tokens_used":            result.clip.UsedTokens + result.observationTokens,
 			"tokens_budget":          result.clip.Budget + result.observationTokens,

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import {
   deleteMemories,
   getStats,
@@ -12,6 +12,8 @@ import {
   recallPreview,
   searchMemories,
   setMemoryPinned,
+  listFeedback,
+  listSkills,
   type BenchmarkRun,
   type DashboardStats,
   type MemoryEntry,
@@ -24,6 +26,8 @@ import {
   type SchedulerRunHistory,
   type SessionEntry,
   type StorageTier,
+  type RetrievalRequestLog,
+  type SkillInfo,
 } from '../lib/api'
 import { DiagramViewer } from './DiagramViewer'
 import { MarkdownView } from './MarkdownView'
@@ -35,6 +39,8 @@ import {
   compareMemoryRecency,
   compareMemoryRelevance,
   buildConsolidatedExportHTML,
+  formatNumber,
+  formatBytes,
   formatScore,
   formatTS,
   getHealthState,
@@ -57,9 +63,12 @@ import { LifecyclePanel } from './LifecyclePanel'
 import { OverviewPanel } from './OverviewPanel'
 import { SessionsPanel } from './SessionsPanel'
 import { WikiPanel } from './WikiPanel'
+import { FeedbackPanel } from './FeedbackPanel'
+import { SkillsPanel } from './SkillsPanel'
 
 export function App() {
   const [surface, setSurface] = useState<Surface>('overview')
+  const [viewingJSON, setViewingJSON] = useState<any | null>(null)
 
   const [projects, setProjects] = useState<ProjectListItem[]>([])
   const [workspace, setWorkspace] = useState<string>('')
@@ -82,6 +91,9 @@ export function App() {
   const [promotionResults, setPromotionResults] = useState<Record<string, ObservationPromotionResult>>({})
   const [overviewExperimentFocusKey, setOverviewExperimentFocusKey] = useState<number>(0)
   const [rawStatsOpen, setRawStatsOpen] = useState<boolean>(false)
+  const [feedbackLogs, setFeedbackLogs] = useState<RetrievalRequestLog[]>([])
+  const [feedbackBusy, setFeedbackBusy] = useState<boolean>(false)
+  const [feedbackErr, setFeedbackErr] = useState<string>('')
 
   const [topK, setTopK] = useState<number>(10)
   const [explain, setExplain] = useState<boolean>(true)
@@ -119,6 +131,9 @@ export function App() {
   const [wikiPinBusyIds, setWikiPinBusyIds] = useState<Set<string>>(new Set())
   const [wikiDeleteBusy, setWikiDeleteBusy] = useState<boolean>(false)
   const [wikiDiagramMemory, setWikiDiagramMemory] = useState<MemoryEntry | null>(null)
+  const [skills, setSkills] = useState<SkillInfo[]>([])
+  const [skillsBusy, setSkillsBusy] = useState<boolean>(false)
+  const [skillsErr, setSkillsErr] = useState<string>('')
   const threadRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -310,6 +325,62 @@ export function App() {
       cancelled = true
     }
   }, [workspace])
+
+  const refreshFeedbackAndStats = useCallback(() => {
+    if (!workspace) return
+    setFeedbackBusy(true)
+    setFeedbackErr('')
+    listFeedback({ workspace })
+      .then((data) => {
+        setFeedbackLogs(data)
+      })
+      .catch((e) => {
+        setFeedbackLogs([])
+        setFeedbackErr(e instanceof Error ? e.message : String(e))
+      })
+      .finally(() => {
+        setFeedbackBusy(false)
+      })
+
+    getStats(workspace)
+      .then((s) => {
+        setStats(s)
+      })
+      .catch((e) => {
+        setStats(null)
+        setStatsErr(e instanceof Error ? e.message : String(e))
+      })
+  }, [workspace])
+
+  useEffect(() => {
+    if (workspace && surface === 'feedback') {
+      refreshFeedbackAndStats()
+    }
+  }, [workspace, surface, refreshFeedbackAndStats])
+
+  useEffect(() => {
+    let cancelled = false
+    if (!workspace || surface !== 'skills') return
+    setSkillsBusy(true)
+    setSkillsErr('')
+    listSkills({ workspace })
+      .then((data) => {
+        if (cancelled) return
+        setSkills(data)
+      })
+      .catch((e) => {
+        if (cancelled) return
+        setSkills([])
+        setSkillsErr(e instanceof Error ? e.message : String(e))
+      })
+      .finally(() => {
+        if (cancelled) return
+        setSkillsBusy(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [workspace, surface])
 
   useEffect(() => {
     if (!sessions.length) {
@@ -696,7 +767,7 @@ export function App() {
   }
 
   return (
-    <div className={surface === 'wiki' ? 'shell chatShell shellWikiMode' : 'shell chatShell'}>
+    <div className={surface === 'wiki' ? 'shell chatShell shellWikiMode' : surface === 'feedback' ? 'shell chatShell shellFeedbackMode' : 'shell chatShell'}>
       <header className="topbar chatTopbar">
         <div className="topbarLeft">
           <div className="brand">
@@ -723,7 +794,7 @@ export function App() {
             {projects.length === 0 ? <option value="">(no workspaces)</option> : null}
             {projects.map((p) => (
               <option key={p.name} value={p.name}>
-                {p.name} ({p.memory_count})
+                {p.name} ({p.memory_count} mem, {formatBytes(p.size_bytes)})
               </option>
             ))}
           </select>
@@ -753,6 +824,14 @@ export function App() {
           <button className={surface === 'wiki' ? 'navItem navItemOn' : 'navItem'} onClick={() => openWiki()} type="button" aria-label="Wiki">
             <span className="navKey">[06]</span>
             <span className="navLabel">Wiki</span>
+          </button>
+          <button className={surface === 'feedback' ? 'navItem navItemOn' : 'navItem'} onClick={() => { setSurface('feedback'); setSelectedMemory(null); }} type="button" aria-label="Feedback">
+            <span className="navKey">[07]</span>
+            <span className="navLabel">Feedback</span>
+          </button>
+          <button className={surface === 'skills' ? 'navItem navItemOn' : 'navItem'} onClick={() => { setSurface('skills'); setSelectedMemory(null); }} type="button" aria-label="Skills">
+            <span className="navKey">[08]</span>
+            <span className="navLabel">Skills</span>
           </button>
         </nav>
 
@@ -844,6 +923,26 @@ export function App() {
                 />
               ) : null}
 
+              {surface === 'feedback' ? (
+                <FeedbackPanel
+                  workspace={workspace}
+                  feedback={feedbackLogs}
+                  busy={feedbackBusy}
+                  error={feedbackErr}
+                  onFeedbackUpdated={refreshFeedbackAndStats}
+                />
+              ) : null}
+
+              {surface === 'skills' ? (
+                <SkillsPanel
+                  theme={theme}
+                  workspace={workspace}
+                  skills={skills}
+                  busy={skillsBusy}
+                  error={skillsErr}
+                />
+              ) : null}
+
               {surface === 'wiki' ? (
                 <WikiPanel
                   theme={theme}
@@ -878,7 +977,13 @@ export function App() {
                   onModeChange={(nextMode: WikiMode) => {
                     setWikiMode(nextMode)
                     setWikiError('')
-                    setWikiSearch((current) => (current.mode === nextMode ? current : { ...current, mode: nextMode, searched: false }))
+                    setWikiSearch((current) => {
+                      if (current.mode === nextMode) return current
+                      if (current.mode === 'recents' && nextMode === 'search') {
+                        return { ...current, mode: nextMode }
+                      }
+                      return { ...current, mode: nextMode, searched: false }
+                    })
                     if (nextMode !== 'recall') setWikiRecall(null)
                     if (nextMode === 'recents') void showRecentsCapture()
                   }}
@@ -958,19 +1063,42 @@ export function App() {
                       {selectedSemanticRelevance.label} semantic {formatScore(selectedSemanticSimilarity, 2)}
                     </span>
                   ) : null}
+                  {selectedMemory.superseded_by ? (
+                    <span className="memPill relevancePill relevancePillLow" style={{ background: '#3b1c1c', border: '1px solid #7d2a2a', color: '#ff8585' }}>Superseded</span>
+                  ) : null}
+                  {selectedMemory.relations?.some(r => r.type === 'supersedes') ? (
+                    <span className="memPill relevancePill relevancePillHigh" style={{ background: '#1c3b24', border: '1px solid #2a7d43', color: '#85ff9d' }}>Correction</span>
+                  ) : null}
                 </div>
 
-                <div className="detailSection">
-                  <div className="detailSectionTitle">Content</div>
-                  <div className="detailContentCard">
-                    <MarkdownView markdown={selectedMemory.content} clamp={false} theme={theme} />
-                    {selectedMemory.diagram ? (
-                      <div className="diagramBlock">
-                        <DiagramViewer diagram={selectedMemory.diagram} theme={theme} />
+                {(() => {
+                  const parsedJSON = tryParseJSON(selectedMemory.content)
+                  return (
+                    <div className="detailSection">
+                      <div className="detailSectionTitle">Content</div>
+                      <div
+                        className={`detailContentCard ${parsedJSON ? 'clickableJSONCard' : ''}`}
+                        onClick={() => {
+                          if (parsedJSON) setViewingJSON({ id: selectedMemory.id, data: parsedJSON })
+                        }}
+                        style={parsedJSON ? { cursor: 'pointer', border: '1px dashed var(--accent-primary)', position: 'relative' } : undefined}
+                        title={parsedJSON ? "Click to view beautiful JSON" : undefined}
+                      >
+                        {parsedJSON ? (
+                          <div style={{ position: 'absolute', right: '12px', top: '8px', fontSize: '10px', color: 'var(--accent-primary)', fontWeight: 'bold', background: 'var(--bg-input)', padding: '2px 6px', borderRadius: '4px' }}>
+                            JSON 🔍
+                          </div>
+                        ) : null}
+                        <MarkdownView markdown={selectedMemory.content} clamp={false} theme={theme} />
+                        {selectedMemory.diagram ? (
+                          <div className="diagramBlock">
+                            <DiagramViewer diagram={selectedMemory.diagram} theme={theme} />
+                          </div>
+                        ) : null}
                       </div>
-                    ) : null}
-                  </div>
-                </div>
+                    </div>
+                  )
+                })()}
 
                 <div className="detailSection">
                   <div className="detailSectionTitle">Memory Facts</div>
@@ -1039,6 +1167,20 @@ export function App() {
                       <div className="memMetaLabel">Tags</div>
                       <div className="memMetaValue">{pillList(selectedMemory.tags ?? [])}</div>
                     </div>
+                    {selectedMemory.superseded_by ? (
+                      <div className="memMeta">
+                        <div className="memMetaLabel">Superseded By</div>
+                        <div className="memMetaValue mono" style={{ color: '#ff8585', wordBreak: 'break-all' }}>{selectedMemory.superseded_by}</div>
+                      </div>
+                    ) : null}
+                    {selectedMemory.relations?.some(r => r.type === 'supersedes') ? (
+                      <div className="memMeta">
+                        <div className="memMetaLabel">Supersedes</div>
+                        <div className="memMetaValue mono" style={{ color: '#85ff9d', wordBreak: 'break-all' }}>
+                          {selectedMemory.relations.find(r => r.type === 'supersedes')?.target_id}
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 </div>
 
@@ -1165,6 +1307,41 @@ export function App() {
           </div>
         </div>
       ) : null}
+
+      {viewingJSON ? (
+        <div
+          className="modalBackdrop"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setViewingJSON(null)
+          }}
+          role="presentation"
+        >
+          <div className="modalPanel" role="dialog" aria-modal="true" aria-label="Beautified JSON content" style={{ maxWidth: '800px', width: '90%' }}>
+            <div className="modalTop">
+              <div className="modalTitle">Details</div>
+              <button className="btn btnGhost" onClick={() => setViewingJSON(null)}>
+                Close
+              </button>
+            </div>
+            <div className="modalBody" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
+              <div className="muted small" style={{ marginBottom: '8px' }}>
+                Memory ID: <span className="mono">{viewingJSON.id}</span>
+              </div>
+              <pre className="pre" style={{ margin: 0, padding: '12px', background: 'var(--bg-input)', borderRadius: '6px', fontSize: '12px', lineHeight: '1.5', whiteSpace: 'pre-wrap', overflowWrap: 'break-word' }}>
+                <code>{JSON.stringify(viewingJSON.data, null, 2)}</code>
+              </pre>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
+}
+
+function tryParseJSON(str: string): any {
+  try {
+    return JSON.parse(str)
+  } catch (e) {
+    return null
+  }
 }

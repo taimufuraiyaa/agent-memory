@@ -9,8 +9,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/time/timebooks/agent-memory/internal/core"
-	"github.com/time/timebooks/agent-memory/internal/plugin"
+	"github.com/taimufuraiyaa/agent-memory/internal/core"
+	"github.com/taimufuraiyaa/agent-memory/internal/plugin"
 )
 
 // AuditLogPlugin logs all memory lifecycle events to a file or stdout.

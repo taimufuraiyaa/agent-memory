@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/time/timebooks/agent-memory/internal/core"
+	"github.com/taimufuraiyaa/agent-memory/internal/core"
 )
 
 // AssembleRecallSections emits stable sectioned recall text for session start.
@@ -187,6 +187,18 @@ func keywordOverlap(keywords map[string]struct{}, text string) float64 {
 
 func memoryTextForRecall(m core.MemoryEntry) string {
 	base := strings.TrimSpace(m.Content)
+	var prefix string
+	if m.SupersededBy != nil && *m.SupersededBy != "" {
+		prefix = fmt.Sprintf("[OUT-OF-DATE: Superseded by memory %s]\n", *m.SupersededBy)
+	} else {
+		for _, r := range m.Relations {
+			if r.Type == core.RelSupersedes {
+				prefix += fmt.Sprintf("[CORRECTED: Supersedes memory %s]\n", r.TargetID)
+			}
+		}
+	}
+	base = prefix + base
+
 	if m.Diagram == nil || strings.TrimSpace(m.Diagram.Code) == "" {
 		return base
 	}

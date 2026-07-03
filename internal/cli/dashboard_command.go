@@ -20,8 +20,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/time/timebooks/agent-memory/internal/api"
-	"github.com/time/timebooks/agent-memory/internal/embeddings"
+	"github.com/taimufuraiyaa/agent-memory/internal/api"
+	"github.com/taimufuraiyaa/agent-memory/internal/embeddings"
 )
 
 func openInBrowser(url string) error {
@@ -509,10 +509,7 @@ func newDashboardCommand() *cobra.Command {
 				if !stopOK {
 					inferred, inferErr := inferDashboardPIDByAddr(addr)
 					if inferErr != nil {
-						_, err := readDashboardPID(pidPath)
-						if err != nil {
-							return fmt.Errorf("dashboard stop: %w", err)
-						}
+						return errors.New("Dashboard was closed!")
 					}
 					v = inferred
 				}

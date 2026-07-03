@@ -267,6 +267,32 @@ func (m *MemoryEntry) Validate() error {
 	return nil
 }
 
+// FeedbackStats aggregates retrieval feedback scoring statistics.
+type FeedbackStats struct {
+	Workspace          string         `json:"workspace"`
+	AverageWeek        float64        `json:"average_week"`
+	AverageMonth       float64        `json:"average_month"`
+	AverageYear        float64        `json:"average_year"`
+	TotalFeedbackCount int            `json:"total_feedback_count"`
+	ScoreDistribution  map[string]int `json:"score_distribution"`
+	AverageUsefulCount float64        `json:"average_useful_count"`
+	AverageTotalCount  float64        `json:"average_total_count"`
+	AverageUsefulRatio float64        `json:"average_useful_ratio"`
+}
+
+// RetrievalRequestLog represents a logged search or recall request with optional feedback.
+type RetrievalRequestLog struct {
+	ID          string `json:"id"`
+	Workspace   string `json:"workspace"`
+	RequestType string `json:"request_type"`
+	Query       string `json:"query"`
+	Score       int    `json:"score"`
+	Reason      string `json:"reason"`
+	UsefulCount int    `json:"useful_count"`
+	TotalCount  int    `json:"total_count"`
+	CreatedAt   string `json:"created_at"`
+}
+
 func IsMemoryType(v MemoryType) bool {
 	return isMemoryType(v)
 }

@@ -22,6 +22,42 @@ import {
   TokenGroupCard,
 } from './components'
 
+function ScoreHistogram({ distribution }: { distribution: Record<string, number> }) {
+  const scores = ['0', '1', '2', '3', '4', '5']
+  const values = scores.map((s) => distribution[s] ?? 0)
+  const max = Math.max(...values, 1)
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-end', height: '110px', gap: '8px', padding: '0 8px' }}>
+      {scores.map((score) => {
+        const count = distribution[score] ?? 0
+        const percent = (count / max) * 100
+        return (
+          <div key={score} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', height: '100%' }}>
+            <div style={{ flex: 1, display: 'flex', alignItems: 'flex-end', width: '100%', position: 'relative' }}>
+              <div
+                style={{
+                  width: '100%',
+                  height: `${percent}%`,
+                  backgroundColor: 'var(--accent-primary)',
+                  borderRadius: '2px 2px 0 0',
+                  opacity: count > 0 ? 0.85 : 0.15,
+                  minHeight: count > 0 ? '4px' : '2px',
+                  transition: 'height 0.3s ease',
+                }}
+                title={`${count} requests scored ${score}`}
+              />
+            </div>
+            <span className="mono" style={{ fontSize: '10px', marginTop: '6px', color: 'var(--text-muted)' }}>
+              {score}★ ({count})
+            </span>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 export function OverviewPanel({
   workspace,
   project,
@@ -156,6 +192,11 @@ export function OverviewPanel({
         <MetricCard title="Low Reach" value={formatNumber(lowReachMemoryCount)} detail={`Bottom ${formatNumber(lowReachPercentile)}% of reached memories`} />
         <MetricCard title="Pinned" value={formatNumber(stats?.pinned_count)} detail="Pinned memories retained" />
         <MetricCard title="Diagrams" value={formatNumber(stats?.diagram_count)} detail="Memories with visual payloads" />
+        <MetricCard
+          title="Avg Feedback"
+          value={stats?.feedback_stats && stats.feedback_stats.total_feedback_count > 0 ? `${stats.feedback_stats.average_week.toFixed(1)} / 5` : 'n/a'}
+          detail={`${formatNumber(stats?.feedback_stats?.total_feedback_count ?? 0)} request scores`}
+        />
       </div>
 
       <div className="overviewColumns">
@@ -165,17 +206,6 @@ export function OverviewPanel({
 
         <BreakdownCard title="Storage Tiers" subtitle={`${formatNumber(sumCounts(stats?.storage_tier_counts))} classified`}>
           <PieChartBreakdown entries={tierEntries} emptyLabel="No tier distribution yet." />
-        </BreakdownCard>
-
-        <BreakdownCard title="Retrieval Reach" subtitle={`${formatPercent(retrievalCoveragePercent)} coverage`}>
-          <div className="diagnosticsList">
-            <DiagnosticRow label="Retrieved Memories" value={formatNumber(retrievedMemoryCount)} />
-            <DiagnosticRow label="Never Reached" value={formatNumber(neverReachedMemoryCount)} />
-            <DiagnosticRow label={`Low Reach (P${formatNumber(lowReachPercentile)})`} value={formatNumber(lowReachMemoryCount)} />
-            <DiagnosticRow label="Total Retrieval Events" value={formatNumber(retrieveCountTotal)} />
-            <DiagnosticRow label="Low-Reach Threshold" value={`<= ${formatNumber(lowReachThreshold)} hits`} />
-            <DiagnosticRow label="Last Accessed" value={formatTS(stats?.last_memory_accessed_at) || 'n/a'} />
-          </div>
         </BreakdownCard>
 
         <BreakdownCard title="Scheduler" subtitle={scheduler?.enabled ? `Next tick ${formatTS(scheduler?.next_tick_at) || 'n/a'}` : 'Background lifecycle disabled'}>
@@ -189,6 +219,26 @@ export function OverviewPanel({
             <DiagnosticRow label="Last Impacts" value={schedulerWorkspace?.last_impacts != null ? String(schedulerWorkspace.last_impacts) : '-'} />
           </div>
         </BreakdownCard>
+
+        <div style={{ gridColumn: '1 / -1' }}>
+          <BreakdownCard title="Retrieval Feedback Quality" subtitle={`${formatNumber(stats?.feedback_stats?.total_feedback_count ?? 0)} request scores`}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '24px', padding: '16px 12px' }}>
+              <div className="diagnosticsList">
+                <DiagnosticRow label="Weekly Average (Last 7d)" value={stats?.feedback_stats && stats.feedback_stats.total_feedback_count > 0 ? `${stats.feedback_stats.average_week.toFixed(2)} / 5.0` : 'n/a'} />
+                <DiagnosticRow label="Monthly Average (Last 30d)" value={stats?.feedback_stats && stats.feedback_stats.total_feedback_count > 0 ? `${stats.feedback_stats.average_month.toFixed(2)} / 5.0` : 'n/a'} />
+                <DiagnosticRow label="Yearly Average (Last 365d)" value={stats?.feedback_stats && stats.feedback_stats.total_feedback_count > 0 ? `${stats.feedback_stats.average_year.toFixed(2)} / 5.0` : 'n/a'} />
+                <DiagnosticRow label="Total Feedbacks Given" value={formatNumber(stats?.feedback_stats?.total_feedback_count ?? 0)} />
+                <DiagnosticRow label="Avg Useful Hits Count" value={stats?.feedback_stats && typeof stats.feedback_stats.average_useful_count === 'number' && stats.feedback_stats.average_useful_count >= 0 ? `${stats.feedback_stats.average_useful_count.toFixed(1)} memories` : 'n/a'} />
+                <DiagnosticRow label="Avg Total Hits Count" value={stats?.feedback_stats && typeof stats.feedback_stats.average_total_count === 'number' && stats.feedback_stats.average_total_count >= 0 ? `${stats.feedback_stats.average_total_count.toFixed(1)} memories` : 'n/a'} />
+                <DiagnosticRow label="Avg Useful Hits Ratio" value={stats?.feedback_stats && typeof stats.feedback_stats.average_useful_ratio === 'number' && stats.feedback_stats.average_useful_ratio >= 0 ? `${(stats.feedback_stats.average_useful_ratio * 100).toFixed(1)}%` : 'n/a'} />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                <div style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text-muted)', marginBottom: '12px', textAlign: 'center' }}>Score Distribution</div>
+                <ScoreHistogram distribution={stats?.feedback_stats?.score_distribution ?? {}} />
+              </div>
+            </div>
+          </BreakdownCard>
+        </div>
       </div>
 
       <section className="comparisonSection">

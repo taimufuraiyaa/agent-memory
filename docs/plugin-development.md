@@ -179,7 +179,7 @@ package myplugin
 
 import (
     "context"
-    "github.com/time/timebooks/agent-memory/internal/plugin"
+    "github.com/taimufuraiyaa/agent-memory/internal/plugin"
 )
 
 type MyPlugin struct {
@@ -231,8 +231,8 @@ package myplugin
 
 import (
     "context"
-    "github.com/time/timebooks/agent-memory/internal/embeddings"
-    "github.com/time/timebooks/agent-memory/internal/plugin"
+    "github.com/taimufuraiyaa/agent-memory/internal/embeddings"
+    "github.com/taimufuraiyaa/agent-memory/internal/plugin"
 )
 
 type MyEmbedder struct {
@@ -275,8 +275,8 @@ package myplugin
 
 import (
     "context"
-    "github.com/time/timebooks/agent-memory/internal/core"
-    "github.com/time/timebooks/agent-memory/internal/plugin"
+    "github.com/taimufuraiyaa/agent-memory/internal/core"
+    "github.com/taimufuraiyaa/agent-memory/internal/plugin"
 )
 
 type MyLifecyclePlugin struct {
@@ -313,7 +313,7 @@ func (p *MyLifecyclePlugin) OnWriteComplete(ctx context.Context, mem *core.Memor
 package main
 
 import (
-    "github.com/time/timebooks/agent-memory/internal/plugin"
+    "github.com/taimufuraiyaa/agent-memory/internal/plugin"
     "myplugin"
 )
 
@@ -741,7 +741,7 @@ if _, ok := plugin.(plugin.EmbeddingPlugin); !ok {
 
 - [Package Documentation](../internal/plugin/doc.go)
 - [Example Plugins](../examples/plugins/)
-- [API Reference](https://pkg.go.dev/github.com/time/timebooks/agent-memory/internal/plugin)
+- [API Reference](https://pkg.go.dev/github.com/taimufuraiyaa/agent-memory/internal/plugin)
 - [Contributing Guide](../CONTRIBUTING.md)
 
 ## Support

@@ -21,7 +21,7 @@ $ go build -o agent-memory-test ./cmd/agent-memory
 
 $ ./agent-memory-test version
 agent-memory 0.7
-module: github.com/time/timebooks/agent-memory
+module: github.com/taimufuraiyaa/agent-memory
 platform: darwin/arm64
 ✅ Binary runs correctly
 ```
@@ -33,7 +33,7 @@ platform: darwin/arm64
 ### All Tests Pass
 ```bash
 $ go test ./...
-✅ PASS - github.com/time/timebooks/agent-memory (2.231s)
+✅ PASS - github.com/taimufuraiyaa/agent-memory (2.231s)
 ✅ PASS - internal/api (cached)
 ✅ PASS - internal/bootstrap (cached)
 ✅ PASS - internal/cli (cached)

@@ -81,6 +81,12 @@ function WikiMemoryFragment({
             </span>
           ) : null}
           {weak ? <span className="memPill wikiQuietBadge">weak</span> : null}
+          {memory.superseded_by ? (
+            <span className="memPill relevancePill relevancePillLow" style={{ background: '#3b1c1c', border: '1px solid #7d2a2a', color: '#ff8585' }} title={`Superseded by memory ${memory.superseded_by}`}>Superseded</span>
+          ) : null}
+          {memory.relations?.some(r => r.type === 'supersedes') ? (
+            <span className="memPill relevancePill relevancePillHigh" style={{ background: '#1c3b24', border: '1px solid #2a7d43', color: '#85ff9d' }} title={`Supersedes memory ${memory.relations.find(r => r.type === 'supersedes')?.target_id}`}>Correction</span>
+          ) : null}
         </div>
         <button
           className="btn btnGhost wikiPinButton"
@@ -428,7 +434,11 @@ export function WikiPanel({
               value={query}
               onChange={(e) => onQueryChange(e.target.value)}
               placeholder={inputPlaceholder}
-              disabled={isRecentsMode}
+              onFocus={() => {
+                if (isRecentsMode) {
+                  onModeChange('search')
+                }
+              }}
               rows={dockExpanded || query.trim().length > 0 ? 3 : 1}
               aria-label="Wiki query"
               onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onSubmit() } }}

@@ -487,6 +487,19 @@ const OperatorDashboardHTML = `<!DOCTYPE html>
         // Auto-refresh timer
         let refreshTimer;
 
+        function formatBytes(bytes) {
+            if (typeof bytes !== 'number' || isNaN(bytes) || bytes <= 0) return '0 B';
+            const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+            let value = bytes;
+            let index = 0;
+            while (value >= 1024 && index < units.length - 1) {
+                value /= 1024;
+                index++;
+            }
+            const digits = value >= 100 || index === 0 ? 0 : 1;
+            return value.toFixed(digits) + ' ' + units[index];
+        }
+
         async function fetchHealth() {
             try {
                 const response = await fetch('/health?workspace=' + encodeURIComponent(workspace));
@@ -516,8 +529,7 @@ const OperatorDashboardHTML = `<!DOCTYPE html>
 
                 // Storage stats
                 document.getElementById('valMemoryCount').textContent = data.memory_count;
-                const dbMB = (data.db_size_bytes / (1024 * 1024)).toFixed(2);
-                document.getElementById('valDbSize').textContent = dbMB + ' MB';
+                document.getElementById('valDbSize').textContent = formatBytes(data.db_size_bytes);
 
                 const types = data.memory_type_counts || {};
                 const episodic = types.episodic || 0;

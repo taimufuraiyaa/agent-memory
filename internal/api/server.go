@@ -11,12 +11,12 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	"github.com/time/timebooks/agent-memory/internal/api/dashboard"
-	"github.com/time/timebooks/agent-memory/internal/embeddings"
-	"github.com/time/timebooks/agent-memory/internal/engine"
-	"github.com/time/timebooks/agent-memory/internal/observability"
-	"github.com/time/timebooks/agent-memory/internal/storage/sqlite"
-	"github.com/time/timebooks/agent-memory/internal/workspace"
+	"github.com/taimufuraiyaa/agent-memory/internal/api/dashboard"
+	"github.com/taimufuraiyaa/agent-memory/internal/embeddings"
+	"github.com/taimufuraiyaa/agent-memory/internal/engine"
+	"github.com/taimufuraiyaa/agent-memory/internal/observability"
+	"github.com/taimufuraiyaa/agent-memory/internal/storage/sqlite"
+	"github.com/taimufuraiyaa/agent-memory/internal/workspace"
 )
 
 type Service struct {
@@ -202,6 +202,10 @@ func NewMux(svc *Service) *http.ServeMux {
 	mux.HandleFunc("/api/v1/dashboard", workspaceDashboardHandler(svc))
 	mux.HandleFunc("/api/v1/graph", workspaceGraphHandler(svc))
 	mux.HandleFunc("/api/v1/stats", workspaceStatsHandler(svc))
+	mux.HandleFunc("/api/v1/requests/feedback", requestsFeedbackHandler(svc))
+	mux.HandleFunc("/api/v1/feedback/stats", feedbackStatsHandler(svc))
+	mux.HandleFunc("/api/v1/feedback", listFeedbackHandler(svc))
+	mux.HandleFunc("/api/v1/skills", workspaceSkillsHandler(svc))
 
 	// Visualization endpoints
 	mux.HandleFunc("/api/v1/visualizations/graph", handleMemoryGraph(svc))

@@ -7,7 +7,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/time/timebooks/agent-memory/internal/engine"
+	"github.com/taimufuraiyaa/agent-memory/internal/engine"
 )
 
 func observeEnabled() bool {

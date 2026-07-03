@@ -4,7 +4,7 @@ import (
 	"math"
 	"sync"
 
-	"github.com/time/timebooks/agent-memory/internal/embeddings"
+	"github.com/taimufuraiyaa/agent-memory/internal/embeddings"
 )
 
 // TurbovecIndex is a fast, in-memory, quantized vector cache/index.

@@ -13,10 +13,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/time/timebooks/agent-memory/internal/api/dashboard"
-	"github.com/time/timebooks/agent-memory/internal/core"
-	"github.com/time/timebooks/agent-memory/internal/embeddings"
-	"github.com/time/timebooks/agent-memory/internal/engine"
+	"github.com/taimufuraiyaa/agent-memory/internal/api/dashboard"
+	"github.com/taimufuraiyaa/agent-memory/internal/core"
+	"github.com/taimufuraiyaa/agent-memory/internal/embeddings"
+	"github.com/taimufuraiyaa/agent-memory/internal/engine"
 )
 
 type fakeScheduler struct {
@@ -1334,4 +1334,167 @@ func TestServerProjectsList(t *testing.T) {
 		t.Fatalf("expected 0 projects, got %d", len(projects))
 	}
 }
+
+func TestRequestFeedbackAPI(t *testing.T) {
+	baseDir := t.TempDir()
+	modelDir := filepath.Join(t.TempDir(), "model")
+	if err := os.MkdirAll(modelDir, 0o755); err != nil {
+		t.Fatalf("mkdir model: %v", err)
+	}
+	provider, err := embeddings.NewLocalProvider(modelDir)
+	if err != nil {
+		t.Fatalf("provider: %v", err)
+	}
+	svc := &Service{
+		Workspace:         "ws",
+		BaseDir:           baseDir,
+		EmbeddingProvider: provider,
+	}
+	ts := httptest.NewServer(NewMux(svc))
+	defer ts.Close()
+
+	// 1. Perform a search to generate/log a request ID
+	searchBody, _ := json.Marshal(map[string]any{
+		"workspace": "ws",
+		"query":     "test request query",
+		"top_k":     5,
+	})
+	res, err := http.Post(ts.URL+"/api/v1/memories/search", "application/json", bytes.NewReader(searchBody))
+	if err != nil {
+		t.Fatalf("search post: %v", err)
+	}
+	defer func() { _ = res.Body.Close() }()
+	var searchEnv map[string]any
+	_ = json.NewDecoder(res.Body).Decode(&searchEnv)
+	searchData, _ := searchEnv["data"].(map[string]any)
+	requestID, _ := searchData["request_id"].(string)
+	if requestID == "" {
+		t.Fatalf("expected request_id in search response")
+	}
+
+	// 2. Submit feedback scoring (score >= 4, optional reason)
+	feedbackBody, _ := json.Marshal(map[string]any{
+		"workspace":    "ws",
+		"request_id":   requestID,
+		"score":        4,
+		"reason":       "great matches",
+		"useful_count": 3,
+		"total_count":  10,
+	})
+	res2, err := http.Post(ts.URL+"/api/v1/requests/feedback", "application/json", bytes.NewReader(feedbackBody))
+	if err != nil {
+		t.Fatalf("feedback post: %v", err)
+	}
+	defer func() { _ = res2.Body.Close() }()
+	if res2.StatusCode != http.StatusOK {
+		t.Fatalf("expected feedback status 200, got %d", res2.StatusCode)
+	}
+
+	// 2b. Generate a second request ID to test low score feedback validation
+	resSecond, err := http.Post(ts.URL+"/api/v1/memories/search", "application/json", bytes.NewReader(searchBody))
+	if err != nil {
+		t.Fatalf("search post 2: %v", err)
+	}
+	defer func() { _ = resSecond.Body.Close() }()
+	var searchEnv2 map[string]any
+	_ = json.NewDecoder(resSecond.Body).Decode(&searchEnv2)
+	searchData2, _ := searchEnv2["data"].(map[string]any)
+	requestID2, _ := searchData2["request_id"].(string)
+	if requestID2 == "" {
+		t.Fatalf("expected request_id in second search response")
+	}
+
+	// 2c. Submit feedback scoring below 4 without reason (should fail)
+	badFeedbackBody, _ := json.Marshal(map[string]any{
+		"workspace":  "ws",
+		"request_id": requestID2,
+		"score":      2,
+	})
+	resBad, err := http.Post(ts.URL+"/api/v1/requests/feedback", "application/json", bytes.NewReader(badFeedbackBody))
+	if err != nil {
+		t.Fatalf("bad feedback post: %v", err)
+	}
+	defer func() { _ = resBad.Body.Close() }()
+	if resBad.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected feedback status 400, got %d", resBad.StatusCode)
+	}
+
+	// 2d. Submit feedback scoring below 4 with reason (should succeed)
+	goodFeedbackBody, _ := json.Marshal(map[string]any{
+		"workspace":    "ws",
+		"request_id":   requestID2,
+		"score":        2,
+		"reason":       "some irrelevant results",
+		"useful_count": 1,
+		"total_count":  5,
+	})
+	resGood, err := http.Post(ts.URL+"/api/v1/requests/feedback", "application/json", bytes.NewReader(goodFeedbackBody))
+	if err != nil {
+		t.Fatalf("good feedback post: %v", err)
+	}
+	defer func() { _ = resGood.Body.Close() }()
+	if resGood.StatusCode != http.StatusOK {
+		t.Fatalf("expected feedback status 200, got %d", resGood.StatusCode)
+	}
+
+	// 3. Query stats and check feedback_stats
+	res3, err := http.Get(ts.URL + "/api/v1/stats?workspace=ws")
+	if err != nil {
+		t.Fatalf("stats get: %v", err)
+	}
+	defer func() { _ = res3.Body.Close() }()
+	var statsEnv map[string]any
+	_ = json.NewDecoder(res3.Body).Decode(&statsEnv)
+	statsData, _ := statsEnv["data"].(map[string]any)
+	feedbackStats, _ := statsData["feedback_stats"].(map[string]any)
+	if total, _ := feedbackStats["total_feedback_count"].(float64); total != 2 {
+		t.Fatalf("expected total feedback count to be 2, got %f", total)
+	}
+	if avgWeek, _ := feedbackStats["average_week"].(float64); avgWeek != 3.0 {
+		t.Fatalf("expected weekly average to be 3.0, got %f", avgWeek)
+	}
+	if avgUseful, _ := feedbackStats["average_useful_count"].(float64); avgUseful != 2.0 {
+		t.Fatalf("expected average useful count to be 2.0, got %f", avgUseful)
+	}
+	if avgTotal, _ := feedbackStats["average_total_count"].(float64); avgTotal != 7.5 {
+		t.Fatalf("expected average total count to be 7.5, got %f", avgTotal)
+	}
+	if avgRatio, _ := feedbackStats["average_useful_ratio"].(float64); avgRatio != 0.25 {
+		t.Fatalf("expected average useful ratio to be 0.25, got %f", avgRatio)
+	}
+
+	// 4. Query list of feedbacks and check reason is returned
+	res4, err := http.Get(ts.URL + "/api/v1/feedback?workspace=ws")
+	if err != nil {
+		t.Fatalf("feedback list get: %v", err)
+	}
+	defer func() { _ = res4.Body.Close() }()
+	if res4.StatusCode != http.StatusOK {
+		t.Fatalf("expected feedback list status 200, got %d", res4.StatusCode)
+	}
+	var listEnv map[string]any
+	_ = json.NewDecoder(res4.Body).Decode(&listEnv)
+	listData, _ := listEnv["data"].([]any)
+	if len(listData) != 2 {
+		t.Fatalf("expected feedback list length to be 2, got %d", len(listData))
+	}
+	var found1, found2 bool
+	for _, item := range listData {
+		m, _ := item.(map[string]any)
+		score, _ := m["score"].(float64)
+		reason, _ := m["reason"].(string)
+		usefulCount, _ := m["useful_count"].(float64)
+		totalCount, _ := m["total_count"].(float64)
+		if score == 4 && reason == "great matches" && usefulCount == 3 && totalCount == 10 {
+			found1 = true
+		}
+		if score == 2 && reason == "some irrelevant results" && usefulCount == 1 && totalCount == 5 {
+			found2 = true
+		}
+	}
+	if !found1 || !found2 {
+		t.Fatalf("expected to find both feedback entries in response list with correct useful/total counts, got: %v", listData)
+	}
+}
+
 

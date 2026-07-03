@@ -3,7 +3,7 @@ package api
 import (
 	"github.com/go-playground/validator/v10"
 
-	"github.com/time/timebooks/agent-memory/internal/core"
+	"github.com/taimufuraiyaa/agent-memory/internal/core"
 )
 
 var validate = validator.New()
