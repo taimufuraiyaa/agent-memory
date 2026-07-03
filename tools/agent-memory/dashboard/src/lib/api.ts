@@ -585,7 +585,7 @@ export type SkillInfo = {
 }
 
 export function listSkills(input: { workspace: string }): Promise<SkillInfo[]> {
-  return api(`/api/v1/skills?workspace=${encodeURIComponent(input.workspace)}`, {
+  return api<{ skills: SkillInfo[] }>(`/api/v1/skills?workspace=${encodeURIComponent(input.workspace)}`, {
     method: 'GET',
-  })
+  }).then((res) => res.skills || [])
 }

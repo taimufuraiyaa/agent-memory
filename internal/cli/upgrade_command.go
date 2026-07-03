@@ -28,6 +28,7 @@ type upgradeResult struct {
 	InstalledFrom    string                           `json:"installed_from,omitempty"`
 	Replaced         bool                             `json:"replaced"`
 	AgentFiles       *workspace.WriteAgentFilesResult `json:"agent_files,omitempty"`
+	AllAgentFiles    map[string]*workspace.WriteAgentFilesResult `json:"all_agent_files,omitempty"`
 	DashboardUpdated bool                             `json:"dashboard_updated,omitempty"`
 	DashboardDir     string                           `json:"dashboard_dir,omitempty"`
 	DashboardSource  string                           `json:"dashboard_source,omitempty"`
@@ -358,6 +359,7 @@ func newUpgradeCommand() *cobra.Command {
 	var noHooks bool
 	var noDashboard bool
 	var dashboardDir string
+	var all bool
 
 	cmd := &cobra.Command{
 		Use:   "upgrade",
@@ -386,6 +388,33 @@ Use --hooks-only to push hooks without touching the binary (useful for existing 
 				})
 			}
 
+			writeAllAgentFiles := func(force bool) (map[string]*workspace.WriteAgentFilesResult, error) {
+				mgr, err := workspace.NewManager(defaultAgentMemoryDataDir())
+				if err != nil {
+					return nil, err
+				}
+				projects, err := mgr.List(cmd.Context())
+				if err != nil {
+					return nil, err
+				}
+				res := make(map[string]*workspace.WriteAgentFilesResult)
+				for _, proj := range projects {
+					if proj.WorkspaceRoot == "" {
+						continue
+					}
+					af, err := workspace.WriteAgentFiles(workspace.WriteAgentFilesOptions{
+						CWD:       proj.WorkspaceRoot,
+						Workspace: proj.Name,
+						Force:     force,
+					})
+					if err != nil {
+						continue
+					}
+					res[proj.Name] = af
+				}
+				return res, nil
+			}
+
 			printAgentFiles := func(af *workspace.WriteAgentFilesResult) {
 				for _, ide := range af.IDEs {
 					if len(ide.Written) > 0 {
@@ -399,15 +428,31 @@ Use --hooks-only to push hooks without touching the binary (useful for existing 
 
 			// --hooks-only: just write agent files, skip binary upgrade entirely.
 			if hooksOnly {
-				af, err := writeAgentFiles(forceHooks)
-				if err != nil {
-					return fmt.Errorf("agent files: %w", err)
+				var res upgradeResult
+				if all {
+					aaf, err := writeAllAgentFiles(forceHooks)
+					if err != nil {
+						return fmt.Errorf("all agent files: %w", err)
+					}
+					res.AllAgentFiles = aaf
+				} else {
+					af, err := writeAgentFiles(forceHooks)
+					if err != nil {
+						return fmt.Errorf("agent files: %w", err)
+					}
+					res.AgentFiles = af
 				}
-				res := upgradeResult{AgentFiles: af}
 				if f == "json" {
 					return writeSuccessEnvelope(cmd.OutOrStdout(), "upgrade", res)
 				}
-				printAgentFiles(af)
+				if all {
+					for projName, a := range res.AllAgentFiles {
+						_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Project: %s\n", projName)
+						printAgentFiles(a)
+					}
+				} else {
+					printAgentFiles(res.AgentFiles)
+				}
 				return nil
 			}
 
@@ -479,17 +524,30 @@ Use --hooks-only to push hooks without touching the binary (useful for existing 
 
 			if dryRun {
 				if !noHooks {
-					af, err := writeAgentFiles(forceHooks)
-					if err != nil {
-						return fmt.Errorf("agent files: %w", err)
+					if all {
+						aaf, err := writeAllAgentFiles(forceHooks)
+						if err != nil {
+							return fmt.Errorf("all agent files: %w", err)
+						}
+						res.AllAgentFiles = aaf
+					} else {
+						af, err := writeAgentFiles(forceHooks)
+						if err != nil {
+							return fmt.Errorf("agent files: %w", err)
+						}
+						res.AgentFiles = af
 					}
-					res.AgentFiles = af
 				}
 				if f == "json" {
 					return writeSuccessEnvelope(cmd.OutOrStdout(), "upgrade", res)
 				}
 				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "dry-run: would replace %s (from %s)\n", target, spec)
-				if res.AgentFiles != nil {
+				if all && res.AllAgentFiles != nil {
+					for projName, a := range res.AllAgentFiles {
+						_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Project: %s (dry-run)\n", projName)
+						printAgentFiles(a)
+					}
+				} else if res.AgentFiles != nil {
 					printAgentFiles(res.AgentFiles)
 				}
 				return nil
@@ -511,11 +569,19 @@ Use --hooks-only to push hooks without touching the binary (useful for existing 
 			}
 
 			if !noHooks {
-				af, err := writeAgentFiles(forceHooks)
-				if err != nil {
-					return fmt.Errorf("agent files: %w", err)
+				if all {
+					aaf, err := writeAllAgentFiles(forceHooks)
+					if err != nil {
+						return fmt.Errorf("all agent files: %w", err)
+					}
+					res.AllAgentFiles = aaf
+				} else {
+					af, err := writeAgentFiles(forceHooks)
+					if err != nil {
+						return fmt.Errorf("agent files: %w", err)
+					}
+					res.AgentFiles = af
 				}
-				res.AgentFiles = af
 			}
 
 			if !noDashboard && strings.TrimSpace(srcDir) != "" {
@@ -566,7 +632,12 @@ Use --hooks-only to push hooks without touching the binary (useful for existing 
 				return writeSuccessEnvelope(cmd.OutOrStdout(), "upgrade", res)
 			}
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "upgraded: %s\n", target)
-			if res.AgentFiles != nil {
+			if all && res.AllAgentFiles != nil {
+				for projName, a := range res.AllAgentFiles {
+					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Project: %s\n", projName)
+					printAgentFiles(a)
+				}
+			} else if res.AgentFiles != nil {
 				printAgentFiles(res.AgentFiles)
 			}
 			if res.DashboardUpdated {
@@ -596,6 +667,7 @@ Use --hooks-only to push hooks without touching the binary (useful for existing 
 	cmd.Flags().BoolVar(&forceHooks, "force-hooks", false, "Overwrite hook files even if already up-to-date")
 	cmd.Flags().BoolVar(&noDashboard, "no-dashboard", false, "Skip refreshing standalone dashboard from source checkout")
 	cmd.Flags().StringVar(&dashboardDir, "dashboard-dir", "", "Dashboard install dir (default: $AGENT_MEMORY_DASHBOARD_DIR or ~/.agent-memory/dashboard)")
+	cmd.Flags().BoolVarP(&all, "all", "a", false, "Upgrade all registered workspaces/projects")
 	return cmd
 }
 

@@ -7170,7 +7170,7 @@ function submitRequestFeedback(input) {
 function listSkills(input) {
   return api(`/api/v1/skills?workspace=${encodeURIComponent(input.workspace)}`, {
     method: "GET"
-  });
+  }).then((res) => res.skills || []);
 }
 const scriptRel = "modulepreload";
 const assetsURL = function(dep) {
