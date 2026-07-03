@@ -112,3 +112,15 @@ func TestLooksLikeDashboardCommandLine(t *testing.T) {
 		t.Fatalf("expected serve command line not to match dashboard detector")
 	}
 }
+
+func TestDashboardStopWhenNotRunning(t *testing.T) {
+	cmd := newDashboardCommand()
+	cmd.SetArgs([]string{"--stop", "--addr", ":9999"})
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatalf("expected error, got nil")
+	}
+	if err.Error() != "Dashboard was closed!" {
+		t.Fatalf("expected error %q, got %q", "Dashboard was closed!", err.Error())
+	}
+}

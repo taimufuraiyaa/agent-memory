@@ -509,10 +509,7 @@ func newDashboardCommand() *cobra.Command {
 				if !stopOK {
 					inferred, inferErr := inferDashboardPIDByAddr(addr)
 					if inferErr != nil {
-						_, err := readDashboardPID(pidPath)
-						if err != nil {
-							return fmt.Errorf("dashboard stop: %w", err)
-						}
+						return errors.New("Dashboard was closed!")
 					}
 					v = inferred
 				}

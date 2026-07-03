@@ -275,6 +275,9 @@ type FeedbackStats struct {
 	AverageYear        float64        `json:"average_year"`
 	TotalFeedbackCount int            `json:"total_feedback_count"`
 	ScoreDistribution  map[string]int `json:"score_distribution"`
+	AverageUsefulCount float64        `json:"average_useful_count"`
+	AverageTotalCount  float64        `json:"average_total_count"`
+	AverageUsefulRatio float64        `json:"average_useful_ratio"`
 }
 
 // RetrievalRequestLog represents a logged search or recall request with optional feedback.
@@ -285,6 +288,8 @@ type RetrievalRequestLog struct {
 	Query       string `json:"query"`
 	Score       int    `json:"score"`
 	Reason      string `json:"reason"`
+	UsefulCount int    `json:"useful_count"`
+	TotalCount  int    `json:"total_count"`
 	CreatedAt   string `json:"created_at"`
 }
 

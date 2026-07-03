@@ -208,17 +208,6 @@ export function OverviewPanel({
           <PieChartBreakdown entries={tierEntries} emptyLabel="No tier distribution yet." />
         </BreakdownCard>
 
-        <BreakdownCard title="Retrieval Reach" subtitle={`${formatPercent(retrievalCoveragePercent)} coverage`}>
-          <div className="diagnosticsList">
-            <DiagnosticRow label="Retrieved Memories" value={formatNumber(retrievedMemoryCount)} />
-            <DiagnosticRow label="Never Reached" value={formatNumber(neverReachedMemoryCount)} />
-            <DiagnosticRow label={`Low Reach (P${formatNumber(lowReachMemoryCount)})`} value={formatNumber(lowReachMemoryCount)} />
-            <DiagnosticRow label="Total Retrieval Events" value={formatNumber(retrieveCountTotal)} />
-            <DiagnosticRow label="Low-Reach Threshold" value={`<= ${formatNumber(lowReachThreshold)} hits`} />
-            <DiagnosticRow label="Last Accessed" value={formatTS(stats?.last_memory_accessed_at) || 'n/a'} />
-          </div>
-        </BreakdownCard>
-
         <BreakdownCard title="Scheduler" subtitle={scheduler?.enabled ? `Next tick ${formatTS(scheduler?.next_tick_at) || 'n/a'}` : 'Background lifecycle disabled'}>
           <div className="diagnosticsList">
             <DiagnosticRow label="State" value={schedulerState} />
@@ -239,6 +228,9 @@ export function OverviewPanel({
                 <DiagnosticRow label="Monthly Average (Last 30d)" value={stats?.feedback_stats && stats.feedback_stats.total_feedback_count > 0 ? `${stats.feedback_stats.average_month.toFixed(2)} / 5.0` : 'n/a'} />
                 <DiagnosticRow label="Yearly Average (Last 365d)" value={stats?.feedback_stats && stats.feedback_stats.total_feedback_count > 0 ? `${stats.feedback_stats.average_year.toFixed(2)} / 5.0` : 'n/a'} />
                 <DiagnosticRow label="Total Feedbacks Given" value={formatNumber(stats?.feedback_stats?.total_feedback_count ?? 0)} />
+                <DiagnosticRow label="Avg Useful Hits Count" value={stats?.feedback_stats && typeof stats.feedback_stats.average_useful_count === 'number' && stats.feedback_stats.average_useful_count >= 0 ? `${stats.feedback_stats.average_useful_count.toFixed(1)} memories` : 'n/a'} />
+                <DiagnosticRow label="Avg Total Hits Count" value={stats?.feedback_stats && typeof stats.feedback_stats.average_total_count === 'number' && stats.feedback_stats.average_total_count >= 0 ? `${stats.feedback_stats.average_total_count.toFixed(1)} memories` : 'n/a'} />
+                <DiagnosticRow label="Avg Useful Hits Ratio" value={stats?.feedback_stats && typeof stats.feedback_stats.average_useful_ratio === 'number' && stats.feedback_stats.average_useful_ratio >= 0 ? `${(stats.feedback_stats.average_useful_ratio * 100).toFixed(1)}%` : 'n/a'} />
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
                 <div style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text-muted)', marginBottom: '12px', textAlign: 'center' }}>Score Distribution</div>

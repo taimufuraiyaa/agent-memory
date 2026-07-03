@@ -7161,6 +7161,12 @@ function listFeedback(input) {
     method: "GET"
   });
 }
+function submitRequestFeedback(input) {
+  return api("/api/v1/requests/feedback", {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
 const scriptRel = "modulepreload";
 const assetsURL = function(dep) {
   return "/" + dep;
@@ -36267,7 +36273,7 @@ function OverviewPanel({
   const retrieveCountTotal = (stats == null ? void 0 : stats.retrieve_count_total) ?? 0;
   const retrievalCoveragePercent = (stats == null ? void 0 : stats.retrieval_coverage_percent) ?? (totalMemories > 0 ? retrievedMemoryCount / totalMemories * 100 : 0);
   const lowReachPercentile = (stats == null ? void 0 : stats.low_reach_percentile) ?? 25;
-  const lowReachThreshold = (stats == null ? void 0 : stats.low_reach_threshold) ?? 0;
+  (stats == null ? void 0 : stats.low_reach_threshold) ?? 0;
   const lowReachMemoryCount = (stats == null ? void 0 : stats.low_reach_memory_count) ?? 0;
   const topRetrievedMemories = (stats == null ? void 0 : stats.top_retrieved_memories) ?? [];
   const scheduler2 = stats == null ? void 0 : stats.scheduler;
@@ -36349,14 +36355,6 @@ function OverviewPanel({
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "overviewColumns", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(BreakdownCard, { title: "Memory Types", subtitle: `${formatNumber(sumCounts(stats == null ? void 0 : stats.memory_type_counts))} total`, children: /* @__PURE__ */ jsxRuntimeExports.jsx(PieChartBreakdown, { entries: typeEntries, emptyLabel: "No type distribution yet." }) }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(BreakdownCard, { title: "Storage Tiers", subtitle: `${formatNumber(sumCounts(stats == null ? void 0 : stats.storage_tier_counts))} classified`, children: /* @__PURE__ */ jsxRuntimeExports.jsx(PieChartBreakdown, { entries: tierEntries, emptyLabel: "No tier distribution yet." }) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(BreakdownCard, { title: "Retrieval Reach", subtitle: `${formatPercent(retrievalCoveragePercent)} coverage`, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "diagnosticsList", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Retrieved Memories", value: formatNumber(retrievedMemoryCount) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Never Reached", value: formatNumber(neverReachedMemoryCount) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: `Low Reach (P${formatNumber(lowReachMemoryCount)})`, value: formatNumber(lowReachMemoryCount) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Total Retrieval Events", value: formatNumber(retrieveCountTotal) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Low-Reach Threshold", value: `<= ${formatNumber(lowReachThreshold)} hits` }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Last Accessed", value: formatTS(stats == null ? void 0 : stats.last_memory_accessed_at) || "n/a" })
-      ] }) }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(BreakdownCard, { title: "Scheduler", subtitle: (scheduler2 == null ? void 0 : scheduler2.enabled) ? `Next tick ${formatTS(scheduler2 == null ? void 0 : scheduler2.next_tick_at) || "n/a"}` : "Background lifecycle disabled", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "diagnosticsList", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "State", value: schedulerState }),
         /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Last Tick", value: formatTS(scheduler2 == null ? void 0 : scheduler2.last_tick_at) || "n/a" }),
@@ -36371,7 +36369,10 @@ function OverviewPanel({
           /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Weekly Average (Last 7d)", value: (stats == null ? void 0 : stats.feedback_stats) && stats.feedback_stats.total_feedback_count > 0 ? `${stats.feedback_stats.average_week.toFixed(2)} / 5.0` : "n/a" }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Monthly Average (Last 30d)", value: (stats == null ? void 0 : stats.feedback_stats) && stats.feedback_stats.total_feedback_count > 0 ? `${stats.feedback_stats.average_month.toFixed(2)} / 5.0` : "n/a" }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Yearly Average (Last 365d)", value: (stats == null ? void 0 : stats.feedback_stats) && stats.feedback_stats.total_feedback_count > 0 ? `${stats.feedback_stats.average_year.toFixed(2)} / 5.0` : "n/a" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Total Feedbacks Given", value: formatNumber(((_c2 = stats == null ? void 0 : stats.feedback_stats) == null ? void 0 : _c2.total_feedback_count) ?? 0) })
+          /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Total Feedbacks Given", value: formatNumber(((_c2 = stats == null ? void 0 : stats.feedback_stats) == null ? void 0 : _c2.total_feedback_count) ?? 0) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Avg Useful Hits Count", value: (stats == null ? void 0 : stats.feedback_stats) && typeof stats.feedback_stats.average_useful_count === "number" && stats.feedback_stats.average_useful_count >= 0 ? `${stats.feedback_stats.average_useful_count.toFixed(1)} memories` : "n/a" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Avg Total Hits Count", value: (stats == null ? void 0 : stats.feedback_stats) && typeof stats.feedback_stats.average_total_count === "number" && stats.feedback_stats.average_total_count >= 0 ? `${stats.feedback_stats.average_total_count.toFixed(1)} memories` : "n/a" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticRow, { label: "Avg Useful Hits Ratio", value: (stats == null ? void 0 : stats.feedback_stats) && typeof stats.feedback_stats.average_useful_ratio === "number" && stats.feedback_stats.average_useful_ratio >= 0 ? `${(stats.feedback_stats.average_useful_ratio * 100).toFixed(1)}%` : "n/a" })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", flexDirection: "column", justifyContent: "center" }, children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "12px", fontWeight: "bold", color: "var(--text-muted)", marginBottom: "12px", textAlign: "center" }, children: "Score Distribution" }),
@@ -36588,6 +36589,7 @@ function WikiMemoryFragment({
   onOpenDiagram,
   onTogglePin
 }) {
+  var _a2, _b2;
   const semanticSimilarity = getSemanticSimilarity(memory);
   const semanticRelevance = getSemanticRelevance(semanticSimilarity);
   const pinLabel = pinBusy ? "wait" : pinned ? "unpin" : "pin";
@@ -36629,7 +36631,9 @@ function WikiMemoryFragment({
               " ",
               formatScore(semanticSimilarity, 2)
             ] }) : null,
-            weak ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "memPill wikiQuietBadge", children: "weak" }) : null
+            weak ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "memPill wikiQuietBadge", children: "weak" }) : null,
+            memory.superseded_by ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "memPill relevancePill relevancePillLow", style: { background: "#3b1c1c", border: "1px solid #7d2a2a", color: "#ff8585" }, title: `Superseded by memory ${memory.superseded_by}`, children: "Superseded" }) : null,
+            ((_a2 = memory.relations) == null ? void 0 : _a2.some((r2) => r2.type === "supersedes")) ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "memPill relevancePill relevancePillHigh", style: { background: "#1c3b24", border: "1px solid #2a7d43", color: "#85ff9d" }, title: `Supersedes memory ${(_b2 = memory.relations.find((r2) => r2.type === "supersedes")) == null ? void 0 : _b2.target_id}`, children: "Correction" }) : null
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs(
             "button",
@@ -37045,20 +37049,91 @@ function FeedbackPanel({
   workspace,
   feedback,
   busy,
-  error
+  error,
+  onFeedbackUpdated
 }) {
   const [statusFilter, setStatusFilter] = reactExports.useState("all");
   const [typeFilter, setTypeFilter] = reactExports.useState("all");
   const [searchQuery, setSearchQuery] = reactExports.useState("");
   const [selectedLog, setSelectedLog] = reactExports.useState(null);
   const [copiedId, setCopiedId] = reactExports.useState(null);
+  const [reworkTime, setReworkTime] = reactExports.useState(5);
+  const [isEditing, setIsEditing] = reactExports.useState(false);
+  const [editScore, setEditScore] = reactExports.useState(5);
+  const [editReason, setEditReason] = reactExports.useState("");
+  const [editUsefulCount, setEditUsefulCount] = reactExports.useState("");
+  const [editTotalCount, setEditTotalCount] = reactExports.useState("");
+  const [saving, setSaving] = reactExports.useState(false);
+  const [saveError, setSaveError] = reactExports.useState("");
+  reactExports.useEffect(() => {
+    if (selectedLog) {
+      setEditScore(selectedLog.score >= 0 ? selectedLog.score : 5);
+      setEditReason(selectedLog.reason || "");
+      setEditUsefulCount(typeof selectedLog.useful_count === "number" && selectedLog.useful_count >= 0 ? selectedLog.useful_count : "");
+      setEditTotalCount(typeof selectedLog.total_count === "number" && selectedLog.total_count >= 0 ? selectedLog.total_count : "");
+      setSaveError("");
+      setIsEditing(false);
+    }
+  }, [selectedLog]);
+  const handleSaveFeedback = async () => {
+    if (!selectedLog) return;
+    if (editScore < 0 || editScore > 5) {
+      setSaveError("Score must be between 0 and 5");
+      return;
+    }
+    if (editScore < 4 && !editReason.trim()) {
+      setSaveError("Reason is required for scores below 4");
+      return;
+    }
+    const parsedUseful = editUsefulCount === "" ? void 0 : parseInt(String(editUsefulCount));
+    const parsedTotal = editTotalCount === "" ? void 0 : parseInt(String(editTotalCount));
+    if (parsedUseful !== void 0 && parsedTotal !== void 0 && parsedUseful > parsedTotal) {
+      setSaveError("Useful hits cannot exceed total hits");
+      return;
+    }
+    try {
+      setSaving(true);
+      setSaveError("");
+      await submitRequestFeedback({
+        workspace,
+        request_id: selectedLog.id,
+        score: editScore,
+        reason: editReason,
+        useful_count: parsedUseful,
+        total_count: parsedTotal
+      });
+      setIsEditing(false);
+      if (onFeedbackUpdated) {
+        onFeedbackUpdated();
+      }
+      setSelectedLog((prev2) => prev2 ? {
+        ...prev2,
+        score: editScore,
+        reason: editReason,
+        useful_count: parsedUseful ?? -1,
+        total_count: parsedTotal ?? -1
+      } : null);
+    } catch (err) {
+      setSaveError(err.message || String(err));
+    } finally {
+      setSaving(false);
+    }
+  };
   const stats = reactExports.useMemo(() => {
     const total = feedback.length;
     const scoredList = feedback.filter((f2) => f2.score >= 0);
     const scored = scoredList.length;
     const pending = total - scored;
     const average = scored > 0 ? (scoredList.reduce((acc, f2) => acc + f2.score, 0) / scored).toFixed(1) : "-";
-    return { total, scored, pending, average };
+    const highScoredCount = scoredList.filter((f2) => f2.score >= 4).length;
+    const reworkAvoidanceRate = scored > 0 ? (highScoredCount / scored * 100).toFixed(1) : "-";
+    const ratioList = scoredList.filter(
+      (f2) => typeof f2.total_count === "number" && typeof f2.useful_count === "number" && f2.total_count > 0 && f2.useful_count >= 0
+    );
+    const avgUsefulRatio = ratioList.length > 0 ? (ratioList.reduce((acc, f2) => acc + f2.useful_count / f2.total_count, 0) / ratioList.length * 100).toFixed(1) : "-";
+    const avgUsefulCount = ratioList.length > 0 ? (ratioList.reduce((acc, f2) => acc + f2.useful_count, 0) / ratioList.length).toFixed(1) : "-";
+    const avgTotalCount = ratioList.length > 0 ? (ratioList.reduce((acc, f2) => acc + f2.total_count, 0) / ratioList.length).toFixed(1) : "-";
+    return { total, scored, pending, average, reworkAvoidanceRate, avgUsefulRatio, avgUsefulCount, avgTotalCount, highScoredCount };
   }, [feedback]);
   const filteredFeedback = reactExports.useMemo(() => {
     return feedback.filter((item) => {
@@ -37089,7 +37164,7 @@ function FeedbackPanel({
       "Failed to load feedback logs: ",
       error
     ] }) : busy && feedback.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "emptyState", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "emptyBody", children: "Loading feedback logs..." }) }) : feedback.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "emptyState", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "emptyBody", children: "No retrieval requests or feedback logged yet for this workspace." }) }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "feedbackContainer", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "feedbackSummaryGrid", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "feedbackSummaryGrid", style: { gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }, children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "feedbackSummaryCard", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "feedbackSummaryLabel", children: "Total Queries" }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "feedbackSummaryValue", children: stats.total })
@@ -37099,12 +37174,41 @@ function FeedbackPanel({
           /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "feedbackSummaryValue", style: { color: stats.average !== "-" && Number(stats.average) >= 4 ? "#2ecc71" : "inherit" }, children: stats.average !== "-" ? `${stats.average}/5` : "-" })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "feedbackSummaryCard", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "feedbackSummaryLabel", children: "Scored Requests" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "feedbackSummaryValue", style: { color: "#2ecc71" }, children: stats.scored })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "feedbackSummaryLabel", children: "Rework Avoidance Rate" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "feedbackSummaryValue", style: { color: stats.reworkAvoidanceRate !== "-" && Number(stats.reworkAvoidanceRate) >= 80 ? "#2ecc71" : "inherit" }, children: stats.reworkAvoidanceRate !== "-" ? `${stats.reworkAvoidanceRate}%` : "-" })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "feedbackSummaryCard", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "feedbackSummaryLabel", children: "Pending Scoring" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "feedbackSummaryValue", style: { color: stats.pending > 0 ? "#e67e22" : "inherit" }, children: stats.pending })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "feedbackSummaryLabel", children: "Avg Useful Hits Ratio" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "feedbackSummaryValue", style: { color: "#9b59b6" }, children: [
+            stats.avgUsefulRatio !== "-" ? `${stats.avgUsefulRatio}%` : "-",
+            stats.avgUsefulRatio !== "-" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { fontSize: "10px", color: "var(--text-muted)", marginTop: "4px", fontWeight: "normal" }, children: [
+              "(",
+              stats.avgUsefulCount,
+              " / ",
+              stats.avgTotalCount,
+              " hits)"
+            ] }) : null
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "feedbackSummaryCard", style: { position: "relative" }, children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "feedbackSummaryLabel", children: "Workload Saved" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "feedbackSummaryValue", style: { color: "#f1c40f" }, children: stats.highScoredCount > 0 ? `${(stats.highScoredCount * reworkTime / 60).toFixed(1)} hrs` : "-" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { marginTop: "6px", display: "flex", alignItems: "center", gap: "8px" }, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "9px", color: "var(--text-muted)" }, children: "Loop time:" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "input",
+              {
+                type: "number",
+                min: "1",
+                max: "60",
+                value: reworkTime,
+                onChange: (e2) => setReworkTime(Math.max(1, parseInt(e2.target.value) || 1)),
+                style: { width: "40px", background: "var(--bg-input)", border: "1px solid var(--border)", color: "var(--text-main)", fontSize: "10px", textAlign: "center", padding: "2px", borderRadius: "4px" },
+                title: "Estimated minutes spent per low-score query correction loop"
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontSize: "9px", color: "var(--text-muted)" }, children: "mins" })
+          ] })
         ] })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "feedbackControls", children: [
@@ -37165,10 +37269,18 @@ function FeedbackPanel({
                 /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "feedbackTableCell mono", style: { fontSize: "11px", color: "var(--text-muted)" }, children: formatTS(req.created_at) }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "feedbackTableCell", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: req.request_type === "search" ? "feedbackBadgeSearch" : "feedbackBadgeRecall", children: req.request_type }) }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "feedbackTableCell", style: { whiteSpace: "normal", wordBreak: "break-word", fontSize: "13px" }, children: req.query }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "feedbackTableCell", style: { textAlign: "center" }, children: req.score >= 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: `feedbackScoreBadge ${req.score >= 4 ? "feedbackScoreHigh" : "feedbackScoreLow"}`, children: [
-                  req.score,
-                  "/5"
-                ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "feedbackScoreBadge feedbackScorePending", children: "Pending" }) }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("td", { className: "feedbackTableCell", style: { textAlign: "center" }, children: [
+                  req.score >= 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: `feedbackScoreBadge ${req.score >= 4 ? "feedbackScoreHigh" : "feedbackScoreLow"}`, children: [
+                    req.score,
+                    "/5"
+                  ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "feedbackScoreBadge feedbackScorePending", children: "Pending" }),
+                  typeof req.useful_count === "number" && req.useful_count >= 0 && req.total_count ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { fontSize: "10px", color: "var(--text-muted)", marginTop: "4px" }, children: [
+                    "Hits: ",
+                    req.useful_count,
+                    "/",
+                    req.total_count
+                  ] }) : null
+                ] }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "feedbackTableCell", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "feedbackReasonText", title: req.reason, children: req.reason || /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "muted", children: "-" }) }) })
               ]
             },
@@ -37190,13 +37302,77 @@ function FeedbackPanel({
               }
             )
           ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "detailDrawerBody", style: { overflowY: "auto", display: "flex", flexDirection: "column", gap: "16px", padding: "18px" }, children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "detailDrawerBody", style: { overflowY: "auto", display: "flex", flexDirection: "column", gap: "16px", padding: "18px" }, children: isEditing ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", flexDirection: "column", gap: "14px" }, children: [
+            saveError ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "errAlert", style: { fontSize: "12px", padding: "8px" }, children: saveError }) : null,
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memMetaLabel", style: { marginBottom: "6px" }, children: "Quality Score (0-5)" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { display: "flex", gap: "6px" }, children: [0, 1, 2, 3, 4, 5].map((s2) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "button",
+                {
+                  type: "button",
+                  onClick: () => setEditScore(s2),
+                  className: `feedbackFilterBtn ${editScore === s2 ? "feedbackFilterBtnActive" : ""}`,
+                  style: { flex: 1, padding: "6px 0", fontSize: "12px" },
+                  children: s2
+                },
+                s2
+              )) })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memMetaLabel", style: { marginBottom: "6px" }, children: "Helpful Memories / Hits Ratio" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", gap: "10px", alignItems: "center" }, children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "input",
+                  {
+                    type: "number",
+                    min: "0",
+                    value: editUsefulCount,
+                    onChange: (e2) => setEditUsefulCount(e2.target.value),
+                    placeholder: "Useful count",
+                    style: { flex: 1, padding: "6px 8px", background: "var(--bg-input)", border: "1px solid var(--border)", color: "var(--text-main)", borderRadius: "4px", fontSize: "12px" }
+                  }
+                ),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { color: "var(--text-muted)" }, children: "/" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "input",
+                  {
+                    type: "number",
+                    min: "1",
+                    value: editTotalCount,
+                    onChange: (e2) => setEditTotalCount(e2.target.value),
+                    placeholder: "Total count",
+                    style: { flex: 1, padding: "6px 8px", background: "var(--bg-input)", border: "1px solid var(--border)", color: "var(--text-main)", borderRadius: "4px", fontSize: "12px" }
+                  }
+                )
+              ] })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memMetaLabel", style: { marginBottom: "6px" }, children: "Feedback Explanation / Comments" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "textarea",
+                {
+                  value: editReason,
+                  onChange: (e2) => setEditReason(e2.target.value),
+                  placeholder: editScore < 4 ? "detailed explanation is required for score < 4" : "optional explanation comments...",
+                  style: { width: "100%", minHeight: "80px", padding: "8px", background: "var(--bg-input)", border: "1px solid var(--border)", color: "var(--text-main)", borderRadius: "4px", fontSize: "12px", resize: "vertical" }
+                }
+              )
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", gap: "10px", marginTop: "4px" }, children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "btn btnPrimary", type: "button", onClick: handleSaveFeedback, disabled: saving, style: { flex: 1 }, children: saving ? "Saving..." : "Save Feedback" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "btn btnGhost", type: "button", onClick: () => setIsEditing(false), disabled: saving, style: { flex: 1 }, children: "Cancel" })
+            ] })
+          ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
             /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "detailSection", style: { display: "flex", justifyContent: "space-between", alignItems: "center", background: "var(--bg-input)", padding: "12px", border: "1px dotted var(--border)" }, children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--text-muted)" }, children: "QUALITY SCORE" }),
               selectedLog.score >= 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "4px" }, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: `feedbackScoreBadge ${selectedLog.score >= 4 ? "feedbackScoreHigh" : "feedbackScoreLow"}`, style: { fontSize: "14px", padding: "6px 12px" }, children: [
                 selectedLog.score,
                 " / 5"
               ] }) }) : /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "feedbackScoreBadge feedbackScorePending", style: { padding: "6px 12px" }, children: "PENDING FEEDBACK" })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "detailSection", style: { display: "flex", justifyContent: "space-between", alignItems: "center", background: "var(--bg-input)", padding: "12px", border: "1px dotted var(--border)" }, children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--text-muted)" }, children: "HELPFUL HITS RATIO" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { style: { fontFamily: "var(--font-mono)", fontSize: "12px", fontWeight: "bold" }, children: typeof selectedLog.useful_count === "number" && selectedLog.useful_count >= 0 && selectedLog.total_count && selectedLog.total_count > 0 ? `${selectedLog.useful_count} / ${selectedLog.total_count} (${(selectedLog.useful_count / selectedLog.total_count * 100).toFixed(0)}%)` : /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "muted", children: "Not specified" }) })
             ] }),
             /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "detailSection", children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memMetaLabel", style: { marginBottom: "6px" }, children: "Request ID" }),
@@ -37267,15 +37443,25 @@ function FeedbackPanel({
                   children: selectedLog.reason || "No explanation comments provided for this request."
                 }
               )
-            ] })
-          ] })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { marginTop: "10px" }, children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                className: "btn btnPrimary",
+                type: "button",
+                style: { width: "100%", padding: "10px" },
+                onClick: () => setIsEditing(true),
+                children: selectedLog.score >= 0 ? "Edit / Update Feedback" : "Submit Feedback Score"
+              }
+            ) })
+          ] }) })
         ] })
       ] })
     ] })
   ] });
 }
 function App() {
-  var _a2;
+  var _a2, _b2, _c2, _d2;
   const [surface, setSurface] = reactExports.useState("overview");
   const [viewingJSON, setViewingJSON] = reactExports.useState(null);
   const [projects, setProjects] = reactExports.useState([]);
@@ -37409,8 +37595,8 @@ function App() {
       if (cancelled) return;
       setProjects(r2.projects ?? []);
       setWorkspace((prev2) => {
-        var _a3, _b2;
-        return prev2 || (((_b2 = (_a3 = r2.projects) == null ? void 0 : _a3[0]) == null ? void 0 : _b2.name) ?? "");
+        var _a3, _b3;
+        return prev2 || (((_b3 = (_a3 = r2.projects) == null ? void 0 : _a3[0]) == null ? void 0 : _b3.name) ?? "");
       });
     }).catch(() => {
       if (cancelled) return;
@@ -37504,26 +37690,30 @@ function App() {
       cancelled = true;
     };
   }, [workspace]);
-  reactExports.useEffect(() => {
-    let cancelled = false;
-    if (!workspace || surface !== "feedback") return;
+  const refreshFeedbackAndStats = reactExports.useCallback(() => {
+    if (!workspace) return;
     setFeedbackBusy(true);
     setFeedbackErr("");
     listFeedback({ workspace }).then((data) => {
-      if (cancelled) return;
       setFeedbackLogs(data);
     }).catch((e2) => {
-      if (cancelled) return;
       setFeedbackLogs([]);
       setFeedbackErr(e2 instanceof Error ? e2.message : String(e2));
     }).finally(() => {
-      if (cancelled) return;
       setFeedbackBusy(false);
     });
-    return () => {
-      cancelled = true;
-    };
-  }, [workspace, surface]);
+    getStats(workspace).then((s2) => {
+      setStats(s2);
+    }).catch((e2) => {
+      setStats(null);
+      setStatsErr(e2 instanceof Error ? e2.message : String(e2));
+    });
+  }, [workspace]);
+  reactExports.useEffect(() => {
+    if (workspace && surface === "feedback") {
+      refreshFeedbackAndStats();
+    }
+  }, [workspace, surface, refreshFeedbackAndStats]);
   reactExports.useEffect(() => {
     if (!sessions.length) {
       setSelectedSessionID("");
@@ -37901,6 +38091,8 @@ function App() {
                 p2.name,
                 " (",
                 p2.memory_count,
+                " mem, ",
+                formatBytes(p2.size_bytes),
                 ")"
               ] }, p2.name))
             ]
@@ -38035,7 +38227,8 @@ function App() {
             workspace,
             feedback: feedbackLogs,
             busy: feedbackBusy,
-            error: feedbackErr
+            error: feedbackErr,
+            onFeedbackUpdated: refreshFeedbackAndStats
           }
         ) : null,
         surface === "wiki" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -38151,7 +38344,9 @@ function App() {
               selectedSemanticRelevance.label,
               " semantic ",
               formatScore(selectedSemanticSimilarity, 2)
-            ] }) : null
+            ] }) : null,
+            selectedMemory.superseded_by ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "memPill relevancePill relevancePillLow", style: { background: "#3b1c1c", border: "1px solid #7d2a2a", color: "#ff8585" }, children: "Superseded" }) : null,
+            ((_a2 = selectedMemory.relations) == null ? void 0 : _a2.some((r2) => r2.type === "supersedes")) ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "memPill relevancePill relevancePillHigh", style: { background: "#1c3b24", border: "1px solid #2a7d43", color: "#85ff9d" }, children: "Correction" }) : null
           ] }),
           (() => {
             const parsedJSON = tryParseJSON(selectedMemory.content);
@@ -38217,7 +38412,7 @@ function App() {
                   " times"
                 ] })
               ] }) : null,
-              ((_a2 = selectedMemory.exclusion_reasons) == null ? void 0 : _a2.length) ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memMeta", children: [
+              ((_b2 = selectedMemory.exclusion_reasons) == null ? void 0 : _b2.length) ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memMeta", children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memMetaLabel", children: "Excluded By" }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memMetaValue", children: pillList(selectedMemory.exclusion_reasons) })
               ] }) : null,
@@ -38228,7 +38423,15 @@ function App() {
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memMeta", children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memMetaLabel", children: "Tags" }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memMetaValue", children: pillList(selectedMemory.tags ?? []) })
-              ] })
+              ] }),
+              selectedMemory.superseded_by ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memMeta", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memMetaLabel", children: "Superseded By" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memMetaValue mono", style: { color: "#ff8585", wordBreak: "break-all" }, children: selectedMemory.superseded_by })
+              ] }) : null,
+              ((_c2 = selectedMemory.relations) == null ? void 0 : _c2.some((r2) => r2.type === "supersedes")) ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memMeta", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memMetaLabel", children: "Supersedes" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memMetaValue mono", style: { color: "#85ff9d", wordBreak: "break-all" }, children: (_d2 = selectedMemory.relations.find((r2) => r2.type === "supersedes")) == null ? void 0 : _d2.target_id })
+              ] }) : null
             ] })
           ] }),
           selectedMemory.score_breakdown ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "detailSection", children: [

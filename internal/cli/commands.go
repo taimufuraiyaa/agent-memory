@@ -571,6 +571,7 @@ func newFeedbackCommand() *cobra.Command {
 	var memoryID, outcome, validator, reasonCategory, occurredAt, reconsolidationAction, successorMemoryID, reason string
 	var requestID string
 	var score int
+	var usefulCount, totalCount int
 	cmd := &cobra.Command{
 		Use:   "feedback",
 		Short: "Record retrieval feedback for a memory",
@@ -590,12 +591,17 @@ func newFeedbackCommand() *cobra.Command {
 				if score < 4 && strings.TrimSpace(reason) == "" {
 					return errors.New("reason is required for scores below 4")
 				}
+				if usefulCount != -1 && totalCount != -1 && usefulCount > totalCount {
+					return errors.New("useful-count cannot be greater than total-count")
+				}
 				if cfg.apiURL != "" {
 					body := map[string]any{
-						"workspace":  cfg.workspace,
-						"request_id": requestID,
-						"score":      score,
-						"reason":     reason,
+						"workspace":    cfg.workspace,
+						"request_id":   requestID,
+						"score":        score,
+						"reason":       reason,
+						"useful_count": usefulCount,
+						"total_count":  totalCount,
 					}
 					var out any
 					if err := postAPI(ctx, cfg.apiURL, "/api/v1/requests/feedback", body, &out); err != nil {
@@ -608,15 +614,17 @@ func newFeedbackCommand() *cobra.Command {
 					return err
 				}
 				defer func() { _ = store.Close() }()
-				if err := store.RecordRequestFeedback(ctx, requestID, score, reason); err != nil {
+				if err := store.RecordRequestFeedback(ctx, requestID, score, reason, usefulCount, totalCount); err != nil {
 					return err
 				}
 				return writeSuccessEnvelope(cmd.OutOrStdout(), "feedback", map[string]any{
-					"workspace":  cfg.workspace,
-					"request_id": requestID,
-					"score":      score,
-					"reason":     reason,
-					"ok":         true,
+					"workspace":    cfg.workspace,
+					"request_id":   requestID,
+					"score":        score,
+					"reason":       reason,
+					"useful_count": usefulCount,
+					"total_count":  totalCount,
+					"ok":           true,
 				})
 			}
 			if strings.TrimSpace(memoryID) == "" {
@@ -702,6 +710,8 @@ func newFeedbackCommand() *cobra.Command {
 	cmd.Flags().StringVar(&requestID, "request-id", "", "Request ID for scoring feedback")
 	cmd.Flags().IntVar(&score, "score", -1, "Feedback score: 0 (useless) to 5 (helpful)")
 	cmd.Flags().StringVar(&reason, "reason", "", "Explanation / reason for the feedback score")
+	cmd.Flags().IntVar(&usefulCount, "useful-count", -1, "Number of useful memories found in retrieval results")
+	cmd.Flags().IntVar(&totalCount, "total-count", -1, "Total number of memories retrieved")
 	return cmd
 }
 

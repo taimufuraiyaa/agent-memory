@@ -375,6 +375,8 @@ func (s *Store) Migrate(ctx context.Context) error {
 			query TEXT NOT NULL,
 			score INTEGER NOT NULL DEFAULT -1,
 			reason TEXT NOT NULL DEFAULT '',
+			useful_count INTEGER NOT NULL DEFAULT -1,
+			total_count INTEGER NOT NULL DEFAULT -1,
 			created_at TEXT NOT NULL
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_retrieval_requests_workspace_created ON retrieval_requests(workspace, created_at)`,
@@ -514,6 +516,12 @@ func (s *Store) Migrate(ctx context.Context) error {
 		return err
 	}
 	if err := s.ensureColumn(ctx, "retrieval_requests", "reason", `ALTER TABLE retrieval_requests ADD COLUMN reason TEXT NOT NULL DEFAULT ''`); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "retrieval_requests", "useful_count", `ALTER TABLE retrieval_requests ADD COLUMN useful_count INTEGER NOT NULL DEFAULT -1`); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "retrieval_requests", "total_count", `ALTER TABLE retrieval_requests ADD COLUMN total_count INTEGER NOT NULL DEFAULT -1`); err != nil {
 		return err
 	}
 	// Add indexes for vector provenance columns
@@ -1031,7 +1039,10 @@ ORDER BY updated_at DESC`, workspace)
 		m.Pinned = pinned == 1
 		out = append(out, m)
 	}
-	return out, rows.Err()
+	if rowsErr := rows.Err(); rowsErr != nil {
+		return nil, rowsErr
+	}
+	return s.PopulateSupersedesRelations(ctx, out)
 }
 
 func (s *Store) ListRecentMemoriesByWorkspace(ctx context.Context, workspace string, limit int) ([]core.MemoryEntry, error) {
@@ -1108,7 +1119,10 @@ LIMIT ?`, workspace, limit)
 		m.Pinned = pinned == 1
 		out = append(out, m)
 	}
-	return out, rows.Err()
+	if rowsErr := rows.Err(); rowsErr != nil {
+		return nil, rowsErr
+	}
+	return s.PopulateSupersedesRelations(ctx, out)
 }
 
 // CountMemories returns the number of persisted memories.
@@ -1119,6 +1133,63 @@ func (s *Store) CountMemories(ctx context.Context) (int, error) {
 		return 0, err
 	}
 	return n, nil
+}
+
+// PopulateSupersedesRelations finds outgoing 'supersedes' relations for the given memories
+// and populates their Relations slice.
+func (s *Store) PopulateSupersedesRelations(ctx context.Context, memories []core.MemoryEntry) ([]core.MemoryEntry, error) {
+	if len(memories) == 0 {
+		return memories, nil
+	}
+	ids := make([]string, len(memories))
+	idToIdx := make(map[string][]int)
+	for i, m := range memories {
+		ids[i] = m.ID
+		idToIdx[m.ID] = append(idToIdx[m.ID], i)
+	}
+
+	// Build IN placeholders
+	placeholders := make([]string, len(ids))
+	args := make([]interface{}, len(ids))
+	for i, id := range ids {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+
+	query := fmt.Sprintf(`
+		SELECT source_id, target_id, weight, metadata_json 
+		FROM relations 
+		WHERE type = 'supersedes' AND source_id IN (%s)`, 
+		strings.Join(placeholders, ","),
+	)
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return memories, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	for rows.Next() {
+		var sourceID, targetID string
+		var weight float64
+		var metaJSON string
+		if err := rows.Scan(&sourceID, &targetID, &weight, &metaJSON); err == nil {
+			var metadata map[string]string
+			if metaJSON != "" {
+				_ = json.Unmarshal([]byte(metaJSON), &metadata)
+			}
+			rel := core.Relation{
+				TargetID: targetID,
+				Type:     core.RelSupersedes,
+				Weight:   weight,
+				Metadata: metadata,
+			}
+			for _, idx := range idToIdx[sourceID] {
+				memories[idx].Relations = append(memories[idx].Relations, rel)
+			}
+		}
+	}
+	return memories, rows.Err()
 }
 
 // MarkAccessed increments access_count and updates last_accessed for provided IDs.
@@ -1449,7 +1520,22 @@ FROM memories WHERE id IN (%s)`, strings.Join(placeholders, ","))
 		applyDiagram(&m, diagramLang, diagramCode)
 		out[m.ID] = m
 	}
-	return out, rows.Err()
+	if rowsErr := rows.Err(); rowsErr != nil {
+		return nil, rowsErr
+	}
+	if len(out) > 0 {
+		var list []core.MemoryEntry
+		for _, m := range out {
+			list = append(list, m)
+		}
+		populated, err := s.PopulateSupersedesRelations(ctx, list)
+		if err == nil {
+			for _, m := range populated {
+				out[m.ID] = m
+			}
+		}
+	}
+	return out, nil
 }
 
 // ListMemoryLightweightForInference returns only the necessary fields (ID, Entities, StorageTier, CreatedAt) for non-cold memories.

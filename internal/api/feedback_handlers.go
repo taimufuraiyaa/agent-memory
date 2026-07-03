@@ -15,10 +15,12 @@ func requestsFeedbackHandler(svc *Service) http.HandlerFunc {
 			return
 		}
 		var req struct {
-			Workspace string `json:"workspace"`
-			RequestID string `json:"request_id"`
-			Score     int    `json:"score"`
-			Reason    string `json:"reason"`
+			Workspace   string `json:"workspace"`
+			RequestID   string `json:"request_id"`
+			Score       int    `json:"score"`
+			Reason      string `json:"reason"`
+			UsefulCount *int   `json:"useful_count,omitempty"`
+			TotalCount  *int   `json:"total_count,omitempty"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
@@ -50,16 +52,26 @@ func requestsFeedbackHandler(svc *Service) http.HandlerFunc {
 			writeErr(w, http.StatusInternalServerError, "runtime", "store is not available")
 			return
 		}
-		if err := assets.Store.RecordRequestFeedback(r.Context(), requestID, req.Score, req.Reason); err != nil {
+		useful := -1
+		if req.UsefulCount != nil {
+			useful = *req.UsefulCount
+		}
+		total := -1
+		if req.TotalCount != nil {
+			total = *req.TotalCount
+		}
+		if err := assets.Store.RecordRequestFeedback(r.Context(), requestID, req.Score, req.Reason, useful, total); err != nil {
 			writeErr(w, http.StatusBadRequest, "runtime", err.Error())
 			return
 		}
 		writeOK(w, http.StatusOK, map[string]any{
-			"workspace":  ws,
-			"request_id": requestID,
-			"score":      req.Score,
-			"reason":     req.Reason,
-			"ok":         true,
+			"workspace":    ws,
+			"request_id":   requestID,
+			"score":        req.Score,
+			"reason":       req.Reason,
+			"useful_count": useful,
+			"total_count":  total,
+			"ok":           true,
 		})
 	}
 }

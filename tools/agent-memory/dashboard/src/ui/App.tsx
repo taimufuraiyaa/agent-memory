@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import {
   deleteMemories,
   getStats,
@@ -38,6 +38,7 @@ import {
   compareMemoryRelevance,
   buildConsolidatedExportHTML,
   formatNumber,
+  formatBytes,
   formatScore,
   formatTS,
   getHealthState,
@@ -319,29 +320,37 @@ export function App() {
     }
   }, [workspace])
 
-  useEffect(() => {
-    let cancelled = false
-    if (!workspace || surface !== 'feedback') return
+  const refreshFeedbackAndStats = useCallback(() => {
+    if (!workspace) return
     setFeedbackBusy(true)
     setFeedbackErr('')
     listFeedback({ workspace })
       .then((data) => {
-        if (cancelled) return
         setFeedbackLogs(data)
       })
       .catch((e) => {
-        if (cancelled) return
         setFeedbackLogs([])
         setFeedbackErr(e instanceof Error ? e.message : String(e))
       })
       .finally(() => {
-        if (cancelled) return
         setFeedbackBusy(false)
       })
-    return () => {
-      cancelled = true
+
+    getStats(workspace)
+      .then((s) => {
+        setStats(s)
+      })
+      .catch((e) => {
+        setStats(null)
+        setStatsErr(e instanceof Error ? e.message : String(e))
+      })
+  }, [workspace])
+
+  useEffect(() => {
+    if (workspace && surface === 'feedback') {
+      refreshFeedbackAndStats()
     }
-  }, [workspace, surface])
+  }, [workspace, surface, refreshFeedbackAndStats])
 
   useEffect(() => {
     if (!sessions.length) {
@@ -755,7 +764,7 @@ export function App() {
             {projects.length === 0 ? <option value="">(no workspaces)</option> : null}
             {projects.map((p) => (
               <option key={p.name} value={p.name}>
-                {p.name} ({p.memory_count})
+                {p.name} ({p.memory_count} mem, {formatBytes(p.size_bytes)})
               </option>
             ))}
           </select>
@@ -886,6 +895,7 @@ export function App() {
                   feedback={feedbackLogs}
                   busy={feedbackBusy}
                   error={feedbackErr}
+                  onFeedbackUpdated={refreshFeedbackAndStats}
                 />
               ) : null}
 
@@ -1009,6 +1019,12 @@ export function App() {
                       {selectedSemanticRelevance.label} semantic {formatScore(selectedSemanticSimilarity, 2)}
                     </span>
                   ) : null}
+                  {selectedMemory.superseded_by ? (
+                    <span className="memPill relevancePill relevancePillLow" style={{ background: '#3b1c1c', border: '1px solid #7d2a2a', color: '#ff8585' }}>Superseded</span>
+                  ) : null}
+                  {selectedMemory.relations?.some(r => r.type === 'supersedes') ? (
+                    <span className="memPill relevancePill relevancePillHigh" style={{ background: '#1c3b24', border: '1px solid #2a7d43', color: '#85ff9d' }}>Correction</span>
+                  ) : null}
                 </div>
 
                 {(() => {
@@ -1107,6 +1123,20 @@ export function App() {
                       <div className="memMetaLabel">Tags</div>
                       <div className="memMetaValue">{pillList(selectedMemory.tags ?? [])}</div>
                     </div>
+                    {selectedMemory.superseded_by ? (
+                      <div className="memMeta">
+                        <div className="memMetaLabel">Superseded By</div>
+                        <div className="memMetaValue mono" style={{ color: '#ff8585', wordBreak: 'break-all' }}>{selectedMemory.superseded_by}</div>
+                      </div>
+                    ) : null}
+                    {selectedMemory.relations?.some(r => r.type === 'supersedes') ? (
+                      <div className="memMeta">
+                        <div className="memMetaLabel">Supersedes</div>
+                        <div className="memMetaValue mono" style={{ color: '#85ff9d', wordBreak: 'break-all' }}>
+                          {selectedMemory.relations.find(r => r.type === 'supersedes')?.target_id}
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 </div>
 

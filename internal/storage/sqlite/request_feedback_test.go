@@ -29,32 +29,35 @@ func TestRequestFeedback(t *testing.T) {
 	// Verify it exists in db with score = -1
 	var score int
 	var reason string
+	var usefulCountVal, totalCountVal int
 	err = store.db.QueryRowContext(ctx, "SELECT score FROM retrieval_requests WHERE id = ?", reqID).Scan(&score)
 	require.NoError(t, err)
 	assert.Equal(t, -1, score)
 
 	// 2. Verify RecordRequestFeedback updates score correctly
-	err = store.RecordRequestFeedback(ctx, reqID, 4, "helpful results")
+	err = store.RecordRequestFeedback(ctx, reqID, 4, "helpful results", 3, 8)
 	require.NoError(t, err)
 
-	err = store.db.QueryRowContext(ctx, "SELECT score, reason FROM retrieval_requests WHERE id = ?", reqID).Scan(&score, &reason)
+	err = store.db.QueryRowContext(ctx, "SELECT score, reason, useful_count, total_count FROM retrieval_requests WHERE id = ?", reqID).Scan(&score, &reason, &usefulCountVal, &totalCountVal)
 	require.NoError(t, err)
 	assert.Equal(t, 4, score)
 	assert.Equal(t, "helpful results", reason)
+	assert.Equal(t, 3, usefulCountVal)
+	assert.Equal(t, 8, totalCountVal)
 
 	// Verify error on invalid score
-	err = store.RecordRequestFeedback(ctx, reqID, 10, "")
+	err = store.RecordRequestFeedback(ctx, reqID, 10, "", -1, -1)
 	assert.Error(t, err)
 
 	// Verify error on non-existent request ID
-	err = store.RecordRequestFeedback(ctx, "non-existent", 3, "some reason")
+	err = store.RecordRequestFeedback(ctx, "non-existent", 3, "some reason", -1, -1)
 	assert.Error(t, err)
 
 	// 3. Verify GetFeedbackStats aggregates scores correctly
 	// Add more scored requests
 	err = store.LogRetrievalRequest(ctx, "req-2", ws, "recall", "deploy stack")
 	require.NoError(t, err)
-	err = store.RecordRequestFeedback(ctx, "req-2", 2, "insufficient details")
+	err = store.RecordRequestFeedback(ctx, "req-2", 2, "insufficient details", 1, 5)
 	require.NoError(t, err)
 
 	// Add an unscored request (score = -1) - should not affect the average
@@ -68,6 +71,9 @@ func TestRequestFeedback(t *testing.T) {
 	assert.InDelta(t, 3.0, stats.AverageWeek, 0.001)
 	assert.InDelta(t, 3.0, stats.AverageMonth, 0.001)
 	assert.InDelta(t, 3.0, stats.AverageYear, 0.001)
+	assert.InDelta(t, 2.0, stats.AverageUsefulCount, 0.001)
+	assert.InDelta(t, 6.5, stats.AverageTotalCount, 0.001)
+	assert.InDelta(t, 0.2875, stats.AverageUsefulRatio, 0.001)
 
 	// Add a historical feedback (simulate old record)
 	// SQLite created_at format is RFC3339

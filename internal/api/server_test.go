@@ -1374,10 +1374,12 @@ func TestRequestFeedbackAPI(t *testing.T) {
 
 	// 2. Submit feedback scoring (score >= 4, optional reason)
 	feedbackBody, _ := json.Marshal(map[string]any{
-		"workspace":  "ws",
-		"request_id": requestID,
-		"score":      4,
-		"reason":     "great matches",
+		"workspace":    "ws",
+		"request_id":   requestID,
+		"score":        4,
+		"reason":       "great matches",
+		"useful_count": 3,
+		"total_count":  10,
 	})
 	res2, err := http.Post(ts.URL+"/api/v1/requests/feedback", "application/json", bytes.NewReader(feedbackBody))
 	if err != nil {
@@ -1419,10 +1421,12 @@ func TestRequestFeedbackAPI(t *testing.T) {
 
 	// 2d. Submit feedback scoring below 4 with reason (should succeed)
 	goodFeedbackBody, _ := json.Marshal(map[string]any{
-		"workspace":  "ws",
-		"request_id": requestID2,
-		"score":      2,
-		"reason":     "some irrelevant results",
+		"workspace":    "ws",
+		"request_id":   requestID2,
+		"score":        2,
+		"reason":       "some irrelevant results",
+		"useful_count": 1,
+		"total_count":  5,
 	})
 	resGood, err := http.Post(ts.URL+"/api/v1/requests/feedback", "application/json", bytes.NewReader(goodFeedbackBody))
 	if err != nil {
@@ -1449,6 +1453,15 @@ func TestRequestFeedbackAPI(t *testing.T) {
 	if avgWeek, _ := feedbackStats["average_week"].(float64); avgWeek != 3.0 {
 		t.Fatalf("expected weekly average to be 3.0, got %f", avgWeek)
 	}
+	if avgUseful, _ := feedbackStats["average_useful_count"].(float64); avgUseful != 2.0 {
+		t.Fatalf("expected average useful count to be 2.0, got %f", avgUseful)
+	}
+	if avgTotal, _ := feedbackStats["average_total_count"].(float64); avgTotal != 7.5 {
+		t.Fatalf("expected average total count to be 7.5, got %f", avgTotal)
+	}
+	if avgRatio, _ := feedbackStats["average_useful_ratio"].(float64); avgRatio != 0.25 {
+		t.Fatalf("expected average useful ratio to be 0.25, got %f", avgRatio)
+	}
 
 	// 4. Query list of feedbacks and check reason is returned
 	res4, err := http.Get(ts.URL + "/api/v1/feedback?workspace=ws")
@@ -1470,15 +1483,17 @@ func TestRequestFeedbackAPI(t *testing.T) {
 		m, _ := item.(map[string]any)
 		score, _ := m["score"].(float64)
 		reason, _ := m["reason"].(string)
-		if score == 4 && reason == "great matches" {
+		usefulCount, _ := m["useful_count"].(float64)
+		totalCount, _ := m["total_count"].(float64)
+		if score == 4 && reason == "great matches" && usefulCount == 3 && totalCount == 10 {
 			found1 = true
 		}
-		if score == 2 && reason == "some irrelevant results" {
+		if score == 2 && reason == "some irrelevant results" && usefulCount == 1 && totalCount == 5 {
 			found2 = true
 		}
 	}
 	if !found1 || !found2 {
-		t.Fatalf("expected to find both feedback entries in response list, got: %v", listData)
+		t.Fatalf("expected to find both feedback entries in response list with correct useful/total counts, got: %v", listData)
 	}
 }
 
