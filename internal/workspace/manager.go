@@ -20,10 +20,11 @@ import (
 )
 
 type Project struct {
-	Name       string    `json:"name"`
-	DBPath     string    `json:"db_path"`
-	CreatedAt  time.Time `json:"created_at"`
-	LastUsedAt time.Time `json:"last_used_at"`
+	Name          string    `json:"name"`
+	DBPath        string    `json:"db_path"`
+	WorkspaceRoot string    `json:"workspace_root,omitempty"`
+	CreatedAt     time.Time `json:"created_at"`
+	LastUsedAt    time.Time `json:"last_used_at"`
 }
 
 type Registry struct {
@@ -69,6 +70,7 @@ type RenameResult struct {
 type ListItem struct {
 	Name         string    `json:"name"`
 	DBPath       string    `json:"db_path"`
+	WorkspaceRoot string    `json:"workspace_root,omitempty"`
 	SizeBytes    int64     `json:"size_bytes"`
 	MemoryCount  int       `json:"memory_count"`
 	LastActivity time.Time `json:"last_activity"`
@@ -244,11 +246,17 @@ func (m *Manager) Init(ctx context.Context, opt InitOptions) (*InitResult, error
 		if _, err := sqlite.Open(ctx, dbPath); err != nil {
 			return nil, err
 		}
+		root := FindProjectRoot(opt.CWD)
+		absRoot, err := filepath.Abs(root)
+		if err != nil {
+			absRoot = root
+		}
 		upsertProject(reg, Project{
-			Name:       name,
-			DBPath:     dbPath,
-			CreatedAt:  nowOr(existing, true),
-			LastUsedAt: time.Now().UTC(),
+			Name:          name,
+			DBPath:        dbPath,
+			WorkspaceRoot: absRoot,
+			CreatedAt:     nowOr(existing, true),
+			LastUsedAt:    time.Now().UTC(),
 		})
 
 		out := &InitResult{Project: name, DBPath: dbPath}
@@ -408,11 +416,12 @@ func (m *Manager) List(_ context.Context) ([]ListItem, error) {
 			_ = store.Close()
 		}
 		out = append(out, ListItem{
-			Name:         p.Name,
-			DBPath:       p.DBPath,
-			SizeBytes:    size,
-			MemoryCount:  memCount,
-			LastActivity: p.LastUsedAt,
+			Name:          p.Name,
+			DBPath:        p.DBPath,
+			WorkspaceRoot: p.WorkspaceRoot,
+			SizeBytes:     size,
+			MemoryCount:   memCount,
+			LastActivity:  p.LastUsedAt,
 		})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })

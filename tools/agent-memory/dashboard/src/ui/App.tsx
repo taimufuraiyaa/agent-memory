@@ -13,6 +13,7 @@ import {
   searchMemories,
   setMemoryPinned,
   listFeedback,
+  listSkills,
   type BenchmarkRun,
   type DashboardStats,
   type MemoryEntry,
@@ -26,6 +27,7 @@ import {
   type SessionEntry,
   type StorageTier,
   type RetrievalRequestLog,
+  type SkillInfo,
 } from '../lib/api'
 import { DiagramViewer } from './DiagramViewer'
 import { MarkdownView } from './MarkdownView'
@@ -62,6 +64,7 @@ import { OverviewPanel } from './OverviewPanel'
 import { SessionsPanel } from './SessionsPanel'
 import { WikiPanel } from './WikiPanel'
 import { FeedbackPanel } from './FeedbackPanel'
+import { SkillsPanel } from './SkillsPanel'
 
 export function App() {
   const [surface, setSurface] = useState<Surface>('overview')
@@ -128,6 +131,9 @@ export function App() {
   const [wikiPinBusyIds, setWikiPinBusyIds] = useState<Set<string>>(new Set())
   const [wikiDeleteBusy, setWikiDeleteBusy] = useState<boolean>(false)
   const [wikiDiagramMemory, setWikiDiagramMemory] = useState<MemoryEntry | null>(null)
+  const [skills, setSkills] = useState<SkillInfo[]>([])
+  const [skillsBusy, setSkillsBusy] = useState<boolean>(false)
+  const [skillsErr, setSkillsErr] = useState<string>('')
   const threadRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -351,6 +357,30 @@ export function App() {
       refreshFeedbackAndStats()
     }
   }, [workspace, surface, refreshFeedbackAndStats])
+
+  useEffect(() => {
+    let cancelled = false
+    if (!workspace || surface !== 'skills') return
+    setSkillsBusy(true)
+    setSkillsErr('')
+    listSkills({ workspace })
+      .then((data) => {
+        if (cancelled) return
+        setSkills(data)
+      })
+      .catch((e) => {
+        if (cancelled) return
+        setSkills([])
+        setSkillsErr(e instanceof Error ? e.message : String(e))
+      })
+      .finally(() => {
+        if (cancelled) return
+        setSkillsBusy(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [workspace, surface])
 
   useEffect(() => {
     if (!sessions.length) {
@@ -799,6 +829,10 @@ export function App() {
             <span className="navKey">[07]</span>
             <span className="navLabel">Feedback</span>
           </button>
+          <button className={surface === 'skills' ? 'navItem navItemOn' : 'navItem'} onClick={() => { setSurface('skills'); setSelectedMemory(null); }} type="button" aria-label="Skills">
+            <span className="navKey">[08]</span>
+            <span className="navLabel">Skills</span>
+          </button>
         </nav>
 
         <div className="topbarRight">
@@ -896,6 +930,16 @@ export function App() {
                   busy={feedbackBusy}
                   error={feedbackErr}
                   onFeedbackUpdated={refreshFeedbackAndStats}
+                />
+              ) : null}
+
+              {surface === 'skills' ? (
+                <SkillsPanel
+                  theme={theme}
+                  workspace={workspace}
+                  skills={skills}
+                  busy={skillsBusy}
+                  error={skillsErr}
                 />
               ) : null}
 

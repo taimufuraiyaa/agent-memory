@@ -575,3 +575,17 @@ export function submitRequestFeedback(input: {
     body: JSON.stringify(input),
   })
 }
+
+export type SkillInfo = {
+  name: string
+  display_name: string
+  description: string
+  content: string
+  path: string
+}
+
+export function listSkills(input: { workspace: string }): Promise<SkillInfo[]> {
+  return api(`/api/v1/skills?workspace=${encodeURIComponent(input.workspace)}`, {
+    method: 'GET',
+  })
+}

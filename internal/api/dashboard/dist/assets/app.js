@@ -7167,6 +7167,11 @@ function submitRequestFeedback(input) {
     body: JSON.stringify(input)
   });
 }
+function listSkills(input) {
+  return api(`/api/v1/skills?workspace=${encodeURIComponent(input.workspace)}`, {
+    method: "GET"
+  });
+}
 const scriptRel = "modulepreload";
 const assetsURL = function(dep) {
   return "/" + dep;
@@ -37460,6 +37465,100 @@ function FeedbackPanel({
     ] })
   ] });
 }
+function SkillsPanel({
+  theme,
+  workspace,
+  skills,
+  busy,
+  error
+}) {
+  const [selectedSkill, setSelectedSkill] = reactExports.useState(null);
+  reactExports.useEffect(() => {
+    if (skills.length > 0) {
+      const stillExists = skills.find((s2) => s2.name === (selectedSkill == null ? void 0 : selectedSkill.name));
+      if (!stillExists) {
+        setSelectedSkill(skills[0]);
+      } else {
+        const updated = skills.find((s2) => s2.name === (selectedSkill == null ? void 0 : selectedSkill.name));
+        if (updated) setSelectedSkill(updated);
+      }
+    } else {
+      setSelectedSkill(null);
+    }
+  }, [skills]);
+  if (!workspace) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "surfacePanel", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "emptyState", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "emptyTitle", children: "No Workspace Selected" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "emptyBody", children: "Select a workspace to view its custom agent skills." })
+    ] }) });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "surfacePanel", style: { display: "flex", flexDirection: "column", height: "100%" }, children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "panelHeader", style: { borderBottom: "1px dashed var(--border)", paddingBottom: "16px", marginBottom: "20px" }, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "panelTitle", children: "Distilled Agent Skills" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "panelSubtitle", children: [
+        "Procedural workflows, outcome learnings, and constraints packaged by the AI Agent under ",
+        /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: ".agents/skills/" }),
+        "."
+      ] })
+    ] }),
+    error ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "errAlert", children: [
+      "Failed to load custom skills: ",
+      error
+    ] }) : busy && skills.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "emptyState", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "emptyBody", children: "Loading workspace custom skills..." }) }) : skills.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "emptyState", style: { padding: "60px 20px" }, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "emptyTitle", style: { fontSize: "15px", color: "var(--text-main)", marginBottom: "8px", fontFamily: "var(--font-mono)" }, children: "No Custom Skills Found" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "emptyBody", style: { maxWidth: "480px", margin: "0 auto", fontSize: "13px" }, children: [
+        "No distilled custom skills were found in this project. When the AI Agent packages a workflow or learns reusable steps, it runs ",
+        /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: "agent-memory distill" }),
+        " to save it under ",
+        /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: ".agents/skills/<name>/SKILL.md" }),
+        "."
+      ] })
+    ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", flex: 1, minHeight: 0, gap: "24px", alignItems: "stretch" }, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { width: "280px", flexShrink: 0, borderRight: "1px dashed var(--border)", paddingRight: "16px", display: "flex", flexDirection: "column", gap: "8px", overflowY: "auto" }, children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { fontSize: "10px", fontFamily: "var(--font-mono)", color: "var(--text-muted)", textTransform: "uppercase", marginBottom: "4px", letterSpacing: "0.05em" }, children: [
+          "Skills Directory (",
+          skills.length,
+          ")"
+        ] }),
+        skills.map((skill) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "button",
+          {
+            type: "button",
+            onClick: () => setSelectedSkill(skill),
+            style: {
+              width: "100%",
+              textAlign: "left",
+              background: (selectedSkill == null ? void 0 : selectedSkill.name) === skill.name ? "var(--bg-input)" : "transparent",
+              border: (selectedSkill == null ? void 0 : selectedSkill.name) === skill.name ? "1px solid var(--accent-primary)" : "1px solid transparent",
+              padding: "12px",
+              borderRadius: "6px",
+              cursor: "pointer",
+              display: "flex",
+              flexDirection: "column",
+              gap: "4px",
+              transition: "all 0.15s ease"
+            },
+            children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontWeight: "bold", fontSize: "13px", color: (selectedSkill == null ? void 0 : selectedSkill.name) === skill.name ? "var(--accent-primary)" : "var(--text-main)", fontFamily: "var(--font-mono)" }, children: skill.displayName }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "11px", color: "var(--text-muted)", lineClamp: 2, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }, children: skill.description || "No description provided." })
+            ]
+          },
+          skill.name
+        ))
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { flex: 1, minWidth: 0, display: "flex", flexDirection: "column", height: "100%", overflowY: "auto" }, children: selectedSkill ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", flexDirection: "column", gap: "16px", paddingRight: "8px" }, children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", borderBottom: "1px dotted var(--border)", paddingBottom: "12px" }, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { style: { fontSize: "18px", margin: 0, color: "var(--text-main)" }, children: selectedSkill.displayName }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { fontSize: "11px", fontFamily: "var(--font-mono)", color: "var(--text-muted)", marginTop: "4px" }, children: [
+            "Path: ",
+            selectedSkill.path
+          ] })
+        ] }) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "markdownViewer", style: { padding: "16px", background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "8px" }, children: /* @__PURE__ */ jsxRuntimeExports.jsx(MarkdownView, { markdown: selectedSkill.content, clamp: false, theme }) })
+      ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "emptyState", style: { display: "flex", height: "100%", alignItems: "center", justifyContent: "center" }, children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "emptyBody", children: "Select a skill from the list to view details." }) }) })
+    ] })
+  ] });
+}
 function App() {
   var _a2, _b2, _c2, _d2;
   const [surface, setSurface] = reactExports.useState("overview");
@@ -37521,6 +37620,9 @@ function App() {
   const [wikiPinBusyIds, setWikiPinBusyIds] = reactExports.useState(/* @__PURE__ */ new Set());
   const [wikiDeleteBusy, setWikiDeleteBusy] = reactExports.useState(false);
   const [wikiDiagramMemory, setWikiDiagramMemory] = reactExports.useState(null);
+  const [skills, setSkills] = reactExports.useState([]);
+  const [skillsBusy, setSkillsBusy] = reactExports.useState(false);
+  const [skillsErr, setSkillsErr] = reactExports.useState("");
   const threadRef = reactExports.useRef(null);
   reactExports.useEffect(() => {
     document.body.classList.remove("light", "dark");
@@ -37714,6 +37816,26 @@ function App() {
       refreshFeedbackAndStats();
     }
   }, [workspace, surface, refreshFeedbackAndStats]);
+  reactExports.useEffect(() => {
+    let cancelled = false;
+    if (!workspace || surface !== "skills") return;
+    setSkillsBusy(true);
+    setSkillsErr("");
+    listSkills({ workspace }).then((data) => {
+      if (cancelled) return;
+      setSkills(data);
+    }).catch((e2) => {
+      if (cancelled) return;
+      setSkills([]);
+      setSkillsErr(e2 instanceof Error ? e2.message : String(e2));
+    }).finally(() => {
+      if (cancelled) return;
+      setSkillsBusy(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [workspace, surface]);
   reactExports.useEffect(() => {
     if (!sessions.length) {
       setSelectedSessionID("");
@@ -38130,6 +38252,13 @@ function App() {
         }, type: "button", "aria-label": "Feedback", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "navKey", children: "[07]" }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "navLabel", children: "Feedback" })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { className: surface === "skills" ? "navItem navItemOn" : "navItem", onClick: () => {
+          setSurface("skills");
+          setSelectedMemory(null);
+        }, type: "button", "aria-label": "Skills", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "navKey", children: "[08]" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "navLabel", children: "Skills" })
         ] })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "topbarRight", children: [
@@ -38229,6 +38358,16 @@ function App() {
             busy: feedbackBusy,
             error: feedbackErr,
             onFeedbackUpdated: refreshFeedbackAndStats
+          }
+        ) : null,
+        surface === "skills" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+          SkillsPanel,
+          {
+            theme,
+            workspace,
+            skills,
+            busy: skillsBusy,
+            error: skillsErr
           }
         ) : null,
         surface === "wiki" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
