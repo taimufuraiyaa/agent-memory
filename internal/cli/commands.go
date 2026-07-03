@@ -196,9 +196,9 @@ Use --explain to see per-signal score breakdowns.`,
 				_ = store.AddTokenMetricV2(ctx, cfg.workspace, "search", 0, 0, engine.RunLabel(), false)
 				return writeSuccessEnvelope(cmd.OutOrStdout(), "search", map[string]any{
 					"request_id": requestID,
-					"disabled":  true,
-					"workspace": cfg.workspace,
-					"results":   []any{},
+					"disabled":   true,
+					"workspace":  cfg.workspace,
+					"results":    []any{},
 				})
 			}
 			typed := make([]core.MemoryType, 0, len(types))

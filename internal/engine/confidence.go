@@ -13,8 +13,8 @@ type ConfidenceBand string
 
 const (
 	ConfidenceHigh   ConfidenceBand = "high"   // >= 0.8 — store immediately
-	ConfidenceMedium ConfidenceBand = "medium"  // 0.5–0.8 — store with low-confidence tag
-	ConfidenceLow    ConfidenceBand = "low"     // < 0.5 — discard
+	ConfidenceMedium ConfidenceBand = "medium" // 0.5–0.8 — store with low-confidence tag
+	ConfidenceLow    ConfidenceBand = "low"    // < 0.5 — discard
 )
 
 const (

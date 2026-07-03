@@ -273,13 +273,13 @@ func TestCheckModelVersion_InvalidInputs(t *testing.T) {
 
 func TestShouldWarnAboutVersionMismatch(t *testing.T) {
 	tests := []struct {
-		name              string
-		check             *ModelVersionCheck
+		name               string
+		check              *ModelVersionCheck
 		expectedShouldWarn bool
 	}{
 		{
-			name:              "nil check",
-			check:             nil,
+			name:               "nil check",
+			check:              nil,
 			expectedShouldWarn: false,
 		},
 		{
@@ -382,7 +382,7 @@ func TestFormatWarningMessage(t *testing.T) {
 }
 
 func contains(s, substr string) bool {
-	return len(s) > 0 && len(substr) > 0 && len(s) >= len(substr) && 
+	return len(s) > 0 && len(substr) > 0 && len(s) >= len(substr) &&
 		(s == substr || (len(s) > len(substr) && hasSubstring(s, substr)))
 }
 

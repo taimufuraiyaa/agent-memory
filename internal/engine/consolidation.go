@@ -138,4 +138,3 @@ func tokenSet(s string) map[string]struct{} {
 	}
 	return out
 }
-

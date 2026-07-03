@@ -111,35 +111,35 @@
 //
 // The lifecycle manager performs periodic maintenance:
 //
-//  Decay Engine (decay.go):
-//    - Computes decay scores for all memories
-//    - Type-specific half-lives (episodic: 7d, semantic: 30d, procedural: 90d)
-//    - Boosts for recent access, pins, successful outcomes
-//    - Formula: decay = exp(-ln(2) * age / halfLife) * boosts
+//	Decay Engine (decay.go):
+//	  - Computes decay scores for all memories
+//	  - Type-specific half-lives (episodic: 7d, semantic: 30d, procedural: 90d)
+//	  - Boosts for recent access, pins, successful outcomes
+//	  - Formula: decay = exp(-ln(2) * age / halfLife) * boosts
 //
-//  Consolidation Engine (consolidation.go):
-//    - Merges similar episodic memories into semantic facts
-//    - Clusters by content similarity (overlap threshold)
-//    - Generates consolidated content via merge strategies
-//    - Creates derived_from relationships
+//	Consolidation Engine (consolidation.go):
+//	  - Merges similar episodic memories into semantic facts
+//	  - Clusters by content similarity (overlap threshold)
+//	  - Generates consolidated content via merge strategies
+//	  - Creates derived_from relationships
 //
-//  Deep Consolidation Engine (deep_consolidation.go):
-//    - Cross-type consolidation for advanced patterns
-//    - Outcome pattern mining (find repeated failures)
-//    - Procedural workflow extraction
-//    - Requires higher similarity thresholds
+//	Deep Consolidation Engine (deep_consolidation.go):
+//	  - Cross-type consolidation for advanced patterns
+//	  - Outcome pattern mining (find repeated failures)
+//	  - Procedural workflow extraction
+//	  - Requires higher similarity thresholds
 //
-//  Conflict Engine (conflict.go):
-//    - Detects contradictory memories
-//    - Resolves conflicts by confidence, recency, feedback
-//    - Marks loser as superseded
-//    - Creates contradicts relationship for audit trail
+//	Conflict Engine (conflict.go):
+//	  - Detects contradictory memories
+//	  - Resolves conflicts by confidence, recency, feedback
+//	  - Marks loser as superseded
+//	  - Creates contradicts relationship for audit trail
 //
-//  Promotion/Demotion (lifecycle_manager.go):
-//    - Promotes high-value memories to higher tiers
-//    - Demotes low-value memories to lower tiers
-//    - Maintains markdown tier budget (token limit)
-//    - Evicts fully decayed memories to cold storage
+//	Promotion/Demotion (lifecycle_manager.go):
+//	  - Promotes high-value memories to higher tiers
+//	  - Demotes low-value memories to lower tiers
+//	  - Maintains markdown tier budget (token limit)
+//	  - Evicts fully decayed memories to cold storage
 //
 // Lifecycle runs on schedule or manually via CLI: agent-memory lifecycle run
 //
@@ -147,17 +147,17 @@
 //
 // Forgetting is intentional to prevent memory bloat:
 //
-//  Tombstones:
-//    When a memory is evicted, a small tombstone remains with:
-//    - Original ID and content hash
-//    - Creation and eviction timestamps
-//    - Minimal metadata for gap detection
+//	Tombstones:
+//	  When a memory is evicted, a small tombstone remains with:
+//	  - Original ID and content hash
+//	  - Creation and eviction timestamps
+//	  - Minimal metadata for gap detection
 //
-//  Reconstruction Engine (reconstruction.go):
-//    - Detects "tip of the tongue" queries (no strong hits but tombstone matches)
-//    - Proposes reconstruction from tombstone + related memories
-//    - Creates reconstructed semantic memory with lower confidence
-//    - Safeguards against reconstruction loops
+//	Reconstruction Engine (reconstruction.go):
+//	  - Detects "tip of the tongue" queries (no strong hits but tombstone matches)
+//	  - Proposes reconstruction from tombstone + related memories
+//	  - Creates reconstructed semantic memory with lower confidence
+//	  - Safeguards against reconstruction loops
 //
 // Reconstruction is opt-in: enable via retrieval options or CLI flag.
 //
@@ -165,21 +165,21 @@
 //
 // The export module (export.go) provides multiple formats:
 //
-//  ExportBundle: JSON structure with all memories, relationships, metadata
-//  Markdown: Sectioned document grouped by type with outcome formatting
-//  CSV: Tabular format for spreadsheet analysis
+//	ExportBundle: JSON structure with all memories, relationships, metadata
+//	Markdown: Sectioned document grouped by type with outcome formatting
+//	CSV: Tabular format for spreadsheet analysis
 //
 // Usage: agent-memory export --format json > backup.json
 //
 // # Key Components
 //
-//  WritePipeline: Handles memory ingestion with validation, embedding, routing
-//  RetrievalEngine: Implements ranked retrieval with explainable scoring
-//  DecayEngine: Computes and updates decay scores
-//  ConsolidationEngine: Merges similar memories
-//  ConflictEngine: Resolves contradictions
-//  LifecycleManager: Orchestrates all lifecycle operations
-//  ReconstructionEngine: Recovers forgotten memories from tombstones
+//	WritePipeline: Handles memory ingestion with validation, embedding, routing
+//	RetrievalEngine: Implements ranked retrieval with explainable scoring
+//	DecayEngine: Computes and updates decay scores
+//	ConsolidationEngine: Merges similar memories
+//	ConflictEngine: Resolves contradictions
+//	LifecycleManager: Orchestrates all lifecycle operations
+//	ReconstructionEngine: Recovers forgotten memories from tombstones
 //
 // # Usage Example
 //

@@ -46,11 +46,11 @@ func NewAuditLogPlugin() *AuditLogPlugin {
 func (p *AuditLogPlugin) Initialize(ctx context.Context, config map[string]any) error {
 	// Get log file path
 	logFile, _ := config["logFile"].(string)
-	
+
 	// Get JSON mode
 	jsonMode, _ := config["jsonMode"].(bool)
 	p.jsonMode = jsonMode
-	
+
 	// Open log file or use stdout
 	var writer *os.File
 	if logFile != "" {
@@ -63,14 +63,14 @@ func (p *AuditLogPlugin) Initialize(ctx context.Context, config map[string]any) 
 	} else {
 		writer = os.Stdout
 	}
-	
+
 	// Create logger
 	if p.jsonMode {
 		p.logger = log.New(writer, "", 0)
 	} else {
 		p.logger = log.New(writer, "[AUDIT] ", log.LstdFlags)
 	}
-	
+
 	return nil
 }
 
@@ -92,7 +92,7 @@ func (p *AuditLogPlugin) OnWrite(ctx context.Context, mem *core.MemoryEntry) err
 			"content":   truncate(mem.Content, 100),
 		})
 	}
-	
+
 	p.logger.Printf("WRITE: memory_id=%s workspace=%s type=%s content=%q",
 		mem.ID, mem.Workspace, mem.Type, truncate(mem.Content, 50))
 	return nil
@@ -106,7 +106,7 @@ func (p *AuditLogPlugin) OnWriteComplete(ctx context.Context, mem *core.MemoryEn
 			"workspace": mem.Workspace,
 		})
 	}
-	
+
 	p.logger.Printf("WRITE_COMPLETE: memory_id=%s workspace=%s", mem.ID, mem.Workspace)
 	return nil
 }
@@ -119,7 +119,7 @@ func (p *AuditLogPlugin) OnRetrieve(ctx context.Context, query string, workspace
 			"workspace": workspace,
 		})
 	}
-	
+
 	p.logger.Printf("RETRIEVE: query=%q workspace=%s", truncate(query, 50), workspace)
 	return nil
 }
@@ -132,7 +132,7 @@ func (p *AuditLogPlugin) OnRetrieveComplete(ctx context.Context, query string, h
 			"hits":  hits,
 		})
 	}
-	
+
 	p.logger.Printf("RETRIEVE_COMPLETE: query=%q hits=%d", truncate(query, 50), hits)
 	return nil
 }
@@ -144,7 +144,7 @@ func (p *AuditLogPlugin) OnDelete(ctx context.Context, memoryID string) error {
 			"memory_id": memoryID,
 		})
 	}
-	
+
 	p.logger.Printf("DELETE: memory_id=%s", memoryID)
 	return nil
 }
@@ -157,7 +157,7 @@ func (p *AuditLogPlugin) OnDecay(ctx context.Context, workspace string, count in
 			"count":     count,
 		})
 	}
-	
+
 	p.logger.Printf("DECAY: workspace=%s count=%d", workspace, count)
 	return nil
 }
@@ -169,12 +169,12 @@ func (p *AuditLogPlugin) logJSON(event string, details map[string]interface{}) e
 		Event:     event,
 		Details:   details,
 	}
-	
+
 	data, err := json.Marshal(auditEvent)
 	if err != nil {
 		return fmt.Errorf("failed to marshal JSON: %w", err)
 	}
-	
+
 	p.logger.Println(string(data))
 	return nil
 }

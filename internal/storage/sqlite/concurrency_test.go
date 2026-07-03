@@ -40,8 +40,8 @@ func TestConcurrentReadWrite(t *testing.T) {
 
 	// Test concurrent operations: 10 parallel writes + 10 parallel reads
 	const (
-		numWriters = 10
-		numReaders = 10
+		numWriters   = 10
+		numReaders   = 10
 		opsPerWriter = 5
 		opsPerReader = 10
 	)
@@ -57,16 +57,16 @@ func TestConcurrentReadWrite(t *testing.T) {
 			defer wg.Done()
 			for i := 0; i < opsPerWriter; i++ {
 				memory := &core.MemoryEntry{
-					ID:        fmt.Sprintf("writer-%d-mem-%d", writerID, i),
-					Type:      core.SemanticMemory,
-					Content:   fmt.Sprintf("Content from writer %d operation %d", writerID, i),
-					Workspace: "concurrent-test",
-					Source:    core.MemorySource{Type: core.SourceUserInput},
+					ID:          fmt.Sprintf("writer-%d-mem-%d", writerID, i),
+					Type:        core.SemanticMemory,
+					Content:     fmt.Sprintf("Content from writer %d operation %d", writerID, i),
+					Workspace:   "concurrent-test",
+					Source:      core.MemorySource{Type: core.SourceUserInput},
 					StorageTier: core.TierVector,
-					UpdatedAt: time.Now(),
-					CreatedAt: time.Now(),
+					UpdatedAt:   time.Now(),
+					CreatedAt:   time.Now(),
 				}
-				
+
 				hash := fmt.Sprintf("hash-%d-%d", writerID, i)
 				if err := store.InsertMemoryByHash(ctx, memory, hash); err != nil {
 					errors <- fmt.Errorf("writer %d: %w", writerID, err)
@@ -92,7 +92,7 @@ func TestConcurrentReadWrite(t *testing.T) {
 					errors <- fmt.Errorf("reader %d: invalid count %d", readerID, count)
 					return
 				}
-				
+
 				// Small delay to interleave with writes
 				time.Sleep(time.Millisecond)
 			}
@@ -125,7 +125,7 @@ func TestConcurrentReadWrite(t *testing.T) {
 		t.Errorf("Expected %d memories, got %d", expectedCount, finalCount)
 	}
 
-	t.Logf("Successfully completed %d concurrent writes and %d concurrent reads", 
+	t.Logf("Successfully completed %d concurrent writes and %d concurrent reads",
 		numWriters*opsPerWriter, numReaders*opsPerReader)
 }
 
@@ -149,14 +149,14 @@ func TestConcurrentVectorOperations(t *testing.T) {
 	const numMemories = 20
 	for i := 0; i < numMemories; i++ {
 		memory := &core.MemoryEntry{
-			ID:        fmt.Sprintf("mem-%d", i),
-			Type:      core.SemanticMemory,
-			Content:   fmt.Sprintf("Memory %d", i),
-			Workspace: "vector-test",
-			Source:    core.MemorySource{Type: core.SourceUserInput},
+			ID:          fmt.Sprintf("mem-%d", i),
+			Type:        core.SemanticMemory,
+			Content:     fmt.Sprintf("Memory %d", i),
+			Workspace:   "vector-test",
+			Source:      core.MemorySource{Type: core.SourceUserInput},
 			StorageTier: core.TierVector,
-			UpdatedAt: time.Now(),
-			CreatedAt: time.Now(),
+			UpdatedAt:   time.Now(),
+			CreatedAt:   time.Now(),
 		}
 		hash := fmt.Sprintf("hash-%d", i)
 		if err := store.InsertMemoryByHash(ctx, memory, hash); err != nil {
@@ -177,7 +177,7 @@ func TestConcurrentVectorOperations(t *testing.T) {
 			for j := range vector {
 				vector[j] = 0.01 * float32(j)
 			}
-			
+
 			err := store.UpsertMemoryVector(ctx, id, "vector-test", "onnx-minilm-l6-v2", "minilm-l6-v2-fp32", vector)
 			if err != nil {
 				errors <- fmt.Errorf("upsert vector %s: %w", id, err)

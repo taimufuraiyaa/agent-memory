@@ -48,4 +48,3 @@ func ClipString(s string, max int) string {
 	out = strings.TrimRight(out, " \n\r\t")
 	return out
 }
-

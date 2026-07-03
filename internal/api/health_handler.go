@@ -57,7 +57,7 @@ func healthHandler(svc *Service) http.HandlerFunc {
 			"last_lifecycle_run":      lastLifecycleRun,
 			"embedding_provider":      providerName,
 			"embedding_model_version": providerVersion,
-			"onnx_runtime_available":   onnxAvailable,
+			"onnx_runtime_available":  onnxAvailable,
 		})
 	}
 }

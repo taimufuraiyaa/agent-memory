@@ -61,10 +61,10 @@ func fakeNPMScriptDir(t *testing.T, script string) string {
 
 func TestUpgradeAllProjects(t *testing.T) {
 	tempBase := t.TempDir()
-	
+
 	proj1Root := filepath.Join(tempBase, "proj1")
 	proj2Root := filepath.Join(tempBase, "proj2")
-	
+
 	err := os.MkdirAll(filepath.Join(proj1Root, ".agents"), 0o755)
 	if err != nil {
 		t.Fatal(err)
@@ -73,15 +73,15 @@ func TestUpgradeAllProjects(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	
+
 	t.Setenv("HOME", tempBase)
-	
+
 	dataDir := filepath.Join(tempBase, ".agent-memory")
 	err = os.MkdirAll(dataDir, 0o755)
 	if err != nil {
 		t.Fatal(err)
 	}
-	
+
 	regDataMocked := `{
   "projects": [
     {
@@ -107,7 +107,7 @@ func TestUpgradeAllProjects(t *testing.T) {
 
 	cmd := newUpgradeCommand()
 	cmd.SetArgs([]string{"--hooks-only", "--all", "--yes", "--format", "json"})
-	
+
 	err = cmd.Execute()
 	if err != nil {
 		t.Fatalf("cmd.Execute() failed: %v", err)
@@ -115,10 +115,10 @@ func TestUpgradeAllProjects(t *testing.T) {
 
 	proj1AgentsDir := filepath.Join(proj1Root, ".agents", "rules")
 	proj2AgentsDir := filepath.Join(proj2Root, ".agents", "rules")
-	
+
 	_, err1 := os.Stat(filepath.Join(proj1AgentsDir, "agent-memory.md"))
 	_, err2 := os.Stat(filepath.Join(proj2AgentsDir, "agent-memory.md"))
-	
+
 	if err1 != nil {
 		t.Errorf("proj1 rules not written: %v", err1)
 	}

@@ -124,4 +124,3 @@ ORDER BY COALESCE(run_label, '') ASC, COALESCE(memory_enabled, 1) DESC
 	}
 	return out, rows.Err()
 }
-

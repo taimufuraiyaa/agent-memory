@@ -12,45 +12,45 @@ import (
 // MetricsRegistry holds all Prometheus metrics for agent-memory.
 type MetricsRegistry struct {
 	// Write pipeline metrics
-	WriteTotal      *prometheus.CounterVec
-	WriteDuration   *prometheus.HistogramVec
-	WriteErrors     *prometheus.CounterVec
-	WriteBytes      *prometheus.HistogramVec
-	
+	WriteTotal    *prometheus.CounterVec
+	WriteDuration *prometheus.HistogramVec
+	WriteErrors   *prometheus.CounterVec
+	WriteBytes    *prometheus.HistogramVec
+
 	// Write embedding metrics (eager write-time embedding)
 	WriteEmbeddingDuration *prometheus.HistogramVec
 	WriteEmbeddingErrors   *prometheus.CounterVec
 	WriteEmbeddingSuccess  *prometheus.CounterVec
-	
+
 	// Retrieval metrics
-	RetrievalTotal      *prometheus.CounterVec
-	RetrievalDuration   *prometheus.HistogramVec
-	RetrievalHits       *prometheus.HistogramVec
-	RetrievalErrors     *prometheus.CounterVec
-	
+	RetrievalTotal    *prometheus.CounterVec
+	RetrievalDuration *prometheus.HistogramVec
+	RetrievalHits     *prometheus.HistogramVec
+	RetrievalErrors   *prometheus.CounterVec
+
 	// Storage metrics
 	StorageOperations *prometheus.CounterVec
 	StorageDuration   *prometheus.HistogramVec
 	StorageErrors     *prometheus.CounterVec
 	DBConnections     prometheus.Gauge
 	DBSize            *prometheus.GaugeVec
-	
+
 	// Embedding metrics
-	EmbeddingTotal    *prometheus.CounterVec
-	EmbeddingDuration *prometheus.HistogramVec
-	EmbeddingErrors   *prometheus.CounterVec
+	EmbeddingTotal     *prometheus.CounterVec
+	EmbeddingDuration  *prometheus.HistogramVec
+	EmbeddingErrors    *prometheus.CounterVec
 	EmbeddingBatchSize *prometheus.HistogramVec
-	
+
 	// Token metrics
 	TokensUsed       *prometheus.CounterVec
 	TokensSaved      *prometheus.CounterVec
 	TokenBudgetUsage *prometheus.HistogramVec
-	
+
 	// Memory metrics
 	MemoryCount       *prometheus.GaugeVec
 	MemoryAccessCount *prometheus.CounterVec
 	DecayScoreAvg     *prometheus.GaugeVec
-	
+
 	// Cache metrics
 	CacheHits   *prometheus.CounterVec
 	CacheMisses *prometheus.CounterVec
@@ -142,7 +142,7 @@ func newMetricsRegistry() *MetricsRegistry {
 			},
 			[]string{"workspace", "provider"},
 		),
-		
+
 		// Retrieval metrics
 		RetrievalTotal: promauto.NewCounterVec(
 			prometheus.CounterOpts{
@@ -174,7 +174,7 @@ func newMetricsRegistry() *MetricsRegistry {
 			},
 			[]string{"workspace", "mode", "error_type"},
 		),
-		
+
 		// Storage metrics
 		StorageOperations: promauto.NewCounterVec(
 			prometheus.CounterOpts{
@@ -211,7 +211,7 @@ func newMetricsRegistry() *MetricsRegistry {
 			},
 			[]string{"workspace"},
 		),
-		
+
 		// Embedding metrics
 		EmbeddingTotal: promauto.NewCounterVec(
 			prometheus.CounterOpts{
@@ -243,7 +243,7 @@ func newMetricsRegistry() *MetricsRegistry {
 			},
 			[]string{"provider"},
 		),
-		
+
 		// Token metrics
 		TokensUsed: promauto.NewCounterVec(
 			prometheus.CounterOpts{
@@ -267,7 +267,7 @@ func newMetricsRegistry() *MetricsRegistry {
 			},
 			[]string{"workspace"},
 		),
-		
+
 		// Memory metrics
 		MemoryCount: promauto.NewGaugeVec(
 			prometheus.GaugeOpts{
@@ -290,7 +290,7 @@ func newMetricsRegistry() *MetricsRegistry {
 			},
 			[]string{"workspace"},
 		),
-		
+
 		// API metrics
 		HTTPRequestsTotal: promauto.NewCounterVec(
 			prometheus.CounterOpts{

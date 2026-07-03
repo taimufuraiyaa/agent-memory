@@ -23,4 +23,3 @@ func MemoryEnabled() bool {
 func RunLabel() string {
 	return strings.TrimSpace(os.Getenv("AGENT_MEMORY_RUN_LABEL"))
 }
-

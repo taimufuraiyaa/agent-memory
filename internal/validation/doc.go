@@ -80,19 +80,19 @@
 //	    if err := validation.ValidateWorkspaceName(in.Workspace); err != nil {
 //	        return nil, fmt.Errorf("invalid workspace: %w", err)
 //	    }
-//	    
+//
 //	    // Validate content length
 //	    if err := validation.ValidateContentLength(in.Content); err != nil {
 //	        return nil, fmt.Errorf("invalid content: %w", err)
 //	    }
-//	    
+//
 //	    // Validate diagram code if present
 //	    if in.Diagram != nil {
 //	        if err := validation.ValidateDiagramCode(in.Diagram.Code); err != nil {
 //	            return nil, fmt.Errorf("invalid diagram: %w", err)
 //	        }
 //	    }
-//	    
+//
 //	    // ... proceed with write ...
 //	}
 //
@@ -118,12 +118,12 @@
 //	userInput := "My Project (2024)"
 //	sanitized := validation.SanitizeWorkspaceName(userInput)
 //	// Result: "my-project-2024"
-//	
+//
 //	if err := validation.ValidateWorkspaceName(sanitized); err != nil {
 //	    // This should never happen - sanitized names are always valid
 //	    return err
 //	}
-//	
+//
 //	// Use sanitized name for workspace creation
 //	workspace := sanitized
 //

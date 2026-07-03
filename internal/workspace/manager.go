@@ -68,12 +68,12 @@ type RenameResult struct {
 }
 
 type ListItem struct {
-	Name         string    `json:"name"`
-	DBPath       string    `json:"db_path"`
+	Name          string    `json:"name"`
+	DBPath        string    `json:"db_path"`
 	WorkspaceRoot string    `json:"workspace_root,omitempty"`
-	SizeBytes    int64     `json:"size_bytes"`
-	MemoryCount  int       `json:"memory_count"`
-	LastActivity time.Time `json:"last_activity"`
+	SizeBytes     int64     `json:"size_bytes"`
+	MemoryCount   int       `json:"memory_count"`
+	LastActivity  time.Time `json:"last_activity"`
 }
 
 type DeleteOptions struct {

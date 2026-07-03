@@ -32,18 +32,18 @@ func Open(ctx context.Context, dbPath string) (*Store, error) {
 	// Add query parameters for WAL mode and busy timeout
 	// These need to be in the connection string for modernc.org/sqlite
 	connStr := dbPath + "?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(10000)"
-	
+
 	db, err := sql.Open("sqlite", connStr)
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite: %w", err)
 	}
-	
+
 	// Connection pool configuration for concurrent access
 	// WAL mode allows multiple readers + one writer concurrently
-	db.SetMaxOpenConns(10)             // Allow up to 10 concurrent connections
-	db.SetMaxIdleConns(5)              // Keep 5 warm connections in pool
-	db.SetConnMaxLifetime(time.Hour)   // Rotate connections every hour
-	
+	db.SetMaxOpenConns(10)           // Allow up to 10 concurrent connections
+	db.SetMaxIdleConns(5)            // Keep 5 warm connections in pool
+	db.SetConnMaxLifetime(time.Hour) // Rotate connections every hour
+
 	if err := ping(ctx, db); err != nil {
 		_ = db.Close()
 		return nil, err
@@ -84,8 +84,8 @@ func applyPragmas(ctx context.Context, db *sql.DB) error {
 		"PRAGMA foreign_keys = ON",
 		"PRAGMA journal_mode = WAL",
 		"PRAGMA synchronous = NORMAL",
-		"PRAGMA busy_timeout = 10000",  // 10 seconds for concurrent operations
-		"PRAGMA cache_size = -64000",    // 64MB cache
+		"PRAGMA busy_timeout = 10000", // 10 seconds for concurrent operations
+		"PRAGMA cache_size = -64000",  // 64MB cache
 	}
 	for _, stmt := range pragmas {
 		if _, err := db.ExecContext(ctx, stmt); err != nil {
@@ -531,7 +531,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 	if _, err := s.db.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_memory_vectors_model_version ON memory_vectors(embedding_model_version)`); err != nil {
 		return fmt.Errorf("create embedding_model_version index: %w", err)
 	}
-	
+
 	// Migrate existing memory vectors from json to blob
 	if err := s.migrateJSONVectorsToBlobs(ctx); err != nil {
 		return fmt.Errorf("migrate JSON vectors to blobs: %w", err)
@@ -1159,7 +1159,7 @@ func (s *Store) PopulateSupersedesRelations(ctx context.Context, memories []core
 	query := fmt.Sprintf(`
 		SELECT source_id, target_id, weight, metadata_json 
 		FROM relations 
-		WHERE type = 'supersedes' AND source_id IN (%s)`, 
+		WHERE type = 'supersedes' AND source_id IN (%s)`,
 		strings.Join(placeholders, ","),
 	)
 
@@ -1713,4 +1713,3 @@ func (s *Store) hydrateTurbovecIndex(ctx context.Context) error {
 	}
 	return nil
 }
-

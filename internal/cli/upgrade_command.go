@@ -19,24 +19,24 @@ import (
 )
 
 type upgradeResult struct {
-	FromVersion      string                           `json:"from_version"`
-	ToSpecifier      string                           `json:"to_specifier"`
-	Module           string                           `json:"module"`
-	Method           string                           `json:"method"`
-	SourceDir        string                           `json:"source_dir,omitempty"`
-	TargetPath       string                           `json:"target_path"`
-	InstalledFrom    string                           `json:"installed_from,omitempty"`
-	Replaced         bool                             `json:"replaced"`
-	AgentFiles       *workspace.WriteAgentFilesResult `json:"agent_files,omitempty"`
+	FromVersion      string                                      `json:"from_version"`
+	ToSpecifier      string                                      `json:"to_specifier"`
+	Module           string                                      `json:"module"`
+	Method           string                                      `json:"method"`
+	SourceDir        string                                      `json:"source_dir,omitempty"`
+	TargetPath       string                                      `json:"target_path"`
+	InstalledFrom    string                                      `json:"installed_from,omitempty"`
+	Replaced         bool                                        `json:"replaced"`
+	AgentFiles       *workspace.WriteAgentFilesResult            `json:"agent_files,omitempty"`
 	AllAgentFiles    map[string]*workspace.WriteAgentFilesResult `json:"all_agent_files,omitempty"`
-	DashboardUpdated bool                             `json:"dashboard_updated,omitempty"`
-	DashboardDir     string                           `json:"dashboard_dir,omitempty"`
-	DashboardSource  string                           `json:"dashboard_source,omitempty"`
-	DashboardError   string                           `json:"dashboard_error,omitempty"`
-	EnvFile          string                           `json:"env_file,omitempty"`
-	EnvUpdated       bool                             `json:"env_updated,omitempty"`
-	EnvError         string                           `json:"env_error,omitempty"`
-	TuningCommand    string                           `json:"tuning_command,omitempty"`
+	DashboardUpdated bool                                        `json:"dashboard_updated,omitempty"`
+	DashboardDir     string                                      `json:"dashboard_dir,omitempty"`
+	DashboardSource  string                                      `json:"dashboard_source,omitempty"`
+	DashboardError   string                                      `json:"dashboard_error,omitempty"`
+	EnvFile          string                                      `json:"env_file,omitempty"`
+	EnvUpdated       bool                                        `json:"env_updated,omitempty"`
+	EnvError         string                                      `json:"env_error,omitempty"`
+	TuningCommand    string                                      `json:"tuning_command,omitempty"`
 }
 
 func validateTextOrJSONFormat(s string) (string, error) {

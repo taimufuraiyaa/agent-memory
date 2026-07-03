@@ -34,11 +34,11 @@ type RecallSearchProbeHit struct {
 }
 
 type RecallSearchProbe struct {
-	StrongHitCount     int                    `json:"strong_hit_count"`
-	WeakHitCount       int                    `json:"weak_hit_count"`
-	SuppressedHitCount int                    `json:"suppressed_hit_count"`
+	StrongHitCount     int                     `json:"strong_hit_count"`
+	WeakHitCount       int                     `json:"weak_hit_count"`
+	SuppressedHitCount int                     `json:"suppressed_hit_count"`
 	Policy             RetrievalPolicySnapshot `json:"policy"`
-	TopStrongHit       *RecallSearchProbeHit  `json:"top_strong_hit,omitempty"`
+	TopStrongHit       *RecallSearchProbeHit   `json:"top_strong_hit,omitempty"`
 }
 
 type RecallGateDecision struct {

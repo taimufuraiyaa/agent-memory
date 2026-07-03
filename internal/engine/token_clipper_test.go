@@ -9,9 +9,9 @@ import (
 func TestTokenClipperHardBudget(t *testing.T) {
 	clipper := NewTokenClipper(WhitespaceCounter{})
 	hits := []RetrievalHit{
-		{Memory: core.MemoryEntry{ID: "a", Content: "one two three"}},     // 3
-		{Memory: core.MemoryEntry{ID: "b", Content: "four five six"}},     // 3
-		{Memory: core.MemoryEntry{ID: "c", Content: "seven eight nine"}},  // 3
+		{Memory: core.MemoryEntry{ID: "a", Content: "one two three"}},    // 3
+		{Memory: core.MemoryEntry{ID: "b", Content: "four five six"}},    // 3
+		{Memory: core.MemoryEntry{ID: "c", Content: "seven eight nine"}}, // 3
 	}
 	included, meta := clipper.Clip(hits, 6)
 	if len(included) != 2 {
@@ -38,4 +38,3 @@ func TestTokenClipperOversizeSingleEntry(t *testing.T) {
 		t.Fatalf("expected item_too_large reason")
 	}
 }
-

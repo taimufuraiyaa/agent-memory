@@ -237,4 +237,3 @@ func formatBytes(bytes int64) string {
 	}
 	return fmt.Sprintf("%.1f %s", value, units[index])
 }
-

@@ -66,13 +66,13 @@ func (s *VectorSearcher) SearchWithOptions(ctx context.Context, opt VectorSearch
 	if opt.TopK <= 0 {
 		opt.TopK = 5
 	}
-	
+
 	// Check embedding cache first to avoid re-embedding repeated queries
 	var qv []float32
 	if s.cache != nil {
 		qv = s.cache.GetEmbedding(ctx, opt.Query)
 	}
-	
+
 	// Cache miss - compute embedding and store it
 	if qv == nil {
 		var err error
@@ -85,7 +85,7 @@ func (s *VectorSearcher) SearchWithOptions(ctx context.Context, opt VectorSearch
 		}
 	}
 	activeProvider := strings.TrimSpace(s.provider.Name())
-	
+
 	// Fast path: Go-based vector search over binary SQLite blobs
 	sqlScores, err := s.store.SearchMemoryVectorsGo(ctx, opt.Workspace, activeProvider, qv, opt.TopK, opt.Types, opt.Tiers)
 	if err == nil && len(sqlScores) > 0 {
@@ -93,7 +93,7 @@ func (s *VectorSearcher) SearchWithOptions(ctx context.Context, opt VectorSearch
 		for i, sc := range sqlScores {
 			ids[i] = sc.MemoryID
 		}
-		
+
 		matchingMemories, err := s.store.GetMemoriesByIDs(ctx, ids)
 		if err == nil && len(matchingMemories) > 0 {
 			out := make([]SearchHit, 0, len(sqlScores))

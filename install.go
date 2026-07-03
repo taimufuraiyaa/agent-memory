@@ -310,7 +310,6 @@ func buildAndInstall(cfg config) (string, error) {
 	return finalBin, nil
 }
 
-
 func existsLabel(p string) string {
 	if fileExists(p) || dirExists(p) {
 		return "✓ " + p

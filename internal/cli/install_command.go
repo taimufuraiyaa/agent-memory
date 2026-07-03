@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/taimufuraiyaa/agent-memory/internal/api/dashboard"
 	"github.com/taimufuraiyaa/agent-memory/internal/bootstrap"
 	"github.com/taimufuraiyaa/agent-memory/internal/workspace"
-	"github.com/taimufuraiyaa/agent-memory/internal/api/dashboard"
 )
 
 func newInstallCommand() *cobra.Command {

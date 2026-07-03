@@ -160,10 +160,10 @@ func TestObservePromotionIsIdempotent(t *testing.T) {
 	})
 
 	p1 := postJSON(t, ts.URL+"/api/v1/observations/promote", map[string]any{
-		"workspace":   "ws",
-		"session_id":  "s2",
-		"max_items":   50,
-		"type":        "episodic",
+		"workspace":  "ws",
+		"session_id": "s2",
+		"max_items":  50,
+		"type":       "episodic",
 	})
 	if p1["created_id"] == "" {
 		t.Fatalf("expected created_id, got %+v", p1)
@@ -173,10 +173,10 @@ func TestObservePromotionIsIdempotent(t *testing.T) {
 	}
 
 	p2 := postJSON(t, ts.URL+"/api/v1/observations/promote", map[string]any{
-		"workspace":   "ws",
-		"session_id":  "s2",
-		"max_items":   50,
-		"type":        "episodic",
+		"workspace":  "ws",
+		"session_id": "s2",
+		"max_items":  50,
+		"type":       "episodic",
 	})
 	if p2["created_id"] != p1["created_id"] {
 		t.Fatalf("expected same created_id due to dedup, got p1=%v p2=%v", p1["created_id"], p2["created_id"])
@@ -217,11 +217,11 @@ func TestRecallIncludesRecentObservations(t *testing.T) {
 	})
 
 	resp := postJSON(t, ts.URL+"/api/v1/memories/recall", map[string]any{
-		"workspace":             "ws",
-		"task_description":      "what happened?",
-		"token_budget":          200,
-		"include_observations":  true,
-		"observation_limit":     5,
+		"workspace":              "ws",
+		"task_description":       "what happened?",
+		"token_budget":           200,
+		"include_observations":   true,
+		"observation_limit":      5,
 		"observation_session_id": "s3",
 	})
 

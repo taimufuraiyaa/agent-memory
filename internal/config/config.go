@@ -74,17 +74,17 @@ type EmbeddingConfig struct {
 
 // RetrievalConfig contains retrieval-related configuration.
 type RetrievalConfig struct {
-	DefaultMode       string  `yaml:"default_mode"`        // "search", "recall", "relate", "outcomes"
-	DefaultTopK       int     `yaml:"default_top_k"`       // Number of results to return
-	DefaultBudget     int     `yaml:"default_budget"`      // Token budget for context
-	SemanticWeight    float64 `yaml:"semantic_weight"`     // Weight for semantic similarity
-	RecencyWeight     float64 `yaml:"recency_weight"`      // Weight for recency
-	OutcomeWeight     float64 `yaml:"outcome_weight"`      // Weight for outcome success
-	DecayWeight       float64 `yaml:"decay_weight"`        // Weight for time decay
-	TierBiasWeight    float64 `yaml:"tier_bias_weight"`    // Weight for storage tier bias
-	EnableReranking   bool    `yaml:"enable_reranking"`    // Enable LLM reranking
-	RetrievalTimeout  int     `yaml:"retrieval_timeout"`   // Timeout in seconds
-	EnableExplanation bool    `yaml:"enable_explanation"`  // Include retrieval explanations
+	DefaultMode       string  `yaml:"default_mode"`       // "search", "recall", "relate", "outcomes"
+	DefaultTopK       int     `yaml:"default_top_k"`      // Number of results to return
+	DefaultBudget     int     `yaml:"default_budget"`     // Token budget for context
+	SemanticWeight    float64 `yaml:"semantic_weight"`    // Weight for semantic similarity
+	RecencyWeight     float64 `yaml:"recency_weight"`     // Weight for recency
+	OutcomeWeight     float64 `yaml:"outcome_weight"`     // Weight for outcome success
+	DecayWeight       float64 `yaml:"decay_weight"`       // Weight for time decay
+	TierBiasWeight    float64 `yaml:"tier_bias_weight"`   // Weight for storage tier bias
+	EnableReranking   bool    `yaml:"enable_reranking"`   // Enable LLM reranking
+	RetrievalTimeout  int     `yaml:"retrieval_timeout"`  // Timeout in seconds
+	EnableExplanation bool    `yaml:"enable_explanation"` // Include retrieval explanations
 }
 
 // DashboardConfig contains dashboard-related configuration.
@@ -107,11 +107,11 @@ type ServerConfig struct {
 
 // ObserveConfig contains observability configuration.
 type ObserveConfig struct {
-	Enabled       bool   `yaml:"enabled"`
-	MetricsPort   int    `yaml:"metrics_port"`
+	Enabled        bool   `yaml:"enabled"`
+	MetricsPort    int    `yaml:"metrics_port"`
 	TracingBackend string `yaml:"tracing_backend"` // "jaeger", "zipkin", etc.
-	LogLevel      string `yaml:"log_level"`        // "debug", "info", "warn", "error"
-	LogFormat     string `yaml:"log_format"`       // "json", "text"
+	LogLevel       string `yaml:"log_level"`       // "debug", "info", "warn", "error"
+	LogFormat      string `yaml:"log_format"`      // "json", "text"
 }
 
 // UpgradeConfig contains upgrade-related configuration.
@@ -123,9 +123,9 @@ type UpgradeConfig struct {
 
 // AdaptiveConfig contains adaptive tuning configuration.
 type AdaptiveConfig struct {
-	Enabled           bool                       `yaml:"enabled"`
-	PolicyDefaults    map[string]PolicyDefaults  `yaml:"policy_defaults"`
-	FeedbackCooldowns FeedbackCooldowns          `yaml:"feedback_cooldowns"`
+	Enabled           bool                      `yaml:"enabled"`
+	PolicyDefaults    map[string]PolicyDefaults `yaml:"policy_defaults"`
+	FeedbackCooldowns FeedbackCooldowns         `yaml:"feedback_cooldowns"`
 }
 
 // PolicyDefaults represents adaptive policy thresholds.
@@ -202,11 +202,11 @@ func DefaultConfig() *Config {
 			WriteTimeout:   30,
 		},
 		Observe: ObserveConfig{
-			Enabled:       true,
-			MetricsPort:   9042,
+			Enabled:        true,
+			MetricsPort:    9042,
 			TracingBackend: "",
-			LogLevel:      "info",
-			LogFormat:     "text",
+			LogLevel:       "info",
+			LogFormat:      "text",
 		},
 		Upgrade: UpgradeConfig{
 			AutoUpgrade:   false,
@@ -623,7 +623,7 @@ func GetAdaptiveBudget(defaultBudget int, budgetPercentage float64) int {
 	}
 
 	adaptiveBudget := int(float64(contextWindow) * budgetPercentage)
-	
+
 	// Ensure adaptive budget is reasonable (min 100, max contextWindow)
 	if adaptiveBudget < 100 {
 		adaptiveBudget = 100

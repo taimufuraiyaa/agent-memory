@@ -35,4 +35,3 @@ func TestToggleFlagsWriteEnvFile(t *testing.T) {
 		t.Fatalf("expected AGENT_MEMORY_RUN_LABEL in env file, got %q", s)
 	}
 }
-

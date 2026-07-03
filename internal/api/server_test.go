@@ -1496,5 +1496,3 @@ func TestRequestFeedbackAPI(t *testing.T) {
 		t.Fatalf("expected to find both feedback entries in response list with correct useful/total counts, got: %v", listData)
 	}
 }
-
-

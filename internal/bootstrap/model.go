@@ -28,11 +28,11 @@ const (
 // TODO: Replace with actual SHA256 checksums from HuggingFace model files
 // Source: https://huggingface.co/Xenova/all-MiniLM-L6-v2/tree/main
 var modelChecksums = map[string]string{
-	"config.json":                "7135149f7cffa1a573466c6e4d8423ed73b62fd2332c575bf738a0d033f70df7",
-	"tokenizer.json":             "da0e79933b9ed51798a3ae27893d3c5fa4a201126cef75586296df9b4d2c62a0",
-	"tokenizer_config.json":      "9261e7d79b44c8195c1cada2b453e55b00aeb81e907a6664974b4d7776172ab3",
-	"special_tokens_map.json":    "b6d346be366a7d1d48332dbc9fdf3bf8960b5d879522b7799ddba59e76237ee3",
-	"model.onnx":                 "afdb6f1a0e45b715d0bb9b11772f032c399babd23bfc31fed1c170afc848bdb1",
+	"config.json":             "7135149f7cffa1a573466c6e4d8423ed73b62fd2332c575bf738a0d033f70df7",
+	"tokenizer.json":          "da0e79933b9ed51798a3ae27893d3c5fa4a201126cef75586296df9b4d2c62a0",
+	"tokenizer_config.json":   "9261e7d79b44c8195c1cada2b453e55b00aeb81e907a6664974b4d7776172ab3",
+	"special_tokens_map.json": "b6d346be366a7d1d48332dbc9fdf3bf8960b5d879522b7799ddba59e76237ee3",
+	"model.onnx":              "afdb6f1a0e45b715d0bb9b11772f032c399babd23bfc31fed1c170afc848bdb1",
 }
 
 // ModelFile represents a file needed for the embedding model.
@@ -374,12 +374,12 @@ func validateModelChecksum(path, expectedHex string) error {
 		return err
 	}
 	defer f.Close()
-	
+
 	h := sha256.New()
 	if _, err := io.Copy(h, f); err != nil {
 		return err
 	}
-	
+
 	actual := hex.EncodeToString(h.Sum(nil))
 	if actual != expectedHex {
 		return fmt.Errorf("checksum mismatch: got %s, want %s", actual[:16]+"...", expectedHex[:16]+"...")

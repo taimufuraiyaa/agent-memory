@@ -56,4 +56,3 @@ func TestLLMUsageAggregateByGroup(t *testing.T) {
 		t.Fatalf("expected 2 groups, got %+v", groups)
 	}
 }
-
