@@ -14,6 +14,16 @@ func (s *Store) LogRetrievalRequest(ctx context.Context, id, workspace, requestT
 	if s == nil {
 		return errors.New("store is nil")
 	}
+
+	// Deduplicate: delete any previous pending (-1 score) requests for the same query,
+	// workspace, and type logged in the last 60 seconds to avoid cluttered dashboard logs.
+	cutoff := time.Now().Add(-60 * time.Second).UTC().Format(time.RFC3339)
+	_, _ = s.db.ExecContext(ctx, `
+		DELETE FROM retrieval_requests 
+		WHERE workspace = ? AND request_type = ? AND query = ? AND score = -1 AND created_at >= ?`,
+		workspace, requestType, query, cutoff,
+	)
+
 	createdAt := time.Now().UTC().Format(time.RFC3339)
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO retrieval_requests (id, workspace, request_type, query, score, created_at)

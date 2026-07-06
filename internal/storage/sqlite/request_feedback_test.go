@@ -94,3 +94,51 @@ func TestRequestFeedback(t *testing.T) {
 	// Monthly average covers all => (4+2+5)/3 = 3.666
 	assert.InDelta(t, 3.666, stats.AverageMonth, 0.01)
 }
+
+func TestRequestFeedbackDeduplication(t *testing.T) {
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "test_dedup.db")
+
+	store, err := Open(context.Background(), dbPath)
+	require.NoError(t, err)
+	defer func() { _ = store.Close() }()
+
+	ctx := context.Background()
+	ws := "test-ws"
+	q := "duplicate search query"
+
+	// 1. Log first request
+	err = store.LogRetrievalRequest(ctx, "req-1", ws, "search", q)
+	require.NoError(t, err)
+
+	// 2. Log duplicate request (must purge req-1 since it is pending and within 60s)
+	err = store.LogRetrievalRequest(ctx, "req-2", ws, "search", q)
+	require.NoError(t, err)
+
+	// Verify req-1 was deleted, and req-2 exists
+	var count int
+	err = store.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM retrieval_requests WHERE id = 'req-1'").Scan(&count)
+	require.NoError(t, err)
+	assert.Equal(t, 0, count)
+
+	err = store.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM retrieval_requests WHERE id = 'req-2'").Scan(&count)
+	require.NoError(t, err)
+	assert.Equal(t, 1, count)
+
+	// 3. Score req-2 to make it not pending
+	err = store.RecordRequestFeedback(ctx, "req-2", 5, "good", 1, 1)
+	require.NoError(t, err)
+
+	// 4. Log duplicate request again (should NOT purge req-2 because it is scored/not pending)
+	err = store.LogRetrievalRequest(ctx, "req-3", ws, "search", q)
+	require.NoError(t, err)
+
+	// Verify req-2 still exists, and req-3 exists
+	err = store.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM retrieval_requests WHERE id = 'req-2'").Scan(&count)
+	require.NoError(t, err)
+	assert.Equal(t, 1, count)
+
+	err = store.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM retrieval_requests WHERE id = 'req-3'").Scan(&count)
+	require.NoError(t, err)
+	assert.Equal(t, 1, count)
+}

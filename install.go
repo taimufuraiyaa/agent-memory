@@ -102,7 +102,7 @@ func parseFlags() config {
 	flag.BoolVar(&cfg.quiet, "quiet", false, "less chatter")
 	flag.BoolVar(&cfg.initHere, "init-here", false, "run per-project setup in the current directory after install (init new project, reinstall existing)")
 	flag.StringVar(&cfg.projectName, "project-name", "", "project name for --init-here setup (default: cwd basename)")
-	flag.Var(&cfg.ideTargets, "ide", "IDE rule targets for --init-here project setup (repeatable): cursor|antigravity|claude|aierules|cursorrules|trae|windsurfrules|generic|all")
+	flag.Var(&cfg.ideTargets, "ide", "IDE rule targets for --init-here project setup (repeatable): cursor|antigravity|claude|zcode|aierules|cursorrules|trae|windsurfrules|generic|all")
 	flag.Parse()
 
 	if cfg.binDir == "" {

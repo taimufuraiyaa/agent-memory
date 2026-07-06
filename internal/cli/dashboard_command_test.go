@@ -114,6 +114,8 @@ func TestLooksLikeDashboardCommandLine(t *testing.T) {
 }
 
 func TestDashboardStopWhenNotRunning(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
 	cmd := newDashboardCommand()
 	cmd.SetArgs([]string{"--stop", "--addr", ":9999"})
 	err := cmd.Execute()

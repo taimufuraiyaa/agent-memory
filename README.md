@@ -8,7 +8,7 @@ A persistent, multi-tier memory layer for AI coding agents (Cursor, Claude Code,
 ## Status
 - **Core Implementation**: Complete, optimized, and ready to run.
 - **Tools**: CLI, local HTTP dashboard, and test automation scripts are available.
-- **Integration**: Supports Cursor, Trae, Claude Code, and custom agent integrations out-of-the-box.
+- **Integration**: Supports Cursor, Trae, Claude Code, ZCode, and custom agent integrations out-of-the-box.
 
 ---
 
@@ -88,6 +88,7 @@ agent-memory init --project-name my-project
 ### Common Flags & Operations:
 - `agent-memory init --study` - Register and bootstrap learning from local docs/code immediately.
 - `agent-memory init --ide trae` - Configure Trae-specific rules explicitly.
+- `agent-memory init --ide zcode` - Configure ZCode rules (`AGENTS.md`) explicitly.
 - `agent-memory reinstall` - Refresh or repair IDE configuration rules in an existing project.
 
 **What `init` does**:

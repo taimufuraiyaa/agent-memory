@@ -337,6 +337,10 @@ func TestManagerInitAndReinstallWriteStagedRetrievalPolicyAcrossFiles(t *testing
 			"run memory `search` first",
 			"Run task `recall` only when the task is about continuing previous work",
 		},
+		filepath.Join(cwd, "AGENTS.md"): {
+			"run memory `search` first",
+			"Run task `recall` only when the task is about continuing previous work",
+		},
 		filepath.Join(cwd, ".trae", "rules", "project_rules.md"): {
 			"workspace: proj-stage",
 			"run memory `search` first",
@@ -588,4 +592,126 @@ func TestDebugList(t *testing.T) {
 		t.Fatalf("list failed: %v", err)
 	}
 	t.Logf("List succeeded: %d items", len(items))
+}
+
+func TestNormalizeRuleTargetsAcceptsZcode(t *testing.T) {
+	// "zcode" is a valid standalone target.
+	got, err := normalizeRuleTargets(t.TempDir(), []string{"zcode"})
+	if err != nil {
+		t.Fatalf("zcode should validate, got error: %v", err)
+	}
+	if len(got) != 1 || got[0] != "zcode" {
+		t.Fatalf("expected [zcode], got %+v", got)
+	}
+
+	// "all" expansion must include zcode alongside the other concrete IDEs.
+	allOut, err := normalizeRuleTargets(t.TempDir(), []string{"all"})
+	if err != nil {
+		t.Fatalf("all should validate: %v", err)
+	}
+	if !contains(allOut, "zcode") {
+		t.Fatalf("expected 'all' to expand to include zcode, got %+v", allOut)
+	}
+
+	// "generic" must NOT include zcode — generic is for vendor-agnostic dotfiles only.
+	genOut, err := normalizeRuleTargets(t.TempDir(), []string{"generic"})
+	if err != nil {
+		t.Fatalf("generic should validate: %v", err)
+	}
+	if contains(genOut, "zcode") {
+		t.Fatalf("generic must not expand to zcode, got %+v", genOut)
+	}
+
+	// Unknown ide still errors.
+	if _, err := normalizeRuleTargets(t.TempDir(), []string{"nonsense"}); err == nil {
+		t.Fatalf("expected error for invalid ide")
+	}
+}
+
+func contains(slice []string, s string) bool {
+	for _, v := range slice {
+		if v == s {
+			return true
+		}
+	}
+	return false
+}
+
+func TestManagerInitAutoDetectsZcodeWhenNoIDEFlagsProvided(t *testing.T) {
+	base := t.TempDir()
+	cwd := t.TempDir()
+	// Seed an existing AGENTS.md so auto-detection picks zcode.
+	if err := os.WriteFile(filepath.Join(cwd, "AGENTS.md"), []byte("# existing\n"), 0o644); err != nil {
+		t.Fatalf("seed AGENTS.md: %v", err)
+	}
+	mgr, err := NewManager(base)
+	if err != nil {
+		t.Fatalf("new manager: %v", err)
+	}
+	out, err := mgr.Init(context.Background(), InitOptions{
+		CWD:         cwd,
+		ProjectName: "proj-zcode",
+	})
+	if err != nil {
+		t.Fatalf("init: %v", err)
+	}
+	if len(out.RuleFiles) != 1 {
+		t.Fatalf("expected 1 rule file, got %d (%+v)", len(out.RuleFiles), out.RuleFiles)
+	}
+	agentsMd := filepath.Join(cwd, "AGENTS.md")
+	if out.RuleFiles[0] != agentsMd {
+		t.Fatalf("expected AGENTS.md rule path %s, got %+v", agentsMd, out.RuleFiles)
+	}
+	b, err := os.ReadFile(agentsMd)
+	if err != nil {
+		t.Fatalf("read AGENTS.md: %v", err)
+	}
+	content := string(b)
+	if !strings.Contains(content, "workspace: proj-zcode") {
+		t.Fatalf("expected workspace in AGENTS.md, got: %s", content)
+	}
+	if !strings.Contains(content, "## agent-memory (MANDATORY)") {
+		t.Fatalf("expected MANDATORY marker in AGENTS.md, got: %s", content)
+	}
+	// Cursor rule must NOT be written in a ZCode-only repo.
+	if _, err := os.Stat(filepath.Join(cwd, ".cursor", "rules", "agent-memory.mdc")); !os.IsNotExist(err) {
+		t.Fatalf("expected cursor rule NOT to be written in a ZCode-only repo")
+	}
+}
+
+func TestManagerReinstallWritesZcodeAgentsMd(t *testing.T) {
+	base := t.TempDir()
+	cwd := t.TempDir()
+	mgr, err := NewManager(base)
+	if err != nil {
+		t.Fatalf("new manager: %v", err)
+	}
+	if _, err := mgr.Init(context.Background(), InitOptions{
+		CWD:         cwd,
+		ProjectName: "proj-zcode-reinstall",
+		NoRule:      true,
+	}); err != nil {
+		t.Fatalf("init: %v", err)
+	}
+
+	out, err := mgr.Reinstall(context.Background(), ReinstallOptions{
+		CWD:         cwd,
+		ProjectName: "proj-zcode-reinstall",
+		Force:       true,
+		IDEs:        []string{"zcode"},
+	})
+	if err != nil {
+		t.Fatalf("reinstall: %v", err)
+	}
+	if out.AgentFiles == nil {
+		t.Fatalf("expected agent files result")
+	}
+	agentsMd := filepath.Join(cwd, "AGENTS.md")
+	b, err := os.ReadFile(agentsMd)
+	if err != nil {
+		t.Fatalf("read AGENTS.md: %v", err)
+	}
+	if !strings.Contains(string(b), "workspace: proj-zcode-reinstall") {
+		t.Fatalf("expected workspace in AGENTS.md, got: %s", string(b))
+	}
 }

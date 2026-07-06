@@ -4,7 +4,7 @@
 
 ---
 section: specs-first
-applies_to: [cursorrules, aierules, windsurfrules, trae, claude]
+applies_to: [cursorrules, aierules, windsurfrules, trae, claude, zcode]
 ---
 
 ## Specs-First (FORCED)
@@ -14,7 +14,7 @@ applies_to: [cursorrules, aierules, windsurfrules, trae, claude]
 
 ---
 section: design-depth
-applies_to: [cursorrules, aierules, windsurfrules, trae, claude]
+applies_to: [cursorrules, aierules, windsurfrules, trae, claude, zcode]
 ---
 
 ## Design Depth (FORCED)
@@ -23,7 +23,7 @@ applies_to: [cursorrules, aierules, windsurfrules, trae, claude]
 
 ---
 section: mermaid-safety
-applies_to: [cursorrules, aierules, windsurfrules, trae, claude]
+applies_to: [cursorrules, aierules, windsurfrules, trae, claude, zcode]
 ---
 
 ## Mermaid Safety (ENFORCED)
@@ -33,7 +33,7 @@ applies_to: [cursorrules, aierules, windsurfrules, trae, claude]
 
 ---
 section: truthfulness
-applies_to: [cursorrules, aierules, windsurfrules, trae, claude]
+applies_to: [cursorrules, aierules, windsurfrules, trae, claude, zcode]
 ---
 
 ## Truthfulness (ENFORCED)
@@ -105,7 +105,7 @@ Command:
 
 ---
 section: memory-policy-compact
-applies_to: [agents, antigravity, trae, claude, aierules, cursorrules, windsurfrules]
+applies_to: [agents, antigravity, trae, claude, zcode, aierules, cursorrules, windsurfrules]
 ---
 
 ## agent-memory (MANDATORY)

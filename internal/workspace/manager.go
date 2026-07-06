@@ -140,7 +140,8 @@ func FindProjectRoot(start string) string {
 			fileExists(filepath.Join(dir, ".cursorrules")) ||
 			fileExists(filepath.Join(dir, ".aierules")) ||
 			fileExists(filepath.Join(dir, ".windsurfrules")) ||
-			fileExists(filepath.Join(dir, "CLAUDE.md")) {
+			fileExists(filepath.Join(dir, "CLAUDE.md")) ||
+			fileExists(filepath.Join(dir, "AGENTS.md")) {
 			return dir
 		}
 		next := filepath.Dir(dir)
@@ -163,6 +164,7 @@ func detectWorkspaceFromCWD(start string) (workspace string, root string, ok boo
 			filepath.Join(dir, ".aierules"),
 			filepath.Join(dir, ".windsurfrules"),
 			filepath.Join(dir, "CLAUDE.md"),
+			filepath.Join(dir, "AGENTS.md"),
 		}
 		for _, p := range candidates {
 			if !fileExists(p) {
@@ -311,6 +313,12 @@ func (m *Manager) Init(ctx context.Context, opt InitOptions) (*InitResult, error
 					written = append(written, p)
 				case "claude":
 					p := filepath.Join(opt.CWD, "CLAUDE.md")
+					if _, err := upsertRuleSection(p, "## agent-memory (MANDATORY)", genericRulesSection(name), opt.Force); err != nil {
+						return nil, err
+					}
+					written = append(written, p)
+				case "zcode":
+					p := filepath.Join(opt.CWD, "AGENTS.md")
 					if _, err := upsertRuleSection(p, "## agent-memory (MANDATORY)", genericRulesSection(name), opt.Force); err != nil {
 						return nil, err
 					}
@@ -587,7 +595,7 @@ func normalizeRuleTargets(cwd string, in []string) ([]string, error) {
 		}
 		switch v {
 		case "all":
-			expanded = append(expanded, "cursor", "antigravity", "aierules", "cursorrules", "windsurfrules", "claude", "trae")
+			expanded = append(expanded, "cursor", "antigravity", "aierules", "cursorrules", "windsurfrules", "claude", "zcode", "trae")
 		case "generic":
 			expanded = append(expanded, "aierules", "cursorrules", "windsurfrules", "trae")
 		default:
@@ -602,11 +610,11 @@ func normalizeRuleTargets(cwd string, in []string) ([]string, error) {
 			continue
 		}
 		switch t {
-		case "cursor", "antigravity", "aierules", "cursorrules", "windsurfrules", "claude", "trae":
+		case "cursor", "antigravity", "aierules", "cursorrules", "windsurfrules", "claude", "zcode", "trae":
 			seen[t] = true
 			out = append(out, t)
 		default:
-			return nil, fmt.Errorf("invalid ide: %s (allowed: cursor|antigravity|claude|aierules|cursorrules|trae|windsurfrules|generic|all)", t)
+			return nil, fmt.Errorf("invalid ide: %s (allowed: cursor|antigravity|claude|zcode|aierules|cursorrules|trae|windsurfrules|generic|all)", t)
 		}
 	}
 	if len(out) == 0 {
@@ -616,7 +624,7 @@ func normalizeRuleTargets(cwd string, in []string) ([]string, error) {
 }
 
 func detectDefaultRuleTargets(cwd string) []string {
-	targets := make([]string, 0, 7)
+	targets := make([]string, 0, 8)
 	if dirExists(filepath.Join(cwd, ".cursor")) {
 		targets = append(targets, "cursor")
 	}
@@ -637,6 +645,9 @@ func detectDefaultRuleTargets(cwd string) []string {
 	}
 	if fileExists(filepath.Join(cwd, "CLAUDE.md")) {
 		targets = append(targets, "claude")
+	}
+	if fileExists(filepath.Join(cwd, "AGENTS.md")) {
+		targets = append(targets, "zcode")
 	}
 	if len(targets) == 0 {
 		return []string{"cursor"}
@@ -838,7 +849,7 @@ func HippocampusHooks() []HookFile {
   },
   "then": {
     "type": "askAgent",
-    "prompt": "Review what happened in this session and do the following:\n1. Identify anything worth keeping using this filter:\n   - Structural delta: new service, integration, or data flow discovered\n   - Hidden why: non-obvious design decision or trade-off\n   - Interface contract: API schema, data model, or protocol change\n   - Systemic insight: complex logic spanning multiple files\n   - ANY failure: always write failures, no filter applies\n2. For each qualifying item, write it with the correct type:\n   - Fact about the system -> agent-memory write --type semantic --content \"<fact>\"\n   - Convention or repeatable process -> agent-memory write --type procedural --content \"<steps>\"\n   - Attempt result (success or failure) -> agent-memory write --type outcome --content \"<what was tried> (result: success|failure|partial, approach: <how>, reason: <why>)\"\n3. Run session-end compaction: agent-memory session-end --transcript \"<one paragraph summary of this session>\" --format json\nDo not skip step 3 even if nothing was written in step 2."
+    "prompt": "Review what happened in this session and do the following:\n1. Identify anything worth keeping using this filter:\n   - Structural delta: new service, integration, or data flow discovered\n   - Hidden why: non-obvious design decision or trade-off\n   - Interface contract: API schema, data model, or protocol change\n   - Systemic insight: complex logic spanning multiple files\n   - ANY failure: always write failures, no filter applies\n2. For each qualifying item, write it with the correct type:\n   - Fact about the system -> agent-memory write --type semantic --content \"<fact>\"\n   - Convention or repeatable process -> agent-memory write --type procedural --content \"<steps>\"\n   - Attempt result (success or failure) -> agent-memory write --type outcome --content \"<what was tried> (result: success|failure|partial, approach: <how>, reason: <why>)\"\n3. Proactively package reusable scripts, grep queries, workflows, or complex setup/learnings into a custom agent skill under .agents/skills/ (using agent-memory distill --name <name> --description \"<description>\" or manual packaging) if they are valuable and highly likely to be reused. Do NOT wait for the user to ask.\n4. Run session-end compaction: agent-memory session-end --transcript \"<one paragraph summary of this session>\" --format json\nDo not skip step 4 even if nothing was written in step 2 or 3."
   }
 }
 `,
@@ -955,6 +966,7 @@ type WriteAgentFilesResult struct {
 //   - antigravity : .agents/ directory exists
 //   - trae        : .trae/ directory exists
 //   - claude      : CLAUDE.md file exists
+//   - zcode       : AGENTS.md file exists
 //   - aierules    : .aierules file exists
 //   - windsurfrules : .windsurfrules file exists
 func WriteAgentFiles(opt WriteAgentFilesOptions) (*WriteAgentFilesResult, error) {
@@ -1144,6 +1156,24 @@ func WriteAgentFiles(opt WriteAgentFilesOptions) (*WriteAgentFilesResult, error)
 			ir.Written = append(ir.Written, "CLAUDE.md")
 		} else {
 			ir.Skipped = append(ir.Skipped, "CLAUDE.md")
+		}
+		res.IDEs = append(res.IDEs, ir)
+	}
+
+	// --- ZCode: AGENTS.md (upsert section) ---
+	if targetEnabled(forcedTargets, "zcode") || fileExists(filepath.Join(opt.CWD, "AGENTS.md")) {
+		ir := IDEUpgradeResult{IDE: "zcode"}
+		rulePath := filepath.Join(opt.CWD, "AGENTS.md")
+		marker := "## agent-memory (MANDATORY)"
+		section := genericRulesSection(ws)
+		written, err := upsertRuleSection(rulePath, marker, section, opt.Force)
+		if err != nil {
+			return nil, fmt.Errorf("zcode: %w", err)
+		}
+		if written {
+			ir.Written = append(ir.Written, "AGENTS.md")
+		} else {
+			ir.Skipped = append(ir.Skipped, "AGENTS.md")
 		}
 		res.IDEs = append(res.IDEs, ir)
 	}

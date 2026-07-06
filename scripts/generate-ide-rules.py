@@ -56,6 +56,11 @@ IDE_CONFIGS = [
         {"windsurfrules"},
         "# AI Agent Rules - agent-memory\n",
     ),
+    (
+        "AGENTS.md",
+        {"zcode"},
+        "# AI Agent Rules - agent-memory\n",
+    ),
 ]
 
 

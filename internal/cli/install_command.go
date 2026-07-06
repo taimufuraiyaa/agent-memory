@@ -218,7 +218,7 @@ configure environment variables, and initialize the current directory as a proje
 	cmd.Flags().StringVar(&dashboardDir, "dashboard-dir", "", "dashboard install directory")
 	cmd.Flags().BoolVar(&writeEnvFile, "write-env", true, "write an env file with environment settings")
 	cmd.Flags().StringVarP(&projectName, "project-name", "n", "", "project name for workspace setup (default: cwd basename)")
-	cmd.Flags().StringSliceVar(&ideTargets, "ide", nil, "IDE rule targets (repeatable, default: auto-detect): cursor|antigravity|claude|aierules|cursorrules|trae|windsurfrules|generic|all")
+	cmd.Flags().StringSliceVar(&ideTargets, "ide", nil, "IDE rule targets (repeatable, default: auto-detect): cursor|antigravity|claude|zcode|aierules|cursorrules|trae|windsurfrules|generic|all")
 	cmd.Flags().BoolVar(&noInit, "no-init", false, "skip workspace project auto-initialization")
 	cmd.Flags().BoolVar(&force, "force", false, "force recreate project workspace if it already exists")
 

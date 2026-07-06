@@ -9,6 +9,7 @@ The agent-memory project supports multiple AI-powered IDEs and editors:
 - Antigravity/Agents (`.agents/rules/agent-memory.md`)
 - Trae AI (`.trae/rules/project_rules.md`)
 - Claude Desktop (`CLAUDE.md`)
+- ZCode (`AGENTS.md`)
 - Generic rule files (`.cursorrules`, `.aierules`, `.windsurfrules`)
 
 To avoid maintaining duplicates, all these files are **generated** from a single source of truth.
@@ -55,6 +56,7 @@ More rules here...
 - `agents` / `antigravity` - Antigravity/Agents IDE
 - `trae` - Trae AI
 - `claude` - Claude Desktop
+- `zcode` - ZCode (`AGENTS.md`)
 - `cursorrules` - Generic `.cursorrules` file
 - `aierules` - Generic `.aierules` file
 - `windsurfrules` - Generic `.windsurfrules` file
@@ -120,7 +122,7 @@ git commit -m "Update IDE rules"
    ```bash
    git add .kiro/templates/ide-rules-template.md
    git add .cursor/rules/ .agents/rules/ .trae/rules/
-   git add .cursorrules .aierules .windsurfrules CLAUDE.md
+   git add .cursorrules .aierules .windsurfrules CLAUDE.md AGENTS.md
    git commit -m "Add new IDE rule: [rule name]"
    ```
 
