@@ -383,8 +383,9 @@ Use --hooks-only to push hooks without touching the binary (useful for existing 
 
 			writeAgentFiles := func(force bool) (*workspace.WriteAgentFilesResult, error) {
 				return workspace.WriteAgentFiles(workspace.WriteAgentFilesOptions{
-					CWD:   cwd,
-					Force: force,
+					CWD:     cwd,
+					DataDir: defaultAgentMemoryDataDir(),
+					Force:   force,
 				})
 			}
 
@@ -405,6 +406,7 @@ Use --hooks-only to push hooks without touching the binary (useful for existing 
 					af, err := workspace.WriteAgentFiles(workspace.WriteAgentFilesOptions{
 						CWD:       proj.WorkspaceRoot,
 						Workspace: proj.Name,
+						DataDir:   defaultAgentMemoryDataDir(),
 						Force:     force,
 					})
 					if err != nil {

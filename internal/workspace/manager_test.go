@@ -715,3 +715,148 @@ func TestManagerReinstallWritesZcodeAgentsMd(t *testing.T) {
 		t.Fatalf("expected workspace in AGENTS.md, got: %s", string(b))
 	}
 }
+
+func TestNormalizeRuleTargetsIncludesCodex(t *testing.T) {
+	targets, err := normalizeRuleTargets(t.TempDir(), []string{"codex"})
+	if err != nil {
+		t.Fatalf("normalize codex: %v", err)
+	}
+	if !contains(targets, "codex") {
+		t.Fatalf("expected codex target, got %+v", targets)
+	}
+
+	all, err := normalizeRuleTargets(t.TempDir(), []string{"all"})
+	if err != nil {
+		t.Fatalf("normalize all: %v", err)
+	}
+	if !contains(all, "codex") {
+		t.Fatalf("expected all to include codex, got %+v", all)
+	}
+}
+
+func TestManagerInitWritesCodexArtifacts(t *testing.T) {
+	base := filepath.Join(t.TempDir(), "agent memory data")
+	cwd := t.TempDir()
+	mgr, err := NewManager(base)
+	if err != nil {
+		t.Fatalf("new manager: %v", err)
+	}
+
+	out, err := mgr.Init(context.Background(), InitOptions{
+		CWD:         cwd,
+		ProjectName: "proj-codex",
+		IDEs:        []string{"codex"},
+	})
+	if err != nil {
+		t.Fatalf("init: %v", err)
+	}
+
+	for _, path := range []string{
+		filepath.Join(cwd, "AGENTS.md"),
+		filepath.Join(cwd, ".codex", "config.toml"),
+		filepath.Join(cwd, ".codex", "hooks.json"),
+	} {
+		if !contains(out.RuleFiles, path) {
+			t.Fatalf("expected %s in generated files: %+v", path, out.RuleFiles)
+		}
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("expected generated file %s: %v", path, err)
+		}
+	}
+
+	config, err := os.ReadFile(filepath.Join(cwd, ".codex", "config.toml"))
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	if !strings.Contains(string(config), filepath.ToSlash(base)) {
+		t.Fatalf("expected data dir in Codex config, got %s", config)
+	}
+
+	hooks, err := os.ReadFile(filepath.Join(cwd, ".codex", "hooks.json"))
+	if err != nil {
+		t.Fatalf("read hooks: %v", err)
+	}
+	for _, want := range []string{"UserPromptSubmit", "Stop", "agent-memory"} {
+		if !strings.Contains(string(hooks), want) {
+			t.Fatalf("expected %q in Codex hooks, got %s", want, hooks)
+		}
+	}
+}
+
+func TestWriteAgentFilesPreservesCodexConfigAndHooks(t *testing.T) {
+	cwd := t.TempDir()
+	dataDir := filepath.Join(t.TempDir(), "memory")
+	if err := os.MkdirAll(filepath.Join(cwd, ".codex"), 0o755); err != nil {
+		t.Fatalf("mkdir codex: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(cwd, ".codex", "config.toml"), []byte("model = \"gpt-test\"\n"), 0o644); err != nil {
+		t.Fatalf("seed config: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(cwd, ".codex", "hooks.json"), []byte(`{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"custom-hook"}]}]}}`), 0o644); err != nil {
+		t.Fatalf("seed hooks: %v", err)
+	}
+
+	for range 2 {
+		if _, err := WriteAgentFiles(WriteAgentFilesOptions{
+			CWD:       cwd,
+			Workspace: "proj-codex-preserve",
+			DataDir:   dataDir,
+			IDEs:      []string{"codex"},
+		}); err != nil {
+			t.Fatalf("write Codex files: %v", err)
+		}
+	}
+
+	config, _ := os.ReadFile(filepath.Join(cwd, ".codex", "config.toml"))
+	if !strings.Contains(string(config), `model = "gpt-test"`) || strings.Count(string(config), dataDir) != 1 {
+		t.Fatalf("expected preserved config and one data root, got %s", config)
+	}
+	hooks, _ := os.ReadFile(filepath.Join(cwd, ".codex", "hooks.json"))
+	if !strings.Contains(string(hooks), "custom-hook") || strings.Count(string(hooks), codexHookMarker) != 2 {
+		t.Fatalf("expected preserved custom hook and two managed hooks, got %s", hooks)
+	}
+}
+
+func TestWriteCodexGlobalFilesPreservesExistingSettings(t *testing.T) {
+	codexHome := t.TempDir()
+	dataDir := filepath.Join(t.TempDir(), "agent-memory")
+	if err := os.WriteFile(filepath.Join(codexHome, "config.toml"), []byte("model = \"gpt-test\"\n"), 0o644); err != nil {
+		t.Fatalf("seed config: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(codexHome, "hooks.json"), []byte(`{"hooks":{"PreToolUse":[{"hooks":[{"type":"command","command":"custom-hook"}]}]}}`), 0o644); err != nil {
+		t.Fatalf("seed hooks: %v", err)
+	}
+
+	for range 2 {
+		if _, err := WriteCodexGlobalFiles(codexHome, dataDir); err != nil {
+			t.Fatalf("write global Codex files: %v", err)
+		}
+	}
+	config, _ := os.ReadFile(filepath.Join(codexHome, "config.toml"))
+	if !strings.Contains(string(config), `model = "gpt-test"`) || strings.Count(string(config), dataDir) != 1 {
+		t.Fatalf("expected preserved config and one data root, got %s", config)
+	}
+	hooks, _ := os.ReadFile(filepath.Join(codexHome, "hooks.json"))
+	if !strings.Contains(string(hooks), "custom-hook") || strings.Count(string(hooks), codexHookMarker) != 2 {
+		t.Fatalf("expected preserved custom and managed hooks, got %s", hooks)
+	}
+}
+
+func TestWriteCodexGlobalFilesPreservesExistingWritableRoots(t *testing.T) {
+	codexHome := t.TempDir()
+	dataDir := filepath.Join(t.TempDir(), "agent-memory")
+	existingRoot := "/existing/writable/root"
+	seed := "[sandbox_workspace_write]\nwritable_roots = [\"" + existingRoot + "\"]\n"
+	if err := os.WriteFile(filepath.Join(codexHome, "config.toml"), []byte(seed), 0o644); err != nil {
+		t.Fatalf("seed config: %v", err)
+	}
+	for range 2 {
+		if _, err := WriteCodexGlobalFiles(codexHome, dataDir); err != nil {
+			t.Fatalf("write global Codex files: %v", err)
+		}
+	}
+	config, _ := os.ReadFile(filepath.Join(codexHome, "config.toml"))
+	if strings.Count(string(config), existingRoot) != 1 || strings.Count(string(config), dataDir) != 1 {
+		t.Fatalf("expected both writable roots exactly once, got %s", config)
+	}
+}

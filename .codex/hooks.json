@@ -1,0 +1,24 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "prompt": "agent-memory managed lifecycle: Before ending the turn, write durable learnings and run the mandatory agent-memory session-end workflow in AGENTS.md.",
+            "type": "prompt"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "prompt": "agent-memory managed lifecycle: Before answering, follow the mandatory agent-memory search, conditional recall, and immediate feedback workflow in AGENTS.md.",
+            "type": "prompt"
+          }
+        ]
+      }
+    ]
+  }
+}

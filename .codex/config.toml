@@ -1,0 +1,3 @@
+# BEGIN agent-memory managed Codex sandbox
+sandbox_workspace_write.writable_roots = ["/Users/time/.agent-memory"]
+# END agent-memory managed Codex sandbox

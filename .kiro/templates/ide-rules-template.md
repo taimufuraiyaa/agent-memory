@@ -94,7 +94,7 @@ If retrieval has a low score (0-3), proceed to investigate and solve the task. O
 - Record outcomes that would prevent repeating mistakes or preserve a working approach.
 
 Command:
-- `agent-memory write --type outcome --content "<what you tried>" --outcome-result success|failure|partial --outcome-approach "<how>" --outcome-reason "<why>"`
+- `agent-memory write --type outcome --content "<what you tried> (result: success|failure|partial, approach: <how>, reason: <why>)"`
 
 ### At the end of a session
 
@@ -135,6 +135,6 @@ Commands:
 - `agent-memory feedback --memory-id "<old_id>" --outcome rejected --reconsolidation-action superseded --successor-memory-id "<new_id>" --reason "<explanation>"`
 - `agent-memory write --type semantic --content "<durable fact + source>"`
 - `agent-memory write --type procedural --content "<repeatable steps/checklist>"`
-- `agent-memory write --type outcome --content "<what you tried>" --outcome-result success|failure|partial --outcome-approach "<how>" --outcome-reason "<why>"`
+- `agent-memory write --type outcome --content "<what you tried> (result: success|failure|partial, approach: <how>, reason: <why>)"`
 - `agent-memory session-end --transcript "<session summary or transcript>" --format json`
 

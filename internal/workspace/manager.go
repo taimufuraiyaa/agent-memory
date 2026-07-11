@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -215,6 +216,7 @@ func (m *Manager) Reinstall(ctx context.Context, opt ReinstallOptions) (*Reinsta
 	af, err := WriteAgentFiles(WriteAgentFilesOptions{
 		CWD:       root,
 		Workspace: name,
+		DataDir:   m.BaseDir,
 		Force:     opt.Force,
 		IDEs:      opt.IDEs,
 	})
@@ -323,6 +325,12 @@ func (m *Manager) Init(ctx context.Context, opt InitOptions) (*InitResult, error
 						return nil, err
 					}
 					written = append(written, p)
+				case "codex":
+					paths, err := writeCodexFiles(opt.CWD, name, m.BaseDir, opt.Force)
+					if err != nil {
+						return nil, err
+					}
+					written = append(written, paths...)
 				case "trae":
 					p := filepath.Join(opt.CWD, ".trae", "rules", "project_rules.md")
 					if _, err := upsertRuleSection(p, "## agent-memory (MANDATORY)", genericRulesSection(name), opt.Force); err != nil {
@@ -595,7 +603,7 @@ func normalizeRuleTargets(cwd string, in []string) ([]string, error) {
 		}
 		switch v {
 		case "all":
-			expanded = append(expanded, "cursor", "antigravity", "aierules", "cursorrules", "windsurfrules", "claude", "zcode", "trae")
+			expanded = append(expanded, "cursor", "antigravity", "aierules", "cursorrules", "windsurfrules", "claude", "zcode", "codex", "trae")
 		case "generic":
 			expanded = append(expanded, "aierules", "cursorrules", "windsurfrules", "trae")
 		default:
@@ -610,11 +618,11 @@ func normalizeRuleTargets(cwd string, in []string) ([]string, error) {
 			continue
 		}
 		switch t {
-		case "cursor", "antigravity", "aierules", "cursorrules", "windsurfrules", "claude", "zcode", "trae":
+		case "cursor", "antigravity", "aierules", "cursorrules", "windsurfrules", "claude", "zcode", "codex", "trae":
 			seen[t] = true
 			out = append(out, t)
 		default:
-			return nil, fmt.Errorf("invalid ide: %s (allowed: cursor|antigravity|claude|zcode|aierules|cursorrules|trae|windsurfrules|generic|all)", t)
+			return nil, fmt.Errorf("invalid ide: %s (allowed: cursor|antigravity|claude|zcode|codex|aierules|cursorrules|trae|windsurfrules|generic|all)", t)
 		}
 	}
 	if len(out) == 0 {
@@ -649,6 +657,9 @@ func detectDefaultRuleTargets(cwd string) []string {
 	if fileExists(filepath.Join(cwd, "AGENTS.md")) {
 		targets = append(targets, "zcode")
 	}
+	if dirExists(filepath.Join(cwd, ".codex")) || os.Getenv("CODEX_HOME") != "" {
+		targets = append(targets, "codex")
+	}
 	if len(targets) == 0 {
 		return []string{"cursor"}
 	}
@@ -663,6 +674,148 @@ func writeRuleFile(path, content string) error {
 		return fmt.Errorf("write rule file %s: %w", path, err)
 	}
 	return nil
+}
+
+const (
+	codexConfigStart = "# BEGIN agent-memory managed Codex sandbox"
+	codexConfigEnd   = "# END agent-memory managed Codex sandbox"
+	codexHookMarker  = "agent-memory managed lifecycle"
+)
+
+func writeCodexFiles(cwd, workspace, dataDir string, force bool) ([]string, error) {
+	agentsPath := filepath.Join(cwd, "AGENTS.md")
+	if _, err := upsertRuleSection(agentsPath, "## agent-memory (MANDATORY)", genericRulesSection(workspace), force); err != nil {
+		return nil, fmt.Errorf("write AGENTS.md: %w", err)
+	}
+	configPath := filepath.Join(cwd, ".codex", "config.toml")
+	if err := writeCodexConfig(configPath, dataDir); err != nil {
+		return nil, err
+	}
+	hooksPath := filepath.Join(cwd, ".codex", "hooks.json")
+	if err := writeCodexHooks(hooksPath); err != nil {
+		return nil, err
+	}
+	return []string{agentsPath, configPath, hooksPath}, nil
+}
+
+// WriteCodexGlobalFiles installs the user-wide Codex sandbox root and lifecycle
+// hooks while preserving unrelated Codex configuration.
+func WriteCodexGlobalFiles(codexHome, dataDir string) ([]string, error) {
+	if strings.TrimSpace(codexHome) == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return nil, fmt.Errorf("resolve Codex home: %w", err)
+		}
+		codexHome = filepath.Join(home, ".codex")
+	}
+	configPath := filepath.Join(codexHome, "config.toml")
+	if err := writeCodexConfig(configPath, dataDir); err != nil {
+		return nil, err
+	}
+	hooksPath := filepath.Join(codexHome, "hooks.json")
+	if err := writeCodexHooks(hooksPath); err != nil {
+		return nil, err
+	}
+	return []string{configPath, hooksPath}, nil
+}
+
+func writeCodexConfig(path, dataDir string) error {
+	absDataDir, err := filepath.Abs(dataDir)
+	if err != nil {
+		return fmt.Errorf("resolve Codex writable root: %w", err)
+	}
+	quoted := strconv.Quote(filepath.ToSlash(absDataDir))
+	managed := codexConfigStart + "\n" +
+		"sandbox_workspace_write.writable_roots = [" + quoted + "]\n" +
+		codexConfigEnd
+
+	existing := ""
+	if b, err := os.ReadFile(path); err == nil {
+		existing = string(b)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("read Codex config: %w", err)
+	}
+	if !strings.Contains(existing, codexConfigStart) {
+		writableRoots := regexp.MustCompile(`(?m)^(\s*(?:sandbox_workspace_write\.)?writable_roots\s*=\s*)\[([^\n]*)\](\s*)$`)
+		if match := writableRoots.FindStringSubmatchIndex(existing); match != nil {
+			line := existing[match[0]:match[1]]
+			if !strings.Contains(line, quoted) {
+				closeAt := strings.LastIndex(line, "]")
+				before := strings.TrimSpace(line[:closeAt])
+				separator := ""
+				if !strings.HasSuffix(before, "[") {
+					separator = ", "
+				}
+				line = line[:closeAt] + separator + quoted + line[closeAt:]
+				existing = existing[:match[0]] + line + existing[match[1]:]
+			}
+			return writeRuleFile(path, strings.TrimSpace(existing)+"\n")
+		}
+	}
+	updated, err := replaceManagedBlock(existing, codexConfigStart, codexConfigEnd, managed)
+	if err != nil {
+		return fmt.Errorf("update Codex config: %w", err)
+	}
+	return writeRuleFile(path, strings.TrimSpace(updated)+"\n")
+}
+
+func replaceManagedBlock(existing, start, end, managed string) (string, error) {
+	startAt := strings.Index(existing, start)
+	endAt := strings.Index(existing, end)
+	if startAt >= 0 || endAt >= 0 {
+		if startAt < 0 || endAt < startAt {
+			return "", errors.New("incomplete managed block")
+		}
+		endAt += len(end)
+		return existing[:startAt] + managed + existing[endAt:], nil
+	}
+	if strings.TrimSpace(existing) == "" {
+		return managed + "\n", nil
+	}
+	// Keep dotted managed keys in the TOML root context. Appending after a table
+	// header would make them relative to that table.
+	return managed + "\n\n" + strings.TrimLeft(existing, "\n"), nil
+}
+
+func writeCodexHooks(path string) error {
+	root := map[string]any{}
+	if b, err := os.ReadFile(path); err == nil {
+		if err := json.Unmarshal(b, &root); err != nil {
+			return fmt.Errorf("parse Codex hooks %s: %w", path, err)
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("read Codex hooks: %w", err)
+	}
+	hooks, _ := root["hooks"].(map[string]any)
+	if hooks == nil {
+		hooks = map[string]any{}
+		root["hooks"] = hooks
+	}
+	managed := map[string]string{
+		"UserPromptSubmit": "Before answering, follow the mandatory agent-memory search, conditional recall, and immediate feedback workflow in AGENTS.md.",
+		"Stop":             "Before ending the turn, write durable learnings and run the mandatory agent-memory session-end workflow in AGENTS.md.",
+	}
+	for event, prompt := range managed {
+		groups, _ := hooks[event].([]any)
+		kept := make([]any, 0, len(groups)+1)
+		for _, raw := range groups {
+			if !strings.Contains(fmt.Sprint(raw), codexHookMarker) {
+				kept = append(kept, raw)
+			}
+		}
+		kept = append(kept, map[string]any{
+			"hooks": []any{map[string]any{
+				"type":   "prompt",
+				"prompt": codexHookMarker + ": " + prompt,
+			}},
+		})
+		hooks[event] = kept
+	}
+	b, err := json.MarshalIndent(root, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode Codex hooks: %w", err)
+	}
+	return writeRuleFile(path, string(b)+"\n")
 }
 
 func appendRuleSectionIfMissing(path, marker, section string) error {
@@ -724,7 +877,7 @@ Commands:
 - `+"`"+`agent-memory feedback --memory-id "<old_id>" --outcome rejected --reconsolidation-action superseded --successor-memory-id "<new_id>" --reason "<explanation>"`+"`"+`
 - `+"`"+`agent-memory write --type semantic --content "<durable fact + source>"`+"`"+`
 - `+"`"+`agent-memory write --type procedural --content "<repeatable steps/checklist>"`+"`"+`
-- `+"`"+`agent-memory write --type outcome --content "<what you tried>" --outcome-result success|failure|partial --outcome-approach "<how>" --outcome-reason "<why>"`+"`"+`
+- `+"`"+`agent-memory write --type outcome --content "<what you tried> (result: success|failure|partial, approach: <how>, reason: <why>)"`+"`"+`
 - `+"`"+`agent-memory session-end --transcript "<session summary or transcript>" --format json`+"`"+`
 `, workspace)
 }
@@ -917,7 +1070,7 @@ If retrieval has a low score (0-3), proceed to investigate and solve the task. O
 - Record outcomes that would prevent repeating mistakes or preserve a working approach.
 
 Command:
-- `+"`"+`agent-memory write --type outcome --content "<what you tried>" --outcome-result success|failure|partial --outcome-approach "<how>" --outcome-reason "<why>"`+"`"+`
+- `+"`"+`agent-memory write --type outcome --content "<what you tried> (result: success|failure|partial, approach: <how>, reason: <why>)"`+"`"+`
 
 ### At the end of a session
 
@@ -935,6 +1088,9 @@ type WriteAgentFilesOptions struct {
 	// Workspace is the project name used in rule file content.
 	// If empty, it is read from the existing cursor rule file, or derived from the CWD basename.
 	Workspace string
+	// DataDir is the agent-memory data directory Codex must be able to write.
+	// If empty, it defaults to ~/.agent-memory.
+	DataDir string
 	// Force overwrites existing files even if content is identical.
 	Force bool
 	// IDEs optionally forces writing specific IDE files even if the project
@@ -991,6 +1147,27 @@ func WriteAgentFiles(opt WriteAgentFilesOptions) (*WriteAgentFilesResult, error)
 	}
 
 	res := &WriteAgentFilesResult{Workspace: ws}
+
+	// --- Codex: AGENTS.md + project sandbox config + lifecycle hooks ---
+	if targetEnabled(forcedTargets, "codex") || dirExists(filepath.Join(opt.CWD, ".codex")) {
+		ir := IDEUpgradeResult{IDE: "codex"}
+		dataDir := strings.TrimSpace(opt.DataDir)
+		if dataDir == "" {
+			home, err := os.UserHomeDir()
+			if err != nil {
+				return nil, fmt.Errorf("codex: resolve data dir: %w", err)
+			}
+			dataDir = filepath.Join(home, ".agent-memory")
+		}
+		paths, err := writeCodexFiles(opt.CWD, ws, dataDir, opt.Force)
+		if err != nil {
+			return nil, fmt.Errorf("codex: %w", err)
+		}
+		for _, path := range paths {
+			ir.Written = append(ir.Written, strings.TrimPrefix(strings.TrimPrefix(path, opt.CWD), string(filepath.Separator)))
+		}
+		res.IDEs = append(res.IDEs, ir)
+	}
 
 	// --- Kiro: .kiro/hooks/*.json ---
 	if targetEnabled(forcedTargets, "kiro") || dirExists(filepath.Join(opt.CWD, ".kiro")) {

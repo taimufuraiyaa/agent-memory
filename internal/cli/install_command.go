@@ -48,6 +48,12 @@ configure environment variables, and initialize the current directory as a proje
 			if dashboardDir == "" {
 				dashboardDir = filepath.Join(dataDir, "dashboard")
 			}
+			if len(ideTargets) == 0 {
+				// A fresh install configures every supported agent surface. This keeps
+				// Codex and other agents zero-configuration even in repositories that
+				// do not contain an IDE marker yet.
+				ideTargets = []string{"all"}
+			}
 
 			fmt.Fprintln(errOut, "— agent-memory installer —")
 
@@ -149,6 +155,23 @@ configure environment variables, and initialize the current directory as a proje
 				}
 			}
 
+			// Codex requires the memory database root to be writable before a
+			// project-local trusted configuration can take effect. Install a narrow,
+			// preserved user-wide layer so first use requires no manual config edits.
+			codexHome := strings.TrimSpace(os.Getenv("CODEX_HOME"))
+			if codexHome == "" {
+				if home, err := os.UserHomeDir(); err == nil {
+					codexHome = filepath.Join(home, ".codex")
+				}
+			}
+			if codexHome != "" {
+				paths, err := workspace.WriteCodexGlobalFiles(codexHome, dataDir)
+				if err != nil {
+					return fmt.Errorf("Codex setup failed: %w", err)
+				}
+				fmt.Fprintf(errOut, "  ✓ configured Codex: %s\n", strings.Join(paths, ", "))
+			}
+
 			// Project workspace initialization (init-here / reinstall)
 			if !noInit {
 				fmt.Fprintln(errOut, "\n▶ project rules setup")
@@ -218,7 +241,7 @@ configure environment variables, and initialize the current directory as a proje
 	cmd.Flags().StringVar(&dashboardDir, "dashboard-dir", "", "dashboard install directory")
 	cmd.Flags().BoolVar(&writeEnvFile, "write-env", true, "write an env file with environment settings")
 	cmd.Flags().StringVarP(&projectName, "project-name", "n", "", "project name for workspace setup (default: cwd basename)")
-	cmd.Flags().StringSliceVar(&ideTargets, "ide", nil, "IDE rule targets (repeatable, default: auto-detect): cursor|antigravity|claude|zcode|aierules|cursorrules|trae|windsurfrules|generic|all")
+	cmd.Flags().StringSliceVar(&ideTargets, "ide", nil, "IDE rule targets (repeatable, default: all): cursor|antigravity|claude|zcode|codex|aierules|cursorrules|trae|windsurfrules|generic|all")
 	cmd.Flags().BoolVar(&noInit, "no-init", false, "skip workspace project auto-initialization")
 	cmd.Flags().BoolVar(&force, "force", false, "force recreate project workspace if it already exists")
 
