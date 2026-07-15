@@ -48,6 +48,22 @@ test("lists only the compact core tools by default", async (t) => {
   const response = await readMessage(child);
 
   assert.deepEqual(response.result.tools.map((tool) => tool.name), [
+    "memory_write",
+    "memory_search",
+    "memory_recall",
+    "memory_feedback",
+    "memory_session_end",
+  ]);
+});
+
+test("lists operational tools only in the expanded profile", async (t) => {
+  const child = startServer({ AGENT_MEMORY_MCP_PROFILE: "expanded" });
+  t.after(() => child.kill());
+  child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 20, method: "tools/list", params: {} })}\n`);
+
+  const response = await readMessage(child);
+
+  assert.deepEqual(response.result.tools.map((tool) => tool.name), [
     "memory_health",
     "memory_write",
     "memory_search",
@@ -56,6 +72,31 @@ test("lists only the compact core tools by default", async (t) => {
     "memory_sessions",
     "memory_session_end",
   ]);
+});
+
+test("rejects calls to tools hidden from the default profile", async (t) => {
+  const child = startServer();
+  t.after(() => child.kill());
+  child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 21, method: "tools/call", params: { name: "memory_health", arguments: {} } })}\n`);
+
+  const response = await readMessage(child);
+
+  assert.equal(response.result.isError, true);
+  assert.match(response.result.content[0].text, /unknown tool: memory_health/);
+});
+
+test("fails closed for an unsupported tool profile", async () => {
+  const child = startServer({ AGENT_MEMORY_MCP_PROFILE: "everything" });
+  let stderr = "";
+  child.stderr.on("data", (chunk) => { stderr += chunk.toString("utf8"); });
+
+  const exitCode = await new Promise((resolve, reject) => {
+    child.once("error", reject);
+    child.once("exit", resolve);
+  });
+
+  assert.notEqual(exitCode, 0);
+  assert.match(stderr, /unsupported AGENT_MEMORY_MCP_PROFILE: everything/);
 });
 
 test("proxies health, write, and compact search to the service", async (t) => {
@@ -77,7 +118,10 @@ test("proxies health, write, and compact search to the service", async (t) => {
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   t.after(() => server.close());
   const address = server.address();
-  const child = startServer({ AGENT_MEMORY_URL: `http://127.0.0.1:${address.port}` });
+  const child = startServer({
+    AGENT_MEMORY_MCP_PROFILE: "expanded",
+    AGENT_MEMORY_URL: `http://127.0.0.1:${address.port}`,
+  });
   t.after(() => child.kill());
 
   child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "memory_health", arguments: {} } })}\n`);
@@ -116,7 +160,10 @@ test("proxies recall, feedback, sessions, and session end", async (t) => {
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   t.after(() => server.close());
-  const child = startServer({ AGENT_MEMORY_URL: `http://127.0.0.1:${server.address().port}` });
+  const child = startServer({
+    AGENT_MEMORY_MCP_PROFILE: "expanded",
+    AGENT_MEMORY_URL: `http://127.0.0.1:${server.address().port}`,
+  });
   t.after(() => child.kill());
 
   child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 6, method: "tools/call", params: { name: "memory_recall", arguments: { workspace: "ws", task: "continue work", budget: 100 } } })}\n`);
@@ -139,7 +186,10 @@ test("proxies recall, feedback, sessions, and session end", async (t) => {
 });
 
 test("reports HTTP transport degradation without silently changing backends", async (t) => {
-  const child = startServer({ AGENT_MEMORY_URL: "http://127.0.0.1:1" });
+  const child = startServer({
+    AGENT_MEMORY_MCP_PROFILE: "expanded",
+    AGENT_MEMORY_URL: "http://127.0.0.1:1",
+  });
   t.after(() => child.kill());
   child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 10, method: "tools/call", params: { name: "memory_health", arguments: {} } })}\n`);
 

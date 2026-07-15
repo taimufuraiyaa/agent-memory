@@ -4,8 +4,14 @@ import readline from "node:readline";
 const protocolVersion = "2025-03-26";
 const serviceURL = (process.env.AGENT_MEMORY_URL || "http://127.0.0.1:3210").replace(/\/$/, "");
 const maxResponseBytes = Number(process.env.AGENT_MEMORY_MCP_MAX_RESPONSE_BYTES || 262144);
+const profile = process.env.AGENT_MEMORY_MCP_PROFILE || "default";
 
-const tools = [
+if (!new Set(["default", "expanded"]).has(profile)) {
+  process.stderr.write(`unsupported AGENT_MEMORY_MCP_PROFILE: ${profile}\n`);
+  process.exit(2);
+}
+
+const allTools = [
   tool("memory_health", "Check the local agent-memory service", {}),
   tool("memory_write", "Store one durable memory", {
     content: { type: "string" },
@@ -42,6 +48,16 @@ const tools = [
     workspace: { type: "string" },
   }, ["transcript"]),
 ];
+const defaultToolNames = new Set([
+  "memory_write",
+  "memory_search",
+  "memory_recall",
+  "memory_feedback",
+  "memory_session_end",
+]);
+const tools = profile === "expanded"
+  ? allTools
+  : allTools.filter((definition) => defaultToolNames.has(definition.name));
 
 function tool(name, description, properties, required = []) {
   return { name, description, inputSchema: { type: "object", properties, required, additionalProperties: false } };

@@ -20,7 +20,10 @@ disconnect <agent>`; only agent-memory-owned entries are removed.
 Codex and Claude Code use the v1 normalized hook contract. Capture is enabled
 independently from context injection; prompt/session injection stays opt-in.
 MCP uses the compact HTTP proxy profile and reports a machine-readable degraded
-state when the local service is unavailable.
+state when the local service is unavailable. The default profile exposes only
+the workflow tools: write, search, recall, feedback, and session finalization.
+Set `AGENT_MEMORY_MCP_PROFILE=expanded` on the MCP server when operator-facing
+health checks or captured-session browsing must also be available.
 
 ## Trust and replay
 
