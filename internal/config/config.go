@@ -47,6 +47,21 @@ type Config struct {
 
 	// Adaptive tuning settings
 	Adaptive AdaptiveConfig `yaml:"adaptive"`
+
+	// Connectors are isolated observation producers. A bad instance must not
+	// prevent other configured instances from starting.
+	Connectors []ConnectorConfig `yaml:"connectors"`
+}
+
+type ConnectorConfig struct {
+	ID             string   `yaml:"id"`
+	Type           string   `yaml:"type"`
+	Enabled        bool     `yaml:"enabled"`
+	Workspace      string   `yaml:"workspace"`
+	Roots          []string `yaml:"roots"`
+	Ignore         []string `yaml:"ignore"`
+	PreviewBytes   int      `yaml:"preview_bytes"`
+	PollIntervalMS int      `yaml:"poll_interval_ms"`
 }
 
 // StorageConfig contains storage-related configuration.

@@ -5217,4 +5217,12 @@ body.light .feedbackBadgeRecall {
   font-weight: normal;
 }
 
-
+.replaySurface { display: grid; gap: 14px; }
+.replayControls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.replaySelect { width: auto; min-width: 112px; }
+.replayCurrent { border: 1px solid var(--line); background: var(--panel); padding: 18px; }
+.replayProvenance { display: flex; flex-wrap: wrap; gap: 10px 18px; margin-top: 14px; color: var(--muted); font-family: var(--mono); font-size: 12px; }
+.replaySequence { display: grid; gap: 1px; max-height: 320px; overflow: auto; border: 1px solid var(--line); }
+.replayStep { display: grid; grid-template-columns: 42px minmax(120px, 1fr) minmax(160px, auto); gap: 12px; border: 0; border-bottom: 1px solid var(--line); padding: 10px 12px; background: transparent; color: var(--text); text-align: left; font-family: var(--mono); cursor: pointer; }
+.replayStep:hover, .replayStepOn { background: var(--panel-strong); }
+@media (max-width: 720px) { .replayStep { grid-template-columns: 32px 1fr; } .replayStep span:last-child { grid-column: 2; } }

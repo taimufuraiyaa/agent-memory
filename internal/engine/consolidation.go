@@ -64,6 +64,7 @@ func (e *ConsolidationEngine) Run(ctx context.Context, workspace string, mode Me
 		if err := e.store.MarkSuperseded(ctx, oldIDs, newID); err != nil {
 			return nil, err
 		}
+		_, _ = e.store.AppendAuditEvent(ctx, sqlite.AuditEventInput{Workspace: workspace, Operation: "consolidate", Outcome: "success", Actor: "lifecycle", Source: "consolidation", TargetType: "memory", TargetIDs: append(oldIDs, newID), Reason: string(mode)})
 		out = append(out, newID)
 	}
 	return out, nil

@@ -107,7 +107,7 @@ func handleMemoryGraph(svc *Service) http.HandlerFunc {
 
 		assets, err := svc.resolve(r.Context(), workspace)
 		if err != nil {
-			writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
+			writeWorkspaceResolveError(w, err)
 			return
 		}
 
@@ -192,7 +192,7 @@ func handleDecayTimeline(svc *Service) http.HandlerFunc {
 
 		assets, err := svc.resolve(r.Context(), workspace)
 		if err != nil {
-			writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
+			writeWorkspaceResolveError(w, err)
 			return
 		}
 
@@ -347,7 +347,7 @@ func handleEntityNetwork(svc *Service) http.HandlerFunc {
 
 		assets, err := svc.resolve(r.Context(), workspace)
 		if err != nil {
-			writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
+			writeWorkspaceResolveError(w, err)
 			return
 		}
 

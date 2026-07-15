@@ -1,0 +1,6 @@
+{"category":"delivery_reliability","expected":"accepted_once","id":"hook-retry","latency_budget_ms":1000,"operation":"hook","secret_marker":"sk-INTEGRATIONFIXTURE000000000"}
+{"category":"delivery_reliability","expected":"machine_readable_degraded","id":"service-degraded","latency_budget_ms":1500,"operation":"mcp","secret_marker":""}
+{"category":"privacy_trust","expected":"partial_resumable","id":"partial-import","latency_budget_ms":2000,"operation":"import","secret_marker":"password=INTEGRATION_SECRET"}
+{"category":"privacy_trust","expected":"exactly_one_audit","id":"audited-delete","latency_budget_ms":500,"operation":"delete","secret_marker":""}
+{"category":"delivery_reliability","expected":"no_duplicate_unchanged","id":"connector-restart","latency_budget_ms":1500,"operation":"connector","secret_marker":"token=INTEGRATION_CONNECTOR_SECRET"}
+{"category":"continuation_value","expected":"bounded_payload","id":"compact-recall","latency_budget_ms":750,"operation":"recall","secret_marker":""}

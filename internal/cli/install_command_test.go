@@ -13,6 +13,13 @@ func TestInstallCommandBasic(t *testing.T) {
 	dataDir := t.TempDir()
 	binDir := t.TempDir()
 	cwd := t.TempDir()
+	codexHome := t.TempDir()
+	codexConfig := filepath.Join(codexHome, "config.toml")
+	const originalCodexConfig = "model = \"test-model\"\n"
+	if err := os.WriteFile(codexConfig, []byte(originalCodexConfig), 0o644); err != nil {
+		t.Fatalf("seed Codex config: %v", err)
+	}
+	t.Setenv("CODEX_HOME", codexHome)
 
 	// Switch working directory to cwd for workspace init testing
 	oldCwd, err := os.Getwd()
@@ -65,6 +72,16 @@ func TestInstallCommandBasic(t *testing.T) {
 	envContent := string(b)
 	if !strings.Contains(envContent, "AGENT_MEMORY_ENABLED") {
 		t.Fatalf("expected AGENT_MEMORY_ENABLED in env file, got: %s", envContent)
+	}
+
+	// An explicit non-Codex IDE selection must not mutate the user's global
+	// Codex configuration.
+	gotCodexConfig, err := os.ReadFile(codexConfig)
+	if err != nil {
+		t.Fatalf("read Codex config: %v", err)
+	}
+	if string(gotCodexConfig) != originalCodexConfig {
+		t.Fatalf("non-Codex install changed global Codex config: %s", gotCodexConfig)
 	}
 
 	// Verify cursor rule created

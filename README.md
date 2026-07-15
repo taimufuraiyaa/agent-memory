@@ -111,6 +111,7 @@ agent-memory init --project-name my-project
 | `agent-memory write` | Store a semantic, procedural, episodic, or outcome memory |
 | `agent-memory search` | Query memories using multi-signal retrieval |
 | `agent-memory recall` | Retrieve stable, token-budgeted prompt context for a task |
+| `agent-memory advisor` | Score workspace memory health and show evidence-backed recommendations |
 | `agent-memory session-end` | Parse a session transcript to extract clean learnings |
 | `agent-memory study` | Bootstrap/learn from project documents and code files |
 | `agent-memory dashboard` (`ui`) | Start and open the local web-based dashboard |
@@ -135,6 +136,10 @@ agent-memory search --query "auth validation" --top-k 5
 # Recall context for a task (within a 4000-token budget)
 agent-memory recall --task "debug JWT token validation failure" --budget 4000 --format raw
 
+# Review workspace memory quality, context efficiency, hygiene, coverage, and trust
+agent-memory advisor
+agent-memory advisor --format json
+
 # Extract learnings at the end of a session
 cat session_transcript.txt | agent-memory session-end --format json
 ```
@@ -158,6 +163,7 @@ agent-memory dashboard --stop
 - **Interactive Search**: Run queries with precise type, tier, outcome, and date filters.
 - **Explain Mode**: Click to inspect calculated scores (`semantic_similarity`, `recency`, `outcome_boost`, `decay_weight`, `tier_bias`).
 - **Recall Preview**: Preview the formatted prompt block that will be injected into the agent, highlighting clipped memories and tokens used.
+- **Memory Advisor**: Review the same deterministic score and ranked recommendations exposed by `GET /api/v1/advisor`.
 
 ---
 

@@ -45,7 +45,7 @@ func requestsFeedbackHandler(svc *Service) http.HandlerFunc {
 		}
 		assets, err := svc.resolve(r.Context(), ws)
 		if err != nil {
-			writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
+			writeWorkspaceResolveError(w, err)
 			return
 		}
 		if assets.Store == nil {
@@ -87,7 +87,7 @@ func feedbackStatsHandler(svc *Service) http.HandlerFunc {
 		ws := workspaceFromRequest(r, svc.Workspace)
 		assets, err := svc.resolve(r.Context(), ws)
 		if err != nil {
-			writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
+			writeWorkspaceResolveError(w, err)
 			return
 		}
 		if assets.Store == nil {
@@ -114,7 +114,7 @@ func listFeedbackHandler(svc *Service) http.HandlerFunc {
 		ws := workspaceFromRequest(r, svc.Workspace)
 		assets, err := svc.resolve(r.Context(), ws)
 		if err != nil {
-			writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
+			writeWorkspaceResolveError(w, err)
 			return
 		}
 		if assets.Store == nil {

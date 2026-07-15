@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -11,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 
+	"github.com/taimufuraiyaa/agent-memory/internal/application"
 	"github.com/taimufuraiyaa/agent-memory/internal/config"
 	"github.com/taimufuraiyaa/agent-memory/internal/core"
 	"github.com/taimufuraiyaa/agent-memory/internal/embeddings"
@@ -105,8 +105,9 @@ The memory will be automatically:
 			checkAndWarnModelVersion(ctx, cfg.workspace, store, provider)
 
 			p := engine.NewWritePipelineWithEmbedder(store, provider)
+			app := application.NewMemoryService(store, p, nil)
 			mt := core.MemoryType(mType)
-			res, err := p.Write(ctx, engine.WriteInput{
+			res, err := app.Write(ctx, engine.WriteInput{
 				Workspace: cfg.workspace,
 				Type:      mt,
 				Content:   content,
@@ -323,12 +324,10 @@ Use --explain to see per-signal score breakdowns.`,
 			// Check for model version mismatches and warn user
 			checkAndWarnModelVersion(ctx, cfg.workspace, store, provider)
 
-			requestID := uuid.New().String()
-			_ = store.LogRetrievalRequest(ctx, requestID, cfg.workspace, "search", query)
-
 			searcher := engine.NewVectorSearcher(store, provider)
 			retrieval := engine.NewRetrievalEngine(searcher)
-			res, err := retrieval.Retrieve(ctx, engine.RetrievalOptions{
+			app := application.NewMemoryService(store, nil, retrieval)
+			res, err := app.Search(ctx, engine.RetrievalOptions{
 				Workspace: cfg.workspace,
 				Query:     query,
 				TopK:      topK,
@@ -353,8 +352,6 @@ Use --explain to see per-signal score breakdowns.`,
 			if err != nil {
 				return err
 			}
-			res.RequestID = requestID
-			_ = store.AddTokenMetricV2(ctx, cfg.workspace, "search", sumHitTokens(res.Hits), sumHitTokens(res.Hits), engine.RunLabel(), true)
 			return writeSuccessEnvelope(cmd.OutOrStdout(), "search", res)
 		},
 	}
@@ -678,15 +675,16 @@ func newFeedbackCommand() *cobra.Command {
 				}
 				at = parsed
 			}
-			updated, err := store.ApplyRetrievalFeedback(ctx, strings.TrimSpace(memoryID), feedback, at)
+			app := application.NewMemoryService(store, nil, nil)
+			updated, err := app.Feedback(ctx, application.FeedbackInput{
+				MemoryID:              memoryID,
+				Outcome:               feedback,
+				OccurredAt:            at,
+				ReconsolidationAction: recon,
+				SuccessorMemoryID:     successorMemoryID,
+			})
 			if err != nil {
 				return err
-			}
-			if recon != "" {
-				updated, err = store.ApplyReconsolidation(ctx, strings.TrimSpace(memoryID), recon, strings.TrimSpace(successorMemoryID), at)
-				if err != nil {
-					return err
-				}
 			}
 			return writeSuccessEnvelope(cmd.OutOrStdout(), "feedback", map[string]any{
 				"workspace":              cfg.workspace,
@@ -737,48 +735,6 @@ func floatPtrIfChanged(cmd *cobra.Command, name string, v float64) *float64 {
 		return nil
 	}
 	return &v
-}
-
-func buildRecentObservationBlockCLI(ctx context.Context, store *sqlite.Store, workspace string, preferredSessionID string, limit int) (string, string, int) {
-	if limit <= 0 {
-		limit = 10
-	}
-	if limit > 50 {
-		limit = 50
-	}
-	sessionID := strings.TrimSpace(preferredSessionID)
-	if sessionID == "" {
-		sessions, err := store.ListSessions(ctx, workspace, 1)
-		if err != nil || len(sessions) == 0 {
-			return "", "", 0
-		}
-		sessionID = sessions[0].SessionID
-	}
-	obs, err := store.ListObservations(ctx, workspace, sessionID, nil, nil, limit)
-	if err != nil || len(obs) == 0 {
-		return "", sessionID, 0
-	}
-	var b strings.Builder
-	b.WriteString("Session: ")
-	b.WriteString(sessionID)
-	b.WriteString("\n")
-	count := 0
-	for _, o := range obs {
-		if count >= limit {
-			break
-		}
-		line := strings.TrimSpace(o.Summary)
-		if line == "" {
-			continue
-		}
-		b.WriteString("- ")
-		b.WriteString(o.OccurredAt.UTC().Format(time.RFC3339))
-		b.WriteString(" ")
-		b.WriteString(engine.ClipString(line, 240))
-		b.WriteString("\n")
-		count++
-	}
-	return strings.TrimSpace(b.String()), sessionID, count
 }
 
 func newSessionEndCommand() *cobra.Command {

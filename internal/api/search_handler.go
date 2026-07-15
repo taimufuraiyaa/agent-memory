@@ -78,14 +78,11 @@ func searchHandler(svc *Service) http.HandlerFunc {
 		if ws != allProjectsScope {
 			assets, err = svc.resolve(r.Context(), ws)
 			if err != nil {
-				writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
+				writeWorkspaceResolveError(w, err)
 				return
 			}
 		}
 		requestID := uuid.New().String()
-		if ws != allProjectsScope && assets != nil && assets.Store != nil {
-			_ = assets.Store.LogRetrievalRequest(r.Context(), requestID, ws, "search", req.Query)
-		}
 		topK := req.TopK
 		if topK <= 0 {
 			topK = 10
@@ -263,7 +260,7 @@ func searchHandler(svc *Service) http.HandlerFunc {
 			weakHits = trimRetrievalHits(weakHits, topK)
 			suppressedHits = trimRetrievalHits(suppressedHits, topK)
 		} else {
-			out, err := assets.Retrieval.Retrieve(r.Context(), engine.RetrievalOptions{
+			out, err := assets.Application.Search(r.Context(), engine.RetrievalOptions{
 				Workspace: opt.Workspace,
 				Query:     opt.Query,
 				TopK:      opt.TopK,
@@ -277,14 +274,12 @@ func searchHandler(svc *Service) http.HandlerFunc {
 				return
 			}
 			hits = out.Hits
+			requestID = out.RequestID
 			strongHits = out.StrongHits
 			weakHits = out.WeakHits
 			suppressedHits = out.SuppressedHits
 			policySnapshot = out.Policy
 			tokenTotal = sumHitTokens(hits)
-			if assets.Store != nil {
-				_ = assets.Store.AddTokenMetricV2(r.Context(), ws, "search", tokenTotal, tokenTotal, engine.RunLabel(), engine.MemoryEnabled())
-			}
 		}
 		results := renderSearchResults(hits, req.Explain)
 		strongResults := renderSearchResults(strongHits, req.Explain)

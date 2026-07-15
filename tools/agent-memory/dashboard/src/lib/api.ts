@@ -166,8 +166,43 @@ export type FeedbackStats = {
   average_useful_ratio?: number
 }
 
+export type AdvisorDimension = {
+  key: 'quality' | 'efficiency' | 'hygiene' | 'coverage' | 'trust'
+  label: string
+  score: number
+  weight: number
+  available: boolean
+  detail: string
+}
+
+export type AdvisorRecommendation = {
+  id: string
+  severity: 'critical' | 'warn' | 'info'
+  category: string
+  title: string
+  detail: string
+  metric?: string
+}
+
+export type AdvisorReport = {
+  workspace: string
+  score: number
+  grade: 'A' | 'B' | 'C' | 'D' | 'F' | 'N/A'
+  neutral: boolean
+  dimensions: AdvisorDimension[]
+  recommendations: AdvisorRecommendation[]
+  evidence: {
+    memory_count: number
+    active_memory_count: number
+    scored_request_count: number
+    useful_ratio_sample_count: number
+    recall_metric_records: number
+  }
+}
+
 export type DashboardStats = {
   workspace: string
+  advisor?: AdvisorReport
   feedback_stats?: FeedbackStats
   memory_count: number
   db_size_bytes: number
@@ -223,6 +258,20 @@ export type ObservationEntry = {
   tool_name?: string
   summary: string
   created_at: string
+}
+
+export type ReplayEvent = {
+  event_id: string
+  session_id: string
+  occurred_at: string
+  kind: string
+  actor?: string
+  summary: string
+  tool_name?: string
+  related_observation_ids?: string[]
+  related_memory_ids?: string[]
+  schema_version?: string
+  capture_mode?: string
 }
 
 export type ObservationPromotionResult = {
@@ -422,6 +471,11 @@ export function getStats(workspace?: string): Promise<DashboardStats> {
   return api(`/api/v1/stats${qs}`, { method: 'GET' })
 }
 
+export function getAdvisor(workspace?: string): Promise<AdvisorReport> {
+  const qs = workspace ? `?workspace=${encodeURIComponent(workspace)}` : ''
+  return api(`/api/v1/advisor${qs}`, { method: 'GET' })
+}
+
 export function listSchedulerHistory(input: { workspace: string; limit?: number }): Promise<{ workspace: string; limit: number; history: SchedulerRunHistory[] }> {
   const qs = new URLSearchParams()
   qs.set('workspace', input.workspace)
@@ -450,6 +504,15 @@ export function listObservations(input: {
   if (input.from) qs.set('from', input.from)
   if (input.to) qs.set('to', input.to)
   return api(`/api/v1/observations?${qs.toString()}`, { method: 'GET' })
+}
+
+export function listReplayEvents(input: { workspace: string; session_id: string; limit?: number; cursor?: string }): Promise<{ workspace: string; session_id: string; events: ReplayEvent[]; count: number; next_cursor?: string }> {
+  const qs = new URLSearchParams()
+  qs.set('workspace', input.workspace)
+  qs.set('session_id', input.session_id)
+  if (typeof input.limit === 'number') qs.set('limit', String(input.limit))
+  if (input.cursor) qs.set('cursor', input.cursor)
+  return api(`/api/v1/replay/events?${qs.toString()}`, { method: 'GET' })
 }
 
 export function listBenchmarkRuns(input: { workspace: string; limit?: number }): Promise<{ workspace: string; limit: number; runs: BenchmarkRun[] }> {

@@ -2,8 +2,13 @@
   "name": "@agent-memory/mcp-server",
   "version": "0.7.0",
   "private": true,
-  "description": "Deferred V1.5+ MCP shim package scaffold",
+  "type": "module",
+  "description": "Compact MCP adapter for the agent-memory service",
+  "bin": {
+    "agent-memory-mcp": "src/server.js"
+  },
   "scripts": {
-    "build": "node -e \"console.log('mcp-server scaffold build ok')\""
+    "build": "node --check src/server.js",
+    "test": "node --test test/*.test.js"
   }
 }

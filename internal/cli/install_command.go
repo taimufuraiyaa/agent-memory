@@ -155,21 +155,23 @@ configure environment variables, and initialize the current directory as a proje
 				}
 			}
 
-			// Codex requires the memory database root to be writable before a
-			// project-local trusted configuration can take effect. Install a narrow,
-			// preserved user-wide layer so first use requires no manual config edits.
-			codexHome := strings.TrimSpace(os.Getenv("CODEX_HOME"))
-			if codexHome == "" {
-				if home, err := os.UserHomeDir(); err == nil {
-					codexHome = filepath.Join(home, ".codex")
+			if installTargetSelected(ideTargets, "codex") {
+				// Codex requires the memory database root to be writable before a
+				// project-local trusted configuration can take effect. Install a narrow,
+				// preserved user-wide layer so first use requires no manual config edits.
+				codexHome := strings.TrimSpace(os.Getenv("CODEX_HOME"))
+				if codexHome == "" {
+					if home, err := os.UserHomeDir(); err == nil {
+						codexHome = filepath.Join(home, ".codex")
+					}
 				}
-			}
-			if codexHome != "" {
-				paths, err := workspace.WriteCodexGlobalFiles(codexHome, dataDir)
-				if err != nil {
-					return fmt.Errorf("Codex setup failed: %w", err)
+				if codexHome != "" {
+					paths, err := workspace.WriteCodexGlobalFiles(codexHome, dataDir)
+					if err != nil {
+						return fmt.Errorf("Codex setup failed: %w", err)
+					}
+					fmt.Fprintf(errOut, "  ✓ configured Codex: %s\n", strings.Join(paths, ", "))
 				}
-				fmt.Fprintf(errOut, "  ✓ configured Codex: %s\n", strings.Join(paths, ", "))
 			}
 
 			// Project workspace initialization (init-here / reinstall)
@@ -246,6 +248,16 @@ configure environment variables, and initialize the current directory as a proje
 	cmd.Flags().BoolVar(&force, "force", false, "force recreate project workspace if it already exists")
 
 	return cmd
+}
+
+func installTargetSelected(targets []string, target string) bool {
+	for _, raw := range targets {
+		selected := strings.ToLower(strings.TrimSpace(raw))
+		if selected == "all" || selected == target {
+			return true
+		}
+	}
+	return false
 }
 
 func installOrCopyBinary(out, errOut io.Writer, binDir, src string) (string, error) {

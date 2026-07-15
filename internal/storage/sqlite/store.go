@@ -262,6 +262,12 @@ func (s *Store) Migrate(ctx context.Context) error {
 			tool_name TEXT NOT NULL DEFAULT '',
 			summary TEXT NOT NULL,
 			content_hash TEXT NOT NULL DEFAULT '',
+			source_agent TEXT NOT NULL DEFAULT '',
+			source_adapter TEXT NOT NULL DEFAULT '',
+			hook_event TEXT NOT NULL DEFAULT '',
+			external_event_id TEXT NOT NULL DEFAULT '',
+			schema_version TEXT NOT NULL DEFAULT '',
+			capture_mode TEXT NOT NULL DEFAULT '',
 			created_at TEXT NOT NULL
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_observations_workspace_occurred ON observations(workspace, occurred_at DESC)`,
@@ -380,6 +386,48 @@ func (s *Store) Migrate(ctx context.Context) error {
 			created_at TEXT NOT NULL
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_retrieval_requests_workspace_created ON retrieval_requests(workspace, created_at)`,
+		`CREATE TABLE IF NOT EXISTS audit_events (
+			id TEXT PRIMARY KEY,
+			schema_version TEXT NOT NULL DEFAULT 'v1',
+			workspace TEXT NOT NULL,
+			operation TEXT NOT NULL,
+			outcome TEXT NOT NULL,
+			actor TEXT NOT NULL DEFAULT '',
+			source TEXT NOT NULL DEFAULT '',
+			request_id TEXT NOT NULL DEFAULT '',
+			session_id TEXT NOT NULL DEFAULT '',
+			target_type TEXT NOT NULL DEFAULT '',
+			target_ids_json TEXT NOT NULL DEFAULT '[]',
+			target_count INTEGER NOT NULL DEFAULT 0,
+			reason TEXT NOT NULL DEFAULT '',
+			metadata_json TEXT NOT NULL DEFAULT '{}',
+			occurred_at TEXT NOT NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_audit_events_workspace_occurred ON audit_events(workspace, occurred_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_audit_events_workspace_operation ON audit_events(workspace, operation, occurred_at DESC)`,
+		`CREATE TABLE IF NOT EXISTS memory_observation_provenance (
+			memory_id TEXT NOT NULL,
+			observation_id TEXT NOT NULL,
+			created_at TEXT NOT NULL,
+			PRIMARY KEY(memory_id, observation_id)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_memory_observation_observation ON memory_observation_provenance(observation_id)`,
+		`CREATE TABLE IF NOT EXISTS replay_import_checkpoints (
+			workspace TEXT NOT NULL,
+			source_path TEXT NOT NULL,
+			line_number INTEGER NOT NULL DEFAULT 0,
+			updated_at TEXT NOT NULL,
+			PRIMARY KEY(workspace, source_path)
+		)`,
+		`CREATE TABLE IF NOT EXISTS connector_checkpoints (
+			connector_id TEXT PRIMARY KEY,
+			state_json TEXT NOT NULL,
+			updated_at TEXT NOT NULL,
+			last_error TEXT NOT NULL DEFAULT '',
+			emitted_count INTEGER NOT NULL DEFAULT 0,
+			coalesced_count INTEGER NOT NULL DEFAULT 0,
+			rescanned_count INTEGER NOT NULL DEFAULT 0
+		)`,
 	}
 	for _, stmt := range stmts {
 		if _, err := s.db.ExecContext(ctx, stmt); err != nil {
@@ -388,6 +436,19 @@ func (s *Store) Migrate(ctx context.Context) error {
 	}
 	if err := s.ensureColumn(ctx, "scheduler_workspace_state", "last_impacts", `ALTER TABLE scheduler_workspace_state ADD COLUMN last_impacts INTEGER NOT NULL DEFAULT 0`); err != nil {
 		return err
+	}
+	observationColumns := []struct{ name, sql string }{
+		{"source_agent", `ALTER TABLE observations ADD COLUMN source_agent TEXT NOT NULL DEFAULT ''`},
+		{"source_adapter", `ALTER TABLE observations ADD COLUMN source_adapter TEXT NOT NULL DEFAULT ''`},
+		{"hook_event", `ALTER TABLE observations ADD COLUMN hook_event TEXT NOT NULL DEFAULT ''`},
+		{"external_event_id", `ALTER TABLE observations ADD COLUMN external_event_id TEXT NOT NULL DEFAULT ''`},
+		{"schema_version", `ALTER TABLE observations ADD COLUMN schema_version TEXT NOT NULL DEFAULT ''`},
+		{"capture_mode", `ALTER TABLE observations ADD COLUMN capture_mode TEXT NOT NULL DEFAULT ''`},
+	}
+	for _, column := range observationColumns {
+		if err := s.ensureColumn(ctx, "observations", column.name, column.sql); err != nil {
+			return err
+		}
 	}
 	hasContentHash, err := s.hasColumn(ctx, "memories", "content_hash")
 	if err != nil {

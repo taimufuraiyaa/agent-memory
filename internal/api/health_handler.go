@@ -17,14 +17,19 @@ func healthHandler(svc *Service) http.HandlerFunc {
 		var memoryCount int
 		var lastLifecycleRun string
 		var dbSizeMB float64
+		serviceMode := "fixed_workspace"
+		registeredCount := 0
 
 		ws := svc.Workspace
 		if ws == "" {
-			ws = "agent-memory" // fallback if empty
+			serviceMode = "multi_workspace"
+			if names, err := svc.listProjectNames(r.Context()); err == nil {
+				registeredCount = len(names)
+			}
 		}
 
 		assets, err := svc.resolve(r.Context(), ws)
-		if err == nil && assets.Store != nil {
+		if ws != "" && err == nil && assets.Store != nil {
 			if summary, err := assets.Store.GetWorkspaceActivitySummary(r.Context(), ws); err == nil {
 				memoryCount = summary.MemoryCount
 			}
@@ -58,6 +63,9 @@ func healthHandler(svc *Service) http.HandlerFunc {
 			"embedding_provider":      providerName,
 			"embedding_model_version": providerVersion,
 			"onnx_runtime_available":  onnxAvailable,
+			"service_mode":            serviceMode,
+			"registered_workspaces":   registeredCount,
+			"loaded_workspaces":       svc.loadedWorkspaceCount(),
 		})
 	}
 }

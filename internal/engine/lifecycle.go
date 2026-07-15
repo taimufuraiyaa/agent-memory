@@ -119,6 +119,7 @@ func (m *LifecycleManager) applyEvictionPromotion(ctx context.Context, workspace
 				return evicted, promoted, demoted, summarized, err
 			}
 			_ = m.store.AddTierTransition(ctx, mm.ID, from, core.TierVectorGraph, "promoted by successful outcome or frequent access")
+			_, _ = m.store.AppendAuditEvent(ctx, sqlite.AuditEventInput{Workspace: workspace, Operation: "promote", Outcome: "success", Actor: "lifecycle", Source: "lifecycle", TargetType: "memory", TargetIDs: []string{mm.ID}, Reason: "successful outcome or frequent access"})
 			promoted++
 		}
 	}
@@ -192,6 +193,7 @@ func (m *LifecycleManager) applyEvictionPromotion(ctx context.Context, workspace
 				// Override router-assigned tier to cold.
 				_ = m.store.UpdateTier(ctx, wr.ID, core.TierCold)
 				_ = m.store.AddTierTransition(ctx, wr.ID, wr.StorageTier, core.TierCold, "cold summary created before eviction")
+				_, _ = m.store.AppendAuditEvent(ctx, sqlite.AuditEventInput{Workspace: workspace, Operation: "archive", Outcome: "success", Actor: "lifecycle", Source: "cold_summary", TargetType: "memory", TargetIDs: []string{wr.ID}, Reason: "created before eviction"})
 				summarized++
 			}
 		}
@@ -203,7 +205,7 @@ func (m *LifecycleManager) applyEvictionPromotion(ctx context.Context, workspace
 		}
 		_ = m.store.AddTombstone(ctx, mm, "evict", "")
 	}
-	if err := m.store.DeleteByIDs(ctx, toDelete); err != nil {
+	if err := m.store.DeleteByIDsAudited(ctx, toDelete, sqlite.AuditEventInput{Workspace: workspace, Operation: "retention_evict", Outcome: "success", Actor: "lifecycle", Source: "eviction", Reason: "workspace entry limit"}); err != nil {
 		return evicted, promoted, demoted, summarized, err
 	}
 	evicted = len(toDelete)
@@ -222,6 +224,7 @@ func (m *LifecycleManager) applyTierRebalance(ctx context.Context, workspace str
 					return demoted, err
 				}
 				_ = m.store.AddTierTransition(ctx, mm.ID, from, core.TierVector, "demoted due to low access and staleness")
+				_, _ = m.store.AppendAuditEvent(ctx, sqlite.AuditEventInput{Workspace: workspace, Operation: "demote", Outcome: "success", Actor: "lifecycle", Source: "tier_rebalance", TargetType: "memory", TargetIDs: []string{mm.ID}, Reason: "low access and staleness"})
 				demoted++
 			}
 			continue
@@ -232,6 +235,7 @@ func (m *LifecycleManager) applyTierRebalance(ctx context.Context, workspace str
 				return demoted, err
 			}
 			_ = m.store.AddTierTransition(ctx, mm.ID, from, core.TierMarkdown, "promoted to markdown by lifecycle policy")
+			_, _ = m.store.AppendAuditEvent(ctx, sqlite.AuditEventInput{Workspace: workspace, Operation: "promote", Outcome: "success", Actor: "lifecycle", Source: "tier_rebalance", TargetType: "memory", TargetIDs: []string{mm.ID}, Reason: "markdown lifecycle policy"})
 		}
 	}
 
@@ -276,6 +280,7 @@ func (m *LifecycleManager) applyTierRebalance(ctx context.Context, workspace str
 			return demoted, err
 		}
 		_ = m.store.AddTierTransition(ctx, mm.ID, from, core.TierVector, "demoted to satisfy markdown token budget")
+		_, _ = m.store.AppendAuditEvent(ctx, sqlite.AuditEventInput{Workspace: workspace, Operation: "demote", Outcome: "success", Actor: "lifecycle", Source: "markdown_budget", TargetType: "memory", TargetIDs: []string{mm.ID}, Reason: "markdown token budget"})
 		total -= len(strings.Fields(mm.Content))
 		demoted++
 	}

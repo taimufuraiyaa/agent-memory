@@ -94,6 +94,7 @@ func NewRootCommand() *cobra.Command {
 	cmd.AddCommand(newExportCommand())
 	cmd.AddCommand(newImportCommand())
 	cmd.AddCommand(newStatsCommand())
+	cmd.AddCommand(newAdvisorCommand())
 	cmd.AddCommand(newTuningCommand())
 	cmd.AddCommand(newConfigCommand())
 	cmd.AddCommand(newInitCommand())
@@ -108,5 +109,12 @@ func NewRootCommand() *cobra.Command {
 	cmd.AddCommand(newUpgradeCommand())
 	cmd.AddCommand(newInstallCommand())
 	cmd.AddCommand(newDistillCommand())
+	cmd.AddCommand(newConnectCommand(false))
+	cmd.AddCommand(newConnectCommand(true))
+	cmd.AddCommand(newDoctorCommand())
+	cmd.AddCommand(newDemoCommand())
+	cmd.AddCommand(newHookCommand())
+	cmd.AddCommand(newAuditCommand())
+	cmd.AddCommand(newImportJSONLCommand())
 	return cmd
 }

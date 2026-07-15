@@ -103,6 +103,14 @@ func (p *ObservationPromoter) Promote(ctx context.Context, req PromoteRequest) (
 	if err != nil {
 		return nil, err
 	}
+	observationIDs := make([]string, 0, len(obs))
+	for _, observation := range obs {
+		observationIDs = append(observationIDs, observation.ID)
+	}
+	if err := p.store.LinkMemoryObservations(ctx, out.ID, observationIDs); err != nil {
+		return nil, err
+	}
+	_, _ = p.store.AppendAuditEvent(ctx, sqlite.AuditEventInput{Workspace: req.Workspace, Operation: "promote_observations", Outcome: "success", Actor: "lifecycle", Source: "observations", SessionID: req.SessionID, TargetType: "memory", TargetIDs: []string{out.ID}, TargetCount: len(obs), Reason: "session promotion"})
 
 	return &PromoteResult{
 		Workspace:      req.Workspace,

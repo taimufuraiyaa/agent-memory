@@ -197,14 +197,20 @@ type StoreStats struct {
 }
 
 type Observation struct {
-	ID         string    `json:"id"`
-	Workspace  string    `json:"workspace"`
-	SessionID  string    `json:"session_id"`
-	OccurredAt time.Time `json:"occurred_at"`
-	Kind       string    `json:"kind"`
-	ToolName   *string   `json:"tool_name,omitempty"`
-	Summary    string    `json:"summary"`
-	CreatedAt  time.Time `json:"created_at"`
+	ID              string    `json:"id"`
+	Workspace       string    `json:"workspace"`
+	SessionID       string    `json:"session_id"`
+	OccurredAt      time.Time `json:"occurred_at"`
+	Kind            string    `json:"kind"`
+	ToolName        *string   `json:"tool_name,omitempty"`
+	Summary         string    `json:"summary"`
+	SourceAgent     string    `json:"source_agent,omitempty"`
+	SourceAdapter   string    `json:"source_adapter,omitempty"`
+	HookEvent       string    `json:"hook_event,omitempty"`
+	ExternalEventID string    `json:"external_event_id,omitempty"`
+	SchemaVersion   string    `json:"schema_version,omitempty"`
+	CaptureMode     string    `json:"capture_mode,omitempty"`
+	CreatedAt       time.Time `json:"created_at"`
 }
 
 type Session struct {

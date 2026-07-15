@@ -4,6 +4,7 @@ import {
   getStats,
   listBenchmarkRuns,
   listObservations,
+  listReplayEvents,
   listSessions,
   listProjects,
   listRecentMemories,
@@ -20,6 +21,7 @@ import {
   type MemoryType,
   type ObservationEntry,
   type ObservationPromotionResult,
+  type ReplayEvent,
   type OutcomeResult,
   type ProjectListItem,
   type RecallPreviewResponse,
@@ -87,6 +89,9 @@ export function App() {
   const [observations, setObservations] = useState<ObservationEntry[]>([])
   const [observationsBusy, setObservationsBusy] = useState<boolean>(false)
   const [observationsErr, setObservationsErr] = useState<string>('')
+  const [replayEvents, setReplayEvents] = useState<ReplayEvent[]>([])
+  const [replayBusy, setReplayBusy] = useState(false)
+  const [replayErr, setReplayErr] = useState('')
   const [promotionBusyFor, setPromotionBusyFor] = useState<string>('')
   const [promotionResults, setPromotionResults] = useState<Record<string, ObservationPromotionResult>>({})
   const [overviewExperimentFocusKey, setOverviewExperimentFocusKey] = useState<number>(0)
@@ -419,6 +424,18 @@ export function App() {
     return () => {
       cancelled = true
     }
+  }, [selectedSessionID, workspace])
+
+  useEffect(() => {
+    let cancelled = false
+    if (!workspace || !selectedSessionID) { setReplayEvents([]); setReplayErr(''); return }
+    setReplayBusy(true)
+    setReplayErr('')
+    listReplayEvents({ workspace, session_id: selectedSessionID, limit: 400 })
+      .then((response) => { if (!cancelled) setReplayEvents(response.events ?? []) })
+      .catch((error) => { if (!cancelled) { setReplayEvents([]); setReplayErr(error instanceof Error ? error.message : String(error)) } })
+      .finally(() => { if (!cancelled) setReplayBusy(false) })
+    return () => { cancelled = true }
   }, [selectedSessionID, workspace])
 
   const filters = useMemo(() => {
@@ -890,6 +907,9 @@ export function App() {
                   promotionBusy={Boolean(selectedSession && promotionBusyFor === selectedSession.session_id)}
                   onSelectSession={setSelectedSessionID}
                   onPromote={promoteSelectedSession}
+                  replayEvents={replayEvents}
+                  replayBusy={replayBusy}
+                  replayErr={replayErr}
                 />
               ) : null}
 

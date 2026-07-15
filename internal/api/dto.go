@@ -39,16 +39,22 @@ func (r *SearchRequest) Validate() error {
 }
 
 type ObserveRequest struct {
-	Workspace   string `json:"workspace,omitempty" validate:"omitempty,min=1"`
-	SessionID   string `json:"session_id" validate:"required,min=1,max=128"`
-	OccurredAt  string `json:"occurred_at" validate:"required,min=1,max=64"`
-	Kind        string `json:"kind" validate:"required,min=1,max=64"`
-	ToolName    string `json:"tool_name,omitempty" validate:"omitempty,max=128"`
-	Prompt      string `json:"prompt,omitempty" validate:"omitempty,max=4000"`
-	ToolInput   any    `json:"tool_input,omitempty"`
-	ProjectRoot string `json:"project_root,omitempty" validate:"omitempty,max=512"`
-	CWD         string `json:"cwd,omitempty" validate:"omitempty,max=512"`
-	Metadata    any    `json:"metadata,omitempty"`
+	Workspace       string `json:"workspace,omitempty" validate:"omitempty,min=1"`
+	SessionID       string `json:"session_id" validate:"required,min=1,max=128"`
+	OccurredAt      string `json:"occurred_at" validate:"required,min=1,max=64"`
+	Kind            string `json:"kind" validate:"required,min=1,max=64"`
+	ToolName        string `json:"tool_name,omitempty" validate:"omitempty,max=128"`
+	Prompt          string `json:"prompt,omitempty" validate:"omitempty,max=4000"`
+	ToolInput       any    `json:"tool_input,omitempty"`
+	ProjectRoot     string `json:"project_root,omitempty" validate:"omitempty,max=512"`
+	CWD             string `json:"cwd,omitempty" validate:"omitempty,max=512"`
+	Metadata        any    `json:"metadata,omitempty"`
+	SourceAgent     string `json:"source_agent,omitempty" validate:"omitempty,max=64"`
+	SourceAdapter   string `json:"source_adapter,omitempty" validate:"omitempty,max=128"`
+	HookEvent       string `json:"hook_event,omitempty" validate:"omitempty,max=64"`
+	ExternalEventID string `json:"external_event_id,omitempty" validate:"omitempty,max=256"`
+	SchemaVersion   string `json:"schema_version,omitempty" validate:"omitempty,max=32"`
+	CaptureMode     string `json:"capture_mode,omitempty" validate:"omitempty,max=32"`
 }
 
 func (r *ObserveRequest) Validate() error {

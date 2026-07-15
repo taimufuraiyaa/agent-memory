@@ -36,6 +36,8 @@ type Manager struct {
 	BaseDir string
 }
 
+var ErrProjectNotRegistered = errors.New("workspace is not registered")
+
 type InitOptions struct {
 	CWD         string
 	ProjectName string
@@ -444,6 +446,43 @@ func (m *Manager) List(_ context.Context) ([]ListItem, error) {
 	return out, nil
 }
 
+// Project returns registry metadata without opening the workspace database.
+// The registry DB path is authoritative for daemon request routing.
+func (m *Manager) Project(name string) (Project, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return Project{}, errors.New("workspace is required")
+	}
+	reg, err := m.readRegistry()
+	if err != nil {
+		return Project{}, err
+	}
+	project := findProject(reg, name)
+	if project == nil {
+		return Project{}, fmt.Errorf("%w: %q", ErrProjectNotRegistered, name)
+	}
+	if strings.TrimSpace(project.DBPath) == "" {
+		return Project{}, fmt.Errorf("workspace %q has no database path", name)
+	}
+	return *project, nil
+}
+
+// ProjectNames returns registered routing keys without opening databases.
+func (m *Manager) ProjectNames() ([]string, error) {
+	reg, err := m.readRegistry()
+	if err != nil {
+		return nil, err
+	}
+	names := make([]string, 0, len(reg.Projects))
+	for _, project := range reg.Projects {
+		if name := strings.TrimSpace(project.Name); name != "" {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+	return names, nil
+}
+
 func (m *Manager) Delete(_ context.Context, opt DeleteOptions) (*DeleteResult, error) {
 	if !opt.Yes {
 		return nil, errors.New("delete requires --yes")
@@ -692,10 +731,61 @@ func writeCodexFiles(cwd, workspace, dataDir string, force bool) ([]string, erro
 		return nil, err
 	}
 	hooksPath := filepath.Join(cwd, ".codex", "hooks.json")
-	if err := writeCodexHooks(hooksPath); err != nil {
+	if err := writeCodexHooks(hooksPath, workspace); err != nil {
 		return nil, err
 	}
 	return []string{agentsPath, configPath, hooksPath}, nil
+}
+
+// WriteCodexProjectFiles applies the existing managed Codex project
+// configuration for use by higher-level connection adapters.
+func WriteCodexProjectFiles(cwd, workspace, dataDir string, force bool) ([]string, error) {
+	return writeCodexFiles(cwd, workspace, dataDir, force)
+}
+
+// RemoveCodexProjectFiles removes only agent-memory-owned Codex config and
+// hook entries. User-owned settings and hooks are preserved.
+func RemoveCodexProjectFiles(cwd string) ([]string, error) {
+	paths := []string{filepath.Join(cwd, ".codex", "config.toml"), filepath.Join(cwd, ".codex", "hooks.json")}
+	config, err := os.ReadFile(paths[0])
+	if err == nil {
+		updated, removeErr := removeManagedBlock(string(config), codexConfigStart, codexConfigEnd)
+		if removeErr != nil {
+			return nil, removeErr
+		}
+		if err := writeRuleFile(paths[0], strings.TrimSpace(updated)+"\n"); err != nil {
+			return nil, err
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return nil, err
+	}
+	root := map[string]any{}
+	if hooksData, readErr := os.ReadFile(paths[1]); readErr == nil {
+		if err := json.Unmarshal(hooksData, &root); err != nil {
+			return nil, fmt.Errorf("parse Codex hooks %s: %w", paths[1], err)
+		}
+		hooks, _ := root["hooks"].(map[string]any)
+		for event, rawGroups := range hooks {
+			groups, _ := rawGroups.([]any)
+			kept := make([]any, 0, len(groups))
+			for _, raw := range groups {
+				if !strings.Contains(fmt.Sprint(raw), codexHookMarker) {
+					kept = append(kept, raw)
+				}
+			}
+			hooks[event] = kept
+		}
+		encoded, err := json.MarshalIndent(root, "", "  ")
+		if err != nil {
+			return nil, err
+		}
+		if err := writeRuleFile(paths[1], string(encoded)+"\n"); err != nil {
+			return nil, err
+		}
+	} else if !errors.Is(readErr, os.ErrNotExist) {
+		return nil, readErr
+	}
+	return paths, nil
 }
 
 // WriteCodexGlobalFiles installs the user-wide Codex sandbox root and lifecycle
@@ -709,17 +799,52 @@ func WriteCodexGlobalFiles(codexHome, dataDir string) ([]string, error) {
 		codexHome = filepath.Join(home, ".codex")
 	}
 	configPath := filepath.Join(codexHome, "config.toml")
-	if err := writeCodexConfig(configPath, dataDir); err != nil {
+	if err := writeCodexGlobalConfig(configPath, dataDir); err != nil {
 		return nil, err
 	}
 	hooksPath := filepath.Join(codexHome, "hooks.json")
-	if err := writeCodexHooks(hooksPath); err != nil {
+	if err := writeCodexHooks(hooksPath, "agent-memory"); err != nil {
 		return nil, err
 	}
 	return []string{configPath, hooksPath}, nil
 }
 
 func writeCodexConfig(path, dataDir string) error {
+	absDataDir, err := filepath.Abs(dataDir)
+	if err != nil {
+		return fmt.Errorf("resolve Codex writable root: %w", err)
+	}
+	quoted := strconv.Quote(filepath.ToSlash(absDataDir))
+	managed := codexConfigStart + "\n" +
+		"default_permissions = \"agent-memory-workspace\"\n" +
+		"permissions.agent-memory-workspace.filesystem.\":root\" = \"read\"\n" +
+		"permissions.agent-memory-workspace.filesystem.\":tmpdir\" = \"write\"\n" +
+		"permissions.agent-memory-workspace.filesystem.\":slash_tmp\" = \"write\"\n" +
+		"permissions.agent-memory-workspace.filesystem." + quoted + " = \"write\"\n" +
+		"permissions.agent-memory-workspace.filesystem.\":workspace_roots\" = { \".\" = \"write\", \".git\" = \"read\", \".agents\" = \"read\", \".codex\" = \"read\" }\n" +
+		codexConfigEnd
+
+	existing := ""
+	if b, err := os.ReadFile(path); err == nil {
+		existing = string(b)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("read Codex config: %w", err)
+	}
+	userConfig, err := removeManagedBlock(existing, codexConfigStart, codexConfigEnd)
+	if err != nil {
+		return fmt.Errorf("inspect Codex config: %w", err)
+	}
+	if regexp.MustCompile(`(?m)^\s*(?:default_permissions|sandbox_mode)\s*=`).MatchString(userConfig) {
+		return errors.New("existing Codex permission selection conflicts with the agent-memory project profile")
+	}
+	updated, err := replaceManagedBlock(existing, codexConfigStart, codexConfigEnd, managed)
+	if err != nil {
+		return fmt.Errorf("update Codex config: %w", err)
+	}
+	return writeRuleFile(path, strings.TrimSpace(updated)+"\n")
+}
+
+func writeCodexGlobalConfig(path, dataDir string) error {
 	absDataDir, err := filepath.Abs(dataDir)
 	if err != nil {
 		return fmt.Errorf("resolve Codex writable root: %w", err)
@@ -777,7 +902,20 @@ func replaceManagedBlock(existing, start, end, managed string) (string, error) {
 	return managed + "\n\n" + strings.TrimLeft(existing, "\n"), nil
 }
 
-func writeCodexHooks(path string) error {
+func removeManagedBlock(existing, start, end string) (string, error) {
+	startAt := strings.Index(existing, start)
+	endAt := strings.Index(existing, end)
+	if startAt < 0 && endAt < 0 {
+		return existing, nil
+	}
+	if startAt < 0 || endAt < startAt {
+		return "", errors.New("incomplete managed block")
+	}
+	endAt += len(end)
+	return strings.TrimSpace(existing[:startAt] + existing[endAt:]), nil
+}
+
+func writeCodexHooks(path, workspaceName string) error {
 	root := map[string]any{}
 	if b, err := os.ReadFile(path); err == nil {
 		if err := json.Unmarshal(b, &root); err != nil {
@@ -791,11 +929,7 @@ func writeCodexHooks(path string) error {
 		hooks = map[string]any{}
 		root["hooks"] = hooks
 	}
-	managed := map[string]string{
-		"UserPromptSubmit": "Before answering, follow the mandatory agent-memory search, conditional recall, and immediate feedback workflow in AGENTS.md.",
-		"Stop":             "Before ending the turn, write durable learnings and run the mandatory agent-memory session-end workflow in AGENTS.md.",
-	}
-	for event, prompt := range managed {
+	for _, event := range []string{"SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PreCompact", "Stop"} {
 		groups, _ := hooks[event].([]any)
 		kept := make([]any, 0, len(groups)+1)
 		for _, raw := range groups {
@@ -805,8 +939,9 @@ func writeCodexHooks(path string) error {
 		}
 		kept = append(kept, map[string]any{
 			"hooks": []any{map[string]any{
-				"type":   "prompt",
-				"prompt": codexHookMarker + ": " + prompt,
+				"type":    "command",
+				"command": fmt.Sprintf("agent-memory hook --event %s --agent codex --workspace %s # %s", event, workspaceName, codexHookMarker),
+				"timeout": 2,
 			}},
 		})
 		hooks[event] = kept

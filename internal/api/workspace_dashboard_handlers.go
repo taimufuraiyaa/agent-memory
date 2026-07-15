@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/taimufuraiyaa/agent-memory/internal/advisor"
 	"github.com/taimufuraiyaa/agent-memory/internal/core"
 	"github.com/taimufuraiyaa/agent-memory/internal/storage/sqlite"
 )
@@ -22,7 +23,7 @@ func workspaceDashboardHandler(svc *Service) http.HandlerFunc {
 		workspace := workspaceFromRequest(r, svc.Workspace)
 		assets, err := svc.resolve(r.Context(), workspace)
 		if err != nil {
-			writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
+			writeWorkspaceResolveError(w, err)
 			return
 		}
 		memories, err := assets.Store.ListMemoriesByWorkspace(r.Context(), workspace)
@@ -50,7 +51,7 @@ func workspaceGraphHandler(svc *Service) http.HandlerFunc {
 		workspace := workspaceFromRequest(r, svc.Workspace)
 		assets, err := svc.resolve(r.Context(), workspace)
 		if err != nil {
-			writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
+			writeWorkspaceResolveError(w, err)
 			return
 		}
 		memories, err := assets.Store.ListMemoriesByWorkspace(r.Context(), workspace)
@@ -101,7 +102,7 @@ func workspaceStatsHandler(svc *Service) http.HandlerFunc {
 		workspace := workspaceFromRequest(r, svc.Workspace)
 		assets, err := svc.resolve(r.Context(), workspace)
 		if err != nil {
-			writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
+			writeWorkspaceResolveError(w, err)
 			return
 		}
 		memories, err := assets.Store.ListMemoriesByWorkspace(r.Context(), workspace)
@@ -227,9 +228,19 @@ func workspaceStatsHandler(svc *Service) http.HandlerFunc {
 		if err != nil {
 			feedbackStats = &core.FeedbackStats{Workspace: workspace}
 		}
+		var advisorReport any
+		if requests, requestErr := assets.Store.ListRetrievalRequests(r.Context(), workspace); requestErr == nil {
+			advisorReport = advisor.Analyze(advisor.Snapshot{
+				Workspace:               workspace,
+				Memories:                memories,
+				Requests:                requests,
+				TokenMetricsByOperation: tokenByOperation,
+			})
+		}
 		cacheStats := assets.Retrieval.CacheStats()
 		writeOK(w, http.StatusOK, map[string]any{
 			"workspace":                     workspace,
+			"advisor":                       advisorReport,
 			"feedback_stats":                feedbackStats,
 			"memory_count":                  len(memories),
 			"db_size_bytes":                 dbSize,

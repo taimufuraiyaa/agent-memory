@@ -1,11 +1,56 @@
 {
   "hooks": {
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "agent-memory hook --event PostToolUse --agent codex --workspace agent-memory # agent-memory managed lifecycle",
+            "timeout": 2,
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "command": "agent-memory hook --event PreCompact --agent codex --workspace agent-memory # agent-memory managed lifecycle",
+            "timeout": 2,
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "agent-memory hook --event PreToolUse --agent codex --workspace agent-memory # agent-memory managed lifecycle",
+            "timeout": 2,
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "command": "agent-memory hook --event SessionStart --agent codex --workspace agent-memory # agent-memory managed lifecycle",
+            "timeout": 2,
+            "type": "command"
+          }
+        ]
+      }
+    ],
     "Stop": [
       {
         "hooks": [
           {
-            "prompt": "agent-memory managed lifecycle: Before ending the turn, write durable learnings and run the mandatory agent-memory session-end workflow in AGENTS.md.",
-            "type": "prompt"
+            "command": "agent-memory hook --event Stop --agent codex --workspace agent-memory # agent-memory managed lifecycle",
+            "timeout": 2,
+            "type": "command"
           }
         ]
       }
@@ -14,8 +59,9 @@
       {
         "hooks": [
           {
-            "prompt": "agent-memory managed lifecycle: Before answering, follow the mandatory agent-memory search, conditional recall, and immediate feedback workflow in AGENTS.md.",
-            "type": "prompt"
+            "command": "agent-memory hook --event UserPromptSubmit --agent codex --workspace agent-memory # agent-memory managed lifecycle",
+            "timeout": 2,
+            "type": "command"
           }
         ]
       }

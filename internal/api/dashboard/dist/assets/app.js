@@ -7107,6 +7107,14 @@ function listObservations(input) {
   if (input.to) qs.set("to", input.to);
   return api(`/api/v1/observations?${qs.toString()}`, { method: "GET" });
 }
+function listReplayEvents(input) {
+  const qs = new URLSearchParams();
+  qs.set("workspace", input.workspace);
+  qs.set("session_id", input.session_id);
+  qs.set("limit", String(input.limit));
+  if (input.cursor) qs.set("cursor", input.cursor);
+  return api(`/api/v1/replay/events?${qs.toString()}`, { method: "GET" });
+}
 function listBenchmarkRuns(input) {
   const qs = new URLSearchParams();
   qs.set("workspace", input.workspace);
@@ -36281,6 +36289,7 @@ function OverviewPanel({
   (stats == null ? void 0 : stats.low_reach_threshold) ?? 0;
   const lowReachMemoryCount = (stats == null ? void 0 : stats.low_reach_memory_count) ?? 0;
   const topRetrievedMemories = (stats == null ? void 0 : stats.top_retrieved_memories) ?? [];
+  const advisor = stats == null ? void 0 : stats.advisor;
   const scheduler2 = stats == null ? void 0 : stats.scheduler;
   const schedulerWorkspace = scheduler2 == null ? void 0 : scheduler2.workspace;
   const schedulerState = (scheduler2 == null ? void 0 : scheduler2.enabled) ? (schedulerWorkspace == null ? void 0 : schedulerWorkspace.run_in_progress) ? "running" : (schedulerWorkspace == null ? void 0 : schedulerWorkspace.last_error) ? "failed" : (schedulerWorkspace == null ? void 0 : schedulerWorkspace.last_result) || "idle" : "disabled";
@@ -36357,6 +36366,39 @@ function OverviewPanel({
         }
       )
     ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "comparisonSection", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "comparisonHeader", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "breakdownTitle", children: "Memory Advisor" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "breakdownSubtitle", children: "Deterministic workspace guidance from retrieval feedback, recall context metrics, lifecycle state, coverage, and provenance." })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `statusBadge statusBadge${(advisor == null ? void 0 : advisor.neutral) ? "Warn" : advisor && advisor.score >= 80 ? "Good" : advisor && advisor.score >= 60 ? "Warn" : "Bad"}`, children: advisor ? advisor.neutral ? "N/A" : `${advisor.grade} · ${advisor.score}/100` : "Loading" })
+      ] }),
+      !advisor ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "emptyInline", children: "Advisor data is not available from this server yet." }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "overviewColumns", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs(BreakdownCard, { title: "Dimensions", subtitle: advisor.neutral ? "More evidence is needed before scoring" : "Available dimensions only contribute to the composite", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "diagnosticsList", children: advisor.dimensions.map((dimension) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+            DiagnosticRow,
+            {
+              label: dimension.label,
+              value: dimension.available ? `${dimension.score}/100` : "N/A"
+            },
+            dimension.key
+          )) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "breakdownSubtitle", style: { marginTop: "12px" }, children: "Context efficiency is a deterministic recall-context proxy, not provider-billed cost." })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(BreakdownCard, { title: "Recommendations", subtitle: `${formatNumber(advisor.recommendations.length)} active signals`, children: advisor.recommendations.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "emptyInline", children: "No advisor recommendations for the available evidence." }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { display: "grid", gap: "10px" }, children: advisor.recommendations.map((recommendation) => /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "feedbackSummaryCard", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "feedbackSummaryLabel", children: [
+            "[",
+            recommendation.severity.toUpperCase(),
+            "] ",
+            recommendation.category
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontWeight: 700, marginTop: "4px" }, children: recommendation.title }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "breakdownSubtitle", style: { margin: "6px 0 0" }, children: recommendation.detail }),
+          recommendation.metric ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mono", style: { marginTop: "8px" }, children: recommendation.metric }) : null
+        ] }, recommendation.id)) }) })
+      ] })
+    ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "overviewColumns", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(BreakdownCard, { title: "Memory Types", subtitle: `${formatNumber(sumCounts(stats == null ? void 0 : stats.memory_type_counts))} total`, children: /* @__PURE__ */ jsxRuntimeExports.jsx(PieChartBreakdown, { entries: typeEntries, emptyLabel: "No type distribution yet." }) }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(BreakdownCard, { title: "Storage Tiers", subtitle: `${formatNumber(sumCounts(stats == null ? void 0 : stats.storage_tier_counts))} classified`, children: /* @__PURE__ */ jsxRuntimeExports.jsx(PieChartBreakdown, { entries: tierEntries, emptyLabel: "No tier distribution yet." }) }),
@@ -36405,6 +36447,95 @@ function OverviewPanel({
     ] })
   ] });
 }
+function ReplayTimeline({ events, busy, error }) {
+  var _a2, _b2;
+  const [playing, setPlaying] = reactExports.useState(false);
+  const [cursor, setCursor] = reactExports.useState(0);
+  const [speed, setSpeed] = reactExports.useState(1);
+  const [filter2, setFilter] = reactExports.useState("all");
+  const kinds = reactExports.useMemo(() => Array.from(new Set(events.map((event) => event.kind))), [events]);
+  const visible = reactExports.useMemo(() => filter2 === "all" ? events : events.filter((event) => event.kind === filter2), [events, filter2]);
+  reactExports.useEffect(() => {
+    setCursor(0);
+    setPlaying(false);
+  }, [events, filter2]);
+  reactExports.useEffect(() => {
+    if (!playing || visible.length === 0) return;
+    const timer2 = window.setInterval(() => {
+      setCursor((current2) => {
+        if (current2 >= visible.length - 1) {
+          setPlaying(false);
+          return current2;
+        }
+        return current2 + 1;
+      });
+    }, 1e3 / speed);
+    return () => window.clearInterval(timer2);
+  }, [playing, speed, visible]);
+  if (busy) return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "emptyInline", children: "Loading replay timeline..." });
+  if (error) return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "callout calloutBad", children: error });
+  if (!events.length) return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "emptyInline", children: "No sanitized replay events are available for this session." });
+  const current = visible[Math.min(cursor, Math.max(visible.length - 1, 0))];
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "replaySurface", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "replayControls", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "btn btnPrimary", type: "button", onClick: () => setPlaying((value) => !value), children: playing ? "Pause" : "Play" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "btn", type: "button", disabled: cursor <= 0, onClick: () => setCursor((value) => Math.max(0, value - 1)), children: "Previous" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "btn", type: "button", disabled: cursor >= visible.length - 1, onClick: () => setCursor((value) => Math.min(visible.length - 1, value + 1)), children: "Next" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("select", { className: "input replaySelect", value: speed, onChange: (event) => setSpeed(Number(event.target.value)), "aria-label": "Replay speed", children: [0.5, 1, 2, 4].map((value) => /* @__PURE__ */ jsxRuntimeExports.jsxs("option", { value, children: [
+        value,
+        "×"
+      ] }, value)) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("select", { className: "input replaySelect", value: filter2, onChange: (event) => setFilter(event.target.value), "aria-label": "Replay event filter", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "all", children: "All events" }),
+        kinds.map((kind) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: kind, children: toTitle(kind) }, kind))
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "mono muted", children: [
+        visible.length ? cursor + 1 : 0,
+        "/",
+        visible.length
+      ] })
+    ] }),
+    current ? /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "replayCurrent", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "timelineTop", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "timelineTitle", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "timelinePrefix", children: ".-" }),
+            toTitle(current.kind)
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "timelineMeta", children: formatTS(current.occurred_at) })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "memPill", children: current.capture_mode || "captured" })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "timelineSummary", children: current.summary }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "replayProvenance", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+          "actor:",
+          current.actor || "unknown"
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+          "tool:",
+          current.tool_name || "system"
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+          "observations:",
+          ((_a2 = current.related_observation_ids) == null ? void 0 : _a2.length) || 0
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+          "memories:",
+          ((_b2 = current.related_memory_ids) == null ? void 0 : _b2.join(", ")) || "none"
+        ] })
+      ] })
+    ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "emptyInline", children: "No events match this filter." }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "replaySequence", "aria-label": "Replay event sequence", children: visible.map((event, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: index === cursor ? "replayStep replayStepOn" : "replayStep", onClick: () => {
+      setCursor(index);
+      setPlaying(false);
+    }, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: String(index + 1).padStart(2, "0") }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: toTitle(event.kind) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: formatTS(event.occurred_at) })
+    ] }, event.event_id)) })
+  ] });
+}
 function SessionsPanel({
   workspace,
   sessions,
@@ -36418,7 +36549,10 @@ function SessionsPanel({
   promotionResult,
   promotionBusy,
   onSelectSession,
-  onPromote
+  onPromote,
+  replayEvents,
+  replayBusy,
+  replayErr
 }) {
   const selectedSession = sessions.find((session) => session.session_id === selectedSessionID) ?? sessions[0];
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "surfaceStack", children: [
@@ -36538,6 +36672,13 @@ function SessionsPanel({
             ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "muted", children: "No promotion has been run for this session in the current dashboard view yet." }) })
           ] }),
           observationsErr ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "callout calloutBad", children: observationsErr }) : null,
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "timelineSection", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "comparisonHeader", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "breakdownTitle", children: "Sanitized Session Replay" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "breakdownSubtitle", children: "Play, step, and filter captured or imported events while tracing promoted memory provenance." })
+            ] }) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(ReplayTimeline, { events: replayEvents, busy: replayBusy, error: replayErr })
+          ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "timelineSection", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "comparisonHeader", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "breakdownTitle", children: "Observation Timeline" }),
@@ -37580,6 +37721,9 @@ function App() {
   const [observations, setObservations] = reactExports.useState([]);
   const [observationsBusy, setObservationsBusy] = reactExports.useState(false);
   const [observationsErr, setObservationsErr] = reactExports.useState("");
+  const [replayEvents, setReplayEvents] = reactExports.useState([]);
+  const [replayBusy, setReplayBusy] = reactExports.useState(false);
+  const [replayErr, setReplayErr] = reactExports.useState("");
   const [promotionBusyFor, setPromotionBusyFor] = reactExports.useState("");
   const [promotionResults, setPromotionResults] = reactExports.useState({});
   const [overviewExperimentFocusKey, setOverviewExperimentFocusKey] = reactExports.useState(0);
@@ -37866,6 +38010,29 @@ function App() {
     }).finally(() => {
       if (cancelled) return;
       setObservationsBusy(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedSessionID, workspace]);
+  reactExports.useEffect(() => {
+    let cancelled = false;
+    if (!workspace || !selectedSessionID) {
+      setReplayEvents([]);
+      setReplayErr("");
+      return;
+    }
+    setReplayBusy(true);
+    setReplayErr("");
+    listReplayEvents({ workspace, session_id: selectedSessionID, limit: 400 }).then((response) => {
+      if (!cancelled) setReplayEvents(response.events ?? []);
+    }).catch((error) => {
+      if (!cancelled) {
+        setReplayEvents([]);
+        setReplayErr(error instanceof Error ? error.message : String(error));
+      }
+    }).finally(() => {
+      if (!cancelled) setReplayBusy(false);
     });
     return () => {
       cancelled = true;
@@ -38317,7 +38484,10 @@ function App() {
             promotionResult: selectedSession ? promotionResults[selectedSession.session_id] : void 0,
             promotionBusy: Boolean(selectedSession && promotionBusyFor === selectedSession.session_id),
             onSelectSession: setSelectedSessionID,
-            onPromote: promoteSelectedSession
+            onPromote: promoteSelectedSession,
+            replayEvents,
+            replayBusy,
+            replayErr
           }
         ) : null,
         surface === "diagnostics" ? /* @__PURE__ */ jsxRuntimeExports.jsx(

@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/taimufuraiyaa/agent-memory/internal/engine"
+	"github.com/taimufuraiyaa/agent-memory/internal/storage/sqlite"
 )
 
 // newArchiveCommand returns the top-level `archive` command with subcommands
@@ -96,6 +97,12 @@ func newArchiveRestoreCommand() *cobra.Command {
 				}
 				return fmt.Errorf("restore archive: %w", err)
 			}
+			store, openErr := openStore(cmd.Context(), cfg)
+			if openErr != nil {
+				return openErr
+			}
+			defer store.Close()
+			_, _ = store.AppendAuditEvent(cmd.Context(), sqlite.AuditEventInput{Workspace: cfg.workspace, Operation: "restore", Outcome: "success", Actor: "cli", Source: "archive", TargetType: "memory", TargetIDs: []string{memoryID}, Reason: "archive inspection"})
 
 			if flags.format == "json" {
 				return json.NewEncoder(cmd.OutOrStdout()).Encode(rec)

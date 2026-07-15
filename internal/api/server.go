@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"path/filepath"
@@ -12,6 +13,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/taimufuraiyaa/agent-memory/internal/api/dashboard"
+	"github.com/taimufuraiyaa/agent-memory/internal/application"
 	"github.com/taimufuraiyaa/agent-memory/internal/embeddings"
 	"github.com/taimufuraiyaa/agent-memory/internal/engine"
 	"github.com/taimufuraiyaa/agent-memory/internal/observability"
@@ -32,30 +34,50 @@ type Service struct {
 const allProjectsScope = "__all_projects__"
 
 type workspaceAssets struct {
-	Store     *sqlite.Store
-	Writer    *engine.WritePipeline
-	Retrieval *engine.RetrievalEngine
-	Clipper   *engine.TokenClipper
+	DBPath      string
+	Store       *sqlite.Store
+	Writer      *engine.WritePipeline
+	Retrieval   *engine.RetrievalEngine
+	Application *application.MemoryService
+	Clipper     *engine.TokenClipper
 }
 
 func (s *Service) resolve(ctx context.Context, ws string) (*workspaceAssets, error) {
 	if ws == "" {
 		ws = s.Workspace
 	}
+	if strings.TrimSpace(ws) == "" {
+		return nil, errors.New("workspace is required")
+	}
+	dbPath := filepath.Join(s.BaseDir, ws+".db")
+	// A daemon has no fixed workspace and routes exclusively through the
+	// registry. A fixed-workspace embedded service preserves its legacy path.
+	if strings.TrimSpace(s.Workspace) == "" || ws != s.Workspace {
+		manager, err := workspace.NewManager(s.BaseDir)
+		if err != nil {
+			return nil, err
+		}
+		project, err := manager.Project(ws)
+		if err != nil {
+			return nil, err
+		}
+		dbPath = project.DBPath
+	}
 	s.mu.RLock()
 	assets, ok := s.stores[ws]
 	s.mu.RUnlock()
-	if ok {
+	if ok && assets.DBPath == dbPath {
 		return assets, nil
 	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if assets, ok := s.stores[ws]; ok {
+	if assets, ok := s.stores[ws]; ok && assets.DBPath == dbPath {
 		return assets, nil
+	} else if ok && assets.Store != nil {
+		_ = assets.Store.Close()
+		delete(s.stores, ws)
 	}
-
-	dbPath := filepath.Join(s.BaseDir, ws+".db")
 	store, err := sqlite.Open(ctx, dbPath)
 	if err != nil {
 		return nil, err
@@ -66,14 +88,17 @@ func (s *Service) resolve(ctx context.Context, ws string) (*workspaceAssets, err
 	searcher := engine.NewVectorSearcher(store, s.EmbeddingProvider)
 	retrieval := engine.NewRetrievalEngineWithSharedCache(searcher, cache)
 
+	writer := engine.NewWritePipelineWithOptions(store, engine.WritePipelineOptions{
+		Embedder: s.EmbeddingProvider,
+		Cache:    cache,
+	})
 	assets = &workspaceAssets{
-		Store: store,
-		Writer: engine.NewWritePipelineWithOptions(store, engine.WritePipelineOptions{
-			Embedder: s.EmbeddingProvider,
-			Cache:    cache,
-		}),
-		Retrieval: retrieval,
-		Clipper:   engine.NewTokenClipper(nil),
+		DBPath:      dbPath,
+		Store:       store,
+		Writer:      writer,
+		Retrieval:   retrieval,
+		Application: application.NewMemoryService(store, writer, retrieval),
+		Clipper:     engine.NewTokenClipper(nil),
 	}
 	if s.stores == nil {
 		s.stores = make(map[string]*workspaceAssets)
@@ -82,24 +107,58 @@ func (s *Service) resolve(ctx context.Context, ws string) (*workspaceAssets, err
 	return assets, nil
 }
 
+// Close releases all lazily opened workspace stores. It is safe to call more
+// than once during daemon shutdown.
+func (s *Service) Close() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var closeErr error
+	for name, assets := range s.stores {
+		if assets != nil && assets.Store != nil {
+			if err := assets.Store.Close(); err != nil {
+				closeErr = errors.Join(closeErr, fmt.Errorf("close workspace %s: %w", name, err))
+			}
+		}
+		delete(s.stores, name)
+	}
+	return closeErr
+}
+
+func (s *Service) evictWorkspace(name string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	assets, ok := s.stores[strings.TrimSpace(name)]
+	if !ok {
+		return nil
+	}
+	delete(s.stores, strings.TrimSpace(name))
+	if assets != nil && assets.Store != nil {
+		return assets.Store.Close()
+	}
+	return nil
+}
+
+func writeWorkspaceResolveError(w http.ResponseWriter, err error) {
+	if errors.Is(err, workspace.ErrProjectNotRegistered) || strings.Contains(err.Error(), "workspace is required") {
+		writeErr(w, http.StatusBadRequest, "workspace", err.Error())
+		return
+	}
+	writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
+}
+
 func (s *Service) listProjectNames(ctx context.Context) ([]string, error) {
+	_ = ctx
 	mgr, err := workspace.NewManager(s.BaseDir)
 	if err != nil {
 		return nil, err
 	}
-	items, err := mgr.List(ctx)
-	if err != nil {
-		return nil, err
-	}
-	names := make([]string, 0, len(items))
-	for _, item := range items {
-		if strings.TrimSpace(item.Name) == "" {
-			continue
-		}
-		names = append(names, item.Name)
-	}
-	sort.Strings(names)
-	return names, nil
+	return mgr.ProjectNames()
+}
+
+func (s *Service) loadedWorkspaceCount() int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return len(s.stores)
 }
 
 func rankRetrievalHits(hits []engine.RetrievalHit) {
@@ -154,6 +213,7 @@ func NewMux(svc *Service) *http.ServeMux {
 	// Prometheus metrics scrape endpoint
 	mux.Handle("/metrics", promhttp.Handler())
 	mux.HandleFunc("/health", healthHandler(svc))
+	mux.HandleFunc("/api/v1/capabilities", capabilitiesHandler())
 	mux.HandleFunc("/ops/dashboard", opsDashboardHandler(svc))
 	mux.HandleFunc("/api/v1/scheduler/status", schedulerStatusHandler(svc))
 	mux.HandleFunc("/api/v1/scheduler/history", schedulerHistoryHandler(svc))
@@ -202,9 +262,14 @@ func NewMux(svc *Service) *http.ServeMux {
 	mux.HandleFunc("/api/v1/dashboard", workspaceDashboardHandler(svc))
 	mux.HandleFunc("/api/v1/graph", workspaceGraphHandler(svc))
 	mux.HandleFunc("/api/v1/stats", workspaceStatsHandler(svc))
+	mux.HandleFunc("/api/v1/advisor", advisorHandler(svc))
 	mux.HandleFunc("/api/v1/requests/feedback", requestsFeedbackHandler(svc))
 	mux.HandleFunc("/api/v1/feedback/stats", feedbackStatsHandler(svc))
 	mux.HandleFunc("/api/v1/feedback", listFeedbackHandler(svc))
+	mux.HandleFunc("/api/v1/audit", auditHandler(svc))
+	mux.HandleFunc("/api/v1/replay/import-jsonl", replayImportJSONLHandler(svc))
+	mux.HandleFunc("/api/v1/replay/sessions", replaySessionsHandler(svc))
+	mux.HandleFunc("/api/v1/replay/events", replayEventsHandler(svc))
 	mux.HandleFunc("/api/v1/skills", workspaceSkillsHandler(svc))
 
 	// Visualization endpoints

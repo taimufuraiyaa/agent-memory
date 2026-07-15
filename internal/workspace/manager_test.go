@@ -812,8 +812,51 @@ func TestWriteAgentFilesPreservesCodexConfigAndHooks(t *testing.T) {
 		t.Fatalf("expected preserved config and one data root, got %s", config)
 	}
 	hooks, _ := os.ReadFile(filepath.Join(cwd, ".codex", "hooks.json"))
-	if !strings.Contains(string(hooks), "custom-hook") || strings.Count(string(hooks), codexHookMarker) != 2 {
+	if !strings.Contains(string(hooks), "custom-hook") || strings.Count(string(hooks), codexHookMarker) != 6 {
 		t.Fatalf("expected preserved custom hook and two managed hooks, got %s", hooks)
+	}
+}
+
+func TestWriteCodexConfigUsesNamedPermissionProfile(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	dataDir := filepath.Join(t.TempDir(), "agent memory")
+	legacy := codexConfigStart + "\n" +
+		"sandbox_workspace_write.writable_roots = [\"/legacy/agent-memory\"]\n" +
+		codexConfigEnd + "\n\n" +
+		"model = \"gpt-test\"\n"
+	if err := os.WriteFile(configPath, []byte(legacy), 0o644); err != nil {
+		t.Fatalf("seed config: %v", err)
+	}
+
+	for range 2 {
+		if err := writeCodexConfig(configPath, dataDir); err != nil {
+			t.Fatalf("write Codex config: %v", err)
+		}
+	}
+
+	config, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	got := string(config)
+	checks := []string{
+		`default_permissions = "agent-memory-workspace"`,
+		`permissions.agent-memory-workspace.filesystem.":root" = "read"`,
+		`permissions.agent-memory-workspace.filesystem.":tmpdir" = "write"`,
+		`permissions.agent-memory-workspace.filesystem.":slash_tmp" = "write"`,
+		`permissions.agent-memory-workspace.filesystem.":workspace_roots" = { "." = "write", ".git" = "read", ".agents" = "read", ".codex" = "read" }`,
+		`model = "gpt-test"`,
+	}
+	for _, want := range checks {
+		if !strings.Contains(got, want) {
+			t.Errorf("expected generated config to contain %q, got %s", want, got)
+		}
+	}
+	if !strings.Contains(got, `permissions.agent-memory-workspace.filesystem."`+filepath.ToSlash(dataDir)+`" = "write"`) {
+		t.Errorf("expected generated config to grant the data directory, got %s", got)
+	}
+	if strings.Contains(got, "sandbox_workspace_write") || strings.Count(got, "default_permissions") != 1 || strings.Count(got, filepath.ToSlash(dataDir)) != 1 {
+		t.Fatalf("expected idempotent migration from legacy sandbox config, got %s", got)
 	}
 }
 
@@ -837,7 +880,7 @@ func TestWriteCodexGlobalFilesPreservesExistingSettings(t *testing.T) {
 		t.Fatalf("expected preserved config and one data root, got %s", config)
 	}
 	hooks, _ := os.ReadFile(filepath.Join(codexHome, "hooks.json"))
-	if !strings.Contains(string(hooks), "custom-hook") || strings.Count(string(hooks), codexHookMarker) != 2 {
+	if !strings.Contains(string(hooks), "custom-hook") || strings.Count(string(hooks), codexHookMarker) != 6 {
 		t.Fatalf("expected preserved custom and managed hooks, got %s", hooks)
 	}
 }

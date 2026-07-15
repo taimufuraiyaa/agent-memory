@@ -70,6 +70,10 @@ func projectsRenameHandler(svc *Service) http.HandlerFunc {
 			writeErr(w, http.StatusBadRequest, "runtime", err.Error())
 			return
 		}
+		if err := svc.evictWorkspace(req.From); err != nil {
+			writeErr(w, http.StatusBadRequest, "runtime", err.Error())
+			return
+		}
 		out, err := mgr.Rename(r.Context(), workspace.RenameOptions{CWD: req.CWD, From: req.From, To: req.To})
 		if err != nil {
 			writeErr(w, http.StatusBadRequest, "runtime", err.Error())
@@ -118,6 +122,10 @@ func projectsDeleteHandler(svc *Service) http.HandlerFunc {
 		}
 		mgr, err := workspace.NewManager(svc.BaseDir)
 		if err != nil {
+			writeErr(w, http.StatusBadRequest, "runtime", err.Error())
+			return
+		}
+		if err := svc.evictWorkspace(req.ProjectName); err != nil {
 			writeErr(w, http.StatusBadRequest, "runtime", err.Error())
 			return
 		}

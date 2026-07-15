@@ -397,6 +397,7 @@ func (p *WritePipeline) Write(ctx context.Context, in WriteInput) (res *WriteRes
 	if p.cache != nil {
 		p.cache.InvalidateWorkspace(entry.Workspace)
 	}
+	_, _ = p.store.AppendAuditEvent(ctx, sqlite.AuditEventInput{Workspace: entry.Workspace, Operation: "write", Outcome: "success", Actor: "pipeline", Source: string(entry.Source.Type), SessionID: entry.Source.SessionID, TargetType: "memory", TargetIDs: []string{entry.ID}, OccurredAt: time.Now().UTC()})
 
 	return &WriteResult{
 		ID:          entry.ID,
