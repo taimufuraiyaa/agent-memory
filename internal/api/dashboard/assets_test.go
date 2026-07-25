@@ -1,6 +1,7 @@
 package dashboard
 
 import (
+	"bytes"
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
@@ -59,6 +60,18 @@ func TestGetEmbeddedHandler(t *testing.T) {
 	t.Logf("Handler response status: %d", rec.Code)
 }
 
+func TestEmbeddedHandlerPreventsStaleDashboardBundles(t *testing.T) {
+	handler := GetEmbeddedHandler()
+	req := httptest.NewRequest(http.MethodGet, "/assets/app.js", nil)
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if got := rec.Header().Get("Cache-Control"); got != "no-store" {
+		t.Fatalf("expected Cache-Control no-store, got %q", got)
+	}
+}
+
 func TestEmbeddedAssetsStructure(t *testing.T) {
 	if !HasEmbeddedAssets() {
 		t.Skip("embedded assets not available")
@@ -81,6 +94,53 @@ func TestEmbeddedAssetsStructure(t *testing.T) {
 		t.Errorf("assets directory not found: %v", err)
 	} else if !info.IsDir() {
 		t.Error("assets is not a directory")
+	}
+}
+
+func TestEmbeddedDashboardIncludesResponsiveNavigation(t *testing.T) {
+	fsys, err := GetEmbeddedFS()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	stylesheet, err := fs.ReadFile(fsys, "assets/app.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, marker := range [][]byte{
+		[]byte(".navMenuTrigger"),
+		[]byte("@media (max-width: 2160px)"),
+		[]byte("max-width: calc(100vw - 24px)"),
+	} {
+		if !bytes.Contains(stylesheet, marker) {
+			t.Fatalf("embedded stylesheet is missing responsive navigation marker %q", marker)
+		}
+	}
+}
+
+func TestEmbeddedDashboardIsNotebookFirstAndSelfContained(t *testing.T) {
+	fsys, err := GetEmbeddedFS()
+	if err != nil {
+		t.Fatal(err)
+	}
+	index, err := fs.ReadFile(fsys, "index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(index, []byte(`src="./assets/app.js"`)) || !bytes.Contains(index, []byte(`href="./assets/app.css"`)) {
+		t.Fatalf("embedded index must use dashboard-relative assets: %s", index)
+	}
+	if bytes.Contains(index, []byte("fonts.googleapis.com")) || bytes.Contains(index, []byte("fonts.gstatic.com")) {
+		t.Fatal("embedded dashboard must not request external font assets")
+	}
+	app, err := fs.ReadFile(fsys, "assets/app.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, marker := range [][]byte{[]byte("NotebookWorkspace"), []byte("Human note"), []byte("Write what matters.")} {
+		if !bytes.Contains(app, marker) {
+			t.Fatalf("embedded app is missing notebook marker %q", marker)
+		}
 	}
 }
 

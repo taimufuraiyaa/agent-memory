@@ -150,6 +150,9 @@ configure environment variables, and initialize the current directory as a proje
 				if err != nil {
 					fmt.Fprintf(errOut, "  ! env file write failed: %v\n", err)
 				}
+				if _, err := ensureEnvVarAtPath(envPath, "AGENT_MEMORY_TERM_BLOOM_MODE", "shadow"); err != nil {
+					fmt.Fprintf(errOut, "  ! term Bloom env setup failed: %v\n", err)
+				}
 				if err := ensureShellAutoload(envPath); err != nil {
 					fmt.Fprintf(errOut, "  ! shell setup skipped: %v\n", err)
 				}

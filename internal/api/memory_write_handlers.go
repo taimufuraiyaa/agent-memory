@@ -35,6 +35,7 @@ func writeMemoryHandler(svc *Service) http.HandlerFunc {
 			Content   string             `json:"content"`
 			Entities  []string           `json:"entities"`
 			Tags      []string           `json:"tags"`
+			Keywords  []string           `json:"keywords"`
 			Outcome   *core.Outcome      `json:"outcome"`
 			Source    *core.MemorySource `json:"source"`
 		}
@@ -61,6 +62,7 @@ func writeMemoryHandler(svc *Service) http.HandlerFunc {
 			Content:   req.Content,
 			Entities:  req.Entities,
 			Tags:      req.Tags,
+			Keywords:  req.Keywords,
 			Outcome:   req.Outcome,
 			Source:    src,
 			Mode:      engine.ExtractFast,

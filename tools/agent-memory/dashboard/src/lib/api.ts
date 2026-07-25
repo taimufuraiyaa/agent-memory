@@ -1,6 +1,45 @@
 export type OutcomeResult = 'success' | 'failure' | 'partial'
 export type MemoryType = 'episodic' | 'semantic' | 'procedural' | 'outcome'
 export type StorageTier = 'markdown' | 'vector' | 'vector+graph' | 'document' | 'cold'
+export type NoteIndexState = 'pending' | 'indexing' | 'ready' | 'failed' | 'retired' | 'paused'
+
+export type NoteDocument = {
+  id: string
+  workspace: string
+  path: string
+  title: string
+  body: string
+  properties: Record<string, unknown>
+  revision: number
+  content_hash: string
+  index_state: NoteIndexState
+  indexed_revision: number
+  index_error?: string
+  created_at: string
+  updated_at: string
+  deleted_at?: string
+}
+
+export type NoteRevision = {
+  note_id: string
+  workspace: string
+  revision: number
+  path: string
+  title: string
+  body: string
+  properties: Record<string, unknown>
+  content_hash: string
+  author_kind: string
+  created_at: string
+}
+
+export type NoteLink = {
+  source_note_id: string
+  target_note_id?: string
+  raw_target: string
+  line: number
+  snippet: string
+}
 
 export type Diagram = {
   lang: string
@@ -44,6 +83,16 @@ export type MemoryEntry = {
   match_reason?: string
   band?: string
   exclusion_reasons?: string[]
+  source?: {
+    type: string
+    session_id?: string
+    file_path?: string
+    line_range?: number[]
+    note_id?: string
+    note_revision?: number
+    note_path?: string
+    heading?: string
+  }
 }
 
 export type Relation = {
@@ -445,11 +494,23 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
     ...init,
     headers: {
+      accept: 'application/json',
       'content-type': 'application/json',
       ...(init?.headers ?? {}),
     },
   })
-  const json = (await res.json()) as unknown
+  const body = await res.text()
+  let json: unknown
+  try {
+    json = JSON.parse(body)
+  } catch {
+    const contentType = res.headers.get('content-type') ?? 'unknown content type'
+    const preview = body.trim().replace(/\s+/g, ' ').slice(0, 160)
+    const detail = preview ? `: ${preview}` : ''
+    throw new Error(
+      `API ${res.status} ${path} returned a non-JSON response (${contentType})${detail}`,
+    )
+  }
   const env = json as {
     ok?: boolean
     data?: unknown
@@ -464,6 +525,76 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
 
 export function listProjects(): Promise<{ projects: ProjectListItem[] }> {
   return api('/api/v1/projects/list', { method: 'GET' })
+}
+
+export function listNotes(input: { workspace: string; include_deleted?: boolean }): Promise<{ workspace: string; notes: NoteDocument[] }> {
+  const qs = new URLSearchParams({ workspace: input.workspace })
+  if (input.include_deleted) qs.set('include_deleted', 'true')
+  return api(`/api/v1/notes?${qs.toString()}`, { method: 'GET' })
+}
+
+export function getNote(input: { workspace: string; note_id: string }): Promise<{ note: NoteDocument }> {
+  const qs = new URLSearchParams({ workspace: input.workspace, note_id: input.note_id })
+  return api(`/api/v1/notes/get?${qs.toString()}`, { method: 'GET' })
+}
+
+export function createNote(input: {
+  workspace: string
+  path: string
+  title: string
+  body?: string
+  properties?: Record<string, unknown>
+  author_kind?: string
+}): Promise<{ note: NoteDocument }> {
+  return api('/api/v1/notes/create', { method: 'POST', body: JSON.stringify(input) })
+}
+
+export function updateNote(input: {
+  workspace: string
+  note_id: string
+  expected_revision: number
+  path: string
+  title: string
+  body: string
+  properties: Record<string, unknown>
+  author_kind?: string
+}): Promise<{ note: NoteDocument }> {
+  return api('/api/v1/notes/update', { method: 'POST', body: JSON.stringify(input) })
+}
+
+export function trashNote(input: { workspace: string; note_id: string }): Promise<{ note: NoteDocument }> {
+  return api('/api/v1/notes/trash', { method: 'POST', body: JSON.stringify(input) })
+}
+
+export function restoreNote(input: { workspace: string; note_id: string }): Promise<{ note: NoteDocument }> {
+  return api('/api/v1/notes/restore', { method: 'POST', body: JSON.stringify(input) })
+}
+
+export function deleteNotePermanently(input: { workspace: string; note_id: string }): Promise<{ note: { deleted: boolean; note_id: string } }> {
+  return api('/api/v1/notes/delete', { method: 'POST', body: JSON.stringify(input) })
+}
+
+export function listNoteRevisions(input: { workspace: string; note_id: string }): Promise<{ revisions: NoteRevision[] }> {
+  const qs = new URLSearchParams({ workspace: input.workspace, note_id: input.note_id })
+  return api(`/api/v1/notes/revisions?${qs.toString()}`, { method: 'GET' })
+}
+
+export function restoreNoteRevision(input: {
+  workspace: string
+  note_id: string
+  revision: number
+  expected_revision: number
+}): Promise<{ note: NoteDocument }> {
+  return api('/api/v1/notes/revisions/restore', { method: 'POST', body: JSON.stringify(input) })
+}
+
+export function listNoteBacklinks(input: { workspace: string; note_id: string }): Promise<{ backlinks: NoteLink[] }> {
+  const qs = new URLSearchParams({ workspace: input.workspace, note_id: input.note_id })
+  return api(`/api/v1/notes/backlinks?${qs.toString()}`, { method: 'GET' })
+}
+
+export function retryNoteIndex(input: { workspace: string; note_id: string }): Promise<{ note: NoteDocument }> {
+  return api('/api/v1/notes/index/retry', { method: 'POST', body: JSON.stringify(input) })
 }
 
 export function getStats(workspace?: string): Promise<DashboardStats> {

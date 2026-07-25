@@ -19,6 +19,7 @@ type MemoryService struct {
 	store     *sqlite.Store
 	writer    *engine.WritePipeline
 	retrieval *engine.RetrievalEngine
+	termIndex *TermIndexRuntime
 }
 
 type FeedbackInput struct {
@@ -49,7 +50,7 @@ func (s *MemoryService) Feedback(ctx context.Context, input FeedbackInput) (*cor
 }
 
 func NewMemoryService(store *sqlite.Store, writer *engine.WritePipeline, retrieval *engine.RetrievalEngine) *MemoryService {
-	return &MemoryService{store: store, writer: writer, retrieval: retrieval}
+	return &MemoryService{store: store, writer: writer, retrieval: retrieval, termIndex: NewTermIndexRuntime()}
 }
 
 func (s *MemoryService) Write(ctx context.Context, input engine.WriteInput) (*engine.WriteResult, error) {

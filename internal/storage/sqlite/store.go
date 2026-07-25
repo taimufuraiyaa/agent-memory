@@ -170,6 +170,128 @@ func (s *Store) Migrate(ctx context.Context) error {
 		`CREATE INDEX IF NOT EXISTS idx_memories_type ON memories(type)`,
 		`CREATE INDEX IF NOT EXISTS idx_memories_updated_at ON memories(updated_at DESC)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_memories_workspace_hash_unique ON memories(workspace, content_hash) WHERE content_hash != ''`,
+		`CREATE TABLE IF NOT EXISTS notes (
+			id TEXT PRIMARY KEY,
+			workspace TEXT NOT NULL,
+			path TEXT NOT NULL,
+			title TEXT NOT NULL,
+			body TEXT NOT NULL,
+			properties_json TEXT NOT NULL DEFAULT '{}',
+			revision INTEGER NOT NULL DEFAULT 1,
+			content_hash TEXT NOT NULL,
+			index_state TEXT NOT NULL DEFAULT 'pending',
+			indexed_revision INTEGER NOT NULL DEFAULT 0,
+			index_error TEXT NOT NULL DEFAULT '',
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL,
+			deleted_at TEXT
+		)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_notes_workspace_path_active
+			ON notes(workspace, path COLLATE NOCASE) WHERE deleted_at IS NULL`,
+		`CREATE INDEX IF NOT EXISTS idx_notes_workspace_updated
+			ON notes(workspace, updated_at DESC)`,
+		`CREATE TABLE IF NOT EXISTS note_revisions (
+			note_id TEXT NOT NULL,
+			workspace TEXT NOT NULL,
+			revision INTEGER NOT NULL,
+			path TEXT NOT NULL,
+			title TEXT NOT NULL,
+			body TEXT NOT NULL,
+			properties_json TEXT NOT NULL DEFAULT '{}',
+			content_hash TEXT NOT NULL,
+			author_kind TEXT NOT NULL DEFAULT 'human',
+			created_at TEXT NOT NULL,
+			PRIMARY KEY(note_id, revision),
+			FOREIGN KEY(note_id) REFERENCES notes(id) ON DELETE CASCADE
+		)`,
+		`CREATE TABLE IF NOT EXISTS note_links (
+			source_note_id TEXT NOT NULL,
+			workspace TEXT NOT NULL,
+			revision INTEGER NOT NULL,
+			target_note_id TEXT,
+			raw_target TEXT NOT NULL,
+			line INTEGER NOT NULL DEFAULT 1,
+			snippet TEXT NOT NULL DEFAULT '',
+			PRIMARY KEY(source_note_id, revision, raw_target, line),
+			FOREIGN KEY(source_note_id) REFERENCES notes(id) ON DELETE CASCADE,
+			FOREIGN KEY(target_note_id) REFERENCES notes(id) ON DELETE SET NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_note_links_target
+			ON note_links(workspace, target_note_id)`,
+		`CREATE TABLE IF NOT EXISTS note_memory_chunks (
+			workspace TEXT NOT NULL,
+			note_id TEXT NOT NULL,
+			revision INTEGER NOT NULL,
+			ordinal INTEGER NOT NULL,
+			heading TEXT NOT NULL DEFAULT '',
+			start_line INTEGER NOT NULL,
+			end_line INTEGER NOT NULL,
+			content_hash TEXT NOT NULL,
+			memory_id TEXT NOT NULL,
+			active INTEGER NOT NULL DEFAULT 0,
+			PRIMARY KEY(note_id, revision, ordinal),
+			FOREIGN KEY(note_id) REFERENCES notes(id) ON DELETE CASCADE,
+			FOREIGN KEY(memory_id) REFERENCES memories(id) ON DELETE CASCADE
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_note_memory_chunks_active
+			ON note_memory_chunks(workspace, note_id, active)`,
+		`CREATE TABLE IF NOT EXISTS memory_terms (
+			workspace TEXT NOT NULL,
+			memory_id TEXT NOT NULL,
+			normalized_term TEXT NOT NULL,
+			display_term TEXT NOT NULL DEFAULT '',
+			source TEXT NOT NULL,
+			ordinal INTEGER NOT NULL DEFAULT 0,
+			normalization_version TEXT NOT NULL,
+			extractor_version TEXT NOT NULL,
+			created_at TEXT NOT NULL,
+			PRIMARY KEY(workspace, memory_id, normalized_term, normalization_version),
+			FOREIGN KEY(memory_id) REFERENCES memories(id) ON DELETE CASCADE
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_memory_terms_workspace_term ON memory_terms(workspace, normalized_term)`,
+		`CREATE INDEX IF NOT EXISTS idx_memory_terms_workspace_memory ON memory_terms(workspace, memory_id)`,
+		`CREATE TABLE IF NOT EXISTS term_index_state (
+			workspace TEXT PRIMARY KEY,
+			bitmap BLOB,
+			state TEXT NOT NULL DEFAULT 'dirty',
+			format_version TEXT NOT NULL DEFAULT '',
+			normalization_version TEXT NOT NULL DEFAULT '',
+			extractor_version TEXT NOT NULL DEFAULT '',
+			hash_version TEXT NOT NULL DEFAULT '',
+			bit_count INTEGER NOT NULL DEFAULT 0,
+			hash_count INTEGER NOT NULL DEFAULT 0,
+			distinct_item_count INTEGER NOT NULL DEFAULT 0,
+			planned_capacity INTEGER NOT NULL DEFAULT 0,
+			estimated_fpp REAL NOT NULL DEFAULT 0,
+			stale_delete_count INTEGER NOT NULL DEFAULT 0,
+			corpus_generation INTEGER NOT NULL DEFAULT 0,
+			filter_generation INTEGER NOT NULL DEFAULT 0,
+			checksum TEXT NOT NULL DEFAULT '',
+			rebuild_reason TEXT NOT NULL DEFAULT '',
+			built_at TEXT NOT NULL DEFAULT '',
+			updated_at TEXT NOT NULL
+		)`,
+		`CREATE TRIGGER IF NOT EXISTS trg_memory_terms_insert_state
+		AFTER INSERT ON memory_terms
+		BEGIN
+			INSERT INTO term_index_state (workspace, state, corpus_generation, updated_at)
+			VALUES (NEW.workspace, 'dirty', 1, NEW.created_at)
+			ON CONFLICT(workspace) DO UPDATE SET
+				state = 'dirty',
+				corpus_generation = term_index_state.corpus_generation + 1,
+				updated_at = excluded.updated_at;
+		END`,
+		`CREATE TRIGGER IF NOT EXISTS trg_memory_terms_delete_state
+		AFTER DELETE ON memory_terms
+		BEGIN
+			INSERT INTO term_index_state (workspace, state, corpus_generation, updated_at)
+			VALUES (OLD.workspace, 'dirty', 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+			ON CONFLICT(workspace) DO UPDATE SET
+				state = 'dirty',
+				stale_delete_count = term_index_state.stale_delete_count + 1,
+				corpus_generation = term_index_state.corpus_generation + 1,
+				updated_at = excluded.updated_at;
+		END`,
 		`CREATE TABLE IF NOT EXISTS memory_vectors (
 			memory_id TEXT PRIMARY KEY,
 			workspace TEXT NOT NULL,
@@ -585,6 +707,30 @@ func (s *Store) Migrate(ctx context.Context) error {
 	if err := s.ensureColumn(ctx, "retrieval_requests", "total_count", `ALTER TABLE retrieval_requests ADD COLUMN total_count INTEGER NOT NULL DEFAULT -1`); err != nil {
 		return err
 	}
+	if err := s.ensureColumn(ctx, "term_index_state", "extractor_version", `ALTER TABLE term_index_state ADD COLUMN extractor_version TEXT NOT NULL DEFAULT ''`); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "term_index_state", "stale_delete_count", `ALTER TABLE term_index_state ADD COLUMN stale_delete_count INTEGER NOT NULL DEFAULT 0`); err != nil {
+		return err
+	}
+	// Recreate the delete trigger so databases created before stale-delete tracking
+	// receive the same pressure accounting as new databases.
+	if _, err := s.db.ExecContext(ctx, `DROP TRIGGER IF EXISTS trg_memory_terms_delete_state`); err != nil {
+		return fmt.Errorf("drop legacy memory term delete trigger: %w", err)
+	}
+	if _, err := s.db.ExecContext(ctx, `CREATE TRIGGER trg_memory_terms_delete_state
+		AFTER DELETE ON memory_terms
+		BEGIN
+			INSERT INTO term_index_state (workspace, state, corpus_generation, stale_delete_count, updated_at)
+			VALUES (OLD.workspace, 'dirty', 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+			ON CONFLICT(workspace) DO UPDATE SET
+				state = 'dirty',
+				stale_delete_count = term_index_state.stale_delete_count + 1,
+				corpus_generation = term_index_state.corpus_generation + 1,
+				updated_at = excluded.updated_at;
+		END`); err != nil {
+		return fmt.Errorf("create memory term delete trigger: %w", err)
+	}
 	// Add indexes for vector provenance columns
 	if _, err := s.db.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_memory_vectors_provider ON memory_vectors(embedding_provider)`); err != nil {
 		return fmt.Errorf("create embedding_provider index: %w", err)
@@ -602,12 +748,26 @@ func (s *Store) Migrate(ctx context.Context) error {
 
 // UpsertMemory inserts or updates a memory entry by ID.
 func (s *Store) UpsertMemory(ctx context.Context, m *core.MemoryEntry) error {
-	return s.upsertMemory(ctx, m, "")
+	if m.Keywords == nil {
+		return s.upsertMemory(ctx, s.db, m, "")
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := s.upsertMemory(ctx, tx, m, ""); err != nil {
+		return err
+	}
+	if err := replaceMemoryTermsTx(ctx, tx, m.Workspace, m.ID, m.Keywords); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // InsertMemoryByHash inserts a memory while enforcing workspace+content_hash idempotency.
 // Returns ErrDuplicateContent when the hash already exists in the same workspace.
-func (s *Store) InsertMemoryByHash(ctx context.Context, m *core.MemoryEntry, contentHash string) error {
+func (s *Store) InsertMemoryByHash(ctx context.Context, m *core.MemoryEntry, contentHash string, termSets ...[]core.MemoryTerm) error {
 	if strings.TrimSpace(contentHash) == "" {
 		return errors.New("content hash is required")
 	}
@@ -639,13 +799,23 @@ func (s *Store) InsertMemoryByHash(ctx context.Context, m *core.MemoryEntry, con
 		m.CreatedAt = time.Now().UTC()
 	}
 	m.UpdatedAt = time.Now().UTC()
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback()
+		}
+	}()
 
 	query := `
 INSERT OR IGNORE INTO memories (id, type, content, diagram_lang, diagram_code, workspace, content_hash, source_json, entities_json, tags_json, confidence, storage_tier, pinned, superseded_by, access_count, last_accessed, decay_score, salience_score, suppression_score, useful_count, ignored_count, rejected_count, harmful_count, last_helpful_at, last_rejected_at, suppression_until, familiarity_band_last, outcome_json, created_at, updated_at)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	_startInsert := time.Now()
-	res, err := s.db.ExecContext(
+	res, err := tx.ExecContext(
 		ctx,
 		query,
 		m.ID,
@@ -679,7 +849,6 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 
 		m.CreatedAt.Format(time.RFC3339Nano),
 		m.UpdatedAt.Format(time.RFC3339Nano),
 	)
-	s.logSlowQuery(ctx, "insert_memory", m.Workspace, time.Since(_startInsert))
 	if err != nil {
 		return fmt.Errorf("insert memory: %w", err)
 	}
@@ -687,6 +856,16 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 
 	if err == nil && affected == 0 {
 		return ErrDuplicateContent
 	}
+	if len(termSets) > 0 {
+		if err := replaceMemoryTermsTx(ctx, tx, m.Workspace, m.ID, termSets[0]); err != nil {
+			return err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit insert memory: %w", err)
+	}
+	committed = true
+	s.logSlowQuery(ctx, "insert_memory", m.Workspace, time.Since(_startInsert))
 	return nil
 }
 
@@ -700,7 +879,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 
 // the process crashed between two separate statements -- which the write
 // pipeline previously only guarded against with a manual compensating
 // delete after the fact.
-func (s *Store) InsertMemoryByHashWithVector(ctx context.Context, m *core.MemoryEntry, contentHash, embeddingProvider, embeddingModelVersion string, embedding []float32) error {
+func (s *Store) InsertMemoryByHashWithVector(ctx context.Context, m *core.MemoryEntry, contentHash, embeddingProvider, embeddingModelVersion string, embedding []float32, termSets ...[]core.MemoryTerm) error {
 	if strings.TrimSpace(contentHash) == "" {
 		return errors.New("content hash is required")
 	}
@@ -791,7 +970,6 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 
 		m.CreatedAt.Format(time.RFC3339Nano),
 		m.UpdatedAt.Format(time.RFC3339Nano),
 	)
-	s.logSlowQuery(ctx, "insert_memory", m.Workspace, time.Since(_startInsert))
 	if err != nil {
 		return fmt.Errorf("insert memory: %w", err)
 	}
@@ -814,19 +992,30 @@ ON CONFLICT(memory_id) DO UPDATE SET
 	embedding_model_version=excluded.embedding_model_version,
 	updated_at=excluded.updated_at
 `, m.ID, m.Workspace, string(embJSON), strings.TrimSpace(embeddingProvider), strings.TrimSpace(embeddingModelVersion), m.UpdatedAt.Format(time.RFC3339Nano))
-	s.logSlowQuery(ctx, "upsert_memory_vector", m.Workspace, time.Since(_startVec))
+	vecDuration := time.Since(_startVec)
 	if err != nil {
 		return fmt.Errorf("upsert memory vector: %w", err)
+	}
+	if len(termSets) > 0 {
+		if err := replaceMemoryTermsTx(ctx, tx, m.Workspace, m.ID, termSets[0]); err != nil {
+			return err
+		}
 	}
 
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit insert memory with vector: %w", err)
 	}
 	committed = true
+	s.logSlowQuery(ctx, "insert_memory", m.Workspace, time.Since(_startInsert))
+	s.logSlowQuery(ctx, "upsert_memory_vector", m.Workspace, vecDuration)
 	return nil
 }
 
-func (s *Store) upsertMemory(ctx context.Context, m *core.MemoryEntry, contentHash string) error {
+type sqlExecer interface {
+	ExecContext(context.Context, string, ...any) (sql.Result, error)
+}
+
+func (s *Store) upsertMemory(ctx context.Context, execer sqlExecer, m *core.MemoryEntry, contentHash string) error {
 	if err := m.Validate(); err != nil {
 		return err
 	}
@@ -888,7 +1077,7 @@ ON CONFLICT(id) DO UPDATE SET
 	outcome_json=excluded.outcome_json,
 	updated_at=excluded.updated_at`
 
-	_, err = s.db.ExecContext(
+	_, err = execer.ExecContext(
 		ctx,
 		query,
 		m.ID,

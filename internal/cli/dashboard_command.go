@@ -21,6 +21,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/taimufuraiyaa/agent-memory/internal/api"
+	dashboardassets "github.com/taimufuraiyaa/agent-memory/internal/api/dashboard"
 	"github.com/taimufuraiyaa/agent-memory/internal/embeddings"
 )
 
@@ -290,10 +291,16 @@ func startDashboardProcess(cfg runtimeConfig, addr string, dashDirFlag string, p
 	c := exec.Command(exe, args...)
 	c.Stdout = io.Discard
 	c.Stderr = io.Discard
+	configureBackgroundProcess(c)
 	if err := c.Start(); err != nil {
 		return 0, err
 	}
-	return c.Process.Pid, nil
+	pid := c.Process.Pid
+	if err := c.Process.Release(); err != nil {
+		_ = c.Process.Kill()
+		return 0, err
+	}
+	return pid, nil
 }
 
 func pickFreeLocalPort() (int, error) {
@@ -391,7 +398,7 @@ func dashboardSourceDir(override string) (string, error) {
 	return dir, nil
 }
 
-func tryServeEmbeddedDashboard(cmd *cobra.Command, ctx context.Context, cfg runtimeConfig, ln net.Listener, apiURL string, noOpen bool) error {
+func tryServeEmbeddedDashboard(cmd *cobra.Command, ctx context.Context, cfg runtimeConfig, ln net.Listener, apiURL string, noOpen bool, pidFile string) error {
 	// Import the dashboard package to access embedded assets
 	embeddedDashboard := &embeddedDashboardWrapper{}
 
@@ -405,6 +412,19 @@ func tryServeEmbeddedDashboard(cmd *cobra.Command, ctx context.Context, cfg runt
 	// Get the dashboard URL - embedded assets are served from the API server
 	dashURL := strings.TrimRight(apiURL, "/") + "/dashboard/"
 
+	if strings.TrimSpace(pidFile) != "" {
+		if err := writeDashboardPID(pidFile, dashboardPID{
+			PID:       os.Getpid(),
+			Workspace: cfg.workspace,
+			Addr:      ln.Addr().String(),
+			URL:       dashURL,
+			StartedAt: time.Now().UTC(),
+		}); err != nil {
+			return fmt.Errorf("write dashboard start handshake: %w", err)
+		}
+		defer func() { _ = os.Remove(pidFile) }()
+	}
+
 	if noOpen {
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s\n", dashURL)
 	} else {
@@ -417,14 +437,10 @@ func tryServeEmbeddedDashboard(cmd *cobra.Command, ctx context.Context, cfg runt
 	return nil
 }
 
-// embeddedDashboardWrapper is a temporary wrapper to check for embedded assets
-// This will be replaced with direct dashboard package import once it's properly integrated
 type embeddedDashboardWrapper struct{}
 
 func (w *embeddedDashboardWrapper) hasAssets() bool {
-	// For now, return false to maintain existing behavior
-	// This will be updated to call dashboard.HasEmbeddedAssets() once fully integrated
-	return false
+	return dashboardassets.HasEmbeddedAssets()
 }
 
 func newDashboardCommand() *cobra.Command {
@@ -562,13 +578,6 @@ func newDashboardCommand() *cobra.Command {
 				if err != nil {
 					return err
 				}
-				_ = writeDashboardPID(pidPath, dashboardPID{
-					PID:       pid,
-					Workspace: cfg.workspace,
-					Addr:      addr,
-					URL:       "",
-					StartedAt: time.Now().UTC(),
-				})
 
 				url := ""
 				for i := 0; i < 120; i++ {
@@ -630,7 +639,7 @@ func newDashboardCommand() *cobra.Command {
 			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "api serving on %s\n", apiURL)
 
 			// Try embedded dashboard assets first (no npm required)
-			if err := tryServeEmbeddedDashboard(cmd, ctx, cfg, ln, apiURL, noOpen); err == nil {
+			if err := tryServeEmbeddedDashboard(cmd, ctx, cfg, ln, apiURL, noOpen, pidFile); err == nil {
 				return nil
 			}
 

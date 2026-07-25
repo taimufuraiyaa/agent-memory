@@ -22,6 +22,7 @@ const (
 	ModeRelate      RetrievalMode = "relate"
 	ModeOutcomes    RetrievalMode = "outcomes"
 	ModeGraphExpand RetrievalMode = "graph-expand"
+	ModeTerms       RetrievalMode = "terms"
 )
 
 // RetrievalOptions controls retrieval behavior.

@@ -14,13 +14,17 @@ import (
 
 func TestMergeEnvFileAddsAdaptiveTuningGuidance(t *testing.T) {
 	merged, err := mergeEnvFile("/tmp/agent-memory.env", map[string]string{
-		"AGENT_MEMORY_ENABLED": "1",
+		"AGENT_MEMORY_ENABLED":         "1",
+		"AGENT_MEMORY_TERM_BLOOM_MODE": "shadow",
 	})
 	if err != nil {
 		t.Fatalf("merge env file: %v", err)
 	}
 	if !strings.Contains(merged, "export AGENT_MEMORY_ENABLED=1") {
 		t.Fatalf("expected base env assignment, got %q", merged)
+	}
+	if !strings.Contains(merged, "AGENT_MEMORY_TERM_BLOOM_MODE") {
+		t.Fatalf("expected term Bloom rollout mode, got %q", merged)
 	}
 	if !strings.Contains(merged, amconfig.AdaptiveTuningEnvGuidanceHeader()) {
 		t.Fatalf("expected adaptive tuning guidance, got %q", merged)
@@ -44,6 +48,20 @@ func TestMergeEnvFileGuidanceIsIdempotent(t *testing.T) {
 	}
 	if strings.Count(second, amconfig.AdaptiveTuningEnvGuidanceHeader()) != 1 {
 		t.Fatalf("expected one guidance header in second output, got %q", second)
+	}
+}
+
+func TestMergeEnvFilePreservesExistingTermBloomMode(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "agent-memory.env")
+	if err := os.WriteFile(path, []byte("export AGENT_MEMORY_TERM_BLOOM_MODE=gate\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	merged, err := mergeEnvFile(path, map[string]string{"AGENT_MEMORY_TERM_BLOOM_MODE": "shadow"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(merged, "AGENT_MEMORY_TERM_BLOOM_MODE=gate") || strings.Contains(merged, "AGENT_MEMORY_TERM_BLOOM_MODE=shadow") {
+		t.Fatalf("existing operator mode was not preserved: %q", merged)
 	}
 }
 

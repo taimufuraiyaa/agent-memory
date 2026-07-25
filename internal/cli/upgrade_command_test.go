@@ -1,10 +1,14 @@
 package cli
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/taimufuraiyaa/agent-memory/internal/core"
+	"github.com/taimufuraiyaa/agent-memory/internal/storage/sqlite"
 )
 
 func TestRunDashboardNPMCIRetriesAfterCleanup(t *testing.T) {
@@ -124,5 +128,77 @@ func TestUpgradeAllProjects(t *testing.T) {
 	}
 	if err2 != nil {
 		t.Errorf("proj2 rules not written: %v", err2)
+	}
+	if _, err := os.Stat(filepath.Join(dataDir, "proj1.db")); !os.IsNotExist(err) {
+		t.Fatalf("hooks-only upgrade mutated project database: %v", err)
+	}
+}
+
+func TestPrepareRegisteredTermIndexesContinuesAfterProjectFailure(t *testing.T) {
+	base := t.TempDir()
+	goodDB := filepath.Join(base, "good.db")
+	store, err := sqlite.Open(context.Background(), goodDB)
+	if err != nil {
+		t.Fatalf("open good db: %v", err)
+	}
+	if err := store.UpsertMemory(context.Background(), &core.MemoryEntry{
+		ID: "legacy", Type: core.SemanticMemory, Content: "#UpgradeReady", Workspace: "good",
+		Source: core.MemorySource{Type: core.SourceCodeAnalysis}, StorageTier: core.TierVector, Confidence: 0.9,
+	}); err != nil {
+		t.Fatalf("seed legacy memory: %v", err)
+	}
+	_ = store.Close()
+	badDB := filepath.Join(base, "bad.db")
+	if err := os.MkdirAll(badDB, 0o755); err != nil {
+		t.Fatalf("create invalid db path: %v", err)
+	}
+	registry := `{"projects":[` +
+		`{"name":"good","db_path":"` + goodDB + `","workspace_root":"` + base + `","created_at":"2026-01-01T00:00:00Z","last_used_at":"2026-01-01T00:00:00Z"},` +
+		`{"name":"bad","db_path":"` + badDB + `","workspace_root":"` + base + `","created_at":"2026-01-01T00:00:00Z","last_used_at":"2026-01-01T00:00:00Z"}]}`
+	if err := os.WriteFile(filepath.Join(base, "workspaces.json"), []byte(registry), 0o644); err != nil {
+		t.Fatalf("write registry: %v", err)
+	}
+
+	prepared, failures, err := prepareRegisteredTermIndexes(context.Background(), base)
+	if err != nil {
+		t.Fatalf("prepare registered indexes: %v", err)
+	}
+	if prepared["good"] == nil || !prepared["good"].Ready || prepared["good"].DistinctTerms == 0 {
+		t.Fatalf("healthy project was not prepared: %#v", prepared)
+	}
+	if failures["bad"] == "" {
+		t.Fatalf("invalid project failure was not reported: %#v", failures)
+	}
+}
+
+func TestUpgradeAddsShadowModeWithoutOverwritingOperatorChoice(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	envDir := filepath.Join(home, ".agent-memory")
+	if err := os.MkdirAll(envDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	envPath := filepath.Join(envDir, "agent-memory.env")
+	if err := os.WriteFile(envPath, []byte("export AGENT_MEMORY_ENABLED=1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, updated, err := ensureEnvVarIfPresent("AGENT_MEMORY_TERM_BLOOM_MODE", "shadow")
+	if err != nil || !updated {
+		t.Fatalf("add shadow mode: updated=%v err=%v", updated, err)
+	}
+	content, _ := os.ReadFile(envPath)
+	if !strings.Contains(string(content), `AGENT_MEMORY_TERM_BLOOM_MODE="shadow"`) {
+		t.Fatalf("shadow mode not added: %s", content)
+	}
+	if err := os.WriteFile(envPath, []byte("export AGENT_MEMORY_TERM_BLOOM_MODE=gate\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, updated, err = ensureEnvVarIfPresent("AGENT_MEMORY_TERM_BLOOM_MODE", "shadow")
+	if err != nil || updated {
+		t.Fatalf("operator choice should be preserved: updated=%v err=%v", updated, err)
+	}
+	content, _ = os.ReadFile(envPath)
+	if !strings.Contains(string(content), "AGENT_MEMORY_TERM_BLOOM_MODE=gate") {
+		t.Fatalf("gate choice was overwritten: %s", content)
 	}
 }

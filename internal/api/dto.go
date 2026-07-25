@@ -15,6 +15,7 @@ type WriteMemoryRequest struct {
 	Workspace string            `json:"workspace" validate:"required,min=1"`
 	Entities  []string          `json:"entities,omitempty"`
 	Tags      []string          `json:"tags,omitempty"`
+	Keywords  []string          `json:"keywords,omitempty" validate:"omitempty,max=3,dive,min=1,max=128"`
 	Outcome   *core.Outcome     `json:"outcome,omitempty"`
 	Source    core.MemorySource `json:"source" validate:"required"`
 }

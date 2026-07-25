@@ -18,6 +18,7 @@ func TestMemoryEntryJSONRoundTrip(t *testing.T) {
 		Source:         MemorySource{Type: SourceCodeAnalysis, FilePath: "src/main.go", LineRange: []int{10, 20}},
 		Entities:       []string{"OPS", "orders.events"},
 		Tags:           []string{"kafka"},
+		Keywords:       []MemoryTerm{{Term: "orders.api", Source: TermSourceExplicit}},
 		Confidence:     0.9,
 		CreatedAt:      now,
 		UpdatedAt:      now,
@@ -43,6 +44,9 @@ func TestMemoryEntryJSONRoundTrip(t *testing.T) {
 	}
 	if len(decoded.Source.LineRange) != 2 || decoded.Source.LineRange[0] != 10 || decoded.Source.LineRange[1] != 20 {
 		t.Fatalf("line range mismatch: %+v", decoded.Source.LineRange)
+	}
+	if len(decoded.Keywords) != 1 || decoded.Keywords[0].Term != "orders.api" {
+		t.Fatalf("keyword round trip mismatch: %+v", decoded.Keywords)
 	}
 }
 
@@ -71,5 +75,22 @@ func TestMemoryEntryValidate(t *testing.T) {
 		if err := invalid[i].Validate(); err == nil {
 			t.Fatalf("case %d expected validation error", i)
 		}
+	}
+}
+
+func TestMemoryEntryValidateRejectsMoreThanThreeKeywords(t *testing.T) {
+	entry := &MemoryEntry{
+		ID:          "m_001",
+		Type:        SemanticMemory,
+		Content:     "valid",
+		Workspace:   "ws",
+		Confidence:  0.5,
+		StorageTier: TierVector,
+		Keywords: []MemoryTerm{
+			{Term: "one"}, {Term: "two"}, {Term: "three"}, {Term: "four"},
+		},
+	}
+	if err := entry.Validate(); err == nil {
+		t.Fatal("expected keyword limit validation error")
 	}
 }

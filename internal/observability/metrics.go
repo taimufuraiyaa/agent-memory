@@ -23,10 +23,15 @@ type MetricsRegistry struct {
 	WriteEmbeddingSuccess  *prometheus.CounterVec
 
 	// Retrieval metrics
-	RetrievalTotal    *prometheus.CounterVec
-	RetrievalDuration *prometheus.HistogramVec
-	RetrievalHits     *prometheus.HistogramVec
-	RetrievalErrors   *prometheus.CounterVec
+	RetrievalTotal         *prometheus.CounterVec
+	RetrievalDuration      *prometheus.HistogramVec
+	RetrievalHits          *prometheus.HistogramVec
+	RetrievalErrors        *prometheus.CounterVec
+	TermBloomProbes        *prometheus.CounterVec
+	TermBloomMismatch      *prometheus.CounterVec
+	TermBloomShortCircuits *prometheus.CounterVec
+	TermBloomSize          *prometheus.GaugeVec
+	TermBloomFPP           *prometheus.GaugeVec
 
 	// Storage metrics
 	StorageOperations *prometheus.CounterVec
@@ -173,6 +178,41 @@ func newMetricsRegistry() *MetricsRegistry {
 				Help: "Total number of retrieval errors",
 			},
 			[]string{"workspace", "mode", "error_type"},
+		),
+		TermBloomProbes: promauto.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "agent_memory_term_bloom_probes_total",
+				Help: "Total exact-term Bloom probes by rollout mode and decision",
+			},
+			[]string{"workspace", "mode", "decision", "reason"},
+		),
+		TermBloomMismatch: promauto.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "agent_memory_term_bloom_shadow_mismatches_total",
+				Help: "Bloom negatives that contradicted canonical exact term matches",
+			},
+			[]string{"workspace", "operator"},
+		),
+		TermBloomShortCircuits: promauto.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "agent_memory_term_bloom_short_circuits_total",
+				Help: "Canonical exact-term lookups avoided by safe Bloom negatives",
+			},
+			[]string{"workspace", "operator"},
+		),
+		TermBloomSize: promauto.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Name: "agent_memory_term_bloom_size_bytes",
+				Help: "Persisted Bloom bitmap size by workspace",
+			},
+			[]string{"workspace"},
+		),
+		TermBloomFPP: promauto.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Name: "agent_memory_term_bloom_estimated_fpp",
+				Help: "Estimated Bloom false-positive probability by workspace",
+			},
+			[]string{"workspace"},
 		),
 
 		// Storage metrics

@@ -159,15 +159,12 @@ func observationsHandler(svc *Service) http.HandlerFunc {
 }
 
 // sessionsHandler implements GET /api/v1/sessions: lists recent sessions for
-// a workspace, gated behind observeEnabled().
+// a workspace. Reading existing session history remains available when capture
+// is disabled; the capture flag gates writes, not inspection.
 func sessionsHandler(svc *Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			writeErr(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
-			return
-		}
-		if !observeEnabled() {
-			writeErr(w, http.StatusNotFound, "not_found", "route not enabled")
 			return
 		}
 		ws := strings.TrimSpace(r.URL.Query().Get("workspace"))

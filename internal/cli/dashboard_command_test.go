@@ -1,9 +1,15 @@
 package cli
 
 import (
+	"bytes"
+	"context"
+	"net"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
+
+	"github.com/spf13/cobra"
 )
 
 func TestBuildDashboardProcessArgsOmitsWorkspaceWhenEmpty(t *testing.T) {
@@ -110,6 +116,69 @@ func TestLooksLikeDashboardCommandLine(t *testing.T) {
 	}
 	if looksLikeDashboardCommandLine("/path/agent-memory serve --no-open --addr :3211") {
 		t.Fatalf("expected serve command line not to match dashboard detector")
+	}
+}
+
+func TestEmbeddedDashboardWrapperUsesBundledAssets(t *testing.T) {
+	if !(&embeddedDashboardWrapper{}).hasAssets() {
+		t.Fatal("expected embedded dashboard assets to be available")
+	}
+}
+
+func TestEmbeddedDashboardPublishesBackgroundStartHandshake(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer ln.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	pidPath := filepath.Join(t.TempDir(), "dashboard.pid")
+	cfg := runtimeConfig{workspace: "agent-memory"}
+	cmd := &cobra.Command{}
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	cmd.SetOut(&stdout)
+	cmd.SetErr(&stderr)
+	done := make(chan error, 1)
+	go func() {
+		done <- tryServeEmbeddedDashboard(
+			cmd,
+			ctx,
+			cfg,
+			ln,
+			"http://127.0.0.1:3210",
+			true,
+			pidPath,
+		)
+	}()
+
+	var pid dashboardPID
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		pid, err = readDashboardPID(pidPath)
+		if err == nil && pid.URL != "" {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if err != nil {
+		t.Fatalf("read handshake: %v", err)
+	}
+	if pid.PID != os.Getpid() {
+		t.Fatalf("expected child pid %d, got %d", os.Getpid(), pid.PID)
+	}
+	if pid.URL != "http://127.0.0.1:3210/dashboard/" {
+		t.Fatalf("expected dashboard URL in handshake, got %q", pid.URL)
+	}
+
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatalf("serve embedded dashboard: %v", err)
+	}
+	if _, err := os.Stat(pidPath); !os.IsNotExist(err) {
+		t.Fatalf("expected handshake file removal after shutdown, got %v", err)
 	}
 }
 

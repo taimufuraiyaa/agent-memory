@@ -174,6 +174,7 @@ func runInstall(cfg config) {
 			"AGENT_MEMORY_UPGRADE_YES":     "1",
 			"AGENT_MEMORY_OBSERVE_ENABLED": "1",
 			"AGENT_MEMORY_ENABLED":         "1",
+			"AGENT_MEMORY_TERM_BLOOM_MODE": "shadow",
 		}
 		if strings.TrimSpace(runtimePath) != "" {
 			vars["AGENT_MEMORY_ONNX_RUNTIME_PATH"] = runtimePath
@@ -503,6 +504,9 @@ func mergeEnvFile(path string, vars map[string]string) (string, error) {
 		}
 		newLine := formatEnvAssignment(k, v)
 		if at, ok := index[k]; ok {
+			if k == "AGENT_MEMORY_TERM_BLOOM_MODE" {
+				continue
+			}
 			lines[at] = newLine
 		} else {
 			lines = append(lines, newLine)
@@ -512,6 +516,7 @@ func mergeEnvFile(path string, vars map[string]string) (string, error) {
 
 	out := strings.TrimRight(strings.Join(lines, "\n"), "\n") + "\n"
 	out = amconfig.EnsureAdaptiveTuningEnvGuidance(out)
+	out = amconfig.EnsureTermBloomEnvGuidance(out)
 	return out, nil
 }
 

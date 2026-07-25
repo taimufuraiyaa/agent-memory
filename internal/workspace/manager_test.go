@@ -7,6 +7,9 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/taimufuraiyaa/agent-memory/internal/core"
+	"github.com/taimufuraiyaa/agent-memory/internal/storage/sqlite"
 )
 
 func init() {
@@ -455,6 +458,11 @@ func TestCursorRuleContentUsesStagedRetrieval(t *testing.T) {
 			t.Fatalf("expected %q in cursor rule content, got %q", want, content)
 		}
 	}
+	for _, want := range []string{"Choose up to three", "names, terms, or helpful locators", "Do not copy the full content"} {
+		if !strings.Contains(content, want) {
+			t.Fatalf("expected keyword guidance %q, got %q", want, content)
+		}
+	}
 }
 
 func TestManagerInitConcurrentSafety(t *testing.T) {
@@ -485,6 +493,103 @@ func TestManagerInitConcurrentSafety(t *testing.T) {
 	wg.Wait()
 	if successes != 1 {
 		t.Fatalf("expected exactly one successful init, got %d (failures=%d)", successes, failures)
+	}
+}
+
+func TestInitPublishesReadyTermIndex(t *testing.T) {
+	base := t.TempDir()
+	cwd := t.TempDir()
+	mgr, err := NewManager(base)
+	if err != nil {
+		t.Fatalf("new manager: %v", err)
+	}
+	out, err := mgr.Init(context.Background(), InitOptions{CWD: cwd, ProjectName: "term-ready", NoRule: true})
+	if err != nil {
+		t.Fatalf("init: %v", err)
+	}
+	if out.TermIndex == nil || !out.TermIndex.Ready || out.TermIndex.RebuildRequired {
+		t.Fatalf("init did not report a ready term index: %#v", out)
+	}
+	store, err := sqlite.Open(context.Background(), out.DBPath)
+	if err != nil {
+		t.Fatalf("open initialized db: %v", err)
+	}
+	defer func() { _ = store.Close() }()
+	state, err := store.GetTermIndexState(context.Background(), "term-ready")
+	if err != nil || state == nil || state.State != sqlite.TermIndexReady || state.CorpusGeneration != state.FilterGeneration {
+		t.Fatalf("initialized term index is not ready: state=%#v err=%v", state, err)
+	}
+}
+
+func TestReinstallBackfillsAndRebuildsTermIndex(t *testing.T) {
+	base := t.TempDir()
+	cwd := t.TempDir()
+	mgr, err := NewManager(base)
+	if err != nil {
+		t.Fatalf("new manager: %v", err)
+	}
+	initialized, err := mgr.Init(context.Background(), InitOptions{CWD: cwd, ProjectName: "term-reinstall", NoRule: true})
+	if err != nil {
+		t.Fatalf("init: %v", err)
+	}
+	store, err := sqlite.Open(context.Background(), initialized.DBPath)
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	if err := store.UpsertMemory(context.Background(), &core.MemoryEntry{
+		ID: "legacy-memory", Type: core.SemanticMemory, Content: "The #UpgradePath is ready", Workspace: "term-reinstall",
+		Source: core.MemorySource{Type: core.SourceCodeAnalysis}, StorageTier: core.TierVector, Confidence: 0.9,
+	}); err != nil {
+		t.Fatalf("seed pre-feature memory: %v", err)
+	}
+	_ = store.Close()
+
+	reinstalled, err := mgr.Reinstall(context.Background(), ReinstallOptions{CWD: cwd, ProjectName: "term-reinstall", Force: true, IDEs: []string{"cursor"}})
+	if err != nil {
+		t.Fatalf("reinstall: %v", err)
+	}
+	if reinstalled.TermIndex == nil || !reinstalled.TermIndex.Ready || reinstalled.TermIndex.DistinctTerms == 0 {
+		t.Fatalf("reinstall did not prepare term index: %#v", reinstalled)
+	}
+	store, err = sqlite.Open(context.Background(), initialized.DBPath)
+	if err != nil {
+		t.Fatalf("reopen db: %v", err)
+	}
+	defer func() { _ = store.Close() }()
+	terms, err := store.ListMemoryTerms(context.Background(), "term-reinstall", "legacy-memory")
+	if err != nil || len(terms) == 0 || terms[0].Term != "upgradepath" {
+		t.Fatalf("legacy memory was not backfilled: terms=%#v err=%v", terms, err)
+	}
+}
+
+func TestReuseInitRepreparesExistingTermIndex(t *testing.T) {
+	base := t.TempDir()
+	cwd := t.TempDir()
+	mgr, err := NewManager(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	initialized, err := mgr.Init(context.Background(), InitOptions{CWD: cwd, ProjectName: "term-reuse", NoRule: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	store, err := sqlite.Open(context.Background(), initialized.DBPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.UpsertMemory(context.Background(), &core.MemoryEntry{
+		ID: "reuse-memory", Type: core.SemanticMemory, Content: "#ReuseReady", Workspace: "term-reuse",
+		Source: core.MemorySource{Type: core.SourceCodeAnalysis}, StorageTier: core.TierVector, Confidence: 0.9,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	_ = store.Close()
+	reused, err := mgr.Init(context.Background(), InitOptions{CWD: cwd, ProjectName: "term-reuse", Reuse: true, NoRule: true})
+	if err != nil {
+		t.Fatalf("reuse init: %v", err)
+	}
+	if reused.TermIndex == nil || !reused.TermIndex.Ready || reused.TermIndex.DistinctTerms == 0 {
+		t.Fatalf("reuse init did not reprepare term index: %#v", reused)
 	}
 }
 

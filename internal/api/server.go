@@ -39,6 +39,7 @@ type workspaceAssets struct {
 	Writer      *engine.WritePipeline
 	Retrieval   *engine.RetrievalEngine
 	Application *application.MemoryService
+	Notes       *application.NoteService
 	Clipper     *engine.TokenClipper
 }
 
@@ -98,6 +99,7 @@ func (s *Service) resolve(ctx context.Context, ws string) (*workspaceAssets, err
 		Writer:      writer,
 		Retrieval:   retrieval,
 		Application: application.NewMemoryService(store, writer, retrieval),
+		Notes:       application.NewNoteService(store, writer),
 		Clipper:     engine.NewTokenClipper(nil),
 	}
 	if s.stores == nil {
@@ -225,6 +227,18 @@ func NewMux(svc *Service) *http.ServeMux {
 	mux.HandleFunc("/api/v1/memories/feedback", memoriesFeedbackHandler(svc))
 	mux.HandleFunc("/api/v1/memories/pin", memoriesPinHandler(svc))
 	mux.HandleFunc("/api/v1/memories/delete", memoriesDeleteHandler(svc))
+
+	mux.HandleFunc("/api/v1/notes", notesListHandler(svc))
+	mux.HandleFunc("/api/v1/notes/get", noteGetHandler(svc))
+	mux.HandleFunc("/api/v1/notes/create", noteCreateHandler(svc))
+	mux.HandleFunc("/api/v1/notes/update", noteUpdateHandler(svc))
+	mux.HandleFunc("/api/v1/notes/trash", noteTrashHandler(svc))
+	mux.HandleFunc("/api/v1/notes/restore", noteRestoreHandler(svc))
+	mux.HandleFunc("/api/v1/notes/delete", noteDeleteHandler(svc))
+	mux.HandleFunc("/api/v1/notes/revisions", noteRevisionsHandler(svc))
+	mux.HandleFunc("/api/v1/notes/revisions/restore", noteRevisionRestoreHandler(svc))
+	mux.HandleFunc("/api/v1/notes/backlinks", noteBacklinksHandler(svc))
+	mux.HandleFunc("/api/v1/notes/index/retry", noteIndexRetryHandler(svc))
 
 	mux.HandleFunc("/api/v1/memories/search", searchHandler(svc))
 	mux.HandleFunc("/api/v1/memories/recent", memoriesRecentHandler(svc))

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/taimufuraiyaa/agent-memory/internal/application"
 	"github.com/taimufuraiyaa/agent-memory/internal/core"
 	"github.com/taimufuraiyaa/agent-memory/internal/engine"
 )
@@ -28,6 +29,7 @@ func searchHandler(svc *Service) http.HandlerFunc {
 			TopK        int               `json:"top_k"`
 			TokenBudget int               `json:"token_budget"`
 			Mode        string            `json:"mode"`
+			Operator    string            `json:"operator"`
 			Depth       int               `json:"depth"`
 			Explain     bool              `json:"explain"`
 			Tiers       []string          `json:"tiers"`
@@ -92,7 +94,7 @@ func searchHandler(svc *Service) http.HandlerFunc {
 			mode = engine.ModeSearch
 		}
 		switch mode {
-		case engine.ModeSearch, engine.ModeRecall, engine.ModeRelate, engine.ModeOutcomes, engine.ModeGraphExpand:
+		case engine.ModeSearch, engine.ModeRecall, engine.ModeRelate, engine.ModeOutcomes, engine.ModeGraphExpand, engine.ModeTerms:
 		default:
 			writeErr(w, http.StatusBadRequest, "validation", "invalid mode")
 			return
@@ -206,6 +208,54 @@ func searchHandler(svc *Service) http.HandlerFunc {
 				MinTotalScore:       minTotalScore,
 				RelativeScoreCutoff: relativeCutoff,
 			},
+		}
+		if mode == engine.ModeTerms {
+			if ws == allProjectsScope {
+				writeErr(w, http.StatusBadRequest, "validation", "term search requires one project workspace")
+				return
+			}
+			out, err := assets.Application.SearchTerms(r.Context(), application.TermSearchOptions{
+				Workspace: ws,
+				Query:     req.Query,
+				Operator:  application.TermOperator(strings.ToLower(strings.TrimSpace(req.Operator))),
+				TopK:      topK,
+				Filters:   opt.Filters,
+			})
+			if err != nil {
+				writeErr(w, http.StatusBadRequest, "validation", err.Error())
+				return
+			}
+			results := make([]map[string]any, 0, len(out.Hits))
+			totalTokens := 0
+			for _, hit := range out.Hits {
+				totalTokens += len(strings.Fields(hit.Memory.Content))
+				results = append(results, map[string]any{
+					"id":            hit.Memory.ID,
+					"type":          hit.Memory.Type,
+					"content":       hit.Memory.Content,
+					"workspace":     hit.Memory.Workspace,
+					"keywords":      hit.Memory.Keywords,
+					"matched_terms": hit.MatchedTerms,
+					"match_count":   hit.MatchCount,
+					"source_weight": hit.SourceWeight,
+					"confidence":    hit.Memory.Confidence,
+					"storage_tier":  hit.Memory.StorageTier,
+					"updated_at":    hit.Memory.UpdatedAt,
+				})
+			}
+			writeOK(w, http.StatusOK, map[string]any{
+				"request_id":      requestID,
+				"results":         results,
+				"terms":           out.Terms,
+				"operator":        out.Operator,
+				"strategy":        out.Strategy,
+				"prefilter":       out.Prefilter,
+				"total_tokens":    totalTokens,
+				"search_time_ms":  time.Since(started).Milliseconds(),
+				"workspace":       ws,
+				"requested_query": req.Query,
+			})
+			return
 		}
 		var (
 			hits           []engine.RetrievalHit

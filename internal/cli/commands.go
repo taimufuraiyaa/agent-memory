@@ -38,6 +38,7 @@ func addCommonFlags(cmd *cobra.Command, f *commonFlags) {
 func newWriteCommand() *cobra.Command {
 	var flags commonFlags
 	var mType, content string
+	var keywords []string
 	cmd := &cobra.Command{
 		Use:   "write",
 		Short: "Write one memory entry",
@@ -87,8 +88,9 @@ The memory will be automatically:
 			if cfg.apiURL != "" {
 				var out any
 				err := postAPI(ctx, cfg.apiURL, "/api/v1/memories/write", map[string]any{
-					"type":    mType,
-					"content": content,
+					"type":     mType,
+					"content":  content,
+					"keywords": keywords,
 				}, &out)
 				if err != nil {
 					return err
@@ -111,6 +113,7 @@ The memory will be automatically:
 				Workspace: cfg.workspace,
 				Type:      mt,
 				Content:   content,
+				Keywords:  keywords,
 				Source:    core.MemorySource{Type: core.SourceUserInput},
 				Mode:      engine.ExtractFast,
 			})
@@ -123,6 +126,7 @@ The memory will be automatically:
 	addCommonFlags(cmd, &flags)
 	cmd.Flags().StringVar(&mType, "type", "semantic", "Memory type: episodic|semantic|procedural|outcome")
 	cmd.Flags().StringVar(&content, "content", "", "Memory content")
+	cmd.Flags().StringSliceVar(&keywords, "keyword", nil, "Exact locator keyword (repeatable, maximum 3)")
 	_ = cmd.MarkFlagRequired("content")
 	return cmd
 }
@@ -145,6 +149,7 @@ func newSearchCommand() *cobra.Command {
 	var from, to string
 	var tokenBudget int
 	var depth int
+	var operator string
 	cmd := &cobra.Command{
 		Use:   "search",
 		Short: "Semantic multi-signal search",
@@ -265,6 +270,16 @@ Use --explain to see per-signal score breakdowns.`,
 				}
 				dateTo = &t
 			}
+			retrievalFilters := engine.RetrievalFilters{
+				Types:         typed,
+				Tiers:         tiered,
+				OutcomeResult: outcome,
+				MinConfidence: minC,
+				MinDecayScore: minD,
+				Entities:      entities,
+				DateFrom:      dateFrom,
+				DateTo:        dateTo,
+			}
 			if cfg.apiURL != "" {
 				filters := map[string]any{}
 				if len(typed) > 0 {
@@ -303,6 +318,7 @@ Use --explain to see per-signal score breakdowns.`,
 					"top_k":        topK,
 					"token_budget": tokenBudget,
 					"mode":         mode,
+					"operator":     operator,
 					"explain":      explain,
 				}
 				if len(filters) > 0 {
@@ -314,6 +330,25 @@ Use --explain to see per-signal score breakdowns.`,
 					return err
 				}
 				return writeSuccessEnvelope(cmd.OutOrStdout(), "search", out)
+			}
+			if engine.RetrievalMode(strings.ToLower(strings.TrimSpace(mode))) == engine.ModeTerms {
+				store, err := openStore(ctx, cfg)
+				if err != nil {
+					return err
+				}
+				defer func() { _ = store.Close() }()
+				app := application.NewMemoryService(store, nil, nil)
+				res, err := app.SearchTerms(ctx, application.TermSearchOptions{
+					Workspace: cfg.workspace,
+					Query:     query,
+					TopK:      topK,
+					Operator:  application.TermOperator(strings.ToLower(strings.TrimSpace(operator))),
+					Filters:   retrievalFilters,
+				})
+				if err != nil {
+					return err
+				}
+				return writeSuccessEnvelope(cmd.OutOrStdout(), "search", res)
 			}
 			store, provider, err := openDeps(ctx, cfg)
 			if err != nil {
@@ -333,16 +368,7 @@ Use --explain to see per-signal score breakdowns.`,
 				TopK:      topK,
 				Mode:      engine.RetrievalMode(mode),
 				Depth:     depth,
-				Filters: engine.RetrievalFilters{
-					Types:         typed,
-					Tiers:         tiered,
-					OutcomeResult: outcome,
-					MinConfidence: minC,
-					MinDecayScore: minD,
-					Entities:      entities,
-					DateFrom:      dateFrom,
-					DateTo:        dateTo,
-				},
+				Filters:   retrievalFilters,
 				Policy: engine.RetrievalPolicy{
 					MinSemanticScore:    floatPtrIfChanged(cmd, "min-semantic-score", minSemanticScore),
 					MinTotalScore:       floatPtrIfChanged(cmd, "min-total-score", minTotalScore),
@@ -358,7 +384,8 @@ Use --explain to see per-signal score breakdowns.`,
 	addCommonFlags(cmd, &flags)
 	cmd.Flags().StringVar(&query, "query", "", "Search query")
 	cmd.Flags().IntVar(&topK, "top-k", 10, "Top K results")
-	cmd.Flags().StringVar(&mode, "mode", string(engine.ModeSearch), "Mode: search|recall|relate|outcomes|graph-expand")
+	cmd.Flags().StringVar(&mode, "mode", string(engine.ModeSearch), "Mode: search|recall|relate|outcomes|graph-expand|terms")
+	cmd.Flags().StringVar(&operator, "operator", string(application.TermOperatorAND), "Term operator for mode=terms: and|or")
 	cmd.Flags().IntVar(&depth, "depth", 2, "Graph expansion depth limit (mode=graph-expand only)")
 	cmd.Flags().BoolVar(&explain, "explain", false, "Include per-signal score breakdown")
 	cmd.Flags().StringSliceVar(&tiers, "tier", nil, "Filter by storage tier (repeatable): markdown|vector|vector+graph|document")

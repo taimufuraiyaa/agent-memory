@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/taimufuraiyaa/agent-memory/internal/storage/sqlite"
 )
 
 func TestInstallCommandBasic(t *testing.T) {
@@ -72,6 +74,19 @@ func TestInstallCommandBasic(t *testing.T) {
 	envContent := string(b)
 	if !strings.Contains(envContent, "AGENT_MEMORY_ENABLED") {
 		t.Fatalf("expected AGENT_MEMORY_ENABLED in env file, got: %s", envContent)
+	}
+	if !strings.Contains(envContent, `AGENT_MEMORY_TERM_BLOOM_MODE="shadow"`) {
+		t.Fatalf("expected safe term Bloom rollout mode in env file, got: %s", envContent)
+	}
+
+	store, err := sqlite.Open(context.Background(), filepath.Join(dataDir, "test-install-proj.db"))
+	if err != nil {
+		t.Fatalf("open installed workspace db: %v", err)
+	}
+	defer func() { _ = store.Close() }()
+	state, err := store.GetTermIndexState(context.Background(), "test-install-proj")
+	if err != nil || state == nil || state.State != sqlite.TermIndexReady {
+		t.Fatalf("install did not prepare ready term index: state=%#v err=%v", state, err)
 	}
 
 	// An explicit non-Codex IDE selection must not mutate the user's global

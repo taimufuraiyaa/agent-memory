@@ -129,6 +129,36 @@ func TestObserveRejectsInvalidTimestamp(t *testing.T) {
 	}
 }
 
+func TestSessionsRemainReadableWhenObservationCaptureIsDisabled(t *testing.T) {
+	t.Setenv("AGENT_MEMORY_OBSERVE_ENABLED", "false")
+
+	baseDir := t.TempDir()
+	modelDir := filepath.Join(t.TempDir(), "model")
+	if err := os.MkdirAll(modelDir, 0o755); err != nil {
+		t.Fatalf("mkdir model: %v", err)
+	}
+	provider, err := embeddings.NewLocalProvider(modelDir)
+	if err != nil {
+		t.Fatalf("provider: %v", err)
+	}
+	svc := &Service{
+		Workspace:         "ws",
+		BaseDir:           baseDir,
+		EmbeddingProvider: provider,
+	}
+	ts := httptest.NewServer(NewMux(svc))
+	defer ts.Close()
+
+	res, err := http.Get(ts.URL + "/api/v1/sessions?workspace=ws&limit=12")
+	if err != nil {
+		t.Fatalf("get sessions: %v", err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("expected sessions to remain readable, got status %d", res.StatusCode)
+	}
+}
+
 func TestObservePromotionIsIdempotent(t *testing.T) {
 	t.Setenv("AGENT_MEMORY_OBSERVE_ENABLED", "true")
 

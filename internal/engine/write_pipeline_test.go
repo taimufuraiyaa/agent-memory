@@ -187,6 +187,63 @@ func TestWritePipelineDedupByHash(t *testing.T) {
 	}
 }
 
+func TestWritePipelinePersistsNormalizedExplicitKeywords(t *testing.T) {
+	store := mustOpenStore(t)
+	t.Cleanup(func() { _ = store.Close() })
+
+	p := NewWritePipeline(store)
+	result, err := p.Write(context.Background(), WriteInput{
+		Workspace: "ws",
+		Type:      core.SemanticMemory,
+		Content:   "Bloom filtering avoids unnecessary exact term lookups.",
+		Keywords:  []string{"#BloomFilter", "SQLite"},
+		Source:    core.MemorySource{Type: core.SourceCodeAnalysis},
+	})
+	if err != nil {
+		t.Fatalf("write failed: %v", err)
+	}
+
+	terms, err := store.ListMemoryTerms(context.Background(), "ws", result.ID)
+	if err != nil {
+		t.Fatalf("list terms: %v", err)
+	}
+	if len(terms) != 2 || terms[0].Term != "bloomfilter" || terms[1].Term != "sqlite" {
+		t.Fatalf("unexpected persisted terms: %#v", terms)
+	}
+	state, err := store.GetTermIndexState(context.Background(), "ws")
+	if err != nil {
+		t.Fatalf("get term index state: %v", err)
+	}
+	if state == nil || state.State != sqlite.TermIndexDirty || state.CorpusGeneration == 0 {
+		t.Fatalf("term write did not dirty corpus generation: %#v", state)
+	}
+}
+
+func TestWritePipelineUsesDeterministicKeywordFallback(t *testing.T) {
+	store := mustOpenStore(t)
+	t.Cleanup(func() { _ = store.Close() })
+
+	p := NewWritePipeline(store)
+	result, err := p.Write(context.Background(), WriteInput{
+		Workspace: "ws",
+		Type:      core.SemanticMemory,
+		Content:   "The #HotPath belongs to Orders.API.",
+		Entities:  []string{"Payment Gateway"},
+		Tags:      []string{"pinned"},
+		Source:    core.MemorySource{Type: core.SourceCodeAnalysis},
+	})
+	if err != nil {
+		t.Fatalf("write failed: %v", err)
+	}
+	terms, err := store.ListMemoryTerms(context.Background(), "ws", result.ID)
+	if err != nil {
+		t.Fatalf("list terms: %v", err)
+	}
+	if len(terms) != 3 || terms[0].Term != "hotpath" || terms[1].Term != "payment" || terms[2].Term != "gateway" {
+		t.Fatalf("unexpected fallback terms: %#v", terms)
+	}
+}
+
 func TestWritePipelineDedupByHashWithEmbedder(t *testing.T) {
 	store := mustOpenStore(t)
 	t.Cleanup(func() { _ = store.Close() })

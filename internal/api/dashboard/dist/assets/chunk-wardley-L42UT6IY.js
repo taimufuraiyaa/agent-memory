@@ -29982,7 +29982,7 @@ var initializers = {
     const { createInfoServices: createInfoServices2 } = await __vitePreload(async () => {
       const { createInfoServices: createInfoServices22 } = await Promise.resolve().then(() => infoJ43DQDTF);
       return { createInfoServices: createInfoServices22 };
-    }, true ? void 0 : void 0);
+    }, true ? void 0 : void 0, import.meta.url);
     const parser = createInfoServices2().Info.parser.LangiumParser;
     parsers.info = parser;
   }, "info"),
@@ -29990,7 +29990,7 @@ var initializers = {
     const { createPacketServices: createPacketServices2 } = await __vitePreload(async () => {
       const { createPacketServices: createPacketServices22 } = await Promise.resolve().then(() => packetYPE3B663);
       return { createPacketServices: createPacketServices22 };
-    }, true ? void 0 : void 0);
+    }, true ? void 0 : void 0, import.meta.url);
     const parser = createPacketServices2().Packet.parser.LangiumParser;
     parsers.packet = parser;
   }, "packet"),
@@ -29998,7 +29998,7 @@ var initializers = {
     const { createPieServices: createPieServices2 } = await __vitePreload(async () => {
       const { createPieServices: createPieServices22 } = await Promise.resolve().then(() => pieLRSECV5Y);
       return { createPieServices: createPieServices22 };
-    }, true ? void 0 : void 0);
+    }, true ? void 0 : void 0, import.meta.url);
     const parser = createPieServices2().Pie.parser.LangiumParser;
     parsers.pie = parser;
   }, "pie"),
@@ -30006,7 +30006,7 @@ var initializers = {
     const { createTreeViewServices: createTreeViewServices2 } = await __vitePreload(async () => {
       const { createTreeViewServices: createTreeViewServices22 } = await Promise.resolve().then(() => treeViewBLDUP644);
       return { createTreeViewServices: createTreeViewServices22 };
-    }, true ? void 0 : void 0);
+    }, true ? void 0 : void 0, import.meta.url);
     const parser = createTreeViewServices2().TreeView.parser.LangiumParser;
     parsers.treeView = parser;
   }, "treeView"),
@@ -30014,7 +30014,7 @@ var initializers = {
     const { createArchitectureServices: createArchitectureServices2 } = await __vitePreload(async () => {
       const { createArchitectureServices: createArchitectureServices22 } = await Promise.resolve().then(() => architecture7EHR7CIX);
       return { createArchitectureServices: createArchitectureServices22 };
-    }, true ? void 0 : void 0);
+    }, true ? void 0 : void 0, import.meta.url);
     const parser = createArchitectureServices2().Architecture.parser.LangiumParser;
     parsers.architecture = parser;
   }, "architecture"),
@@ -30022,7 +30022,7 @@ var initializers = {
     const { createGitGraphServices: createGitGraphServices2 } = await __vitePreload(async () => {
       const { createGitGraphServices: createGitGraphServices22 } = await Promise.resolve().then(() => gitGraphWXDBUCRP);
       return { createGitGraphServices: createGitGraphServices22 };
-    }, true ? void 0 : void 0);
+    }, true ? void 0 : void 0, import.meta.url);
     const parser = createGitGraphServices2().GitGraph.parser.LangiumParser;
     parsers.gitGraph = parser;
   }, "gitGraph"),
@@ -30030,7 +30030,7 @@ var initializers = {
     const { createEventModelingServices: createEventModelingServices2 } = await __vitePreload(async () => {
       const { createEventModelingServices: createEventModelingServices22 } = await Promise.resolve().then(() => eventmodelingFCH6USID);
       return { createEventModelingServices: createEventModelingServices22 };
-    }, true ? void 0 : void 0);
+    }, true ? void 0 : void 0, import.meta.url);
     const parser = createEventModelingServices2().EventModel.parser.LangiumParser;
     parsers.eventmodeling = parser;
   }, "eventmodeling"),
@@ -30038,7 +30038,7 @@ var initializers = {
     const { createRadarServices: createRadarServices2 } = await __vitePreload(async () => {
       const { createRadarServices: createRadarServices22 } = await Promise.resolve().then(() => radarGUYGQ44K);
       return { createRadarServices: createRadarServices22 };
-    }, true ? void 0 : void 0);
+    }, true ? void 0 : void 0, import.meta.url);
     const parser = createRadarServices2().Radar.parser.LangiumParser;
     parsers.radar = parser;
   }, "radar"),
@@ -30046,7 +30046,7 @@ var initializers = {
     const { createTreemapServices: createTreemapServices2 } = await __vitePreload(async () => {
       const { createTreemapServices: createTreemapServices22 } = await Promise.resolve().then(() => treemapLRROVOQU);
       return { createTreemapServices: createTreemapServices22 };
-    }, true ? void 0 : void 0);
+    }, true ? void 0 : void 0, import.meta.url);
     const parser = createTreemapServices2().Treemap.parser.LangiumParser;
     parsers.treemap = parser;
   }, "treemap"),
@@ -30054,7 +30054,7 @@ var initializers = {
     const { createWardleyServices: createWardleyServices2 } = await __vitePreload(async () => {
       const { createWardleyServices: createWardleyServices22 } = await Promise.resolve().then(() => wardleyL42UT6IY);
       return { createWardleyServices: createWardleyServices22 };
-    }, true ? void 0 : void 0);
+    }, true ? void 0 : void 0, import.meta.url);
     const parser = createWardleyServices2().Wardley.parser.LangiumParser;
     parsers.wardley = parser;
   }, "wardley")

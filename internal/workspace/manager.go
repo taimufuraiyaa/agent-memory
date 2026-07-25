@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/taimufuraiyaa/agent-memory/internal/application"
 	"github.com/taimufuraiyaa/agent-memory/internal/embeddings"
 	"github.com/taimufuraiyaa/agent-memory/internal/engine"
 	"github.com/taimufuraiyaa/agent-memory/internal/storage/sqlite"
@@ -50,12 +51,13 @@ type InitOptions struct {
 }
 
 type InitResult struct {
-	Project         string   `json:"project"`
-	DBPath          string   `json:"db_path"`
-	CursorRule      string   `json:"cursor_rule,omitempty"`
-	RuleFiles       []string `json:"rule_files,omitempty"`
-	StudyRun        bool     `json:"study_run"`
-	MemoriesCreated int      `json:"memories_created,omitempty"`
+	Project         string                `json:"project"`
+	DBPath          string                `json:"db_path"`
+	CursorRule      string                `json:"cursor_rule,omitempty"`
+	RuleFiles       []string              `json:"rule_files,omitempty"`
+	StudyRun        bool                  `json:"study_run"`
+	MemoriesCreated int                   `json:"memories_created,omitempty"`
+	TermIndex       *TermIndexSetupResult `json:"term_index,omitempty"`
 }
 
 type RenameOptions struct {
@@ -101,6 +103,20 @@ type ReinstallResult struct {
 	Project    string                 `json:"project"`
 	DBPath     string                 `json:"db_path"`
 	AgentFiles *WriteAgentFilesResult `json:"agent_files"`
+	TermIndex  *TermIndexSetupResult  `json:"term_index,omitempty"`
+}
+
+// TermIndexSetupResult is safe lifecycle metadata; it excludes raw terms and bitmap bytes.
+type TermIndexSetupResult struct {
+	Ready           bool   `json:"ready"`
+	RebuildRequired bool   `json:"rebuild_required"`
+	RebuildReason   string `json:"rebuild_reason,omitempty"`
+	Scanned         int    `json:"scanned"`
+	Indexed         int    `json:"indexed"`
+	Skipped         int    `json:"skipped"`
+	Failed          int    `json:"failed"`
+	DistinctTerms   int64  `json:"distinct_terms"`
+	Generation      int64  `json:"generation"`
 }
 
 func NewManager(baseDir string) (*Manager, error) {
@@ -188,7 +204,6 @@ func detectWorkspaceFromCWD(start string) (workspace string, root string, ok boo
 }
 
 func (m *Manager) Reinstall(ctx context.Context, opt ReinstallOptions) (*ReinstallResult, error) {
-	_ = ctx
 	root := FindProjectRoot(opt.CWD)
 	name := strings.TrimSpace(opt.ProjectName)
 	if name == "" {
@@ -215,6 +230,10 @@ func (m *Manager) Reinstall(ctx context.Context, opt ReinstallOptions) (*Reinsta
 	if !fileExists(p.DBPath) {
 		return nil, fmt.Errorf("db file missing: %s", p.DBPath)
 	}
+	termIndex, err := prepareTermIndexPath(ctx, p.DBPath, name)
+	if err != nil {
+		return nil, fmt.Errorf("prepare term index: %w", err)
+	}
 	af, err := WriteAgentFiles(WriteAgentFilesOptions{
 		CWD:       root,
 		Workspace: name,
@@ -225,7 +244,7 @@ func (m *Manager) Reinstall(ctx context.Context, opt ReinstallOptions) (*Reinsta
 	if err != nil {
 		return nil, err
 	}
-	return &ReinstallResult{Project: name, DBPath: p.DBPath, AgentFiles: af}, nil
+	return &ReinstallResult{Project: name, DBPath: p.DBPath, AgentFiles: af, TermIndex: termIndex}, nil
 }
 
 func (m *Manager) Init(ctx context.Context, opt InitOptions) (*InitResult, error) {
@@ -249,7 +268,11 @@ func (m *Manager) Init(ctx context.Context, opt InitOptions) (*InitResult, error
 				return nil, err
 			}
 		}
-		if _, err := sqlite.Open(ctx, dbPath); err != nil {
+		store, err := sqlite.Open(ctx, dbPath)
+		if err != nil {
+			return nil, err
+		}
+		if err := store.Close(); err != nil {
 			return nil, err
 		}
 		root := FindProjectRoot(opt.CWD)
@@ -371,6 +394,11 @@ func (m *Manager) Init(ctx context.Context, opt InitOptions) (*InitResult, error
 			out.StudyRun = true
 			out.MemoriesCreated = len(sr.WrittenIDs)
 		}
+		termIndex, err := prepareTermIndexPath(ctx, dbPath, name)
+		if err != nil {
+			return nil, fmt.Errorf("prepare term index: %w", err)
+		}
+		out.TermIndex = termIndex
 		return out, nil
 	})
 	if err != nil {
@@ -378,6 +406,64 @@ func (m *Manager) Init(ctx context.Context, opt InitOptions) (*InitResult, error
 	}
 	out, _ := v.(*InitResult)
 	return out, nil
+}
+
+// PrepareTermIndex migrates, backfills, and rebuilds one registered project.
+func (m *Manager) PrepareTermIndex(ctx context.Context, projectName string) (*TermIndexSetupResult, error) {
+	name, err := ValidateProjectName(projectName)
+	if err != nil {
+		return nil, err
+	}
+	reg, err := m.readRegistry()
+	if err != nil {
+		return nil, err
+	}
+	project := findProject(reg, name)
+	if project == nil {
+		return nil, ErrProjectNotRegistered
+	}
+	return prepareTermIndexPath(ctx, project.DBPath, name)
+}
+
+// PrepareAllTermIndexes prepares every registered project independently.
+func (m *Manager) PrepareAllTermIndexes(ctx context.Context) (map[string]*TermIndexSetupResult, map[string]string, error) {
+	reg, err := m.readRegistry()
+	if err != nil {
+		return nil, nil, err
+	}
+	prepared := make(map[string]*TermIndexSetupResult)
+	failures := make(map[string]string)
+	for _, project := range reg.Projects {
+		result, err := prepareTermIndexPath(ctx, project.DBPath, project.Name)
+		if err != nil {
+			failures[project.Name] = err.Error()
+			continue
+		}
+		prepared[project.Name] = result
+	}
+	return prepared, failures, nil
+}
+
+func prepareTermIndexPath(ctx context.Context, dbPath, workspace string) (*TermIndexSetupResult, error) {
+	store, err := sqlite.Open(ctx, dbPath)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = store.Close() }()
+	service := application.NewMemoryService(store, nil, nil)
+	report, err := service.RebuildTermIndex(ctx, application.RebuildTermIndexOptions{Workspace: workspace})
+	if err != nil {
+		return nil, err
+	}
+	status, err := service.TermIndexStatus(ctx, workspace)
+	if err != nil {
+		return nil, err
+	}
+	return &TermIndexSetupResult{
+		Ready: status.GatingEligible, RebuildRequired: status.RebuildRequired, RebuildReason: status.RebuildReason,
+		Scanned: report.Scanned, Indexed: report.Indexed, Skipped: report.Skipped, Failed: report.Failed,
+		DistinctTerms: report.DistinctTerms, Generation: report.Generation,
+	}, nil
 }
 
 func (m *Manager) Rename(_ context.Context, opt RenameOptions) (*RenameResult, error) {
@@ -998,6 +1084,7 @@ Always use `+"`"+`agent-memory`+"`"+` as the memory system:
     1. Write the new corrected memory first using `+"`"+`agent-memory write`+"`"+` and copy the new memory ID.
     2. Link the old incorrect memory to the new one by running `+"`"+`agent-memory feedback --memory-id <old_id> --outcome rejected --reconsolidation-action superseded --successor-memory-id <new_id> --reason "<explanation>"`+"`"+`.
 - After learning durable new knowledge: write it to memory immediately.
+- When writing a memory: Choose up to three explicit keywords: names, terms, or helpful locators a human would search later. Do not copy the full content into keywords.
 - You MUST proactively package reusable scripts, grep queries, workflows, or complex setup/learnings into a custom agent skill under `+"`"+`.agents/skills/`+"`"+` (using `+"`"+`agent-memory distill`+"`"+` or manual packaging) if they are valuable and highly likely to be reused. Do NOT wait for the user to ask; proactively distill skills once a workflow or learning pattern is successfully validated.
   - Do NOT use generic, numbered, or index-based filenames (like `+"`"+`part1.md`+"`"+`, `+"`"+`workflows_part1.md`+"`"+`).
   - Always use clear, descriptive, and meaningful names for all custom skill reference files (e.g., `+"`"+`db_performance.md`+"`"+`, `+"`"+`ui_fixes.md`+"`"+`).
@@ -1181,6 +1268,7 @@ Command:
 ### While working
 
 - If you discover durable new knowledge (facts, commands, config, constraints, architecture decisions), write it immediately.
+- When writing a memory: Choose up to three explicit keywords: names, terms, or helpful locators a human would search later. Do not copy the full content into keywords.
 - Prefer short, atomic memories. Include the source (file path / command / URL) in the content when available.
 - You MUST proactively package reusable scripts, grep queries, workflows, or complex setup/learnings into a custom agent skill under `+"`"+`.agents/skills/`+"`"+` (using `+"`"+`agent-memory distill`+"`"+` or manual packaging) if they are valuable and highly likely to be reused. Do NOT wait for the user to ask; proactively distill skills once a workflow or learning pattern is successfully validated.
   - Do NOT use generic, numbered, or index-based filenames (like `+"`"+`part1.md`+"`"+`, `+"`"+`workflows_part1.md`+"`"+`).
