@@ -37883,6 +37883,7 @@ function NotebookWorkspace({
   const saveActiveNote = reactExports.useCallback(async () => {
     const note2 = activeNoteRef.current;
     if (!note2 || saveState === "saving") return;
+    const title = noteTitleFromBody(note2.body, note2.title);
     setSaveState("saving");
     try {
       const response = await updateNote({
@@ -37890,7 +37891,7 @@ function NotebookWorkspace({
         note_id: note2.id,
         expected_revision: note2.revision,
         path: note2.path,
-        title: note2.title,
+        title,
         body: note2.body,
         properties: note2.properties ?? emptyProperties
       });
@@ -37963,6 +37964,7 @@ function NotebookWorkspace({
       if (!current) return current;
       const next2 = { ...current, ...patch };
       activeNoteRef.current = next2;
+      setOpenTabs((tabs) => tabs.map((tab) => tab.id === next2.id ? next2 : tab));
       return next2;
     });
     setSaveState("dirty");
@@ -38217,7 +38219,7 @@ ${formatEvidenceLinks(askEvidence)}
       destination === "notes" ? activeNote ? /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "notebookDocument", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("header", { className: "noteHeader", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("input", { className: "noteTitleInput", value: activeNote.title, onChange: (event) => patchActiveNote({ title: event.target.value }), "aria-label": "Note title" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "noteTitle", children: activeNote.title }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: activeNote.path })
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "noteHeaderActions", children: [
@@ -38232,7 +38234,10 @@ ${formatEvidenceLinks(askEvidence)}
             {
               ref: editorRef,
               value: activeNote.body,
-              onChange: (event) => patchActiveNote({ body: event.target.value }),
+              onChange: (event) => {
+                const body = event.target.value;
+                patchActiveNote({ body, title: noteTitleFromBody(body, activeNote.title) });
+              },
               spellCheck: true,
               "aria-label": "Markdown editor"
             }
@@ -38520,6 +38525,11 @@ function nextUntitledTitle(notes) {
     index += 1;
   }
   return index === 1 ? "Untitled" : `Untitled ${index}`;
+}
+function noteTitleFromBody(body, fallback) {
+  const firstLine = body.split(/\r?\n/, 1)[0].trim();
+  const withoutHeading = /^#{1,6}(?:[ \t]+|$)/.test(firstLine) ? firstLine.replace(/^#{1,6}(?:[ \t]+|$)/, "").replace(/[ \t]+#+$/, "").trim() : firstLine;
+  return withoutHeading || fallback.trim();
 }
 function groupNotesByFolder(notes) {
   const groups = /* @__PURE__ */ new Map();

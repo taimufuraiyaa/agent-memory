@@ -58,6 +58,20 @@ test('new note naming reserves stored paths after a note title changes', () => {
   ]), 'Untitled 2')
 })
 
+test('the first Markdown line is the note title', () => {
+  const source = /function noteTitleFromBody\(body: string, fallback: string\) \{([\s\S]*?)\n\}/.exec(notebookSource)
+  assert.ok(source, 'noteTitleFromBody source should exist')
+  const noteTitleFromBody = Function(`return function noteTitleFromBody(body, fallback) {${source[1]}\n}`)()
+
+  assert.equal(noteTitleFromBody('# Quarterly plan\n\nDetails', 'Old title'), 'Quarterly plan')
+  assert.equal(noteTitleFromBody('Customer interview notes\n\nDetails', 'Old title'), 'Customer interview notes')
+  assert.equal(noteTitleFromBody('Status #\n\nDetails', 'Old title'), 'Status #')
+  assert.equal(noteTitleFromBody('## Roadmap review ##\n\nDetails', 'Old title'), 'Roadmap review')
+  assert.equal(noteTitleFromBody('\nDetails', 'Old title'), 'Old title')
+  assert.doesNotMatch(notebookSource, /aria-label="Note title"/)
+  assert.match(notebookSource, /patchActiveNote\(\{ body, title: noteTitleFromBody\(body, activeNote\.title\) \}\)/)
+})
+
 test('Ask results stay in a bounded document flow without covering the composer', () => {
   assert.match(stylesSource, /\.askWorkspace\s*\{[^}]*display:\s*flex;[^}]*flex-direction:\s*column;[^}]*overflow-x:\s*hidden;/s)
   assert.match(stylesSource, /\.askAnswer,\s*\.askScope,\s*\.askComposer\s*\{[^}]*width:\s*100%;[^}]*max-width:\s*820px;[^}]*min-width:\s*0;[^}]*box-sizing:\s*border-box;/s)

@@ -342,12 +342,9 @@ body.light .notebookRail {
   min-width: 0;
 }
 
-.noteTitleInput {
+.noteTitle {
   width: min(680px, 100%);
-  padding: 0;
-  border: 0;
-  outline: 0;
-  background: transparent;
+  margin: 0;
   color: var(--nb-text);
   font-size: clamp(24px, 3vw, 36px);
   font-weight: 650;

@@ -105,3 +105,31 @@ func NormalizeNoteTitle(title, path string) string {
 	}
 	return path
 }
+
+// NoteTitleFromBody treats the first physical Markdown line as the note title.
+// ATX heading markers are presentation syntax and are not part of the title.
+func NoteTitleFromBody(body, fallback string) string {
+	firstLine, _, _ := strings.Cut(body, "\n")
+	title := strings.TrimSpace(firstLine)
+
+	headingMarkers := 0
+	for headingMarkers < len(title) && headingMarkers < 6 && title[headingMarkers] == '#' {
+		headingMarkers++
+	}
+	isHeading := headingMarkers > 0 && (headingMarkers == len(title) || title[headingMarkers] == ' ' || title[headingMarkers] == '\t')
+	if isHeading {
+		title = strings.TrimSpace(title[headingMarkers:])
+	}
+
+	lastNonHash := len(title)
+	for lastNonHash > 0 && title[lastNonHash-1] == '#' {
+		lastNonHash--
+	}
+	if isHeading && lastNonHash < len(title) && lastNonHash > 0 && (title[lastNonHash-1] == ' ' || title[lastNonHash-1] == '\t') {
+		title = strings.TrimSpace(title[:lastNonHash])
+	}
+	if title == "" {
+		return strings.TrimSpace(fallback)
+	}
+	return title
+}

@@ -171,6 +171,7 @@ export function NotebookWorkspace({
   const saveActiveNote = useCallback(async () => {
     const note = activeNoteRef.current
     if (!note || saveState === 'saving') return
+    const title = noteTitleFromBody(note.body, note.title)
     setSaveState('saving')
     try {
       const response = await updateNote({
@@ -178,7 +179,7 @@ export function NotebookWorkspace({
         note_id: note.id,
         expected_revision: note.revision,
         path: note.path,
-        title: note.title,
+        title,
         body: note.body,
         properties: note.properties ?? emptyProperties,
       })
@@ -251,6 +252,7 @@ export function NotebookWorkspace({
       if (!current) return current
       const next = { ...current, ...patch }
       activeNoteRef.current = next
+      setOpenTabs((tabs) => tabs.map((tab) => (tab.id === next.id ? next : tab)))
       return next
     })
     setSaveState('dirty')
@@ -510,7 +512,7 @@ export function NotebookWorkspace({
             <article className="notebookDocument">
               <header className="noteHeader">
                 <div>
-                  <input className="noteTitleInput" value={activeNote.title} onChange={(event) => patchActiveNote({ title: event.target.value })} aria-label="Note title" />
+                  <h1 className="noteTitle">{activeNote.title}</h1>
                   <p>{activeNote.path}</p>
                 </div>
                 <div className="noteHeaderActions">
@@ -530,7 +532,10 @@ export function NotebookWorkspace({
                   <textarea
                     ref={editorRef}
                     value={activeNote.body}
-                    onChange={(event) => patchActiveNote({ body: event.target.value })}
+                    onChange={(event) => {
+                      const body = event.target.value
+                      patchActiveNote({ body, title: noteTitleFromBody(body, activeNote.title) })
+                    }}
                     spellCheck
                     aria-label="Markdown editor"
                   />
@@ -773,6 +778,14 @@ function nextUntitledTitle(notes: NoteDocument[]) {
     index += 1
   }
   return index === 1 ? 'Untitled' : `Untitled ${index}`
+}
+
+function noteTitleFromBody(body: string, fallback: string) {
+  const firstLine = body.split(/\r?\n/, 1)[0].trim()
+  const withoutHeading = /^#{1,6}(?:[ \t]+|$)/.test(firstLine)
+    ? firstLine.replace(/^#{1,6}(?:[ \t]+|$)/, '').replace(/[ \t]+#+$/, '').trim()
+    : firstLine
+  return withoutHeading || fallback.trim()
 }
 
 function groupNotesByFolder(notes: NoteDocument[]) {

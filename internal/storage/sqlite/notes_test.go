@@ -73,6 +73,48 @@ func TestNoteLifecyclePreservesRevisionsAndUsesOptimisticConcurrency(t *testing.
 	}
 }
 
+func TestNoteTitleFollowsTheFirstBodyLineWithoutRenamingItsPath(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	store, err := Open(ctx, filepath.Join(t.TempDir(), "notes.db"))
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	created, err := store.CreateNote(ctx, core.CreateNoteInput{
+		Workspace: "ws",
+		Path:      "Untitled.md",
+		Title:     "Ignored request title",
+		Body:      "# Project north star\n\nInitial notes.",
+	})
+	if err != nil {
+		t.Fatalf("create note: %v", err)
+	}
+	if created.Title != "Project north star" {
+		t.Fatalf("created title = %q, want first body line", created.Title)
+	}
+
+	updated, err := store.UpdateNote(ctx, core.UpdateNoteInput{
+		Workspace:        "ws",
+		NoteID:           created.ID,
+		ExpectedRevision: created.Revision,
+		Path:             created.Path,
+		Title:            created.Title,
+		Body:             "Customer discovery\n\nUpdated notes.",
+	})
+	if err != nil {
+		t.Fatalf("update note: %v", err)
+	}
+	if updated.Title != "Customer discovery" {
+		t.Fatalf("updated title = %q, want first body line", updated.Title)
+	}
+	if updated.Path != "Untitled.md" {
+		t.Fatalf("updated path = %q, want stable path", updated.Path)
+	}
+}
+
 func TestNotePathUniquenessTrashAndRestore(t *testing.T) {
 	t.Parallel()
 

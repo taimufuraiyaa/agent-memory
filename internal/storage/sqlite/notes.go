@@ -85,7 +85,7 @@ func (s *Store) CreateNote(ctx context.Context, input core.CreateNoteInput) (*co
 	if err != nil {
 		return nil, err
 	}
-	title := core.NormalizeNoteTitle(input.Title, notePath)
+	title := core.NoteTitleFromBody(input.Body, core.NormalizeNoteTitle(input.Title, notePath))
 	propertiesJSON, err := notePropertiesJSON(input.Properties)
 	if err != nil {
 		return nil, err
@@ -169,7 +169,7 @@ func (s *Store) UpdateNote(ctx context.Context, input core.UpdateNoteInput) (*co
 	if current.Revision != input.ExpectedRevision {
 		return nil, ErrNoteRevisionConflict
 	}
-	title := core.NormalizeNoteTitle(input.Title, notePath)
+	title := core.NoteTitleFromBody(input.Body, core.NormalizeNoteTitle(input.Title, notePath))
 	if current.Path == notePath && current.Title == title && current.ContentHash == hash {
 		return current, nil
 	}
