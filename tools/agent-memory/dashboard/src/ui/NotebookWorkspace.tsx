@@ -19,9 +19,10 @@ import {
   type ProjectListItem,
 } from '../lib/api'
 import { MarkdownView } from './MarkdownView'
+import { LibraryWorkspace } from './LibraryWorkspace'
 import './notebook.css'
 
-type Destination = 'notes' | 'search' | 'ask' | 'activity'
+type Destination = 'notes' | 'library' | 'search' | 'ask' | 'activity'
 type EditorMode = 'edit' | 'preview' | 'split'
 type ContextTab = 'ask' | 'backlinks' | 'outline' | 'properties' | 'history'
 type SaveState = 'idle' | 'dirty' | 'saving' | 'saved' | 'error'
@@ -442,6 +443,7 @@ export function NotebookWorkspace({
       <aside className="notebookRail" aria-label="Primary navigation">
         <button className="notebookBrand" type="button" onClick={() => setDestination('notes')} aria-label="Agent Memory notebook">am</button>
         <RailButton label="Notes" active={destination === 'notes'} onClick={() => setDestination('notes')} glyph="N" />
+        <RailButton label="Library" active={destination === 'library'} onClick={() => setDestination('library')} glyph="L" />
         <RailButton label="Search" active={destination === 'search'} onClick={() => setDestination('search')} glyph="S" />
         <RailButton label="Ask" active={destination === 'ask'} onClick={() => setDestination('ask')} glyph="A" />
         <RailButton label="Activity" active={destination === 'activity'} onClick={() => setDestination('activity')} glyph="R" />
@@ -549,6 +551,8 @@ export function NotebookWorkspace({
             </article>
           ) : <NotebookWelcome onCreate={() => void createNewNote()} onAsk={() => setDestination('ask')} />
         ) : null}
+
+        {destination === 'library' ? <LibraryWorkspace workspace={workspace} /> : null}
 
         {destination === 'search' ? (
           <section className="notebookUtilityPage">
@@ -688,6 +692,7 @@ export function NotebookWorkspace({
           <section className="commandPalette" role="dialog" aria-modal="true" aria-label="Command palette" onMouseDown={(event) => event.stopPropagation()}>
             <p>Command palette</p>
             <button type="button" onClick={() => { setPaletteOpen(false); void createNewNote() }}>New note <kbd>⌘N</kbd></button>
+            <button type="button" onClick={() => { setPaletteOpen(false); setDestination('library') }}>Open Library</button>
             <button type="button" onClick={() => { setPaletteOpen(false); setDestination('search') }}>Search knowledge <kbd>⌘⇧F</kbd></button>
             <button type="button" onClick={() => { setPaletteOpen(false); setDestination('ask') }}>Ask agent-memory</button>
             <button type="button" onClick={() => { setPaletteOpen(false); onOpenSystem() }}>Open System</button>

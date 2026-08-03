@@ -41,6 +41,99 @@ export type NoteLink = {
   snippet: string
 }
 
+export type LibraryImportRequest = {
+  workspace: string
+  library_id: string
+  library_kind?: 'personal' | 'organization'
+  organization_id?: string
+  principal_id: string
+  title: string
+  edition_label: string
+  language: string
+  markdown: string
+}
+
+export type LibraryImportResult = {
+  work_id: string
+  edition_id: string
+  asset_id: string
+  node_count: number
+  passage_count?: number
+  existing: boolean
+}
+
+export type LibraryImportJob = {
+  id: string
+  state: 'pending' | 'running' | 'completed' | 'failed'
+  result?: LibraryImportResult
+  error?: string
+  created_at: string
+}
+
+export type LibraryStructuralNode = {
+  id: string
+  edition_id: string
+  parent_id?: string
+  kind: 'part' | 'chapter' | 'section' | 'subsection' | 'appendix'
+  ordinal: number
+  title: string
+  start_offset?: number
+  end_offset?: number
+  explicit: boolean
+}
+
+export type SourceLocator = {
+  kind: string
+  display: string
+  parser_version: string
+  normalization_version: string
+  text?: {
+    heading_path?: string[]
+    source_start?: number
+    source_end?: number
+    normalized_start?: number
+    normalized_end?: number
+  }
+  pdf?: Record<string, unknown>
+  epub?: Record<string, unknown>
+  web?: Record<string, unknown>
+}
+
+export type LibraryPassageResult = {
+  passage: {
+    id: string
+    edition_id: string
+    source_asset_id: string
+    structural_node_id: string
+    text: string
+    locator: SourceLocator
+    fingerprint: string
+  }
+  score: number
+}
+
+export type BookMemoryProposal = {
+  id: string
+  workspace: string
+  content: string
+  confidence: number
+  status: 'suggested' | 'accepted' | 'rejected'
+  memory_id?: string
+  citations?: Array<{ id: string; locator: SourceLocator; short_quote?: string }>
+  created_at: string
+  reviewed_at?: string
+}
+
+export type LibraryQueryRequest = {
+  workspace: string
+  principal_id: string
+  organization_ids?: string[]
+  question: string
+  limit?: number
+  propose_memory?: boolean
+  memory_content?: string
+}
+
 export type Diagram = {
   lang: string
   code: string
@@ -595,6 +688,23 @@ export function listNoteBacklinks(input: { workspace: string; note_id: string })
 
 export function retryNoteIndex(input: { workspace: string; note_id: string }): Promise<{ note: NoteDocument }> {
   return api('/api/v1/notes/index/retry', { method: 'POST', body: JSON.stringify(input) })
+}
+
+export function importLibraryBook(input: LibraryImportRequest): Promise<LibraryImportJob> {
+  return api('/api/v1/library/imports', { method: 'POST', body: JSON.stringify(input) })
+}
+
+export function getLibraryStructure(input: { workspace: string; principal_id: string; edition_id: string }): Promise<{ edition_id: string; nodes: LibraryStructuralNode[] }> {
+  const qs = new URLSearchParams(input)
+  return api(`/api/v1/library/structure?${qs.toString()}`, { method: 'GET' })
+}
+
+export function queryLibrary(input: LibraryQueryRequest): Promise<{ results: LibraryPassageResult[]; proposal?: BookMemoryProposal }> {
+  return api('/api/v1/library/query', { method: 'POST', body: JSON.stringify(input) })
+}
+
+export function reviewLibraryMemory(input: { workspace: string; proposal_id: string; principal_id: string; decision: 'accept' | 'reject' }): Promise<BookMemoryProposal> {
+  return api('/api/v1/library/memory-review', { method: 'POST', body: JSON.stringify(input) })
 }
 
 export function getStats(workspace?: string): Promise<DashboardStats> {

@@ -22,6 +22,7 @@ type ImportRepository interface {
 	ReplaceStructuralNodes(context.Context, string, []library.StructuralNode) error
 	ListStructuralNodes(context.Context, string) ([]library.StructuralNode, error)
 	PutPassages(context.Context, []library.Passage) error
+	ListPassagesForEditions(context.Context, []string) ([]library.Passage, error)
 }
 
 type MarkdownImportInput struct {
@@ -33,11 +34,12 @@ type MarkdownImportInput struct {
 }
 
 type ImportResult struct {
-	WorkID    string `json:"work_id"`
-	EditionID string `json:"edition_id"`
-	AssetID   string `json:"asset_id"`
-	NodeCount int    `json:"node_count"`
-	Existing  bool   `json:"existing"`
+	WorkID       string `json:"work_id"`
+	EditionID    string `json:"edition_id"`
+	AssetID      string `json:"asset_id"`
+	NodeCount    int    `json:"node_count"`
+	PassageCount int    `json:"passage_count"`
+	Existing     bool   `json:"existing"`
 }
 
 type MarkdownImporter struct {
@@ -71,11 +73,15 @@ func (i *MarkdownImporter) Import(ctx context.Context, input MarkdownImportInput
 		if err != nil {
 			return ImportResult{}, err
 		}
+		passages, err := i.repository.ListPassagesForEditions(ctx, []string{edition.ID})
+		if err != nil {
+			return ImportResult{}, err
+		}
 		asset.Policy = input.Policy
 		if err := i.repository.PutSourceAsset(ctx, asset); err != nil {
 			return ImportResult{}, err
 		}
-		return ImportResult{WorkID: edition.WorkID, EditionID: edition.ID, AssetID: asset.ID, NodeCount: len(nodes), Existing: true}, nil
+		return ImportResult{WorkID: edition.WorkID, EditionID: edition.ID, AssetID: asset.ID, NodeCount: len(nodes), PassageCount: len(passages), Existing: true}, nil
 	}
 
 	normalizedTitle := strings.ToLower(strings.Join(strings.Fields(input.Title), " "))
@@ -142,7 +148,7 @@ func (i *MarkdownImporter) Import(ctx context.Context, input MarkdownImportInput
 	if err := i.repository.PutPassages(ctx, passages); err != nil {
 		return ImportResult{}, err
 	}
-	return ImportResult{WorkID: workID, EditionID: edition.ID, AssetID: assetID, NodeCount: len(document.Nodes)}, nil
+	return ImportResult{WorkID: workID, EditionID: edition.ID, AssetID: assetID, NodeCount: len(document.Nodes), PassageCount: len(passages)}, nil
 }
 
 func stableImportID(prefix string, parts ...string) string {

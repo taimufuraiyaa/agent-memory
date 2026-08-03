@@ -28,12 +28,18 @@ func TestMarkdownImportIsIdempotentAndVersionsChangedContent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("first import: %v", err)
 	}
+	if first.NodeCount != 1 || first.PassageCount != 1 {
+		t.Fatalf("expected complete structure and passage counts, got %+v", first)
+	}
 	second, err := importer.Import(ctx, input)
 	if err != nil {
 		t.Fatalf("second import: %v", err)
 	}
 	if !second.Existing || first.WorkID != second.WorkID || first.EditionID != second.EditionID || first.AssetID != second.AssetID {
 		t.Fatalf("expected stable identical import: first=%+v second=%+v", first, second)
+	}
+	if second.PassageCount != first.PassageCount {
+		t.Fatalf("expected re-import to report persisted passage count: first=%+v second=%+v", first, second)
 	}
 
 	input.Source = []byte("# Chapter\n\nKnowledge changed here.\n")

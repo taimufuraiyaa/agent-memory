@@ -42,6 +42,9 @@ func TestLibraryImportQueryMemoryReview(t *testing.T) {
 	jobID := imported["id"].(string)
 	result := imported["result"].(map[string]any)
 	editionID := result["edition_id"].(string)
+	if result["passage_count"] != float64(2) {
+		t.Fatalf("expected complete passage count in import result, got %+v", result)
+	}
 
 	job := libraryGet(t, server.URL+"/api/v1/library/jobs?id="+jobID, http.StatusOK)
 	if job["state"] != "completed" {

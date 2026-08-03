@@ -4,6 +4,7 @@ import test from 'node:test'
 
 const appSource = await readFile(new URL('../src/ui/App.tsx', import.meta.url), 'utf8')
 const notebookSource = await readFile(new URL('../src/ui/NotebookWorkspace.tsx', import.meta.url), 'utf8').catch(() => '')
+const librarySource = await readFile(new URL('../src/ui/LibraryWorkspace.tsx', import.meta.url), 'utf8').catch(() => '')
 const apiSource = await readFile(new URL('../src/lib/api.ts', import.meta.url), 'utf8')
 const stylesSource = await readFile(new URL('../src/ui/notebook.css', import.meta.url), 'utf8').catch(() => '')
 
@@ -29,6 +30,33 @@ test('notebook API exposes document lifecycle operations', () => {
   ]) {
     assert.match(apiSource, new RegExp(`export function ${operation}`))
   }
+})
+
+test('library is a notebook destination backed by the complete study API flow', () => {
+  assert.match(notebookSource, /type Destination = [^\n]*'library'/)
+  assert.match(notebookSource, /label="Library"/)
+  assert.match(notebookSource, /<LibraryWorkspace workspace=\{workspace\}/)
+
+  for (const operation of [
+    'importLibraryBook',
+    'getLibraryStructure',
+    'queryLibrary',
+    'reviewLibraryMemory',
+  ]) {
+    assert.match(apiSource, new RegExp(`export function ${operation}`))
+  }
+})
+
+test('library workspace separates whole-book indexing source evidence and interpretation review', () => {
+  assert.match(librarySource, /Import a whole book/)
+  assert.match(librarySource, /accept="\.md,\.markdown,\.txt,text\/markdown,text\/plain"/)
+  assert.match(librarySource, /Book contents and index/)
+  assert.match(librarySource, /Grounded evidence/)
+  assert.match(librarySource, /Reader interpretation/)
+  assert.match(librarySource, /No authorized source evidence supports this question yet/)
+  assert.match(librarySource, /Accept memory/)
+  assert.match(librarySource, /Reject/)
+  assert.doesNotMatch(librarySource, /Users\/time/)
 })
 
 test('API client reports non-JSON responses with route context', () => {
