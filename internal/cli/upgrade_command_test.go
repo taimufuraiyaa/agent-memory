@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -34,6 +35,121 @@ touch npm-ci-success
 	}
 	if _, err := os.Stat(filepath.Join(dst, "npm-ci-success")); err != nil {
 		t.Fatalf("expected retry success marker: %v", err)
+	}
+}
+
+func TestUpgradeDryRunDoesNotBuildOrWriteIntegrations(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake go executable uses a POSIX shell")
+	}
+	repositoryCWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("get repository cwd: %v", err)
+	}
+	repositoryRoot := findSourceRoot(repositoryCWD)
+	if repositoryRoot == "" {
+		t.Fatal("locate repository root")
+	}
+
+	clientDir := t.TempDir()
+	homeDir := t.TempDir()
+	binDir := t.TempDir()
+	buildMarker := filepath.Join(t.TempDir(), "go-invoked")
+	fakeGoDir := t.TempDir()
+	fakeGo := filepath.Join(fakeGoDir, "go")
+	if err := os.WriteFile(fakeGo, []byte(`#!/bin/sh
+set -eu
+: > "$FAKE_GO_MARKER"
+out=""
+while [ "$#" -gt 0 ]; do
+	if [ "$1" = "-o" ]; then
+		shift
+		out="$1"
+	fi
+	shift
+done
+if [ -n "$out" ]; then
+	: > "$out"
+	chmod +x "$out"
+fi
+`), 0o755); err != nil {
+		t.Fatalf("write fake go: %v", err)
+	}
+	t.Setenv("HOME", homeDir)
+	t.Setenv("FAKE_GO_MARKER", buildMarker)
+	t.Setenv("PATH", fakeGoDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	if err := os.Chdir(clientDir); err != nil {
+		t.Fatalf("chdir to client workspace: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(repositoryCWD) })
+
+	target := filepath.Join(binDir, binNameWithExt("agent-memory"))
+	cmd := newUpgradeCommand()
+	var output strings.Builder
+	cmd.SetOut(&output)
+	cmd.SetErr(&output)
+	cmd.SetArgs([]string{"--src", repositoryRoot, "--target", target, "--dry-run", "--format", "json"})
+	if err := cmd.ExecuteContext(context.Background()); err != nil {
+		t.Fatalf("dry-run upgrade: %v, output: %s", err, output.String())
+	}
+
+	if _, err := os.Stat(target); !os.IsNotExist(err) {
+		t.Fatalf("dry-run created target %s: %v", target, err)
+	}
+	if _, err := os.Stat(buildMarker); !os.IsNotExist(err) {
+		t.Fatalf("dry-run invoked the Go builder: %v", err)
+	}
+	buildArtifacts, err := filepath.Glob(filepath.Join(binDir, ".agent-memory-build.*"))
+	if err != nil {
+		t.Fatalf("scan build artifacts: %v", err)
+	}
+	if len(buildArtifacts) != 0 {
+		t.Fatalf("dry-run left build artifacts: %v", buildArtifacts)
+	}
+	entries, err := os.ReadDir(clientDir)
+	if err != nil {
+		t.Fatalf("read client directory: %v", err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("dry-run wrote client integrations: %v", entries)
+	}
+}
+
+func TestUpgradeWithoutConfirmationDoesNotBuild(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake go executable uses a POSIX shell")
+	}
+	repositoryCWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("get repository cwd: %v", err)
+	}
+	repositoryRoot := findSourceRoot(repositoryCWD)
+	if repositoryRoot == "" {
+		t.Fatal("locate repository root")
+	}
+
+	buildMarker := filepath.Join(t.TempDir(), "go-invoked")
+	fakeGoDir := t.TempDir()
+	fakeGo := filepath.Join(fakeGoDir, "go")
+	if err := os.WriteFile(fakeGo, []byte("#!/bin/sh\n: > \"$FAKE_GO_MARKER\"\nexit 1\n"), 0o755); err != nil {
+		t.Fatalf("write fake go: %v", err)
+	}
+	t.Setenv("FAKE_GO_MARKER", buildMarker)
+	t.Setenv("PATH", fakeGoDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("AGENT_MEMORY_UPGRADE_YES", "")
+
+	cmd := newUpgradeCommand()
+	cmd.SetArgs([]string{
+		"--src", repositoryRoot,
+		"--target", filepath.Join(t.TempDir(), binNameWithExt("agent-memory")),
+		"--no-hooks",
+	})
+	err = cmd.ExecuteContext(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "upgrade requires --yes") {
+		t.Fatalf("expected confirmation error, got %v", err)
+	}
+	if _, err := os.Stat(buildMarker); !os.IsNotExist(err) {
+		t.Fatalf("unconfirmed upgrade invoked the Go builder: %v", err)
 	}
 }
 

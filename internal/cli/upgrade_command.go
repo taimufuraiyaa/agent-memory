@@ -489,10 +489,41 @@ Use --hooks-only to push hooks without touching the binary (useful for existing 
 			}
 
 			method := "go-install"
-			installedFrom := ""
-
 			if strings.TrimSpace(srcDir) != "" {
 				method = "go-build"
+			}
+
+			res := upgradeResult{
+				FromVersion:   v.Version,
+				ToSpecifier:   to,
+				Module:        module,
+				Method:        method,
+				SourceDir:     srcDir,
+				TargetPath:    target,
+				TuningCommand: "agent-memory tuning",
+			}
+
+			if dryRun {
+				if f == "json" {
+					return writeSuccessEnvelope(cmd.OutOrStdout(), "upgrade", res)
+				}
+				plannedSource := spec
+				if method == "go-build" {
+					plannedSource = srcDir
+				}
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "dry-run: would replace %s (from %s)\n", target, plannedSource)
+				return nil
+			}
+
+			if !yes && envBool("AGENT_MEMORY_UPGRADE_YES") {
+				yes = true
+			}
+			if !yes {
+				return errors.New("upgrade requires --yes / -y (or set AGENT_MEMORY_UPGRADE_YES=1, or use --dry-run)")
+			}
+
+			installedFrom := ""
+			if method == "go-build" {
 				built, err := buildFromSource(srcDir, target)
 				if err != nil {
 					return err
@@ -517,55 +548,7 @@ Use --hooks-only to push hooks without touching the binary (useful for existing 
 					return fmt.Errorf("installed binary not found after go install: %s", installedFrom)
 				}
 			}
-
-			res := upgradeResult{
-				FromVersion:   v.Version,
-				ToSpecifier:   to,
-				Module:        module,
-				Method:        method,
-				SourceDir:     srcDir,
-				TargetPath:    target,
-				InstalledFrom: installedFrom,
-				TuningCommand: "agent-memory tuning",
-			}
-
-			if dryRun {
-				if !noHooks {
-					if all {
-						aaf, err := writeAllAgentFiles(forceHooks)
-						if err != nil {
-							return fmt.Errorf("all agent files: %w", err)
-						}
-						res.AllAgentFiles = aaf
-					} else {
-						af, err := writeAgentFiles(forceHooks)
-						if err != nil {
-							return fmt.Errorf("agent files: %w", err)
-						}
-						res.AgentFiles = af
-					}
-				}
-				if f == "json" {
-					return writeSuccessEnvelope(cmd.OutOrStdout(), "upgrade", res)
-				}
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "dry-run: would replace %s (from %s)\n", target, spec)
-				if all && res.AllAgentFiles != nil {
-					for projName, a := range res.AllAgentFiles {
-						_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Project: %s (dry-run)\n", projName)
-						printAgentFiles(a)
-					}
-				} else if res.AgentFiles != nil {
-					printAgentFiles(res.AgentFiles)
-				}
-				return nil
-			}
-
-			if !yes && envBool("AGENT_MEMORY_UPGRADE_YES") {
-				yes = true
-			}
-			if !yes {
-				return errors.New("upgrade requires --yes / -y (or set AGENT_MEMORY_UPGRADE_YES=1, or use --dry-run)")
-			}
+			res.InstalledFrom = installedFrom
 
 			if err := replaceFileAtomic(target, installedFrom); err != nil {
 				return fmt.Errorf("replace failed: %w", err)

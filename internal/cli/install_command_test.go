@@ -113,3 +113,40 @@ func TestInstallCommandBasic(t *testing.T) {
 		t.Fatalf("expected workspace name in cursor rule, got: %s", ruleContent)
 	}
 }
+
+func TestInstallOrCopyBinaryBuildsAbsoluteSourceOutsideClientWorkspace(t *testing.T) {
+	repositoryCWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("get repository cwd: %v", err)
+	}
+	repositoryRoot := findSourceRoot(repositoryCWD)
+	if repositoryRoot == "" {
+		t.Fatal("locate repository root")
+	}
+
+	clientDir := t.TempDir()
+	if err := os.Chdir(clientDir); err != nil {
+		t.Fatalf("chdir to client workspace: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(repositoryCWD) })
+
+	binDir := t.TempDir()
+	var stdout, stderr bytes.Buffer
+	installed, err := installOrCopyBinary(&stdout, &stderr, binDir, filepath.Join(repositoryRoot, "cmd", "agent-memory"))
+	if err != nil {
+		t.Fatalf("install from absolute source outside module: %v, stderr: %s", err, stderr.String())
+	}
+	if installed != filepath.Join(binDir, binNameWithExt("agent-memory")) {
+		t.Fatalf("unexpected installed path %q", installed)
+	}
+	if info, err := os.Stat(installed); err != nil || info.IsDir() {
+		t.Fatalf("expected installed binary at %s: %v", installed, err)
+	}
+	leftovers, err := filepath.Glob(filepath.Join(binDir, ".agent-memory-install.*"))
+	if err != nil {
+		t.Fatalf("scan install artifacts: %v", err)
+	}
+	if len(leftovers) != 0 {
+		t.Fatalf("installer left temporary build artifacts: %v", leftovers)
+	}
+}

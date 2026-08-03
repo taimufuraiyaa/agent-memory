@@ -269,11 +269,16 @@ func installOrCopyBinary(out, errOut io.Writer, binDir, src string) (string, err
 	// Try to build from local source if available
 	if dirExists(src) {
 		fmt.Fprintln(errOut, "    building binary from source...")
+		buildDir, buildPackage, err := resolveGoBuildPackage(src)
+		if err != nil {
+			return "", err
+		}
 		tmpBin := filepath.Join(binDir, ".agent-memory-install."+time.Now().UTC().Format("20060102T150405Z"))
 		if err := os.MkdirAll(binDir, 0o755); err != nil {
 			return "", err
 		}
-		buildCmd := exec.Command("go", "build", "-trimpath", "-ldflags", "-s -w", "-o", tmpBin, src)
+		buildCmd := exec.Command("go", "build", "-trimpath", "-ldflags", "-s -w", "-o", tmpBin, buildPackage)
+		buildCmd.Dir = buildDir
 		buildCmd.Stdout = out
 		buildCmd.Stderr = errOut
 		buildCmd.Env = append(os.Environ(), "CGO_ENABLED=1")
@@ -285,6 +290,7 @@ func installOrCopyBinary(out, errOut io.Writer, binDir, src string) (string, err
 			_ = os.Remove(tmpBin)
 			return "", fmt.Errorf("install rename: %w", err)
 		}
+		_ = os.Remove(tmpBin)
 		if err := os.Chmod(finalBin, 0o755); err != nil {
 			return "", err
 		}
@@ -309,6 +315,33 @@ func installOrCopyBinary(out, errOut io.Writer, binDir, src string) (string, err
 		return "", fmt.Errorf("copy failed: %w", err)
 	}
 	return finalBin, nil
+}
+
+func resolveGoBuildPackage(src string) (string, string, error) {
+	absSrc, err := filepath.Abs(src)
+	if err != nil {
+		return "", "", fmt.Errorf("resolve source path %s: %w", src, err)
+	}
+	moduleRoot := absSrc
+	for {
+		if fileExists(filepath.Join(moduleRoot, "go.mod")) {
+			break
+		}
+		parent := filepath.Dir(moduleRoot)
+		if parent == moduleRoot {
+			return "", "", fmt.Errorf("source package %s is not inside a Go module", absSrc)
+		}
+		moduleRoot = parent
+	}
+	relativePackage, err := filepath.Rel(moduleRoot, absSrc)
+	if err != nil {
+		return "", "", fmt.Errorf("resolve source package relative to module: %w", err)
+	}
+	buildPackage := "."
+	if relativePackage != "." {
+		buildPackage = "./" + filepath.ToSlash(relativePackage)
+	}
+	return moduleRoot, buildPackage, nil
 }
 
 func detectRepoRoot(src string) string {
