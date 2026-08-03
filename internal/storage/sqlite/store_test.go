@@ -610,4 +610,3 @@ func TestStorePopulateSupersedesRelations(t *testing.T) {
 		t.Errorf("expected to find m2 in recent memories list")
 	}
 }
-

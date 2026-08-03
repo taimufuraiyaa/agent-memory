@@ -85,7 +85,7 @@ func BuildMarkdownExport(workspace string, memories []core.MemoryEntry) string {
 func BuildCSVExport(workspace string, memories []core.MemoryEntry) (string, error) {
 	var b strings.Builder
 	w := csv.NewWriter(&b)
-	
+
 	// Write header
 	header := []string{
 		"id",
@@ -108,14 +108,14 @@ func BuildCSVExport(workspace string, memories []core.MemoryEntry) (string, erro
 	if err := w.Write(header); err != nil {
 		return "", fmt.Errorf("failed to write CSV header: %w", err)
 	}
-	
+
 	// Sort by updated_at (most recent first)
 	sorted := make([]core.MemoryEntry, len(memories))
 	copy(sorted, memories)
 	sort.Slice(sorted, func(i, j int) bool {
 		return sorted[i].UpdatedAt.After(sorted[j].UpdatedAt)
 	})
-	
+
 	// Write rows
 	for _, m := range sorted {
 		outcomeResult := ""
@@ -124,7 +124,7 @@ func BuildCSVExport(workspace string, memories []core.MemoryEntry) (string, erro
 			outcomeResult = string(m.Outcome.Result)
 			outcomeApproach = m.Outcome.Approach
 		}
-		
+
 		row := []string{
 			m.ID,
 			string(m.Type),
@@ -143,16 +143,16 @@ func BuildCSVExport(workspace string, memories []core.MemoryEntry) (string, erro
 			m.CreatedAt.Format(time.RFC3339),
 			m.UpdatedAt.Format(time.RFC3339),
 		}
-		
+
 		if err := w.Write(row); err != nil {
 			return "", fmt.Errorf("failed to write CSV row: %w", err)
 		}
 	}
-	
+
 	w.Flush()
 	if err := w.Error(); err != nil {
 		return "", fmt.Errorf("CSV write error: %w", err)
 	}
-	
+
 	return b.String(), nil
 }

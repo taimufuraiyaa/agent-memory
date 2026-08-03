@@ -90,7 +90,7 @@ export function SkillsPanel({
                 }}
               >
                 <div style={{ fontWeight: 'bold', fontSize: '13px', color: selectedSkill?.name === skill.name ? 'var(--accent-primary)' : 'var(--text-main)', fontFamily: 'var(--font-mono)' }}>
-                  {skill.displayName}
+                  {skill.display_name}
                 </div>
                 <div style={{ fontSize: '11px', color: 'var(--text-muted)', lineClamp: 2, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
                   {skill.description || 'No description provided.'}
@@ -105,7 +105,7 @@ export function SkillsPanel({
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', paddingRight: '8px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px dotted var(--border)', paddingBottom: '12px' }}>
                   <div>
-                    <h3 style={{ fontSize: '18px', margin: 0, color: 'var(--text-main)' }}>{selectedSkill.displayName}</h3>
+                    <h3 style={{ fontSize: '18px', margin: 0, color: 'var(--text-main)' }}>{selectedSkill.display_name}</h3>
                     <div style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', marginTop: '4px' }}>
                       Path: {selectedSkill.path}
                     </div>

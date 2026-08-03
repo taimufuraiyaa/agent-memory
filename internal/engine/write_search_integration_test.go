@@ -145,7 +145,7 @@ func TestWriteSearchRoundTrip(t *testing.T) {
 				if vec.MemoryID == writeResult.ID {
 					found = true
 					t.Logf("Vector persisted: provider=%s, version=%s", vec.EmbeddingProvider, vec.EmbeddingModelVersion)
-					
+
 					// Validate provider and version are recorded
 					if vec.EmbeddingProvider != embedder.Name() {
 						t.Errorf("Expected provider %q, got %q", embedder.Name(), vec.EmbeddingProvider)

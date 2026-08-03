@@ -8,7 +8,7 @@ A persistent, multi-tier memory layer for AI coding agents (Cursor, Claude Code,
 ## Status
 - **Core Implementation**: Complete, optimized, and ready to run.
 - **Tools**: CLI, local HTTP dashboard, and test automation scripts are available.
-- **Integration**: Supports Cursor, Trae, Claude Code, and custom agent integrations out-of-the-box.
+- **Integration**: Supports Cursor, Trae, Claude Code, ZCode, and custom agent integrations out-of-the-box.
 
 ---
 
@@ -45,6 +45,11 @@ Ranked memories are balanced by task intent, checked against a strict token budg
 ### 4. Cache Invalidation & Bulk Retrieval
 Optimized with workspace-scoped cache invalidation, lightweight inference lists, and high-performance bulk memory retrieval to handle active developer workspaces without latency.
 
+### 5. Exact Keyword and Hashtag Search
+Each memory can carry up to three deliberate locators—names, terms, hashtags, or other helpful keywords a person is likely to search later. Exact term mode is project-scoped and supports deterministic `AND` and `OR` matching without starting an embedding provider.
+
+A versioned per-project Bloom filter can reject definite misses before SQLite lookup. A Bloom `maybe` is never treated as a match: possible hits always continue to canonical exact-term search. This is additive to semantic search and does not replace it.
+
 ---
 
 ## Installation & Setup
@@ -73,6 +78,9 @@ go run install.go install_unix.go
 # Windows:
 go run install.go install_windows.go
 ```
+
+The installer configures every supported AI agent by default. For Codex it preserves existing settings while adding the agent-memory data directory as a narrow writable sandbox root and installing lifecycle hooks, so users do not edit Codex configuration manually. Codex may still request its native one-time hook trust confirmation.
+It also writes the conservative exact-term rollout setting (`AGENT_MEMORY_TERM_BLOOM_MODE=shadow`) when no choice already exists. Existing `gate` or `off` values are preserved.
 Ensure your Go bin directory (`$(go env GOPATH)/bin` or `~/go/bin`) is in your system `PATH`. Verify with `agent-memory --help`.
 
 ---
@@ -88,12 +96,16 @@ agent-memory init --project-name my-project
 ### Common Flags & Operations:
 - `agent-memory init --study` - Register and bootstrap learning from local docs/code immediately.
 - `agent-memory init --ide trae` - Configure Trae-specific rules explicitly.
+- `agent-memory init --ide zcode` - Configure ZCode rules (`AGENTS.md`) explicitly.
 - `agent-memory reinstall` - Refresh or repair IDE configuration rules in an existing project.
 
 **What `init` does**:
 - Registers the project inside `~/.agent-memory/workspaces.json`.
 - Creates a per-workspace SQLite database under `~/.agent-memory/<workspace>.db`.
+- Applies database migrations, backfills locators, and publishes a ready project Bloom snapshot after optional study ingestion.
 - Automatically writes rule files (e.g., Cursor rules at `.cursor/rules/agent-memory.mdc`, Trae rules, etc.) to prompt the agent to use `agent-memory`.
+
+`agent-memory reinstall` and `agent-memory init --reuse` run the same idempotent term-index preparation for existing projects. A normal `agent-memory upgrade` prepares every registered project and reports per-project successes or failures; one damaged database does not prevent healthy projects from upgrading, and the damaged project remains fail-open. `upgrade --dry-run` and `upgrade --hooks-only` do not touch project databases.
 
 ---
 
@@ -107,7 +119,9 @@ agent-memory init --project-name my-project
 | `agent-memory delete --project-name <name>` | Deregister workspace (`--keep-data` preserves DB) |
 | `agent-memory write` | Store a semantic, procedural, episodic, or outcome memory |
 | `agent-memory search` | Query memories using multi-signal retrieval |
+| `agent-memory reindex-terms` | Backfill exact locators, rebuild the project Bloom filter, or inspect its status |
 | `agent-memory recall` | Retrieve stable, token-budgeted prompt context for a task |
+| `agent-memory advisor` | Score workspace memory health and show evidence-backed recommendations |
 | `agent-memory session-end` | Parse a session transcript to extract clean learnings |
 | `agent-memory study` | Bootstrap/learn from project documents and code files |
 | `agent-memory dashboard` (`ui`) | Start and open the local web-based dashboard |
@@ -117,8 +131,10 @@ agent-memory init --project-name my-project
 ## Day-to-Day CLI Examples
 
 ```bash
-# Write a fact
-agent-memory write --type semantic --content "Authentication service handles JWT validation"
+# Write a fact with up to three explicit search locators
+agent-memory write --type semantic \
+  --content "Authentication service handles JWT validation" \
+  --keyword authentication --keyword jwt
 
 # Store an outcome memory (with approach and reasoning details)
 agent-memory write --type outcome \
@@ -129,12 +145,34 @@ agent-memory write --type outcome \
 # Search memories
 agent-memory search --query "auth validation" --top-k 5
 
+# Exact project term search: AND requires every term; OR requires at least one
+agent-memory search --mode terms --query "authentication jwt" --operator and
+agent-memory search --mode terms --query "authentication oauth" --operator or
+
+# Backfill/rebuild and safely inspect Bloom health (no raw terms or bitmap)
+agent-memory reindex-terms --target-fpp 0.01
+agent-memory reindex-terms --status
+
 # Recall context for a task (within a 4000-token budget)
 agent-memory recall --task "debug JWT token validation failure" --budget 4000 --format raw
+
+# Review workspace memory quality, context efficiency, hygiene, coverage, and trust
+agent-memory advisor
+agent-memory advisor --format json
 
 # Extract learnings at the end of a session
 cat session_transcript.txt | agent-memory session-end --format json
 ```
+
+### Exact-term Bloom rollout
+
+`AGENT_MEMORY_TERM_BLOOM_MODE` controls only exact term mode:
+
+- `shadow` (default): probe Bloom but always execute canonical SQLite lookup.
+- `gate`: skip canonical lookup only for a healthy, checksum-valid, current definite miss. `AND` can stop when any token is absent; `OR` stops only when every token is absent.
+- `off`: immediate kill switch; bypass Bloom and fail open to canonical lookup.
+
+Missing, dirty, rebuilding, corrupt, incompatible, generation-mismatched, saturated, high-FPP, or delete-heavy state always fails open. Run `agent-memory reindex-terms --status` for the stable bypass/rebuild reason, and run `agent-memory reindex-terms` to rebuild. Semantic search behavior is unchanged.
 
 ---
 
@@ -150,11 +188,26 @@ agent-memory dashboard --start --addr :3210
 agent-memory dashboard --stop
 ```
 
-### Dashboard Capabilities:
-- **Workspace Navigation**: Swap databases/projects instantly via the UI.
-- **Interactive Search**: Run queries with precise type, tier, outcome, and date filters.
-- **Explain Mode**: Click to inspect calculated scores (`semantic_similarity`, `recency`, `outcome_boost`, `decay_weight`, `tier_bias`).
-- **Recall Preview**: Preview the formatted prompt block that will be injected into the agent, highlighting clipped memories and tokens used.
+### Notebook and dashboard capabilities
+
+- **Notebook-first workspace**: Notes is the default home, with a workspace explorer, multi-note tabs, Markdown editing, rendered preview, Mermaid diagrams, and responsive desktop/mobile layouts.
+- **Human + agent recall**: Saved note revisions are indexed asynchronously as replaceable memory chunks. Search and Ask label Human note and Agent memory evidence separately and retain note path, revision, heading, and line provenance.
+- **Safe document lifecycle**: Autosave uses optimistic revisions, revision history is immutable, normal deletion moves notes to recoverable trash, and failed indexing never blocks reading or editing.
+- **Connected notes**: `[[Internal links]]`, backlinks, outline navigation, typed properties, folder paths, and revision restore are available from the context panel.
+- **Grounded Ask**: Ask can search the active note, current workspace, or all local workspaces; citations reopen human notes, and answers can become notes only through an explicit confirmed action.
+- **System workspace**: Existing Overview, Sessions, Diagnostics, Benchmark, Lifecycle, Wiki, Feedback, Skills, raw stats, Explain Mode, Recall Preview, and Memory Advisor remain reachable under System.
+- **Keyboard workflow**: Command palette, new note, global search, Ask, save, close tab, and next/previous tab shortcuts are supported with visible focus states.
+
+The notebook is enabled by default. For the one-release rollback window, build
+the dashboard with `VITE_NOTEBOOK_ENABLED=false` to restore Overview as the
+default and hide Notes without changing stored notes or memories:
+
+```bash
+VITE_NOTEBOOK_ENABLED=false make build-with-dashboard
+```
+
+Rebuild without that environment variable to re-enable the notebook. The
+rollout is additive: existing memory rows require no destructive migration.
 
 ---
 

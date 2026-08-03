@@ -14,6 +14,7 @@ import (
 
 	"github.com/taimufuraiyaa/agent-memory/internal/core"
 	"github.com/taimufuraiyaa/agent-memory/internal/embeddings"
+	"github.com/taimufuraiyaa/agent-memory/internal/locator"
 	"github.com/taimufuraiyaa/agent-memory/internal/observability"
 	"github.com/taimufuraiyaa/agent-memory/internal/storage/markdown"
 	"github.com/taimufuraiyaa/agent-memory/internal/storage/sqlite"
@@ -38,15 +39,18 @@ const entityInferenceCandidateLimit = 500
 
 // WriteInput represents write pipeline input.
 type WriteInput struct {
-	Workspace string
-	Type      core.MemoryType
-	Content   string
-	Diagram   *core.Diagram
-	Source    core.MemorySource
-	Entities  []string
-	Tags      []string
-	Outcome   *core.Outcome
-	Mode      ExtractMode
+	ID              string
+	Workspace       string
+	Type            core.MemoryType
+	Content         string
+	Diagram         *core.Diagram
+	Source          core.MemorySource
+	Entities        []string
+	Tags            []string
+	Keywords        []string
+	Outcome         *core.Outcome
+	Mode            ExtractMode
+	ContentHashSalt string
 }
 
 // WriteResult reports final write status.
@@ -272,6 +276,15 @@ func (p *WritePipeline) Write(ctx context.Context, in WriteInput) (res *WriteRes
 	}
 
 	in.Content = content
+	keywords, err := locator.Extract(locator.Input{
+		Explicit: in.Keywords,
+		Content:  content,
+		Entities: in.Entities,
+		Tags:     in.Tags,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("invalid keywords: %w", err)
+	}
 
 	// Confidence gate — failures always bypass, everything else is scored.
 	var confidence float64
@@ -291,11 +304,19 @@ func (p *WritePipeline) Write(ctx context.Context, in WriteInput) (res *WriteRes
 		}
 	}
 
-	hash := contentHash(in.Workspace, in.Type, content, in.Diagram)
+	hashContent := content
+	if strings.TrimSpace(in.ContentHashSalt) != "" {
+		hashContent += "\x00" + strings.TrimSpace(in.ContentHashSalt)
+	}
+	hash := contentHash(in.Workspace, in.Type, hashContent, in.Diagram)
 	decision := p.router.Decide(in)
 	tier := decision.Tier
+	entryID := strings.TrimSpace(in.ID)
+	if entryID == "" {
+		entryID = uuid.NewString()
+	}
 	entry := &core.MemoryEntry{
-		ID:          uuid.NewString(),
+		ID:          entryID,
 		Type:        in.Type,
 		Content:     content,
 		Diagram:     in.Diagram,
@@ -303,6 +324,7 @@ func (p *WritePipeline) Write(ctx context.Context, in WriteInput) (res *WriteRes
 		Source:      in.Source,
 		Entities:    in.Entities,
 		Tags:        in.Tags,
+		Keywords:    keywords,
 		Outcome:     in.Outcome,
 		Pinned:      containsPinned(in.Tags),
 		Confidence:  confidence,
@@ -366,7 +388,7 @@ func (p *WritePipeline) Write(ctx context.Context, in WriteInput) (res *WriteRes
 		// Insert the memory and its embedding atomically: either both are
 		// persisted, or neither is, so there's never a window where a memory
 		// row exists without its vector.
-		if err := p.store.InsertMemoryByHashWithVector(ctx, entry, hash, embedProvider, embedModelVer, vec); err != nil {
+		if err := p.store.InsertMemoryByHashWithVector(ctx, entry, hash, embedProvider, embedModelVer, vec, keywords); err != nil {
 			if errors.Is(err, sqlite.ErrDuplicateContent) {
 				return dedupResult()
 			}
@@ -375,7 +397,7 @@ func (p *WritePipeline) Write(ctx context.Context, in WriteInput) (res *WriteRes
 			return nil, fmt.Errorf("persist eager vector: insert memory %s: %w", entry.ID, err)
 		}
 	} else {
-		if err := p.store.InsertMemoryByHash(ctx, entry, hash); err != nil {
+		if err := p.store.InsertMemoryByHash(ctx, entry, hash, keywords); err != nil {
 			if errors.Is(err, sqlite.ErrDuplicateContent) {
 				return dedupResult()
 			}
@@ -397,6 +419,7 @@ func (p *WritePipeline) Write(ctx context.Context, in WriteInput) (res *WriteRes
 	if p.cache != nil {
 		p.cache.InvalidateWorkspace(entry.Workspace)
 	}
+	_, _ = p.store.AppendAuditEvent(ctx, sqlite.AuditEventInput{Workspace: entry.Workspace, Operation: "write", Outcome: "success", Actor: "pipeline", Source: string(entry.Source.Type), SessionID: entry.Source.SessionID, TargetType: "memory", TargetIDs: []string{entry.ID}, OccurredAt: time.Now().UTC()})
 
 	return &WriteResult{
 		ID:          entry.ID,

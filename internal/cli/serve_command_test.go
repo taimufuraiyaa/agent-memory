@@ -50,6 +50,53 @@ func TestResolveServeRuntimeAllowsMissingWorkspace(t *testing.T) {
 	}
 }
 
+func TestResolveServeRuntimeDoesNotBindDaemonToCurrentWorkspace(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	cfg, err := resolveServeRuntime(commonFlags{workspace: "alpha"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.workspace != "" {
+		t.Fatalf("daemon bound to workspace %q", cfg.workspace)
+	}
+	if got, want := filepath.Dir(cfg.dbPath), filepath.Join(home, ".agent-memory"); got != want {
+		t.Fatalf("base dir=%q want %q", got, want)
+	}
+}
+
+func TestServePIDPathIsGlobalEvenWhenStartedFromWorkspace(t *testing.T) {
+	cfg := runtimeConfig{workspace: "alpha", dbPath: filepath.Join(t.TempDir(), "alpha.db")}
+	if got, want := filepath.Base(servePIDPath(cfg)), "serve.pid"; got != want {
+		t.Fatalf("serve PID must be daemon-global: got %q want %q", got, want)
+	}
+}
+
+func TestServeAndDoctorUseSameCanonicalPort(t *testing.T) {
+	if defaultServeAddr != ":3211" {
+		t.Fatalf("serve addr=%q", defaultServeAddr)
+	}
+	if defaultServiceURL != "http://127.0.0.1:3211" {
+		t.Fatalf("doctor URL=%q", defaultServiceURL)
+	}
+}
+
+func TestLegacyServePIDPathsExcludeGlobalDaemonPID(t *testing.T) {
+	base := t.TempDir()
+	for _, name := range []string{"serve.pid", "serve.alpha.pid", "serve.beta.pid", "other.pid"} {
+		if err := os.WriteFile(filepath.Join(base, name), []byte("1"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	paths, err := legacyServePIDPaths(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(paths) != 2 || filepath.Base(paths[0]) != "serve.alpha.pid" || filepath.Base(paths[1]) != "serve.beta.pid" {
+		t.Fatalf("legacy paths=%v", paths)
+	}
+}
+
 func TestWallClockAnchorNextAfter(t *testing.T) {
 	loc := time.FixedZone("UTC+2", 2*60*60)
 	anchor := wallClockAnchor{

@@ -26,7 +26,7 @@ func sessionEndHandler(svc *Service) http.HandlerFunc {
 		ws := workspaceFromRequest(r, svc.Workspace)
 		assets, err := svc.resolve(r.Context(), ws)
 		if err != nil {
-			writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
+			writeWorkspaceResolveError(w, err)
 			return
 		}
 		out, err := engine.RunSessionEndLifecycle(r.Context(), ws, req.Transcript, assets.Store, assets.Writer)

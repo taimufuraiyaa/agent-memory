@@ -28,4 +28,3 @@ func TestHybridRouterDeterministicRules(t *testing.T) {
 		t.Fatalf("expected R3 vector+graph, got %+v", outcome)
 	}
 }
-

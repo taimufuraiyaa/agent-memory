@@ -102,7 +102,7 @@ func parseFlags() config {
 	flag.BoolVar(&cfg.quiet, "quiet", false, "less chatter")
 	flag.BoolVar(&cfg.initHere, "init-here", false, "run per-project setup in the current directory after install (init new project, reinstall existing)")
 	flag.StringVar(&cfg.projectName, "project-name", "", "project name for --init-here setup (default: cwd basename)")
-	flag.Var(&cfg.ideTargets, "ide", "IDE rule targets for --init-here project setup (repeatable): cursor|antigravity|claude|aierules|cursorrules|trae|windsurfrules|generic|all")
+	flag.Var(&cfg.ideTargets, "ide", "IDE rule targets for --init-here project setup (repeatable): cursor|antigravity|claude|zcode|aierules|cursorrules|trae|windsurfrules|generic|all")
 	flag.Parse()
 
 	if cfg.binDir == "" {
@@ -174,6 +174,7 @@ func runInstall(cfg config) {
 			"AGENT_MEMORY_UPGRADE_YES":     "1",
 			"AGENT_MEMORY_OBSERVE_ENABLED": "1",
 			"AGENT_MEMORY_ENABLED":         "1",
+			"AGENT_MEMORY_TERM_BLOOM_MODE": "shadow",
 		}
 		if strings.TrimSpace(runtimePath) != "" {
 			vars["AGENT_MEMORY_ONNX_RUNTIME_PATH"] = runtimePath
@@ -309,7 +310,6 @@ func buildAndInstall(cfg config) (string, error) {
 	}
 	return finalBin, nil
 }
-
 
 func existsLabel(p string) string {
 	if fileExists(p) || dirExists(p) {
@@ -504,6 +504,9 @@ func mergeEnvFile(path string, vars map[string]string) (string, error) {
 		}
 		newLine := formatEnvAssignment(k, v)
 		if at, ok := index[k]; ok {
+			if k == "AGENT_MEMORY_TERM_BLOOM_MODE" {
+				continue
+			}
 			lines[at] = newLine
 		} else {
 			lines = append(lines, newLine)
@@ -513,6 +516,7 @@ func mergeEnvFile(path string, vars map[string]string) (string, error) {
 
 	out := strings.TrimRight(strings.Join(lines, "\n"), "\n") + "\n"
 	out = amconfig.EnsureAdaptiveTuningEnvGuidance(out)
+	out = amconfig.EnsureTermBloomEnvGuidance(out)
 	return out, nil
 }
 

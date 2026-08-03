@@ -9,7 +9,7 @@ import (
 // EmbeddingPlugin extends Plugin with embedding capabilities.
 type EmbeddingPlugin interface {
 	Plugin
-	
+
 	// Provider returns the embeddings provider.
 	Provider() embeddings.Provider
 }
@@ -70,11 +70,11 @@ func GetEmbeddingPlugin(name string) (EmbeddingPlugin, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	embPlugin, ok := plugin.(EmbeddingPlugin)
 	if !ok {
 		return nil, ErrInvalidPluginType
 	}
-	
+
 	return embPlugin, nil
 }

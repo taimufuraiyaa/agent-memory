@@ -11,15 +11,15 @@ import (
 
 // ModelVersionCheck represents the result of checking model version consistency.
 type ModelVersionCheck struct {
-	CurrentProvider      string            `json:"current_provider"`
-	CurrentModelVersion  string            `json:"current_model_version"`
-	ProviderDistribution map[string]int    `json:"provider_distribution"`
-	VersionDistribution  map[string]int    `json:"version_distribution"`
-	HasMismatch          bool              `json:"has_mismatch"`
-	MismatchedVectors    int               `json:"mismatched_vectors"`
-	TotalVectors         int               `json:"total_vectors"`
-	ReembedRequired      bool              `json:"reembed_required"`
-	RecommendedAction    string            `json:"recommended_action"`
+	CurrentProvider      string         `json:"current_provider"`
+	CurrentModelVersion  string         `json:"current_model_version"`
+	ProviderDistribution map[string]int `json:"provider_distribution"`
+	VersionDistribution  map[string]int `json:"version_distribution"`
+	HasMismatch          bool           `json:"has_mismatch"`
+	MismatchedVectors    int            `json:"mismatched_vectors"`
+	TotalVectors         int            `json:"total_vectors"`
+	ReembedRequired      bool           `json:"reembed_required"`
+	RecommendedAction    string         `json:"recommended_action"`
 }
 
 // CheckModelVersion verifies that all vectors in a workspace use the current provider and model version.
@@ -66,7 +66,7 @@ func CheckModelVersion(ctx context.Context, workspace string, store *sqlite.Stor
 	}
 
 	hasMismatch := mismatchedVectors > 0
-	reembedRequired := hasMismatch && mismatchedVectors > (totalVectors / 10) // Reembed if >10% mismatch
+	reembedRequired := hasMismatch && mismatchedVectors > (totalVectors/10) // Reembed if >10% mismatch
 
 	var recommendedAction string
 	if !hasMismatch {
@@ -118,10 +118,10 @@ func (c *ModelVersionCheck) FormatWarningMessage() string {
 
 	var b strings.Builder
 	b.WriteString("⚠️  Model version mismatch detected\n\n")
-	
+
 	b.WriteString(fmt.Sprintf("Current: %s@%s\n", c.CurrentProvider, c.CurrentModelVersion))
-	b.WriteString(fmt.Sprintf("Vectors: %d mismatched out of %d total (%.1f%%)\n\n", 
-		c.MismatchedVectors, c.TotalVectors, 
+	b.WriteString(fmt.Sprintf("Vectors: %d mismatched out of %d total (%.1f%%)\n\n",
+		c.MismatchedVectors, c.TotalVectors,
 		float64(c.MismatchedVectors)*100/float64(c.TotalVectors)))
 
 	b.WriteString("Provider distribution:\n")

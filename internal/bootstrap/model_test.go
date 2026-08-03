@@ -60,11 +60,11 @@ func TestValidateModelDir(t *testing.T) {
 
 	// Create valid model files
 	files := map[string]string{
-		"config.json":                `{"model": "test"}`,
-		"tokenizer.json":             `{"vocab": {}}`,
-		"tokenizer_config.json":      `{"do_lower_case": true}`,
-		"special_tokens_map.json":    `{"unk_token": "[UNK]"}`,
-		"model.onnx":                 string(make([]byte, 2*1024*1024)), // 2MB fake onnx
+		"config.json":             `{"model": "test"}`,
+		"tokenizer.json":          `{"vocab": {}}`,
+		"tokenizer_config.json":   `{"do_lower_case": true}`,
+		"special_tokens_map.json": `{"unk_token": "[UNK]"}`,
+		"model.onnx":              string(make([]byte, 2*1024*1024)), // 2MB fake onnx
 	}
 
 	for fname, content := range files {

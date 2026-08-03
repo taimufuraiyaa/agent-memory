@@ -4,6 +4,7 @@ import {
   getStats,
   listBenchmarkRuns,
   listObservations,
+  listReplayEvents,
   listSessions,
   listProjects,
   listRecentMemories,
@@ -20,6 +21,7 @@ import {
   type MemoryType,
   type ObservationEntry,
   type ObservationPromotionResult,
+  type ReplayEvent,
   type OutcomeResult,
   type ProjectListItem,
   type RecallPreviewResponse,
@@ -65,9 +67,14 @@ import { SessionsPanel } from './SessionsPanel'
 import { WikiPanel } from './WikiPanel'
 import { FeedbackPanel } from './FeedbackPanel'
 import { SkillsPanel } from './SkillsPanel'
+import { NotebookWorkspace } from './NotebookWorkspace'
+
+const notebookEnabled = (import.meta as ImportMeta & {
+  env?: Record<string, string | undefined>
+}).env?.VITE_NOTEBOOK_ENABLED !== 'false'
 
 export function App() {
-  const [surface, setSurface] = useState<Surface>('overview')
+  const [surface, setSurface] = useState<Surface>(notebookEnabled ? 'notes' : 'overview')
   const [viewingJSON, setViewingJSON] = useState<any | null>(null)
 
   const [projects, setProjects] = useState<ProjectListItem[]>([])
@@ -87,6 +94,9 @@ export function App() {
   const [observations, setObservations] = useState<ObservationEntry[]>([])
   const [observationsBusy, setObservationsBusy] = useState<boolean>(false)
   const [observationsErr, setObservationsErr] = useState<string>('')
+  const [replayEvents, setReplayEvents] = useState<ReplayEvent[]>([])
+  const [replayBusy, setReplayBusy] = useState(false)
+  const [replayErr, setReplayErr] = useState('')
   const [promotionBusyFor, setPromotionBusyFor] = useState<string>('')
   const [promotionResults, setPromotionResults] = useState<Record<string, ObservationPromotionResult>>({})
   const [overviewExperimentFocusKey, setOverviewExperimentFocusKey] = useState<number>(0)
@@ -134,7 +144,10 @@ export function App() {
   const [skills, setSkills] = useState<SkillInfo[]>([])
   const [skillsBusy, setSkillsBusy] = useState<boolean>(false)
   const [skillsErr, setSkillsErr] = useState<string>('')
+  const [navOpen, setNavOpen] = useState(false)
   const threadRef = useRef<HTMLDivElement>(null)
+  const navMenuRef = useRef<HTMLDivElement>(null)
+  const navTriggerRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
     document.body.classList.remove('light', 'dark')
@@ -150,6 +163,11 @@ export function App() {
   useEffect(() => {
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
+      if (navOpen) {
+        setNavOpen(false)
+        navTriggerRef.current?.focus()
+        return
+      }
       if (wikiDiagramMemory) {
         setWikiDiagramMemory(null)
         return
@@ -168,7 +186,27 @@ export function App() {
     }
     window.addEventListener('keydown', handleEscape)
     return () => window.removeEventListener('keydown', handleEscape)
-  }, [rawStatsOpen, selectedMemory, wikiConsolidatedOpen, wikiDiagramMemory])
+  }, [navOpen, rawStatsOpen, selectedMemory, wikiConsolidatedOpen, wikiDiagramMemory])
+
+  useEffect(() => {
+    if (!navOpen) return
+    const handleOutsidePointer = (event: PointerEvent) => {
+      if (!navMenuRef.current?.contains(event.target as Node)) {
+        setNavOpen(false)
+      }
+    }
+    window.addEventListener('pointerdown', handleOutsidePointer)
+    return () => window.removeEventListener('pointerdown', handleOutsidePointer)
+  }, [navOpen])
+
+  useEffect(() => {
+    const desktopNavigation = window.matchMedia('(min-width: 2161px)')
+    const closeCompactNavigation = () => {
+      if (desktopNavigation.matches) setNavOpen(false)
+    }
+    desktopNavigation.addEventListener('change', closeCompactNavigation)
+    return () => desktopNavigation.removeEventListener('change', closeCompactNavigation)
+  }, [])
 
   const selectedProject = useMemo(() => projects.find((x) => x.name === workspace), [projects, workspace])
 
@@ -419,6 +457,18 @@ export function App() {
     return () => {
       cancelled = true
     }
+  }, [selectedSessionID, workspace])
+
+  useEffect(() => {
+    let cancelled = false
+    if (!workspace || !selectedSessionID) { setReplayEvents([]); setReplayErr(''); return }
+    setReplayBusy(true)
+    setReplayErr('')
+    listReplayEvents({ workspace, session_id: selectedSessionID, limit: 400 })
+      .then((response) => { if (!cancelled) setReplayEvents(response.events ?? []) })
+      .catch((error) => { if (!cancelled) { setReplayEvents([]); setReplayErr(error instanceof Error ? error.message : String(error)) } })
+      .finally(() => { if (!cancelled) setReplayBusy(false) })
+    return () => { cancelled = true }
   }, [selectedSessionID, workspace])
 
   const filters = useMemo(() => {
@@ -766,6 +816,41 @@ export function App() {
     setWikiOptionsOpen(false)
   }
 
+  const navigationItems: Array<{ key: string; label: string; surface: Surface; open: () => void }> = [
+    ...(notebookEnabled ? [{ key: '00', label: 'Notes', surface: 'notes' as Surface, open: () => setSurface('notes') }] : []),
+    { key: '01', label: 'Overview', surface: 'overview', open: () => setSurface('overview') },
+    { key: '02', label: 'Sessions', surface: 'sessions', open: openSessions },
+    { key: '03', label: 'Diagnostics', surface: 'diagnostics', open: () => setSurface('diagnostics') },
+    { key: '04', label: 'Benchmark', surface: 'benchmark', open: openBenchmark },
+    { key: '05', label: 'Lifecycle', surface: 'lifecycle', open: () => setSurface('lifecycle') },
+    { key: '06', label: 'Wiki', surface: 'wiki', open: () => openWiki() },
+    { key: '07', label: 'Feedback', surface: 'feedback', open: () => { setSurface('feedback'); setSelectedMemory(null) } },
+    { key: '08', label: 'Skills', surface: 'skills', open: () => { setSurface('skills'); setSelectedMemory(null) } },
+  ]
+  const activeNavigationItem = navigationItems.find((item) => item.surface === surface) ?? navigationItems[0]
+
+  function activateNavigationItem(item: (typeof navigationItems)[number]) {
+    item.open()
+    setNavOpen(false)
+  }
+
+  if (notebookEnabled && surface === 'notes') {
+    return (
+      <NotebookWorkspace
+        workspace={workspace}
+        projects={projects}
+        theme={theme}
+        onWorkspaceChange={(nextWorkspace) => {
+          setWorkspace(nextWorkspace)
+          setWikiScope(nextWorkspace)
+          setSelectedMemory(null)
+        }}
+        onOpenSystem={() => setSurface('overview')}
+        onThemeChange={() => setTheme((current) => (current === 'dark' ? 'light' : 'dark'))}
+      />
+    )
+  }
+
   return (
     <div className={surface === 'wiki' ? 'shell chatShell shellWikiMode' : surface === 'feedback' ? 'shell chatShell shellFeedbackMode' : 'shell chatShell'}>
       <header className="topbar chatTopbar">
@@ -801,39 +886,52 @@ export function App() {
         </div>
 
         <nav className="topbarCenter" aria-label="Mode switcher">
-          <button className={surface === 'overview' ? 'navItem navItemOn' : 'navItem'} onClick={() => setSurface('overview')} type="button">
-            <span className="navKey">[01]</span>
-            <span className="navLabel">Overview</span>
-          </button>
-          <button className={surface === 'sessions' ? 'navItem navItemOn' : 'navItem'} onClick={openSessions} type="button" aria-label="Sessions">
-            <span className="navKey">[02]</span>
-            <span className="navLabel">Sessions</span>
-          </button>
-          <button className={surface === 'diagnostics' ? 'navItem navItemOn' : 'navItem'} onClick={() => setSurface('diagnostics')} type="button" aria-label="Diagnostics">
-            <span className="navKey">[03]</span>
-            <span className="navLabel">Diagnostics</span>
-          </button>
-          <button className={surface === 'benchmark' ? 'navItem navItemOn' : 'navItem'} onClick={openBenchmark} type="button" aria-label="Benchmark">
-            <span className="navKey">[04]</span>
-            <span className="navLabel">Benchmark</span>
-          </button>
-          <button className={surface === 'lifecycle' ? 'navItem navItemOn' : 'navItem'} onClick={() => setSurface('lifecycle')} type="button" aria-label="Lifecycle">
-            <span className="navKey">[05]</span>
-            <span className="navLabel">Lifecycle</span>
-          </button>
-          <button className={surface === 'wiki' ? 'navItem navItemOn' : 'navItem'} onClick={() => openWiki()} type="button" aria-label="Wiki">
-            <span className="navKey">[06]</span>
-            <span className="navLabel">Wiki</span>
-          </button>
-          <button className={surface === 'feedback' ? 'navItem navItemOn' : 'navItem'} onClick={() => { setSurface('feedback'); setSelectedMemory(null); }} type="button" aria-label="Feedback">
-            <span className="navKey">[07]</span>
-            <span className="navLabel">Feedback</span>
-          </button>
-          <button className={surface === 'skills' ? 'navItem navItemOn' : 'navItem'} onClick={() => { setSurface('skills'); setSelectedMemory(null); }} type="button" aria-label="Skills">
-            <span className="navKey">[08]</span>
-            <span className="navLabel">Skills</span>
-          </button>
+          {navigationItems.map((item) => (
+            <button
+              key={item.surface}
+              className={surface === item.surface ? 'navItem navItemOn' : 'navItem'}
+              onClick={() => activateNavigationItem(item)}
+              type="button"
+              aria-current={surface === item.surface ? 'page' : undefined}
+            >
+              <span className="navKey">[{item.key}]</span>
+              <span className="navLabel">{item.label}</span>
+            </button>
+          ))}
         </nav>
+
+        <div className="navMenuShell" ref={navMenuRef}>
+          <button
+            ref={navTriggerRef}
+            className="navMenuTrigger"
+            type="button"
+            aria-expanded={navOpen}
+            aria-controls="responsive-navigation-menu"
+            onClick={() => setNavOpen((open) => !open)}
+          >
+            <span className="navMenuPrompt">menu</span>
+            <span className="navKey">[{activeNavigationItem.key}]</span>
+            <span className="navMenuCurrent">{activeNavigationItem.label}</span>
+            <span className="navMenuChevron" aria-hidden="true">{navOpen ? '[-]' : '[+]'}</span>
+          </button>
+          {navOpen ? (
+            <nav id="responsive-navigation-menu" className="navMenuPanel" aria-label="Mode switcher">
+              {navigationItems.map((item) => (
+                <button
+                  key={item.surface}
+                  className={surface === item.surface ? 'navMenuItem navMenuItemOn' : 'navMenuItem'}
+                  type="button"
+                  onClick={() => activateNavigationItem(item)}
+                  aria-current={surface === item.surface ? 'page' : undefined}
+                >
+                  <span className="navKey">[{item.key}]</span>
+                  <span>{item.label}</span>
+                  {surface === item.surface ? <span className="navMenuStatus">active</span> : null}
+                </button>
+              ))}
+            </nav>
+          ) : null}
+        </div>
 
         <div className="topbarRight">
           <button
@@ -890,6 +988,9 @@ export function App() {
                   promotionBusy={Boolean(selectedSession && promotionBusyFor === selectedSession.session_id)}
                   onSelectSession={setSelectedSessionID}
                   onPromote={promoteSelectedSession}
+                  replayEvents={replayEvents}
+                  replayBusy={replayBusy}
+                  replayErr={replayErr}
                 />
               ) : null}
 

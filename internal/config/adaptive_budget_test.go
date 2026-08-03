@@ -7,11 +7,11 @@ import (
 
 func TestGetAdaptiveBudget(t *testing.T) {
 	tests := []struct {
-		name              string
-		contextWindow     string
-		defaultBudget     int
-		budgetPercentage  float64
-		expectedBudget    int
+		name             string
+		contextWindow    string
+		defaultBudget    int
+		budgetPercentage float64
+		expectedBudget   int
 	}{
 		{
 			name:             "no context window env var - use default",

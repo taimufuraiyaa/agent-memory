@@ -60,6 +60,15 @@ class GeneratorDeterminismTest(unittest.TestCase):
             self.assertEqual(first_case_one, first_case_two)
 
 
+class IntegrationReliabilityFixtureTest(unittest.TestCase):
+    def test_fixture_ids_categories_and_thresholds_are_stable(self) -> None:
+        path = BENCHMARK_DIR / "testdata" / "integration_reliability.jsonl"
+        rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]
+        self.assertEqual(len(rows), len({row["id"] for row in rows}))
+        self.assertEqual({row["category"] for row in rows}, {"delivery_reliability", "privacy_trust", "continuation_value"})
+        self.assertTrue(all(row["latency_budget_ms"] > 0 for row in rows))
+
+
 class ScoreMathTest(unittest.TestCase):
     def test_aggregate_scores_recompute_percentages_from_summed_totals(self) -> None:
         rows = [

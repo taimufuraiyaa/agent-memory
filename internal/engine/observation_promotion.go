@@ -23,20 +23,20 @@ type PromoteRequest struct {
 }
 
 type PromoteResult struct {
-	Workspace      string          `json:"workspace"`
-	SessionID      string          `json:"session_id"`
-	RequestedType  core.MemoryType `json:"requested_type"`
-	Observations   int             `json:"observations"`
-	CreatedID      string          `json:"created_id"`
-	Deduplicated   bool            `json:"deduplicated"`
-	Rejected       bool            `json:"rejected"`
-	RejectReason   string          `json:"reject_reason,omitempty"`
+	Workspace      string           `json:"workspace"`
+	SessionID      string           `json:"session_id"`
+	RequestedType  core.MemoryType  `json:"requested_type"`
+	Observations   int              `json:"observations"`
+	CreatedID      string           `json:"created_id"`
+	Deduplicated   bool             `json:"deduplicated"`
+	Rejected       bool             `json:"rejected"`
+	RejectReason   string           `json:"reject_reason,omitempty"`
 	StorageTier    core.StorageTier `json:"storage_tier"`
-	RouteRule      string          `json:"route_rule,omitempty"`
-	RouteReason    string          `json:"route_reason,omitempty"`
-	ContentHash    string          `json:"content_hash,omitempty"`
-	Confidence     float64         `json:"confidence"`
-	PromotionChars int             `json:"promotion_chars"`
+	RouteRule      string           `json:"route_rule,omitempty"`
+	RouteReason    string           `json:"route_reason,omitempty"`
+	ContentHash    string           `json:"content_hash,omitempty"`
+	Confidence     float64          `json:"confidence"`
+	PromotionChars int              `json:"promotion_chars"`
 }
 
 type ObservationPromoter struct {
@@ -103,6 +103,14 @@ func (p *ObservationPromoter) Promote(ctx context.Context, req PromoteRequest) (
 	if err != nil {
 		return nil, err
 	}
+	observationIDs := make([]string, 0, len(obs))
+	for _, observation := range obs {
+		observationIDs = append(observationIDs, observation.ID)
+	}
+	if err := p.store.LinkMemoryObservations(ctx, out.ID, observationIDs); err != nil {
+		return nil, err
+	}
+	_, _ = p.store.AppendAuditEvent(ctx, sqlite.AuditEventInput{Workspace: req.Workspace, Operation: "promote_observations", Outcome: "success", Actor: "lifecycle", Source: "observations", SessionID: req.SessionID, TargetType: "memory", TargetIDs: []string{out.ID}, TargetCount: len(obs), Reason: "session promotion"})
 
 	return &PromoteResult{
 		Workspace:      req.Workspace,
@@ -154,4 +162,3 @@ func BuildPromotionText(sessionID string, observations []core.Observation, maxCh
 
 	return ClipString(b.String(), maxChars)
 }
-

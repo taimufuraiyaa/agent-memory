@@ -11,9 +11,11 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/taimufuraiyaa/agent-memory/internal/application"
 	"github.com/taimufuraiyaa/agent-memory/internal/embeddings"
 	"github.com/taimufuraiyaa/agent-memory/internal/engine"
 	"github.com/taimufuraiyaa/agent-memory/internal/storage/sqlite"
@@ -35,6 +37,8 @@ type Manager struct {
 	BaseDir string
 }
 
+var ErrProjectNotRegistered = errors.New("workspace is not registered")
+
 type InitOptions struct {
 	CWD         string
 	ProjectName string
@@ -47,12 +51,13 @@ type InitOptions struct {
 }
 
 type InitResult struct {
-	Project         string   `json:"project"`
-	DBPath          string   `json:"db_path"`
-	CursorRule      string   `json:"cursor_rule,omitempty"`
-	RuleFiles       []string `json:"rule_files,omitempty"`
-	StudyRun        bool     `json:"study_run"`
-	MemoriesCreated int      `json:"memories_created,omitempty"`
+	Project         string                `json:"project"`
+	DBPath          string                `json:"db_path"`
+	CursorRule      string                `json:"cursor_rule,omitempty"`
+	RuleFiles       []string              `json:"rule_files,omitempty"`
+	StudyRun        bool                  `json:"study_run"`
+	MemoriesCreated int                   `json:"memories_created,omitempty"`
+	TermIndex       *TermIndexSetupResult `json:"term_index,omitempty"`
 }
 
 type RenameOptions struct {
@@ -68,12 +73,12 @@ type RenameResult struct {
 }
 
 type ListItem struct {
-	Name         string    `json:"name"`
-	DBPath       string    `json:"db_path"`
+	Name          string    `json:"name"`
+	DBPath        string    `json:"db_path"`
 	WorkspaceRoot string    `json:"workspace_root,omitempty"`
-	SizeBytes    int64     `json:"size_bytes"`
-	MemoryCount  int       `json:"memory_count"`
-	LastActivity time.Time `json:"last_activity"`
+	SizeBytes     int64     `json:"size_bytes"`
+	MemoryCount   int       `json:"memory_count"`
+	LastActivity  time.Time `json:"last_activity"`
 }
 
 type DeleteOptions struct {
@@ -98,6 +103,20 @@ type ReinstallResult struct {
 	Project    string                 `json:"project"`
 	DBPath     string                 `json:"db_path"`
 	AgentFiles *WriteAgentFilesResult `json:"agent_files"`
+	TermIndex  *TermIndexSetupResult  `json:"term_index,omitempty"`
+}
+
+// TermIndexSetupResult is safe lifecycle metadata; it excludes raw terms and bitmap bytes.
+type TermIndexSetupResult struct {
+	Ready           bool   `json:"ready"`
+	RebuildRequired bool   `json:"rebuild_required"`
+	RebuildReason   string `json:"rebuild_reason,omitempty"`
+	Scanned         int    `json:"scanned"`
+	Indexed         int    `json:"indexed"`
+	Skipped         int    `json:"skipped"`
+	Failed          int    `json:"failed"`
+	DistinctTerms   int64  `json:"distinct_terms"`
+	Generation      int64  `json:"generation"`
 }
 
 func NewManager(baseDir string) (*Manager, error) {
@@ -140,7 +159,8 @@ func FindProjectRoot(start string) string {
 			fileExists(filepath.Join(dir, ".cursorrules")) ||
 			fileExists(filepath.Join(dir, ".aierules")) ||
 			fileExists(filepath.Join(dir, ".windsurfrules")) ||
-			fileExists(filepath.Join(dir, "CLAUDE.md")) {
+			fileExists(filepath.Join(dir, "CLAUDE.md")) ||
+			fileExists(filepath.Join(dir, "AGENTS.md")) {
 			return dir
 		}
 		next := filepath.Dir(dir)
@@ -163,6 +183,7 @@ func detectWorkspaceFromCWD(start string) (workspace string, root string, ok boo
 			filepath.Join(dir, ".aierules"),
 			filepath.Join(dir, ".windsurfrules"),
 			filepath.Join(dir, "CLAUDE.md"),
+			filepath.Join(dir, "AGENTS.md"),
 		}
 		for _, p := range candidates {
 			if !fileExists(p) {
@@ -183,7 +204,6 @@ func detectWorkspaceFromCWD(start string) (workspace string, root string, ok boo
 }
 
 func (m *Manager) Reinstall(ctx context.Context, opt ReinstallOptions) (*ReinstallResult, error) {
-	_ = ctx
 	root := FindProjectRoot(opt.CWD)
 	name := strings.TrimSpace(opt.ProjectName)
 	if name == "" {
@@ -210,16 +230,21 @@ func (m *Manager) Reinstall(ctx context.Context, opt ReinstallOptions) (*Reinsta
 	if !fileExists(p.DBPath) {
 		return nil, fmt.Errorf("db file missing: %s", p.DBPath)
 	}
+	termIndex, err := prepareTermIndexPath(ctx, p.DBPath, name)
+	if err != nil {
+		return nil, fmt.Errorf("prepare term index: %w", err)
+	}
 	af, err := WriteAgentFiles(WriteAgentFilesOptions{
 		CWD:       root,
 		Workspace: name,
+		DataDir:   m.BaseDir,
 		Force:     opt.Force,
 		IDEs:      opt.IDEs,
 	})
 	if err != nil {
 		return nil, err
 	}
-	return &ReinstallResult{Project: name, DBPath: p.DBPath, AgentFiles: af}, nil
+	return &ReinstallResult{Project: name, DBPath: p.DBPath, AgentFiles: af, TermIndex: termIndex}, nil
 }
 
 func (m *Manager) Init(ctx context.Context, opt InitOptions) (*InitResult, error) {
@@ -243,7 +268,11 @@ func (m *Manager) Init(ctx context.Context, opt InitOptions) (*InitResult, error
 				return nil, err
 			}
 		}
-		if _, err := sqlite.Open(ctx, dbPath); err != nil {
+		store, err := sqlite.Open(ctx, dbPath)
+		if err != nil {
+			return nil, err
+		}
+		if err := store.Close(); err != nil {
 			return nil, err
 		}
 		root := FindProjectRoot(opt.CWD)
@@ -315,6 +344,18 @@ func (m *Manager) Init(ctx context.Context, opt InitOptions) (*InitResult, error
 						return nil, err
 					}
 					written = append(written, p)
+				case "zcode":
+					p := filepath.Join(opt.CWD, "AGENTS.md")
+					if _, err := upsertRuleSection(p, "## agent-memory (MANDATORY)", genericRulesSection(name), opt.Force); err != nil {
+						return nil, err
+					}
+					written = append(written, p)
+				case "codex":
+					paths, err := writeCodexFiles(opt.CWD, name, m.BaseDir, opt.Force)
+					if err != nil {
+						return nil, err
+					}
+					written = append(written, paths...)
 				case "trae":
 					p := filepath.Join(opt.CWD, ".trae", "rules", "project_rules.md")
 					if _, err := upsertRuleSection(p, "## agent-memory (MANDATORY)", genericRulesSection(name), opt.Force); err != nil {
@@ -353,6 +394,11 @@ func (m *Manager) Init(ctx context.Context, opt InitOptions) (*InitResult, error
 			out.StudyRun = true
 			out.MemoriesCreated = len(sr.WrittenIDs)
 		}
+		termIndex, err := prepareTermIndexPath(ctx, dbPath, name)
+		if err != nil {
+			return nil, fmt.Errorf("prepare term index: %w", err)
+		}
+		out.TermIndex = termIndex
 		return out, nil
 	})
 	if err != nil {
@@ -360,6 +406,64 @@ func (m *Manager) Init(ctx context.Context, opt InitOptions) (*InitResult, error
 	}
 	out, _ := v.(*InitResult)
 	return out, nil
+}
+
+// PrepareTermIndex migrates, backfills, and rebuilds one registered project.
+func (m *Manager) PrepareTermIndex(ctx context.Context, projectName string) (*TermIndexSetupResult, error) {
+	name, err := ValidateProjectName(projectName)
+	if err != nil {
+		return nil, err
+	}
+	reg, err := m.readRegistry()
+	if err != nil {
+		return nil, err
+	}
+	project := findProject(reg, name)
+	if project == nil {
+		return nil, ErrProjectNotRegistered
+	}
+	return prepareTermIndexPath(ctx, project.DBPath, name)
+}
+
+// PrepareAllTermIndexes prepares every registered project independently.
+func (m *Manager) PrepareAllTermIndexes(ctx context.Context) (map[string]*TermIndexSetupResult, map[string]string, error) {
+	reg, err := m.readRegistry()
+	if err != nil {
+		return nil, nil, err
+	}
+	prepared := make(map[string]*TermIndexSetupResult)
+	failures := make(map[string]string)
+	for _, project := range reg.Projects {
+		result, err := prepareTermIndexPath(ctx, project.DBPath, project.Name)
+		if err != nil {
+			failures[project.Name] = err.Error()
+			continue
+		}
+		prepared[project.Name] = result
+	}
+	return prepared, failures, nil
+}
+
+func prepareTermIndexPath(ctx context.Context, dbPath, workspace string) (*TermIndexSetupResult, error) {
+	store, err := sqlite.Open(ctx, dbPath)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = store.Close() }()
+	service := application.NewMemoryService(store, nil, nil)
+	report, err := service.RebuildTermIndex(ctx, application.RebuildTermIndexOptions{Workspace: workspace})
+	if err != nil {
+		return nil, err
+	}
+	status, err := service.TermIndexStatus(ctx, workspace)
+	if err != nil {
+		return nil, err
+	}
+	return &TermIndexSetupResult{
+		Ready: status.GatingEligible, RebuildRequired: status.RebuildRequired, RebuildReason: status.RebuildReason,
+		Scanned: report.Scanned, Indexed: report.Indexed, Skipped: report.Skipped, Failed: report.Failed,
+		DistinctTerms: report.DistinctTerms, Generation: report.Generation,
+	}, nil
 }
 
 func (m *Manager) Rename(_ context.Context, opt RenameOptions) (*RenameResult, error) {
@@ -426,6 +530,43 @@ func (m *Manager) List(_ context.Context) ([]ListItem, error) {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out, nil
+}
+
+// Project returns registry metadata without opening the workspace database.
+// The registry DB path is authoritative for daemon request routing.
+func (m *Manager) Project(name string) (Project, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return Project{}, errors.New("workspace is required")
+	}
+	reg, err := m.readRegistry()
+	if err != nil {
+		return Project{}, err
+	}
+	project := findProject(reg, name)
+	if project == nil {
+		return Project{}, fmt.Errorf("%w: %q", ErrProjectNotRegistered, name)
+	}
+	if strings.TrimSpace(project.DBPath) == "" {
+		return Project{}, fmt.Errorf("workspace %q has no database path", name)
+	}
+	return *project, nil
+}
+
+// ProjectNames returns registered routing keys without opening databases.
+func (m *Manager) ProjectNames() ([]string, error) {
+	reg, err := m.readRegistry()
+	if err != nil {
+		return nil, err
+	}
+	names := make([]string, 0, len(reg.Projects))
+	for _, project := range reg.Projects {
+		if name := strings.TrimSpace(project.Name); name != "" {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+	return names, nil
 }
 
 func (m *Manager) Delete(_ context.Context, opt DeleteOptions) (*DeleteResult, error) {
@@ -587,7 +728,7 @@ func normalizeRuleTargets(cwd string, in []string) ([]string, error) {
 		}
 		switch v {
 		case "all":
-			expanded = append(expanded, "cursor", "antigravity", "aierules", "cursorrules", "windsurfrules", "claude", "trae")
+			expanded = append(expanded, "cursor", "antigravity", "aierules", "cursorrules", "windsurfrules", "claude", "zcode", "codex", "trae")
 		case "generic":
 			expanded = append(expanded, "aierules", "cursorrules", "windsurfrules", "trae")
 		default:
@@ -602,11 +743,11 @@ func normalizeRuleTargets(cwd string, in []string) ([]string, error) {
 			continue
 		}
 		switch t {
-		case "cursor", "antigravity", "aierules", "cursorrules", "windsurfrules", "claude", "trae":
+		case "cursor", "antigravity", "aierules", "cursorrules", "windsurfrules", "claude", "zcode", "codex", "trae":
 			seen[t] = true
 			out = append(out, t)
 		default:
-			return nil, fmt.Errorf("invalid ide: %s (allowed: cursor|antigravity|claude|aierules|cursorrules|trae|windsurfrules|generic|all)", t)
+			return nil, fmt.Errorf("invalid ide: %s (allowed: cursor|antigravity|claude|zcode|codex|aierules|cursorrules|trae|windsurfrules|generic|all)", t)
 		}
 	}
 	if len(out) == 0 {
@@ -616,7 +757,7 @@ func normalizeRuleTargets(cwd string, in []string) ([]string, error) {
 }
 
 func detectDefaultRuleTargets(cwd string) []string {
-	targets := make([]string, 0, 7)
+	targets := make([]string, 0, 8)
 	if dirExists(filepath.Join(cwd, ".cursor")) {
 		targets = append(targets, "cursor")
 	}
@@ -638,6 +779,12 @@ func detectDefaultRuleTargets(cwd string) []string {
 	if fileExists(filepath.Join(cwd, "CLAUDE.md")) {
 		targets = append(targets, "claude")
 	}
+	if fileExists(filepath.Join(cwd, "AGENTS.md")) {
+		targets = append(targets, "zcode")
+	}
+	if dirExists(filepath.Join(cwd, ".codex")) || os.Getenv("CODEX_HOME") != "" {
+		targets = append(targets, "codex")
+	}
 	if len(targets) == 0 {
 		return []string{"cursor"}
 	}
@@ -652,6 +799,244 @@ func writeRuleFile(path, content string) error {
 		return fmt.Errorf("write rule file %s: %w", path, err)
 	}
 	return nil
+}
+
+const (
+	codexConfigStart = "# BEGIN agent-memory managed Codex sandbox"
+	codexConfigEnd   = "# END agent-memory managed Codex sandbox"
+	codexHookMarker  = "agent-memory managed lifecycle"
+)
+
+func writeCodexFiles(cwd, workspace, dataDir string, force bool) ([]string, error) {
+	agentsPath := filepath.Join(cwd, "AGENTS.md")
+	if _, err := upsertRuleSection(agentsPath, "## agent-memory (MANDATORY)", genericRulesSection(workspace), force); err != nil {
+		return nil, fmt.Errorf("write AGENTS.md: %w", err)
+	}
+	configPath := filepath.Join(cwd, ".codex", "config.toml")
+	if err := writeCodexConfig(configPath, dataDir); err != nil {
+		return nil, err
+	}
+	hooksPath := filepath.Join(cwd, ".codex", "hooks.json")
+	if err := writeCodexHooks(hooksPath, workspace); err != nil {
+		return nil, err
+	}
+	return []string{agentsPath, configPath, hooksPath}, nil
+}
+
+// WriteCodexProjectFiles applies the existing managed Codex project
+// configuration for use by higher-level connection adapters.
+func WriteCodexProjectFiles(cwd, workspace, dataDir string, force bool) ([]string, error) {
+	return writeCodexFiles(cwd, workspace, dataDir, force)
+}
+
+// RemoveCodexProjectFiles removes only agent-memory-owned Codex config and
+// hook entries. User-owned settings and hooks are preserved.
+func RemoveCodexProjectFiles(cwd string) ([]string, error) {
+	paths := []string{filepath.Join(cwd, ".codex", "config.toml"), filepath.Join(cwd, ".codex", "hooks.json")}
+	config, err := os.ReadFile(paths[0])
+	if err == nil {
+		updated, removeErr := removeManagedBlock(string(config), codexConfigStart, codexConfigEnd)
+		if removeErr != nil {
+			return nil, removeErr
+		}
+		if err := writeRuleFile(paths[0], strings.TrimSpace(updated)+"\n"); err != nil {
+			return nil, err
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return nil, err
+	}
+	root := map[string]any{}
+	if hooksData, readErr := os.ReadFile(paths[1]); readErr == nil {
+		if err := json.Unmarshal(hooksData, &root); err != nil {
+			return nil, fmt.Errorf("parse Codex hooks %s: %w", paths[1], err)
+		}
+		hooks, _ := root["hooks"].(map[string]any)
+		for event, rawGroups := range hooks {
+			groups, _ := rawGroups.([]any)
+			kept := make([]any, 0, len(groups))
+			for _, raw := range groups {
+				if !strings.Contains(fmt.Sprint(raw), codexHookMarker) {
+					kept = append(kept, raw)
+				}
+			}
+			hooks[event] = kept
+		}
+		encoded, err := json.MarshalIndent(root, "", "  ")
+		if err != nil {
+			return nil, err
+		}
+		if err := writeRuleFile(paths[1], string(encoded)+"\n"); err != nil {
+			return nil, err
+		}
+	} else if !errors.Is(readErr, os.ErrNotExist) {
+		return nil, readErr
+	}
+	return paths, nil
+}
+
+// WriteCodexGlobalFiles installs the user-wide Codex sandbox root and lifecycle
+// hooks while preserving unrelated Codex configuration.
+func WriteCodexGlobalFiles(codexHome, dataDir string) ([]string, error) {
+	if strings.TrimSpace(codexHome) == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return nil, fmt.Errorf("resolve Codex home: %w", err)
+		}
+		codexHome = filepath.Join(home, ".codex")
+	}
+	configPath := filepath.Join(codexHome, "config.toml")
+	if err := writeCodexGlobalConfig(configPath, dataDir); err != nil {
+		return nil, err
+	}
+	hooksPath := filepath.Join(codexHome, "hooks.json")
+	if err := writeCodexHooks(hooksPath, "agent-memory"); err != nil {
+		return nil, err
+	}
+	return []string{configPath, hooksPath}, nil
+}
+
+func writeCodexConfig(path, dataDir string) error {
+	absDataDir, err := filepath.Abs(dataDir)
+	if err != nil {
+		return fmt.Errorf("resolve Codex writable root: %w", err)
+	}
+	quoted := strconv.Quote(filepath.ToSlash(absDataDir))
+	managed := codexConfigStart + "\n" +
+		"default_permissions = \"agent-memory-workspace\"\n" +
+		"permissions.agent-memory-workspace.filesystem.\":root\" = \"read\"\n" +
+		"permissions.agent-memory-workspace.filesystem.\":tmpdir\" = \"write\"\n" +
+		"permissions.agent-memory-workspace.filesystem.\":slash_tmp\" = \"write\"\n" +
+		"permissions.agent-memory-workspace.filesystem." + quoted + " = \"write\"\n" +
+		"permissions.agent-memory-workspace.filesystem.\":workspace_roots\" = { \".\" = \"write\", \".git\" = \"read\", \".agents\" = \"read\", \".codex\" = \"read\" }\n" +
+		codexConfigEnd
+
+	existing := ""
+	if b, err := os.ReadFile(path); err == nil {
+		existing = string(b)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("read Codex config: %w", err)
+	}
+	userConfig, err := removeManagedBlock(existing, codexConfigStart, codexConfigEnd)
+	if err != nil {
+		return fmt.Errorf("inspect Codex config: %w", err)
+	}
+	if regexp.MustCompile(`(?m)^\s*(?:default_permissions|sandbox_mode)\s*=`).MatchString(userConfig) {
+		return errors.New("existing Codex permission selection conflicts with the agent-memory project profile")
+	}
+	updated, err := replaceManagedBlock(existing, codexConfigStart, codexConfigEnd, managed)
+	if err != nil {
+		return fmt.Errorf("update Codex config: %w", err)
+	}
+	return writeRuleFile(path, strings.TrimSpace(updated)+"\n")
+}
+
+func writeCodexGlobalConfig(path, dataDir string) error {
+	absDataDir, err := filepath.Abs(dataDir)
+	if err != nil {
+		return fmt.Errorf("resolve Codex writable root: %w", err)
+	}
+	quoted := strconv.Quote(filepath.ToSlash(absDataDir))
+	managed := codexConfigStart + "\n" +
+		"sandbox_workspace_write.writable_roots = [" + quoted + "]\n" +
+		codexConfigEnd
+
+	existing := ""
+	if b, err := os.ReadFile(path); err == nil {
+		existing = string(b)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("read Codex config: %w", err)
+	}
+	if !strings.Contains(existing, codexConfigStart) {
+		writableRoots := regexp.MustCompile(`(?m)^(\s*(?:sandbox_workspace_write\.)?writable_roots\s*=\s*)\[([^\n]*)\](\s*)$`)
+		if match := writableRoots.FindStringSubmatchIndex(existing); match != nil {
+			line := existing[match[0]:match[1]]
+			if !strings.Contains(line, quoted) {
+				closeAt := strings.LastIndex(line, "]")
+				before := strings.TrimSpace(line[:closeAt])
+				separator := ""
+				if !strings.HasSuffix(before, "[") {
+					separator = ", "
+				}
+				line = line[:closeAt] + separator + quoted + line[closeAt:]
+				existing = existing[:match[0]] + line + existing[match[1]:]
+			}
+			return writeRuleFile(path, strings.TrimSpace(existing)+"\n")
+		}
+	}
+	updated, err := replaceManagedBlock(existing, codexConfigStart, codexConfigEnd, managed)
+	if err != nil {
+		return fmt.Errorf("update Codex config: %w", err)
+	}
+	return writeRuleFile(path, strings.TrimSpace(updated)+"\n")
+}
+
+func replaceManagedBlock(existing, start, end, managed string) (string, error) {
+	startAt := strings.Index(existing, start)
+	endAt := strings.Index(existing, end)
+	if startAt >= 0 || endAt >= 0 {
+		if startAt < 0 || endAt < startAt {
+			return "", errors.New("incomplete managed block")
+		}
+		endAt += len(end)
+		return existing[:startAt] + managed + existing[endAt:], nil
+	}
+	if strings.TrimSpace(existing) == "" {
+		return managed + "\n", nil
+	}
+	// Keep dotted managed keys in the TOML root context. Appending after a table
+	// header would make them relative to that table.
+	return managed + "\n\n" + strings.TrimLeft(existing, "\n"), nil
+}
+
+func removeManagedBlock(existing, start, end string) (string, error) {
+	startAt := strings.Index(existing, start)
+	endAt := strings.Index(existing, end)
+	if startAt < 0 && endAt < 0 {
+		return existing, nil
+	}
+	if startAt < 0 || endAt < startAt {
+		return "", errors.New("incomplete managed block")
+	}
+	endAt += len(end)
+	return strings.TrimSpace(existing[:startAt] + existing[endAt:]), nil
+}
+
+func writeCodexHooks(path, workspaceName string) error {
+	root := map[string]any{}
+	if b, err := os.ReadFile(path); err == nil {
+		if err := json.Unmarshal(b, &root); err != nil {
+			return fmt.Errorf("parse Codex hooks %s: %w", path, err)
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("read Codex hooks: %w", err)
+	}
+	hooks, _ := root["hooks"].(map[string]any)
+	if hooks == nil {
+		hooks = map[string]any{}
+		root["hooks"] = hooks
+	}
+	for _, event := range []string{"SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PreCompact", "Stop"} {
+		groups, _ := hooks[event].([]any)
+		kept := make([]any, 0, len(groups)+1)
+		for _, raw := range groups {
+			if !strings.Contains(fmt.Sprint(raw), codexHookMarker) {
+				kept = append(kept, raw)
+			}
+		}
+		kept = append(kept, map[string]any{
+			"hooks": []any{map[string]any{
+				"type":    "command",
+				"command": fmt.Sprintf("agent-memory hook --event %s --agent codex --workspace %s # %s", event, workspaceName, codexHookMarker),
+				"timeout": 2,
+			}},
+		})
+		hooks[event] = kept
+	}
+	b, err := json.MarshalIndent(root, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode Codex hooks: %w", err)
+	}
+	return writeRuleFile(path, string(b)+"\n")
 }
 
 func appendRuleSectionIfMissing(path, marker, section string) error {
@@ -699,7 +1084,8 @@ Always use `+"`"+`agent-memory`+"`"+` as the memory system:
     1. Write the new corrected memory first using `+"`"+`agent-memory write`+"`"+` and copy the new memory ID.
     2. Link the old incorrect memory to the new one by running `+"`"+`agent-memory feedback --memory-id <old_id> --outcome rejected --reconsolidation-action superseded --successor-memory-id <new_id> --reason "<explanation>"`+"`"+`.
 - After learning durable new knowledge: write it to memory immediately.
-- Be self-aware of reusable scripts, grep queries, or workflows: package them into custom skills under `+"`"+`.agents/skills/`+"`"+` (using `+"`"+`agent-memory distill`+"`"+` or manual packaging) for later reuse.
+- When writing a memory: Choose up to three explicit keywords: names, terms, or helpful locators a human would search later. Do not copy the full content into keywords.
+- You MUST proactively package reusable scripts, grep queries, workflows, or complex setup/learnings into a custom agent skill under `+"`"+`.agents/skills/`+"`"+` (using `+"`"+`agent-memory distill`+"`"+` or manual packaging) if they are valuable and highly likely to be reused. Do NOT wait for the user to ask; proactively distill skills once a workflow or learning pattern is successfully validated.
   - Do NOT use generic, numbered, or index-based filenames (like `+"`"+`part1.md`+"`"+`, `+"`"+`workflows_part1.md`+"`"+`).
   - Always use clear, descriptive, and meaningful names for all custom skill reference files (e.g., `+"`"+`db_performance.md`+"`"+`, `+"`"+`ui_fixes.md`+"`"+`).
   - Limit every individual skill file's size strictly to a maximum of 12,000 characters. If a skill grows beyond this, partition it by domain/feature and place the detailed references into a `+"`"+`references/`+"`"+` subdirectory with descriptive, meaningful filenames.
@@ -713,7 +1099,7 @@ Commands:
 - `+"`"+`agent-memory feedback --memory-id "<old_id>" --outcome rejected --reconsolidation-action superseded --successor-memory-id "<new_id>" --reason "<explanation>"`+"`"+`
 - `+"`"+`agent-memory write --type semantic --content "<durable fact + source>"`+"`"+`
 - `+"`"+`agent-memory write --type procedural --content "<repeatable steps/checklist>"`+"`"+`
-- `+"`"+`agent-memory write --type outcome --content "<what you tried>" --outcome-result success|failure|partial --outcome-approach "<how>" --outcome-reason "<why>"`+"`"+`
+- `+"`"+`agent-memory write --type outcome --content "<what you tried> (result: success|failure|partial, approach: <how>, reason: <why>)"`+"`"+`
 - `+"`"+`agent-memory session-end --transcript "<session summary or transcript>" --format json`+"`"+`
 `, workspace)
 }
@@ -838,7 +1224,7 @@ func HippocampusHooks() []HookFile {
   },
   "then": {
     "type": "askAgent",
-    "prompt": "Review what happened in this session and do the following:\n1. Identify anything worth keeping using this filter:\n   - Structural delta: new service, integration, or data flow discovered\n   - Hidden why: non-obvious design decision or trade-off\n   - Interface contract: API schema, data model, or protocol change\n   - Systemic insight: complex logic spanning multiple files\n   - ANY failure: always write failures, no filter applies\n2. For each qualifying item, write it with the correct type:\n   - Fact about the system -> agent-memory write --type semantic --content \"<fact>\"\n   - Convention or repeatable process -> agent-memory write --type procedural --content \"<steps>\"\n   - Attempt result (success or failure) -> agent-memory write --type outcome --content \"<what was tried> (result: success|failure|partial, approach: <how>, reason: <why>)\"\n3. Run session-end compaction: agent-memory session-end --transcript \"<one paragraph summary of this session>\" --format json\nDo not skip step 3 even if nothing was written in step 2."
+    "prompt": "Review what happened in this session and do the following:\n1. Identify anything worth keeping using this filter:\n   - Structural delta: new service, integration, or data flow discovered\n   - Hidden why: non-obvious design decision or trade-off\n   - Interface contract: API schema, data model, or protocol change\n   - Systemic insight: complex logic spanning multiple files\n   - ANY failure: always write failures, no filter applies\n2. For each qualifying item, write it with the correct type:\n   - Fact about the system -> agent-memory write --type semantic --content \"<fact>\"\n   - Convention or repeatable process -> agent-memory write --type procedural --content \"<steps>\"\n   - Attempt result (success or failure) -> agent-memory write --type outcome --content \"<what was tried> (result: success|failure|partial, approach: <how>, reason: <why>)\"\n3. Proactively package reusable scripts, grep queries, workflows, or complex setup/learnings into a custom agent skill under .agents/skills/ (using agent-memory distill --name <name> --description \"<description>\" or manual packaging) if they are valuable and highly likely to be reused. Do NOT wait for the user to ask.\n4. Run session-end compaction: agent-memory session-end --transcript \"<one paragraph summary of this session>\" --format json\nDo not skip step 4 even if nothing was written in step 2 or 3."
   }
 }
 `,
@@ -882,8 +1268,9 @@ Command:
 ### While working
 
 - If you discover durable new knowledge (facts, commands, config, constraints, architecture decisions), write it immediately.
+- When writing a memory: Choose up to three explicit keywords: names, terms, or helpful locators a human would search later. Do not copy the full content into keywords.
 - Prefer short, atomic memories. Include the source (file path / command / URL) in the content when available.
-- Be self-aware of reusable scripts, grep queries, or workflows: package them into custom skills under `+"`"+`.agents/skills/`+"`"+` (using `+"`"+`agent-memory distill`+"`"+` or manual packaging) for later reuse.
+- You MUST proactively package reusable scripts, grep queries, workflows, or complex setup/learnings into a custom agent skill under `+"`"+`.agents/skills/`+"`"+` (using `+"`"+`agent-memory distill`+"`"+` or manual packaging) if they are valuable and highly likely to be reused. Do NOT wait for the user to ask; proactively distill skills once a workflow or learning pattern is successfully validated.
   - Do NOT use generic, numbered, or index-based filenames (like `+"`"+`part1.md`+"`"+`, `+"`"+`workflows_part1.md`+"`"+`).
   - Always use clear, descriptive, and meaningful names for all custom skill reference files (e.g., `+"`"+`db_performance.md`+"`"+`, `+"`"+`ui_fixes.md`+"`"+`).
   - Limit every individual skill file's size strictly to a maximum of 12,000 characters. If a skill grows beyond this, partition it by domain/feature and place the detailed references into a `+"`"+`references/`+"`"+` subdirectory with descriptive, meaningful filenames.
@@ -906,7 +1293,7 @@ If retrieval has a low score (0-3), proceed to investigate and solve the task. O
 - Record outcomes that would prevent repeating mistakes or preserve a working approach.
 
 Command:
-- `+"`"+`agent-memory write --type outcome --content "<what you tried>" --outcome-result success|failure|partial --outcome-approach "<how>" --outcome-reason "<why>"`+"`"+`
+- `+"`"+`agent-memory write --type outcome --content "<what you tried> (result: success|failure|partial, approach: <how>, reason: <why>)"`+"`"+`
 
 ### At the end of a session
 
@@ -924,6 +1311,9 @@ type WriteAgentFilesOptions struct {
 	// Workspace is the project name used in rule file content.
 	// If empty, it is read from the existing cursor rule file, or derived from the CWD basename.
 	Workspace string
+	// DataDir is the agent-memory data directory Codex must be able to write.
+	// If empty, it defaults to ~/.agent-memory.
+	DataDir string
 	// Force overwrites existing files even if content is identical.
 	Force bool
 	// IDEs optionally forces writing specific IDE files even if the project
@@ -955,6 +1345,7 @@ type WriteAgentFilesResult struct {
 //   - antigravity : .agents/ directory exists
 //   - trae        : .trae/ directory exists
 //   - claude      : CLAUDE.md file exists
+//   - zcode       : AGENTS.md file exists
 //   - aierules    : .aierules file exists
 //   - windsurfrules : .windsurfrules file exists
 func WriteAgentFiles(opt WriteAgentFilesOptions) (*WriteAgentFilesResult, error) {
@@ -979,6 +1370,27 @@ func WriteAgentFiles(opt WriteAgentFilesOptions) (*WriteAgentFilesResult, error)
 	}
 
 	res := &WriteAgentFilesResult{Workspace: ws}
+
+	// --- Codex: AGENTS.md + project sandbox config + lifecycle hooks ---
+	if targetEnabled(forcedTargets, "codex") || dirExists(filepath.Join(opt.CWD, ".codex")) {
+		ir := IDEUpgradeResult{IDE: "codex"}
+		dataDir := strings.TrimSpace(opt.DataDir)
+		if dataDir == "" {
+			home, err := os.UserHomeDir()
+			if err != nil {
+				return nil, fmt.Errorf("codex: resolve data dir: %w", err)
+			}
+			dataDir = filepath.Join(home, ".agent-memory")
+		}
+		paths, err := writeCodexFiles(opt.CWD, ws, dataDir, opt.Force)
+		if err != nil {
+			return nil, fmt.Errorf("codex: %w", err)
+		}
+		for _, path := range paths {
+			ir.Written = append(ir.Written, strings.TrimPrefix(strings.TrimPrefix(path, opt.CWD), string(filepath.Separator)))
+		}
+		res.IDEs = append(res.IDEs, ir)
+	}
 
 	// --- Kiro: .kiro/hooks/*.json ---
 	if targetEnabled(forcedTargets, "kiro") || dirExists(filepath.Join(opt.CWD, ".kiro")) {
@@ -1144,6 +1556,24 @@ func WriteAgentFiles(opt WriteAgentFilesOptions) (*WriteAgentFilesResult, error)
 			ir.Written = append(ir.Written, "CLAUDE.md")
 		} else {
 			ir.Skipped = append(ir.Skipped, "CLAUDE.md")
+		}
+		res.IDEs = append(res.IDEs, ir)
+	}
+
+	// --- ZCode: AGENTS.md (upsert section) ---
+	if targetEnabled(forcedTargets, "zcode") || fileExists(filepath.Join(opt.CWD, "AGENTS.md")) {
+		ir := IDEUpgradeResult{IDE: "zcode"}
+		rulePath := filepath.Join(opt.CWD, "AGENTS.md")
+		marker := "## agent-memory (MANDATORY)"
+		section := genericRulesSection(ws)
+		written, err := upsertRuleSection(rulePath, marker, section, opt.Force)
+		if err != nil {
+			return nil, fmt.Errorf("zcode: %w", err)
+		}
+		if written {
+			ir.Written = append(ir.Written, "AGENTS.md")
+		} else {
+			ir.Skipped = append(ir.Skipped, "AGENTS.md")
 		}
 		res.IDEs = append(res.IDEs, ir)
 	}

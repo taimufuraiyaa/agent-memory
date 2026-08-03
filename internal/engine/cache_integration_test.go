@@ -71,10 +71,10 @@ func TestCacheIntegration(t *testing.T) {
 	searcher := NewVectorSearcher(store, provider)
 	// IMPORTANT: Both retrieval and pipeline must share the same cache instance
 	retrieval := NewRetrievalEngine(searcher)
-	retrieval.cache = cache  // Manually inject shared cache
+	retrieval.cache = cache // Manually inject shared cache
 	pipeline := NewWritePipelineWithOptions(store, WritePipelineOptions{
 		Embedder: provider,
-		Cache:    cache,  // Same cache instance
+		Cache:    cache, // Same cache instance
 	})
 
 	// Write some test memories
@@ -205,7 +205,7 @@ func TestCacheIntegration(t *testing.T) {
 		t.Errorf("expected latency after invalidation to be much higher than cached query: cached=%v, after_invalidation=%v",
 			latency2, latency3)
 	}
-	
+
 	stats3 := retrieval.CacheStats()
 	t.Logf("Final cache stats: Entries=%d, Hits=%d, Misses=%d",
 		stats3.ResultEntries, stats3.ResultHits, stats3.ResultMisses)

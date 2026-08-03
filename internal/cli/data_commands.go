@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/taimufuraiyaa/agent-memory/internal/engine"
+	"github.com/taimufuraiyaa/agent-memory/internal/storage/sqlite"
 )
 
 func newStudyCommand() *cobra.Command {
@@ -256,6 +257,7 @@ func newImportCommand() *cobra.Command {
 					}
 					imported++
 				}
+				_, _ = store.AppendAuditEvent(ctx, sqlite.AuditEventInput{Workspace: cfg.workspace, Operation: "import", Outcome: "success", Actor: "cli", Source: "bundle", TargetType: "memory", TargetCount: imported, Reason: "memory bundle import"})
 				out = map[string]any{"version": bundle.Version, "imported": imported}
 			}
 			return writeSuccessEnvelope(cmd.OutOrStdout(), "import", out)

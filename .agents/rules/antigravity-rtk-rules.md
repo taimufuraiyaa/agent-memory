@@ -32,7 +32,7 @@ agent-memory write --type semantic --content "<durable fact + source>"
 agent-memory write --type procedural --content "<repeatable steps/checklist>"
 
 # record outcomes (success/failure)
-agent-memory write --type outcome --content "<what you tried>" --outcome-result success|failure|partial --outcome-approach "<how>" --outcome-reason "<why>"
+agent-memory write --type outcome --content "<what you tried> (result: success|failure|partial, approach: <how>, reason: <why>)"
 
 # end of session
 agent-memory session-end --transcript "<session summary or transcript>" --format json

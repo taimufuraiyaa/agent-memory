@@ -49,9 +49,9 @@ func newONNXMiniLMProviderWithRuntime(modelDir string, opt ModelLifecycleOptions
 	}, nil
 }
 
-func (p *ONNXMiniLMProvider) Name() string          { return "onnx-minilm-l6-v2" }
-func (p *ONNXMiniLMProvider) ModelVersion() string  { return "minilm-l6-v2-fp32" }
-func (p *ONNXMiniLMProvider) Dimension() int        { return MiniLMDimension }
+func (p *ONNXMiniLMProvider) Name() string         { return "onnx-minilm-l6-v2" }
+func (p *ONNXMiniLMProvider) ModelVersion() string { return "minilm-l6-v2-fp32" }
+func (p *ONNXMiniLMProvider) Dimension() int       { return MiniLMDimension }
 
 func (p *ONNXMiniLMProvider) Embed(ctx context.Context, text string) ([]float32, error) {
 	ctx, span := observability.StartSpan(ctx, "agent-memory.embed")

@@ -83,4 +83,3 @@ func TestMemoryTextForRecallCorrectionFlags(t *testing.T) {
 		t.Errorf("expected corrected prefix, got: %q", t3)
 	}
 }
-

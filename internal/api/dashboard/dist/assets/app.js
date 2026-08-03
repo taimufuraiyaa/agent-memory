@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunk-dagre-BM42HDAG.js","assets/chunk-graph.js","assets/chunk-layout.js","assets/chunk-cose-bilkent-S5V4N54A.js","assets/chunk-cytoscape.esm.js","assets/chunk-c4Diagram-AAUBKEIU.js","assets/chunk-chunk-ND2GUHAM.js","assets/chunk-flowDiagram-I6XJVG4X.js","assets/chunk-chunk-FMBD7UC4.js","assets/chunk-chunk-55IACEB6.js","assets/chunk-chunk-2J33WTMH.js","assets/chunk-channel.js","assets/chunk-erDiagram-TEJ5UH35.js","assets/chunk-gitGraphDiagram-PVQCEYII.js","assets/chunk-chunk-4BX2VUAB.js","assets/chunk-chunk-QZHKN3VN.js","assets/chunk-wardley-L42UT6IY.js","assets/chunk-ganttDiagram-6RSMTGT7.js","assets/chunk-linear.js","assets/chunk-init.js","assets/chunk-defaultLocale.js","assets/chunk-infoDiagram-5YYISTIA.js","assets/chunk-pieDiagram-4H26LBE5.js","assets/chunk-arc.js","assets/chunk-ordinal.js","assets/chunk-quadrantDiagram-W4KKPZXB.js","assets/chunk-xychartDiagram-2RQKCTM6.js","assets/chunk-requirementDiagram-4Y6WPE33.js","assets/chunk-sequenceDiagram-3UESZ5HK.js","assets/chunk-classDiagram-4FO5ZUOK.js","assets/chunk-chunk-727SXJPM.js","assets/chunk-classDiagram-v2-Q7XG4LA2.js","assets/chunk-stateDiagram-AJRCARHV.js","assets/chunk-chunk-AQP2D5EJ.js","assets/chunk-stateDiagram-v2-BHNVJYJU.js","assets/chunk-journeyDiagram-JHISSGLW.js","assets/chunk-timeline-definition-PNZ67QCA.js","assets/chunk-mindmap-definition-RKZ34NQL.js","assets/chunk-kanban-definition-UN3LZRKU.js","assets/chunk-sankeyDiagram-5OEKKPKP.js","assets/chunk-diagram-LMA3HP47.js","assets/chunk-diagram-2AECGRRQ.js","assets/chunk-blockDiagram-GPEHLZMM.js","assets/chunk-diagram-5GNKFQAL.js","assets/chunk-architectureDiagram-3BPJPVTR.js","assets/chunk-diagram-KO2AKTUF.js","assets/chunk-diagram-OG6HWLK6.js","assets/chunk-wardleyDiagram-YWT4CUSO.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["./chunk-dagre-BM42HDAG.js","./chunk-graph.js","./chunk-layout.js","./chunk-cose-bilkent-S5V4N54A.js","./chunk-cytoscape.esm.js","./chunk-c4Diagram-AAUBKEIU.js","./chunk-chunk-ND2GUHAM.js","./chunk-flowDiagram-I6XJVG4X.js","./chunk-chunk-FMBD7UC4.js","./chunk-chunk-55IACEB6.js","./chunk-chunk-2J33WTMH.js","./chunk-channel.js","./chunk-erDiagram-TEJ5UH35.js","./chunk-gitGraphDiagram-PVQCEYII.js","./chunk-chunk-4BX2VUAB.js","./chunk-chunk-QZHKN3VN.js","./chunk-wardley-L42UT6IY.js","./chunk-ganttDiagram-6RSMTGT7.js","./chunk-linear.js","./chunk-init.js","./chunk-defaultLocale.js","./chunk-infoDiagram-5YYISTIA.js","./chunk-pieDiagram-4H26LBE5.js","./chunk-arc.js","./chunk-ordinal.js","./chunk-quadrantDiagram-W4KKPZXB.js","./chunk-xychartDiagram-2RQKCTM6.js","./chunk-requirementDiagram-4Y6WPE33.js","./chunk-sequenceDiagram-3UESZ5HK.js","./chunk-classDiagram-4FO5ZUOK.js","./chunk-chunk-727SXJPM.js","./chunk-classDiagram-v2-Q7XG4LA2.js","./chunk-stateDiagram-AJRCARHV.js","./chunk-chunk-AQP2D5EJ.js","./chunk-stateDiagram-v2-BHNVJYJU.js","./chunk-journeyDiagram-JHISSGLW.js","./chunk-timeline-definition-PNZ67QCA.js","./chunk-mindmap-definition-RKZ34NQL.js","./chunk-kanban-definition-UN3LZRKU.js","./chunk-sankeyDiagram-5OEKKPKP.js","./chunk-diagram-LMA3HP47.js","./chunk-diagram-2AECGRRQ.js","./chunk-blockDiagram-GPEHLZMM.js","./chunk-diagram-5GNKFQAL.js","./chunk-architectureDiagram-3BPJPVTR.js","./chunk-diagram-KO2AKTUF.js","./chunk-diagram-OG6HWLK6.js","./chunk-wardleyDiagram-YWT4CUSO.js"])))=>i.map(i=>d[i]);
 var __defProp = Object.defineProperty;
 var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
 var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
@@ -7067,11 +7067,23 @@ async function api(path, init2) {
   const res = await fetch(path, {
     ...init2,
     headers: {
+      accept: "application/json",
       "content-type": "application/json",
       ...(init2 == null ? void 0 : init2.headers) ?? {}
     }
   });
-  const json2 = await res.json();
+  const body = await res.text();
+  let json2;
+  try {
+    json2 = JSON.parse(body);
+  } catch {
+    const contentType = res.headers.get("content-type") ?? "unknown content type";
+    const preview = body.trim().replace(/\s+/g, " ").slice(0, 160);
+    const detail = preview ? `: ${preview}` : "";
+    throw new Error(
+      `API ${res.status} ${path} returned a non-JSON response (${contentType})${detail}`
+    );
+  }
   const env = json2;
   if (!res.ok || env.ok === false) {
     const msg = ((_a2 = env.error) == null ? void 0 : _a2.message) ? String(env.error.message) : `HTTP ${res.status}`;
@@ -7081,6 +7093,41 @@ async function api(path, init2) {
 }
 function listProjects() {
   return api("/api/v1/projects/list", { method: "GET" });
+}
+function listNotes(input) {
+  const qs = new URLSearchParams({ workspace: input.workspace });
+  qs.set("include_deleted", "true");
+  return api(`/api/v1/notes?${qs.toString()}`, { method: "GET" });
+}
+function getNote(input) {
+  const qs = new URLSearchParams({ workspace: input.workspace, note_id: input.note_id });
+  return api(`/api/v1/notes/get?${qs.toString()}`, { method: "GET" });
+}
+function createNote(input) {
+  return api("/api/v1/notes/create", { method: "POST", body: JSON.stringify(input) });
+}
+function updateNote(input) {
+  return api("/api/v1/notes/update", { method: "POST", body: JSON.stringify(input) });
+}
+function trashNote(input) {
+  return api("/api/v1/notes/trash", { method: "POST", body: JSON.stringify(input) });
+}
+function restoreNote(input) {
+  return api("/api/v1/notes/restore", { method: "POST", body: JSON.stringify(input) });
+}
+function listNoteRevisions(input) {
+  const qs = new URLSearchParams({ workspace: input.workspace, note_id: input.note_id });
+  return api(`/api/v1/notes/revisions?${qs.toString()}`, { method: "GET" });
+}
+function restoreNoteRevision(input) {
+  return api("/api/v1/notes/revisions/restore", { method: "POST", body: JSON.stringify(input) });
+}
+function listNoteBacklinks(input) {
+  const qs = new URLSearchParams({ workspace: input.workspace, note_id: input.note_id });
+  return api(`/api/v1/notes/backlinks?${qs.toString()}`, { method: "GET" });
+}
+function retryNoteIndex(input) {
+  return api("/api/v1/notes/index/retry", { method: "POST", body: JSON.stringify(input) });
 }
 function getStats(workspace) {
   const qs = workspace ? `?workspace=${encodeURIComponent(workspace)}` : "";
@@ -7106,6 +7153,14 @@ function listObservations(input) {
   if (input.from) qs.set("from", input.from);
   if (input.to) qs.set("to", input.to);
   return api(`/api/v1/observations?${qs.toString()}`, { method: "GET" });
+}
+function listReplayEvents(input) {
+  const qs = new URLSearchParams();
+  qs.set("workspace", input.workspace);
+  qs.set("session_id", input.session_id);
+  qs.set("limit", String(input.limit));
+  if (input.cursor) qs.set("cursor", input.cursor);
+  return api(`/api/v1/replay/events?${qs.toString()}`, { method: "GET" });
 }
 function listBenchmarkRuns(input) {
   const qs = new URLSearchParams();
@@ -7173,8 +7228,8 @@ function listSkills(input) {
   }).then((res) => res.skills || []);
 }
 const scriptRel = "modulepreload";
-const assetsURL = function(dep) {
-  return "/" + dep;
+const assetsURL = function(dep, importerUrl) {
+  return new URL(dep, importerUrl).href;
 };
 const seen = {};
 const __vitePreload = function preload(baseModule, deps, importerUrl) {
@@ -7190,19 +7245,27 @@ const __vitePreload = function preload(baseModule, deps, importerUrl) {
         )
       );
     };
-    document.getElementsByTagName("link");
+    const links = document.getElementsByTagName("link");
     const cspNonceMeta = document.querySelector(
       "meta[property=csp-nonce]"
     );
     const cspNonce = (cspNonceMeta == null ? void 0 : cspNonceMeta.nonce) || (cspNonceMeta == null ? void 0 : cspNonceMeta.getAttribute("nonce"));
     promise = allSettled2(
       deps.map((dep) => {
-        dep = assetsURL(dep);
+        dep = assetsURL(dep, importerUrl);
         if (dep in seen) return;
         seen[dep] = true;
         const isCss = dep.endsWith(".css");
         const cssSelector = isCss ? '[rel="stylesheet"]' : "";
-        if (document.querySelector(`link[href="${dep}"]${cssSelector}`)) {
+        const isBaseRelative = !!importerUrl;
+        if (isBaseRelative) {
+          for (let i2 = links.length - 1; i2 >= 0; i2--) {
+            const link22 = links[i2];
+            if (link22.href === dep && (!isCss || link22.rel === "stylesheet")) {
+              return;
+            }
+          }
+        } else if (document.querySelector(`link[href="${dep}"]${cssSelector}`)) {
           return;
         }
         const link2 = document.createElement("link");
@@ -14284,7 +14347,7 @@ var renderKatexUnsanitized = /* @__PURE__ */ __name(async (text2, config2) => {
     const { default: katex } = await __vitePreload(async () => {
       const { default: katex2 } = await import("./chunk-katex.js");
       return { default: katex2 };
-    }, true ? [] : void 0);
+    }, true ? [] : void 0, import.meta.url);
     const outputMode = config2.forceLegacyMathML || !isMathMLSupported() && config2.legacyMathML ? "htmlAndMathml" : "mathml";
     return text2.split(lineBreakRegex).map(
       (line2) => hasKatex(line2) ? `<div style="display: flex; align-items: center; justify-content: center; white-space: nowrap;">${line2}</div>` : `<div>${line2}</div>`
@@ -31185,12 +31248,12 @@ var registerDefaultLayoutLoaders = /* @__PURE__ */ __name(() => {
   registerLayoutLoaders([
     {
       name: "dagre",
-      loader: /* @__PURE__ */ __name(async () => await __vitePreload(() => import("./chunk-dagre-BM42HDAG.js"), true ? __vite__mapDeps([0,1,2]) : void 0), "loader")
+      loader: /* @__PURE__ */ __name(async () => await __vitePreload(() => import("./chunk-dagre-BM42HDAG.js"), true ? __vite__mapDeps([0,1,2]) : void 0, import.meta.url), "loader")
     },
     ...[
       {
         name: "cose-bilkent",
-        loader: /* @__PURE__ */ __name(async () => await __vitePreload(() => import("./chunk-cose-bilkent-S5V4N54A.js"), true ? __vite__mapDeps([3,4]) : void 0), "loader")
+        loader: /* @__PURE__ */ __name(async () => await __vitePreload(() => import("./chunk-cose-bilkent-S5V4N54A.js"), true ? __vite__mapDeps([3,4]) : void 0, import.meta.url), "loader")
       }
     ]
   ]);
@@ -31602,7 +31665,7 @@ var loader = /* @__PURE__ */ __name(async () => {
   const { diagram: diagram2 } = await __vitePreload(async () => {
     const { diagram: diagram22 } = await import("./chunk-c4Diagram-AAUBKEIU.js");
     return { diagram: diagram22 };
-  }, true ? __vite__mapDeps([5,6]) : void 0);
+  }, true ? __vite__mapDeps([5,6]) : void 0, import.meta.url);
   return { id, diagram: diagram2 };
 }, "loader");
 var plugin = {
@@ -31623,7 +31686,7 @@ var loader2 = /* @__PURE__ */ __name(async () => {
   const { diagram: diagram2 } = await __vitePreload(async () => {
     const { diagram: diagram22 } = await import("./chunk-flowDiagram-I6XJVG4X.js");
     return { diagram: diagram22 };
-  }, true ? __vite__mapDeps([7,8,6,9,10,11]) : void 0);
+  }, true ? __vite__mapDeps([7,8,6,9,10,11]) : void 0, import.meta.url);
   return { id: id2, diagram: diagram2 };
 }, "loader");
 var plugin2 = {
@@ -31650,7 +31713,7 @@ var loader3 = /* @__PURE__ */ __name(async () => {
   const { diagram: diagram2 } = await __vitePreload(async () => {
     const { diagram: diagram22 } = await import("./chunk-flowDiagram-I6XJVG4X.js");
     return { diagram: diagram22 };
-  }, true ? __vite__mapDeps([7,8,6,9,10,11]) : void 0);
+  }, true ? __vite__mapDeps([7,8,6,9,10,11]) : void 0, import.meta.url);
   return { id: id3, diagram: diagram2 };
 }, "loader");
 var plugin3 = {
@@ -31667,7 +31730,7 @@ var loader4 = /* @__PURE__ */ __name(async () => {
   const { diagram: diagram2 } = await __vitePreload(async () => {
     const { diagram: diagram22 } = await import("./chunk-erDiagram-TEJ5UH35.js");
     return { diagram: diagram22 };
-  }, true ? __vite__mapDeps([12,9,10,11]) : void 0);
+  }, true ? __vite__mapDeps([12,9,10,11]) : void 0, import.meta.url);
   return { id: id4, diagram: diagram2 };
 }, "loader");
 var plugin4 = {
@@ -31684,7 +31747,7 @@ var loader5 = /* @__PURE__ */ __name(async () => {
   const { diagram: diagram2 } = await __vitePreload(async () => {
     const { diagram: diagram22 } = await import("./chunk-gitGraphDiagram-PVQCEYII.js");
     return { diagram: diagram22 };
-  }, true ? __vite__mapDeps([13,14,15,16]) : void 0);
+  }, true ? __vite__mapDeps([13,14,15,16]) : void 0, import.meta.url);
   return { id: id5, diagram: diagram2 };
 }, "loader");
 var plugin5 = {
@@ -31701,7 +31764,7 @@ var loader6 = /* @__PURE__ */ __name(async () => {
   const { diagram: diagram2 } = await __vitePreload(async () => {
     const { diagram: diagram22 } = await import("./chunk-ganttDiagram-6RSMTGT7.js");
     return { diagram: diagram22 };
-  }, true ? __vite__mapDeps([17,18,19,20]) : void 0);
+  }, true ? __vite__mapDeps([17,18,19,20]) : void 0, import.meta.url);
   return { id: id6, diagram: diagram2 };
 }, "loader");
 var plugin6 = {
@@ -31718,7 +31781,7 @@ var loader7 = /* @__PURE__ */ __name(async () => {
   const { diagram: diagram2 } = await __vitePreload(async () => {
     const { diagram: diagram22 } = await import("./chunk-infoDiagram-5YYISTIA.js");
     return { diagram: diagram22 };
-  }, true ? __vite__mapDeps([21,16]) : void 0);
+  }, true ? __vite__mapDeps([21,16]) : void 0, import.meta.url);
   return { id: id7, diagram: diagram2 };
 }, "loader");
 var info = {
@@ -31734,7 +31797,7 @@ var loader8 = /* @__PURE__ */ __name(async () => {
   const { diagram: diagram2 } = await __vitePreload(async () => {
     const { diagram: diagram22 } = await import("./chunk-pieDiagram-4H26LBE5.js");
     return { diagram: diagram22 };
-  }, true ? __vite__mapDeps([22,14,16,23,24,19]) : void 0);
+  }, true ? __vite__mapDeps([22,14,16,23,24,19]) : void 0, import.meta.url);
   return { id: id8, diagram: diagram2 };
 }, "loader");
 var pie = {
@@ -31750,7 +31813,7 @@ var loader9 = /* @__PURE__ */ __name(async () => {
   const { diagram: diagram2 } = await __vitePreload(async () => {
     const { diagram: diagram22 } = await import("./chunk-quadrantDiagram-W4KKPZXB.js");
     return { diagram: diagram22 };
-  }, true ? __vite__mapDeps([25,18,19,20]) : void 0);
+  }, true ? __vite__mapDeps([25,18,19,20]) : void 0, import.meta.url);
   return { id: id9, diagram: diagram2 };
 }, "loader");
 var plugin7 = {
@@ -31767,7 +31830,7 @@ var loader10 = /* @__PURE__ */ __name(async () => {
   const { diagram: diagram2 } = await __vitePreload(async () => {
     const { diagram: diagram22 } = await import("./chunk-xychartDiagram-2RQKCTM6.js");
     return { diagram: diagram22 };
-  }, true ? __vite__mapDeps([26,19,24,18,20]) : void 0);
+  }, true ? __vite__mapDeps([26,19,24,18,20]) : void 0, import.meta.url);
   return { id: id10, diagram: diagram2 };
 }, "loader");
 var plugin8 = {
@@ -31784,7 +31847,7 @@ var loader11 = /* @__PURE__ */ __name(async () => {
   const { diagram: diagram2 } = await __vitePreload(async () => {
     const { diagram: diagram22 } = await import("./chunk-requirementDiagram-4Y6WPE33.js");
     return { diagram: diagram22 };
-  }, true ? __vite__mapDeps([27,9,10]) : void 0);
+  }, true ? __vite__mapDeps([27,9,10]) : void 0, import.meta.url);
   return { id: id11, diagram: diagram2 };
 }, "loader");
 var plugin9 = {
@@ -31801,7 +31864,7 @@ var loader12 = /* @__PURE__ */ __name(async () => {
   const { diagram: diagram2 } = await __vitePreload(async () => {
     const { diagram: diagram22 } = await import("./chunk-sequenceDiagram-3UESZ5HK.js");
     return { diagram: diagram22 };
-  }, true ? __vite__mapDeps([28,6,15]) : void 0);
+  }, true ? __vite__mapDeps([28,6,15]) : void 0, import.meta.url);
   return { id: id12, diagram: diagram2 };
 }, "loader");
 var plugin10 = {
@@ -31822,7 +31885,7 @@ var loader13 = /* @__PURE__ */ __name(async () => {
   const { diagram: diagram2 } = await __vitePreload(async () => {
     const { diagram: diagram22 } = await import("./chunk-classDiagram-4FO5ZUOK.js");
     return { diagram: diagram22 };
-  }, true ? __vite__mapDeps([29,30,8,6,9,10]) : void 0);
+  }, true ? __vite__mapDeps([29,30,8,6,9,10]) : void 0, import.meta.url);
   return { id: id13, diagram: diagram2 };
 }, "loader");
 var plugin11 = {
@@ -31843,7 +31906,7 @@ var loader14 = /* @__PURE__ */ __name(async () => {
   const { diagram: diagram2 } = await __vitePreload(async () => {
     const { diagram: diagram22 } = await import("./chunk-classDiagram-v2-Q7XG4LA2.js");
     return { diagram: diagram22 };
-  }, true ? __vite__mapDeps([31,30,8,6,9,10]) : void 0);
+  }, true ? __vite__mapDeps([31,30,8,6,9,10]) : void 0, import.meta.url);
   return { id: id14, diagram: diagram2 };
 }, "loader");
 var plugin12 = {
@@ -31864,7 +31927,7 @@ var loader15 = /* @__PURE__ */ __name(async () => {
   const { diagram: diagram2 } = await __vitePreload(async () => {
     const { diagram: diagram22 } = await import("./chunk-stateDiagram-AJRCARHV.js");
     return { diagram: diagram22 };
-  }, true ? __vite__mapDeps([32,33,9,10,1,2]) : void 0);
+  }, true ? __vite__mapDeps([32,33,9,10,1,2]) : void 0, import.meta.url);
   return { id: id15, diagram: diagram2 };
 }, "loader");
 var plugin13 = {
@@ -31888,7 +31951,7 @@ var loader16 = /* @__PURE__ */ __name(async () => {
   const { diagram: diagram2 } = await __vitePreload(async () => {
     const { diagram: diagram22 } = await import("./chunk-stateDiagram-v2-BHNVJYJU.js");
     return { diagram: diagram22 };
-  }, true ? __vite__mapDeps([34,33,9,10]) : void 0);
+  }, true ? __vite__mapDeps([34,33,9,10]) : void 0, import.meta.url);
   return { id: id16, diagram: diagram2 };
 }, "loader");
 var plugin14 = {
@@ -31905,7 +31968,7 @@ var loader17 = /* @__PURE__ */ __name(async () => {
   const { diagram: diagram2 } = await __vitePreload(async () => {
     const { diagram: diagram22 } = await import("./chunk-journeyDiagram-JHISSGLW.js");
     return { diagram: diagram22 };
-  }, true ? __vite__mapDeps([35,8,6,23]) : void 0);
+  }, true ? __vite__mapDeps([35,8,6,23]) : void 0, import.meta.url);
   return { id: id17, diagram: diagram2 };
 }, "loader");
 var plugin15 = {
@@ -31976,7 +32039,7 @@ var loader18 = /* @__PURE__ */ __name(async () => {
   const { diagram: diagram2 } = await __vitePreload(async () => {
     const { diagram: diagram22 } = await import("./chunk-flowDiagram-I6XJVG4X.js");
     return { diagram: diagram22 };
-  }, true ? __vite__mapDeps([7,8,6,9,10,11]) : void 0);
+  }, true ? __vite__mapDeps([7,8,6,9,10,11]) : void 0, import.meta.url);
   return { id: id18, diagram: diagram2 };
 }, "loader");
 var plugin16 = {
@@ -31993,7 +32056,7 @@ var loader19 = /* @__PURE__ */ __name(async () => {
   const { diagram: diagram2 } = await __vitePreload(async () => {
     const { diagram: diagram22 } = await import("./chunk-timeline-definition-PNZ67QCA.js");
     return { diagram: diagram22 };
-  }, true ? __vite__mapDeps([36,23]) : void 0);
+  }, true ? __vite__mapDeps([36,23]) : void 0, import.meta.url);
   return { id: id19, diagram: diagram2 };
 }, "loader");
 var plugin17 = {
@@ -32010,7 +32073,7 @@ var loader20 = /* @__PURE__ */ __name(async () => {
   const { diagram: diagram2 } = await __vitePreload(async () => {
     const { diagram: diagram22 } = await import("./chunk-mindmap-definition-RKZ34NQL.js");
     return { diagram: diagram22 };
-  }, true ? __vite__mapDeps([37,9,10]) : void 0);
+  }, true ? __vite__mapDeps([37,9,10]) : void 0, import.meta.url);
   return { id: id20, diagram: diagram2 };
 }, "loader");
 var plugin18 = {
@@ -32027,7 +32090,7 @@ var loader21 = /* @__PURE__ */ __name(async () => {
   const { diagram: diagram2 } = await __vitePreload(async () => {
     const { diagram: diagram22 } = await import("./chunk-kanban-definition-UN3LZRKU.js");
     return { diagram: diagram22 };
-  }, true ? __vite__mapDeps([38,8]) : void 0);
+  }, true ? __vite__mapDeps([38,8]) : void 0, import.meta.url);
   return { id: id21, diagram: diagram2 };
 }, "loader");
 var plugin19 = {
@@ -32044,7 +32107,7 @@ var loader22 = /* @__PURE__ */ __name(async () => {
   const { diagram: diagram2 } = await __vitePreload(async () => {
     const { diagram: diagram22 } = await import("./chunk-sankeyDiagram-5OEKKPKP.js");
     return { diagram: diagram22 };
-  }, true ? __vite__mapDeps([39,24,19]) : void 0);
+  }, true ? __vite__mapDeps([39,24,19]) : void 0, import.meta.url);
   return { id: id22, diagram: diagram2 };
 }, "loader");
 var plugin20 = {
@@ -32061,7 +32124,7 @@ var loader23 = /* @__PURE__ */ __name(async () => {
   const { diagram: diagram2 } = await __vitePreload(async () => {
     const { diagram: diagram22 } = await import("./chunk-diagram-LMA3HP47.js");
     return { diagram: diagram22 };
-  }, true ? __vite__mapDeps([40,14,16]) : void 0);
+  }, true ? __vite__mapDeps([40,14,16]) : void 0, import.meta.url);
   return { id: id23, diagram: diagram2 };
 }, "loader");
 var packet = {
@@ -32077,7 +32140,7 @@ var loader24 = /* @__PURE__ */ __name(async () => {
   const { diagram: diagram2 } = await __vitePreload(async () => {
     const { diagram: diagram22 } = await import("./chunk-diagram-2AECGRRQ.js");
     return { diagram: diagram22 };
-  }, true ? __vite__mapDeps([41,14,16]) : void 0);
+  }, true ? __vite__mapDeps([41,14,16]) : void 0, import.meta.url);
   return { id: id24, diagram: diagram2 };
 }, "loader");
 var radar = {
@@ -32093,7 +32156,7 @@ var loader25 = /* @__PURE__ */ __name(async () => {
   const { diagram: diagram2 } = await __vitePreload(async () => {
     const { diagram: diagram22 } = await import("./chunk-blockDiagram-GPEHLZMM.js");
     return { diagram: diagram22 };
-  }, true ? __vite__mapDeps([42,8,1,11]) : void 0);
+  }, true ? __vite__mapDeps([42,8,1,11]) : void 0, import.meta.url);
   return { id: id25, diagram: diagram2 };
 }, "loader");
 var plugin21 = {
@@ -32110,7 +32173,7 @@ var loader26 = /* @__PURE__ */ __name(async () => {
   const { diagram: diagram2 } = await __vitePreload(async () => {
     const { diagram: diagram22 } = await import("./chunk-diagram-5GNKFQAL.js");
     return { diagram: diagram22 };
-  }, true ? __vite__mapDeps([43,14,15,16]) : void 0);
+  }, true ? __vite__mapDeps([43,14,15,16]) : void 0, import.meta.url);
   return { id: id26, diagram: diagram2 };
 }, "loader");
 var plugin22 = {
@@ -32127,7 +32190,7 @@ var loader27 = /* @__PURE__ */ __name(async () => {
   const { diagram: diagram2 } = await __vitePreload(async () => {
     const { diagram: diagram22 } = await import("./chunk-architectureDiagram-3BPJPVTR.js");
     return { diagram: diagram22 };
-  }, true ? __vite__mapDeps([44,14,16,4]) : void 0);
+  }, true ? __vite__mapDeps([44,14,16,4]) : void 0, import.meta.url);
   return { id: id27, diagram: diagram2 };
 }, "loader");
 var architecture = {
@@ -32144,7 +32207,7 @@ var loader28 = /* @__PURE__ */ __name(async () => {
   const { diagram: diagram2 } = await __vitePreload(async () => {
     const { diagram: diagram22 } = await import("./chunk-diagram-KO2AKTUF.js");
     return { diagram: diagram22 };
-  }, true ? __vite__mapDeps([45,14,16]) : void 0);
+  }, true ? __vite__mapDeps([45,14,16]) : void 0, import.meta.url);
   return { id: id28, diagram: diagram2 };
 }, "loader");
 var plugin23 = {
@@ -32161,7 +32224,7 @@ var loader29 = /* @__PURE__ */ __name(async () => {
   const { diagram: diagram2 } = await __vitePreload(async () => {
     const { diagram: diagram22 } = await import("./chunk-ishikawaDiagram-YF4QCWOH.js");
     return { diagram: diagram22 };
-  }, true ? [] : void 0);
+  }, true ? [] : void 0, import.meta.url);
   return { id: id29, diagram: diagram2 };
 }, "loader");
 var ishikawa = {
@@ -32177,7 +32240,7 @@ var loader30 = /* @__PURE__ */ __name(async () => {
   const { diagram: diagram2 } = await __vitePreload(async () => {
     const { diagram: diagram22 } = await import("./chunk-vennDiagram-CIIHVFJN.js");
     return { diagram: diagram22 };
-  }, true ? [] : void 0);
+  }, true ? [] : void 0, import.meta.url);
   return { id: id30, diagram: diagram2 };
 }, "loader");
 var plugin24 = {
@@ -32194,7 +32257,7 @@ var loader31 = /* @__PURE__ */ __name(async () => {
   const { diagram: diagram2 } = await __vitePreload(async () => {
     const { diagram: diagram22 } = await import("./chunk-diagram-OG6HWLK6.js");
     return { diagram: diagram22 };
-  }, true ? __vite__mapDeps([46,10,14,16,20,24,19]) : void 0);
+  }, true ? __vite__mapDeps([46,10,14,16,20,24,19]) : void 0, import.meta.url);
   return { id: id31, diagram: diagram2 };
 }, "loader");
 var treemap = {
@@ -32210,7 +32273,7 @@ var loader32 = /* @__PURE__ */ __name(async () => {
   const { diagram: diagram2 } = await __vitePreload(async () => {
     const { diagram: diagram22 } = await import("./chunk-wardleyDiagram-YWT4CUSO.js");
     return { diagram: diagram22 };
-  }, true ? __vite__mapDeps([47,14,16]) : void 0);
+  }, true ? __vite__mapDeps([47,14,16]) : void 0, import.meta.url);
   return { id: id32, diagram: diagram2 };
 }, "loader");
 var plugin25 = {
@@ -36281,6 +36344,7 @@ function OverviewPanel({
   (stats == null ? void 0 : stats.low_reach_threshold) ?? 0;
   const lowReachMemoryCount = (stats == null ? void 0 : stats.low_reach_memory_count) ?? 0;
   const topRetrievedMemories = (stats == null ? void 0 : stats.top_retrieved_memories) ?? [];
+  const advisor = stats == null ? void 0 : stats.advisor;
   const scheduler2 = stats == null ? void 0 : stats.scheduler;
   const schedulerWorkspace = scheduler2 == null ? void 0 : scheduler2.workspace;
   const schedulerState = (scheduler2 == null ? void 0 : scheduler2.enabled) ? (schedulerWorkspace == null ? void 0 : schedulerWorkspace.run_in_progress) ? "running" : (schedulerWorkspace == null ? void 0 : schedulerWorkspace.last_error) ? "failed" : (schedulerWorkspace == null ? void 0 : schedulerWorkspace.last_result) || "idle" : "disabled";
@@ -36357,6 +36421,39 @@ function OverviewPanel({
         }
       )
     ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "comparisonSection", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "comparisonHeader", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "breakdownTitle", children: "Memory Advisor" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "breakdownSubtitle", children: "Deterministic workspace guidance from retrieval feedback, recall context metrics, lifecycle state, coverage, and provenance." })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `statusBadge statusBadge${(advisor == null ? void 0 : advisor.neutral) ? "Warn" : advisor && advisor.score >= 80 ? "Good" : advisor && advisor.score >= 60 ? "Warn" : "Bad"}`, children: advisor ? advisor.neutral ? "N/A" : `${advisor.grade} · ${advisor.score}/100` : "Loading" })
+      ] }),
+      !advisor ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "emptyInline", children: "Advisor data is not available from this server yet." }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "overviewColumns", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs(BreakdownCard, { title: "Dimensions", subtitle: advisor.neutral ? "More evidence is needed before scoring" : "Available dimensions only contribute to the composite", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "diagnosticsList", children: advisor.dimensions.map((dimension) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+            DiagnosticRow,
+            {
+              label: dimension.label,
+              value: dimension.available ? `${dimension.score}/100` : "N/A"
+            },
+            dimension.key
+          )) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "breakdownSubtitle", style: { marginTop: "12px" }, children: "Context efficiency is a deterministic recall-context proxy, not provider-billed cost." })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(BreakdownCard, { title: "Recommendations", subtitle: `${formatNumber(advisor.recommendations.length)} active signals`, children: advisor.recommendations.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "emptyInline", children: "No advisor recommendations for the available evidence." }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { display: "grid", gap: "10px" }, children: advisor.recommendations.map((recommendation) => /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "feedbackSummaryCard", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "feedbackSummaryLabel", children: [
+            "[",
+            recommendation.severity.toUpperCase(),
+            "] ",
+            recommendation.category
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontWeight: 700, marginTop: "4px" }, children: recommendation.title }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "breakdownSubtitle", style: { margin: "6px 0 0" }, children: recommendation.detail }),
+          recommendation.metric ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mono", style: { marginTop: "8px" }, children: recommendation.metric }) : null
+        ] }, recommendation.id)) }) })
+      ] })
+    ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "overviewColumns", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(BreakdownCard, { title: "Memory Types", subtitle: `${formatNumber(sumCounts(stats == null ? void 0 : stats.memory_type_counts))} total`, children: /* @__PURE__ */ jsxRuntimeExports.jsx(PieChartBreakdown, { entries: typeEntries, emptyLabel: "No type distribution yet." }) }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(BreakdownCard, { title: "Storage Tiers", subtitle: `${formatNumber(sumCounts(stats == null ? void 0 : stats.storage_tier_counts))} classified`, children: /* @__PURE__ */ jsxRuntimeExports.jsx(PieChartBreakdown, { entries: tierEntries, emptyLabel: "No tier distribution yet." }) }),
@@ -36405,6 +36502,95 @@ function OverviewPanel({
     ] })
   ] });
 }
+function ReplayTimeline({ events, busy, error }) {
+  var _a2, _b2;
+  const [playing, setPlaying] = reactExports.useState(false);
+  const [cursor, setCursor] = reactExports.useState(0);
+  const [speed, setSpeed] = reactExports.useState(1);
+  const [filter2, setFilter] = reactExports.useState("all");
+  const kinds = reactExports.useMemo(() => Array.from(new Set(events.map((event) => event.kind))), [events]);
+  const visible = reactExports.useMemo(() => filter2 === "all" ? events : events.filter((event) => event.kind === filter2), [events, filter2]);
+  reactExports.useEffect(() => {
+    setCursor(0);
+    setPlaying(false);
+  }, [events, filter2]);
+  reactExports.useEffect(() => {
+    if (!playing || visible.length === 0) return;
+    const timer2 = window.setInterval(() => {
+      setCursor((current2) => {
+        if (current2 >= visible.length - 1) {
+          setPlaying(false);
+          return current2;
+        }
+        return current2 + 1;
+      });
+    }, 1e3 / speed);
+    return () => window.clearInterval(timer2);
+  }, [playing, speed, visible]);
+  if (busy) return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "emptyInline", children: "Loading replay timeline..." });
+  if (error) return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "callout calloutBad", children: error });
+  if (!events.length) return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "emptyInline", children: "No sanitized replay events are available for this session." });
+  const current = visible[Math.min(cursor, Math.max(visible.length - 1, 0))];
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "replaySurface", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "replayControls", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "btn btnPrimary", type: "button", onClick: () => setPlaying((value) => !value), children: playing ? "Pause" : "Play" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "btn", type: "button", disabled: cursor <= 0, onClick: () => setCursor((value) => Math.max(0, value - 1)), children: "Previous" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "btn", type: "button", disabled: cursor >= visible.length - 1, onClick: () => setCursor((value) => Math.min(visible.length - 1, value + 1)), children: "Next" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("select", { className: "input replaySelect", value: speed, onChange: (event) => setSpeed(Number(event.target.value)), "aria-label": "Replay speed", children: [0.5, 1, 2, 4].map((value) => /* @__PURE__ */ jsxRuntimeExports.jsxs("option", { value, children: [
+        value,
+        "×"
+      ] }, value)) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("select", { className: "input replaySelect", value: filter2, onChange: (event) => setFilter(event.target.value), "aria-label": "Replay event filter", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "all", children: "All events" }),
+        kinds.map((kind) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: kind, children: toTitle(kind) }, kind))
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "mono muted", children: [
+        visible.length ? cursor + 1 : 0,
+        "/",
+        visible.length
+      ] })
+    ] }),
+    current ? /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "replayCurrent", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "timelineTop", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "timelineTitle", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "timelinePrefix", children: ".-" }),
+            toTitle(current.kind)
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "timelineMeta", children: formatTS(current.occurred_at) })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "memPill", children: current.capture_mode || "captured" })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "timelineSummary", children: current.summary }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "replayProvenance", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+          "actor:",
+          current.actor || "unknown"
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+          "tool:",
+          current.tool_name || "system"
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+          "observations:",
+          ((_a2 = current.related_observation_ids) == null ? void 0 : _a2.length) || 0
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+          "memories:",
+          ((_b2 = current.related_memory_ids) == null ? void 0 : _b2.join(", ")) || "none"
+        ] })
+      ] })
+    ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "emptyInline", children: "No events match this filter." }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "replaySequence", "aria-label": "Replay event sequence", children: visible.map((event, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: index === cursor ? "replayStep replayStepOn" : "replayStep", onClick: () => {
+      setCursor(index);
+      setPlaying(false);
+    }, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: String(index + 1).padStart(2, "0") }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: toTitle(event.kind) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: formatTS(event.occurred_at) })
+    ] }, event.event_id)) })
+  ] });
+}
 function SessionsPanel({
   workspace,
   sessions,
@@ -36418,7 +36604,10 @@ function SessionsPanel({
   promotionResult,
   promotionBusy,
   onSelectSession,
-  onPromote
+  onPromote,
+  replayEvents,
+  replayBusy,
+  replayErr
 }) {
   const selectedSession = sessions.find((session) => session.session_id === selectedSessionID) ?? sessions[0];
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "surfaceStack", children: [
@@ -36538,6 +36727,13 @@ function SessionsPanel({
             ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "muted", children: "No promotion has been run for this session in the current dashboard view yet." }) })
           ] }),
           observationsErr ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "callout calloutBad", children: observationsErr }) : null,
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "timelineSection", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "comparisonHeader", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "breakdownTitle", children: "Sanitized Session Replay" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "breakdownSubtitle", children: "Play, step, and filter captured or imported events while tracing promoted memory provenance." })
+            ] }) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(ReplayTimeline, { events: replayEvents, busy: replayBusy, error: replayErr })
+          ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "timelineSection", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "comparisonHeader", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "breakdownTitle", children: "Observation Timeline" }),
@@ -37539,7 +37735,7 @@ function SkillsPanel({
               transition: "all 0.15s ease"
             },
             children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontWeight: "bold", fontSize: "13px", color: (selectedSkill == null ? void 0 : selectedSkill.name) === skill.name ? "var(--accent-primary)" : "var(--text-main)", fontFamily: "var(--font-mono)" }, children: skill.displayName }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontWeight: "bold", fontSize: "13px", color: (selectedSkill == null ? void 0 : selectedSkill.name) === skill.name ? "var(--accent-primary)" : "var(--text-main)", fontFamily: "var(--font-mono)" }, children: skill.display_name }),
               /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { fontSize: "11px", color: "var(--text-muted)", lineClamp: 2, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }, children: skill.description || "No description provided." })
             ]
           },
@@ -37548,7 +37744,7 @@ function SkillsPanel({
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { flex: 1, minWidth: 0, display: "flex", flexDirection: "column", height: "100%", overflowY: "auto" }, children: selectedSkill ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { display: "flex", flexDirection: "column", gap: "16px", paddingRight: "8px" }, children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", borderBottom: "1px dotted var(--border)", paddingBottom: "12px" }, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { style: { fontSize: "18px", margin: 0, color: "var(--text-main)" }, children: selectedSkill.displayName }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { style: { fontSize: "18px", margin: 0, color: "var(--text-main)" }, children: selectedSkill.display_name }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { fontSize: "11px", fontFamily: "var(--font-mono)", color: "var(--text-muted)", marginTop: "4px" }, children: [
             "Path: ",
             selectedSkill.path
@@ -37559,9 +37755,846 @@ function SkillsPanel({
     ] })
   ] });
 }
+const emptyProperties = {};
+function startsAboveBreakpoint(maxWidth) {
+  return typeof window === "undefined" || !window.matchMedia(`(max-width: ${maxWidth}px)`).matches;
+}
+function NotebookWorkspace({
+  workspace,
+  projects,
+  theme,
+  onWorkspaceChange,
+  onOpenSystem,
+  onThemeChange
+}) {
+  var _a2;
+  const [destination, setDestination] = reactExports.useState("notes");
+  const [notes, setNotes] = reactExports.useState([]);
+  const [trash, setTrash] = reactExports.useState([]);
+  const [activeNote, setActiveNote] = reactExports.useState(null);
+  const [openTabs, setOpenTabs] = reactExports.useState([]);
+  const [query, setQuery] = reactExports.useState("");
+  const [editorMode, setEditorMode] = reactExports.useState("edit");
+  const [contextTab, setContextTab] = reactExports.useState("ask");
+  const [contextOpen, setContextOpen] = reactExports.useState(() => startsAboveBreakpoint(1240));
+  const [explorerOpen, setExplorerOpen] = reactExports.useState(() => startsAboveBreakpoint(1024));
+  const [saveState, setSaveState] = reactExports.useState("idle");
+  const [error, setError] = reactExports.useState("");
+  const [backlinks, setBacklinks] = reactExports.useState([]);
+  const [revisions, setRevisions] = reactExports.useState([]);
+  const [searchResults, setSearchResults] = reactExports.useState([]);
+  const [searchBusy, setSearchBusy] = reactExports.useState(false);
+  const [askText, setAskText] = reactExports.useState("");
+  const [askScope, setAskScope] = reactExports.useState("workspace");
+  const [askAnswer, setAskAnswer] = reactExports.useState("");
+  const [askEvidence, setAskEvidence] = reactExports.useState([]);
+  const [askBusy, setAskBusy] = reactExports.useState(false);
+  const [paletteOpen, setPaletteOpen] = reactExports.useState(false);
+  const editorRef = reactExports.useRef(null);
+  const activeNoteRef = reactExports.useRef(null);
+  const refreshNotes = reactExports.useCallback(async () => {
+    if (!workspace) return;
+    const response = await listNotes({ workspace });
+    setNotes(response.notes.filter((note2) => !note2.deleted_at));
+    setTrash(response.notes.filter((note2) => Boolean(note2.deleted_at)));
+  }, [workspace]);
+  reactExports.useEffect(() => {
+    setActiveNote(null);
+    setOpenTabs([]);
+    setError("");
+    void refreshNotes().catch((reason) => setError(messageOf(reason)));
+  }, [refreshNotes]);
+  reactExports.useEffect(() => {
+    activeNoteRef.current = activeNote;
+  }, [activeNote]);
+  reactExports.useEffect(() => {
+    const tablet = window.matchMedia("(max-width: 1024px)");
+    const compact = window.matchMedia("(max-width: 1240px)");
+    const closeExplorer = (event) => {
+      if (event.matches) setExplorerOpen(false);
+    };
+    const closeContext = (event) => {
+      if (event.matches) setContextOpen(false);
+    };
+    tablet.addEventListener("change", closeExplorer);
+    compact.addEventListener("change", closeContext);
+    return () => {
+      tablet.removeEventListener("change", closeExplorer);
+      compact.removeEventListener("change", closeContext);
+    };
+  }, []);
+  reactExports.useEffect(() => {
+    if (!activeNote || !["pending", "indexing"].includes(activeNote.index_state)) return;
+    const timeout2 = window.setTimeout(async () => {
+      try {
+        const response = await getNote({ workspace, note_id: activeNote.id });
+        activeNoteRef.current = response.note;
+        setActiveNote(response.note);
+        setOpenTabs((current) => current.map((tab) => tab.id === response.note.id ? response.note : tab));
+      } catch {
+      }
+    }, 1e3);
+    return () => window.clearTimeout(timeout2);
+  }, [activeNote, workspace]);
+  const openNote = reactExports.useCallback(async (noteID) => {
+    if (!workspace) return;
+    try {
+      const response = await getNote({ workspace, note_id: noteID });
+      setActiveNote(response.note);
+      setOpenTabs((current) => {
+        const existing = current.find((note2) => note2.id === response.note.id);
+        return existing ? current.map((note2) => note2.id === response.note.id ? response.note : note2) : [...current, response.note];
+      });
+      setSaveState("idle");
+      setError("");
+      const [links, history] = await Promise.all([
+        listNoteBacklinks({ workspace, note_id: noteID }),
+        listNoteRevisions({ workspace, note_id: noteID })
+      ]);
+      setBacklinks(links.backlinks);
+      setRevisions(history.revisions);
+    } catch (reason) {
+      setError(messageOf(reason));
+    }
+  }, [workspace]);
+  const createNewNote = reactExports.useCallback(async () => {
+    if (!workspace) return;
+    const title = nextUntitledTitle(notes);
+    try {
+      const response = await createNote({
+        workspace,
+        path: `${title}.md`,
+        title,
+        body: `# ${title}
+
+`,
+        properties: {}
+      });
+      await refreshNotes();
+      await openNote(response.note.id);
+      requestAnimationFrame(() => {
+        var _a3;
+        return (_a3 = editorRef.current) == null ? void 0 : _a3.focus();
+      });
+    } catch (reason) {
+      setError(messageOf(reason));
+    }
+  }, [notes, openNote, refreshNotes, workspace]);
+  const saveActiveNote = reactExports.useCallback(async () => {
+    const note2 = activeNoteRef.current;
+    if (!note2 || saveState === "saving") return;
+    const title = noteTitleFromBody(note2.body, note2.title);
+    setSaveState("saving");
+    try {
+      const response = await updateNote({
+        workspace,
+        note_id: note2.id,
+        expected_revision: note2.revision,
+        path: note2.path,
+        title,
+        body: note2.body,
+        properties: note2.properties ?? emptyProperties
+      });
+      activeNoteRef.current = response.note;
+      setActiveNote(response.note);
+      setOpenTabs((current) => current.map((tab) => tab.id === response.note.id ? response.note : tab));
+      setSaveState("saved");
+      setError("");
+      await refreshNotes();
+      const [links, history] = await Promise.all([
+        listNoteBacklinks({ workspace, note_id: note2.id }),
+        listNoteRevisions({ workspace, note_id: note2.id })
+      ]);
+      setBacklinks(links.backlinks);
+      setRevisions(history.revisions);
+    } catch (reason) {
+      setSaveState("error");
+      setError(messageOf(reason));
+    }
+  }, [refreshNotes, saveState, workspace]);
+  reactExports.useEffect(() => {
+    if (saveState !== "dirty" || !activeNote) return;
+    const timeout2 = window.setTimeout(() => void saveActiveNote(), 700);
+    return () => window.clearTimeout(timeout2);
+  }, [activeNote, saveActiveNote, saveState]);
+  reactExports.useEffect(() => {
+    const onKeyDown = (event) => {
+      const modifier = event.metaKey || event.ctrlKey;
+      if (modifier && event.key.toLowerCase() === "s") {
+        event.preventDefault();
+        void saveActiveNote();
+      }
+      if (modifier && event.key.toLowerCase() === "n") {
+        event.preventDefault();
+        void createNewNote();
+      }
+      if (modifier && event.key.toLowerCase() === "p") {
+        event.preventDefault();
+        setPaletteOpen(true);
+      }
+      if (modifier && event.shiftKey && event.key.toLowerCase() === "f") {
+        event.preventDefault();
+        setDestination("search");
+      }
+      if (modifier && event.shiftKey && event.key.toLowerCase() === "a") {
+        event.preventDefault();
+        setDestination("ask");
+      }
+      if (modifier && event.key.toLowerCase() === "w" && activeNoteRef.current) {
+        event.preventDefault();
+        closeTab(activeNoteRef.current.id);
+      }
+      if (event.ctrlKey && event.key === "Tab" && openTabs.length > 1) {
+        event.preventDefault();
+        const currentIndex = openTabs.findIndex((note2) => {
+          var _a3;
+          return note2.id === ((_a3 = activeNoteRef.current) == null ? void 0 : _a3.id);
+        });
+        const direction = event.shiftKey ? -1 : 1;
+        const nextIndex = (currentIndex + direction + openTabs.length) % openTabs.length;
+        void openNote(openTabs[nextIndex].id);
+      }
+      if (event.key === "Escape") setPaletteOpen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [createNewNote, openNote, openTabs, saveActiveNote]);
+  function patchActiveNote(patch) {
+    setActiveNote((current) => {
+      if (!current) return current;
+      const next2 = { ...current, ...patch };
+      activeNoteRef.current = next2;
+      setOpenTabs((tabs) => tabs.map((tab) => tab.id === next2.id ? next2 : tab));
+      return next2;
+    });
+    setSaveState("dirty");
+  }
+  function closeTab(noteID) {
+    setOpenTabs((current) => {
+      const index = current.findIndex((note2) => note2.id === noteID);
+      const next2 = current.filter((note2) => note2.id !== noteID);
+      if ((activeNote == null ? void 0 : activeNote.id) === noteID) {
+        const fallback = next2[Math.max(0, index - 1)] ?? null;
+        setActiveNote(fallback);
+        activeNoteRef.current = fallback;
+        if (fallback) void openNote(fallback.id);
+      }
+      return next2;
+    });
+  }
+  async function moveToTrash() {
+    if (!activeNote || !window.confirm(`Move “${activeNote.title}” to trash?`)) return;
+    try {
+      await trashNote({ workspace, note_id: activeNote.id });
+      closeTab(activeNote.id);
+      setActiveNote(null);
+      await refreshNotes();
+    } catch (reason) {
+      setError(messageOf(reason));
+    }
+  }
+  async function restoreFromTrash(note2) {
+    try {
+      await restoreNote({ workspace, note_id: note2.id });
+      await refreshNotes();
+      await openNote(note2.id);
+    } catch (reason) {
+      setError(messageOf(reason));
+    }
+  }
+  async function openOrCreateLinkedNote(title) {
+    const target = notes.find((note2) => note2.title.toLowerCase() === title.toLowerCase());
+    if (target) {
+      await openNote(target.id);
+      return;
+    }
+    if (!window.confirm(`Create the linked note “${title}”?`)) return;
+    try {
+      const response = await createNote({
+        workspace,
+        path: `${safePathTitle(title)}.md`,
+        title,
+        body: `# ${title}
+
+`,
+        properties: {}
+      });
+      await refreshNotes();
+      await openNote(response.note.id);
+    } catch (reason) {
+      setError(messageOf(reason));
+    }
+  }
+  async function restoreRevision(revision) {
+    if (!activeNote || !window.confirm(`Restore revision ${revision.revision} as a new revision?`)) return;
+    try {
+      const response = await restoreNoteRevision({
+        workspace,
+        note_id: activeNote.id,
+        revision: revision.revision,
+        expected_revision: activeNote.revision
+      });
+      setActiveNote(response.note);
+      activeNoteRef.current = response.note;
+      setSaveState("saved");
+      await openNote(response.note.id);
+    } catch (reason) {
+      setError(messageOf(reason));
+    }
+  }
+  async function retryIndex() {
+    if (!activeNote) return;
+    try {
+      await retryNoteIndex({ workspace, note_id: activeNote.id });
+      const pending = { ...activeNote, index_state: "pending", index_error: "" };
+      setActiveNote(pending);
+      activeNoteRef.current = pending;
+      setSaveState("saved");
+    } catch (reason) {
+      setError(messageOf(reason));
+    }
+  }
+  async function runSearch() {
+    if (!query.trim()) return;
+    setSearchBusy(true);
+    setError("");
+    try {
+      const response = await searchMemories({
+        workspace,
+        query: query.trim(),
+        top_k: 30,
+        explain: true,
+        filters: { types: [], tiers: [] }
+      });
+      setSearchResults(response.results ?? []);
+    } catch (reason) {
+      setError(messageOf(reason));
+    } finally {
+      setSearchBusy(false);
+    }
+  }
+  async function runAsk() {
+    if (!askText.trim()) return;
+    setAskBusy(true);
+    setError("");
+    try {
+      const targets = askScope === "all" ? projects.map((project) => project.name) : [workspace];
+      const scopePrompt = askScope === "active" && activeNote ? `Answer using the active note "${activeNote.title}" as the primary source. ` : "";
+      const responses = await Promise.all(targets.map((targetWorkspace) => recallPreview({
+        workspace: targetWorkspace,
+        task_description: `${scopePrompt}${askText.trim()}`,
+        top_k: 30,
+        token_budget: Math.max(800, Math.floor(4e3 / Math.max(1, targets.length))),
+        explain: true,
+        include_memories: true
+      })));
+      const answer = responses.map((response, index) => {
+        const label = targets.length > 1 ? `### ${targets[index]}
+
+` : "";
+        return response.context_block ? `${label}${response.context_block}` : "";
+      }).filter(Boolean).join("\n\n");
+      setAskAnswer(answer || "No grounded answer was found. Try a more specific question or another scope.");
+      setAskEvidence(responses.flatMap((response) => response.memories_included_full ?? []));
+    } catch (reason) {
+      setError(messageOf(reason));
+    } finally {
+      setAskBusy(false);
+    }
+  }
+  async function saveAnswerAsNote() {
+    if (!askAnswer || !workspace) return;
+    if (!window.confirm("Save this grounded answer and its sources as a new note?")) return;
+    const title = askText.trim().slice(0, 72) || "AI research";
+    try {
+      const response = await createNote({
+        workspace,
+        path: `AI/${safePathTitle(title)}.md`,
+        title,
+        body: `# ${title}
+
+${askAnswer}
+
+## Sources
+
+${formatEvidenceLinks(askEvidence)}`,
+        properties: { source: "agent-memory ask" },
+        author_kind: "agent_assisted"
+      });
+      await refreshNotes();
+      await openNote(response.note.id);
+      setDestination("notes");
+    } catch (reason) {
+      setError(messageOf(reason));
+    }
+  }
+  async function appendAnswerToActiveNote() {
+    if (!activeNote || !askAnswer) return;
+    if (!window.confirm(`Append this grounded answer and its sources to “${activeNote.title}”?`)) return;
+    patchActiveNote({
+      body: `${activeNote.body.trimEnd()}
+
+## AI research
+
+${askAnswer}
+
+${formatEvidenceLinks(askEvidence)}
+`
+    });
+    setDestination("notes");
+  }
+  const filteredNotes = reactExports.useMemo(() => {
+    const normalized = query.trim().toLowerCase();
+    if (!normalized) return notes;
+    return notes.filter((note2) => `${note2.title} ${note2.path}`.toLowerCase().includes(normalized));
+  }, [notes, query]);
+  const noteGroups = reactExports.useMemo(() => groupNotesByFolder(filteredNotes), [filteredNotes]);
+  const outline = reactExports.useMemo(() => parseOutline((activeNote == null ? void 0 : activeNote.body) ?? ""), [activeNote == null ? void 0 : activeNote.body]);
+  const outgoingLinks = reactExports.useMemo(() => parseInternalLinks((activeNote == null ? void 0 : activeNote.body) ?? ""), [activeNote == null ? void 0 : activeNote.body]);
+  const statusText = noteStatusText(activeNote, saveState);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "notebookShell", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("aside", { className: "notebookRail", "aria-label": "Primary navigation", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "notebookBrand", type: "button", onClick: () => setDestination("notes"), "aria-label": "Agent Memory notebook", children: "am" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(RailButton, { label: "Notes", active: destination === "notes", onClick: () => setDestination("notes"), glyph: "N" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(RailButton, { label: "Search", active: destination === "search", onClick: () => setDestination("search"), glyph: "S" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(RailButton, { label: "Ask", active: destination === "ask", onClick: () => setDestination("ask"), glyph: "A" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(RailButton, { label: "Activity", active: destination === "activity", onClick: () => setDestination("activity"), glyph: "R" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "notebookRailSpacer" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(RailButton, { label: "System", active: false, onClick: onOpenSystem, glyph: "SYS" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(RailButton, { label: theme === "dark" ? "Light theme" : "Dark theme", active: false, onClick: onThemeChange, glyph: theme === "dark" ? "☼" : "◐" })
+    ] }),
+    explorerOpen ? /* @__PURE__ */ jsxRuntimeExports.jsxs("aside", { className: "notebookExplorer", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "notebookWorkspacePicker", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("select", { value: workspace, onChange: (event) => onWorkspaceChange(event.target.value), "aria-label": "Notebook workspace", children: projects.map((project) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: project.name, children: project.name }, project.name)) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => void createNewNote(), title: "New note (Cmd/Ctrl+N)", children: "+" })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "notebookFilter", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Filter notes" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("input", { value: query, onChange: (event) => setQuery(event.target.value), placeholder: "Find a note…" })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "notebookSectionLabel", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Notes" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: filteredNotes.length })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("nav", { className: "noteTree", "aria-label": "Notes", children: [
+        noteGroups.map((group) => /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "noteFolder", children: [
+          group.folder ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "noteFolderLabel", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "⌄" }),
+            group.folder
+          ] }) : null,
+          group.notes.map((note2) => /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: (activeNote == null ? void 0 : activeNote.id) === note2.id ? "noteTreeItem active" : "noteTreeItem", onClick: () => void openNote(note2.id), children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "noteTreeIcon", children: "◇" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: note2.title }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("small", { children: note2.path })
+            ] })
+          ] }, note2.id))
+        ] }, group.folder)),
+        filteredNotes.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "notebookHint", children: "Create your first note. It will become available to both you and your agents." }) : null
+      ] }),
+      trash.length ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "notebookSectionLabel", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Trash" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: trash.length })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "noteTree", children: trash.map((note2) => /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "noteTreeItem muted", onClick: () => void restoreFromTrash(note2), children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "noteTreeIcon", children: "×" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: note2.title }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("small", { children: "Restore note" })
+          ] })
+        ] }, note2.id)) })
+      ] }) : null
+    ] }) : null,
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("main", { className: "notebookMain", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("header", { className: "notebookTopbar", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "notebookIconButton", onClick: () => setExplorerOpen((open) => !open), "aria-label": "Toggle note explorer", children: "☰" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "notebookTabs", role: "tablist", "aria-label": "Open notes", children: openTabs.map((note2) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: (activeNote == null ? void 0 : activeNote.id) === note2.id ? "notebookTab active" : "notebookTab", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", role: "tab", "aria-selected": (activeNote == null ? void 0 : activeNote.id) === note2.id, onClick: () => void openNote(note2.id), children: note2.title }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => closeTab(note2.id), "aria-label": `Close ${note2.title}`, children: "×" })
+        ] }, note2.id)) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "notebookIconButton", onClick: () => setPaletteOpen(true), "aria-label": "Open command palette", children: "⌘" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "notebookIconButton", onClick: () => setContextOpen((open) => !open), "aria-label": "Toggle context panel", children: "◫" })
+      ] }),
+      destination === "notes" ? activeNote ? /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "notebookDocument", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("header", { className: "noteHeader", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "noteTitle", children: activeNote.title }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: activeNote.path })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "noteHeaderActions", children: [
+            activeNote.index_state === "failed" ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "noteStatus error", onClick: () => void retryIndex(), children: "Index failed · Retry" }) : /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `noteStatus ${saveState}`, children: statusText }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "editorModeSwitcher", "aria-label": "Editor mode", children: ["edit", "preview", "split"].map((mode) => /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: editorMode === mode ? "active" : "", onClick: () => setEditorMode(mode), children: mode }, mode)) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "dangerTextButton", onClick: () => void moveToTrash(), children: "Trash" })
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `notebookEditor mode-${editorMode}`, children: [
+          editorMode !== "preview" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "textarea",
+            {
+              ref: editorRef,
+              value: activeNote.body,
+              onChange: (event) => {
+                const body = event.target.value;
+                patchActiveNote({ body, title: noteTitleFromBody(body, activeNote.title) });
+              },
+              spellCheck: true,
+              "aria-label": "Markdown editor"
+            }
+          ) : null,
+          editorMode !== "edit" ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "notebookPreview", "aria-label": "Markdown preview", children: /* @__PURE__ */ jsxRuntimeExports.jsx(MarkdownView, { markdown: activeNote.body, clamp: false, theme }) }) : null
+        ] })
+      ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx(NotebookWelcome, { onCreate: () => void createNewNote(), onAsk: () => setDestination("ask") }) : null,
+      destination === "search" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "notebookUtilityPage", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "eyebrow", children: "Knowledge search" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { children: "Find a note or memory" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "notebookSearchBar", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("input", { value: query, onChange: (event) => setQuery(event.target.value), onKeyDown: (event) => {
+            if (event.key === "Enter") void runSearch();
+          }, placeholder: "Search decisions, people, projects…", autoFocus: true }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => void runSearch(), disabled: searchBusy, children: searchBusy ? "Searching…" : "Search" })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "unifiedResults", children: [
+          filteredNotes.map((note2) => /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "unifiedResult", onClick: () => {
+            void openNote(note2.id);
+            setDestination("notes");
+          }, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sourceBadge human", children: "Human note" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: note2.title }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("small", { children: note2.path })
+          ] }, note2.id)),
+          searchResults.map((memory) => {
+            var _a3, _b2, _c2, _d2, _e3, _f2, _g2, _h2;
+            return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+              "article",
+              {
+                className: ((_a3 = memory.source) == null ? void 0 : _a3.note_id) ? "unifiedResult humanMemoryResult" : "unifiedResult",
+                role: ((_b2 = memory.source) == null ? void 0 : _b2.note_id) ? "button" : void 0,
+                tabIndex: ((_c2 = memory.source) == null ? void 0 : _c2.note_id) ? 0 : void 0,
+                onClick: ((_d2 = memory.source) == null ? void 0 : _d2.note_id) ? () => {
+                  var _a4;
+                  void openNote(((_a4 = memory.source) == null ? void 0 : _a4.note_id) ?? "");
+                  setDestination("notes");
+                } : void 0,
+                onKeyDown: ((_e3 = memory.source) == null ? void 0 : _e3.note_id) ? (event) => {
+                  var _a4;
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    void openNote(((_a4 = memory.source) == null ? void 0 : _a4.note_id) ?? "");
+                    setDestination("notes");
+                  }
+                } : void 0,
+                children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: ((_f2 = memory.source) == null ? void 0 : _f2.note_id) ? "sourceBadge human" : "sourceBadge agent", children: ((_g2 = memory.source) == null ? void 0 : _g2.note_id) ? "Human note" : "Agent memory" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(MarkdownView, { markdown: memory.content, clamp: true, theme }),
+                  ((_h2 = memory.source) == null ? void 0 : _h2.note_path) ? /* @__PURE__ */ jsxRuntimeExports.jsx("small", { children: memory.source.note_path }) : null
+                ]
+              },
+              memory.id
+            );
+          })
+        ] })
+      ] }) : null,
+      destination === "ask" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+        AskWorkspace,
+        {
+          value: askText,
+          scope: askScope,
+          answer: askAnswer,
+          evidence: askEvidence,
+          busy: askBusy,
+          theme,
+          onChange: setAskText,
+          onScopeChange: setAskScope,
+          onSubmit: () => void runAsk(),
+          onSaveNew: () => void saveAnswerAsNote(),
+          onAppend: () => void appendAnswerToActiveNote(),
+          canAppend: Boolean(activeNote),
+          canUseActive: Boolean(activeNote),
+          onOpenEvidence: (noteID) => {
+            void openNote(noteID);
+            setDestination("notes");
+          }
+        }
+      ) : null,
+      destination === "activity" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "notebookUtilityPage", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "eyebrow", children: "Activity" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { children: "Recent knowledge" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "activityList", children: [...notes].sort((a2, b2) => b2.updated_at.localeCompare(a2.updated_at)).slice(0, 20).map((note2) => /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", onClick: () => {
+          void openNote(note2.id);
+          setDestination("notes");
+        }, children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: note2.title }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("small", { children: [
+            new Date(note2.updated_at).toLocaleString(),
+            " · ",
+            note2.index_state
+          ] })
+        ] }, note2.id)) })
+      ] }) : null,
+      error ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "notebookError", role: "alert", children: error }) : null,
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("footer", { className: "notebookStatusbar", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: workspace || "No workspace" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: activeNote ? `${activeNote.revision} revisions · ${statusText}` : `${notes.length} notes` })
+      ] })
+    ] }),
+    contextOpen && destination === "notes" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("aside", { className: "notebookContext", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "contextTabs", role: "tablist", "aria-label": "Note context", children: ["ask", "backlinks", "outline", "properties", "history"].map((tab) => /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: contextTab === tab ? "active" : "", onClick: () => setContextTab(tab), children: capitalize(tab) }, tab)) }),
+      contextTab === "ask" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "contextBody", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { children: "Ask about this note" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("textarea", { "aria-label": "Ask agent-memory", value: askText, onChange: (event) => setAskText(event.target.value), placeholder: "What decisions did we make?" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "primaryNotebookButton", onClick: () => {
+          setDestination("ask");
+          void runAsk();
+        }, children: "Ask agent-memory" })
+      ] }) : null,
+      contextTab === "backlinks" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "contextBody", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { children: "Backlinks" }),
+        backlinks.map((link2) => /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { className: "contextListItem", type: "button", onClick: () => void openNote(link2.source_note_id), children: [
+          link2.snippet,
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("small", { children: [
+            "Line ",
+            link2.line
+          ] })
+        ] }, `${link2.source_note_id}:${link2.line}`)),
+        backlinks.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "notebookHint", children: "No notes link here yet." }) : null,
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: "Outgoing links" }),
+        outgoingLinks.map((link2) => /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "contextListItem", type: "button", onClick: () => void openOrCreateLinkedNote(link2), children: link2 }, link2))
+      ] }) : null,
+      contextTab === "outline" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "contextBody", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { children: "Outline" }),
+        outline.map((heading2) => /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "contextListItem", style: { paddingLeft: `${12 + heading2.level * 8}px` }, type: "button", onClick: () => focusEditorLine(editorRef.current, heading2.line), children: heading2.text }, `${heading2.line}:${heading2.text}`))
+      ] }) : null,
+      contextTab === "properties" && activeNote ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "contextBody", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { children: "Properties" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [
+          "Path",
+          /* @__PURE__ */ jsxRuntimeExports.jsx("input", { value: activeNote.path, onChange: (event) => patchActiveNote({ path: event.target.value }) })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [
+          "Status",
+          /* @__PURE__ */ jsxRuntimeExports.jsx("input", { value: String(((_a2 = activeNote.properties) == null ? void 0 : _a2.status) ?? ""), onChange: (event) => patchActiveNote({ properties: { ...activeNote.properties, status: event.target.value } }) })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [
+          "Tags",
+          /* @__PURE__ */ jsxRuntimeExports.jsx("input", { value: propertyTags(activeNote.properties).join(", "), onChange: (event) => patchActiveNote({ properties: { ...activeNote.properties, tags: event.target.value.split(",").map((item) => item.trim()).filter(Boolean) } }) })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "notebookHint", children: "Properties stay small and machine-readable so both people and agents can use them." })
+      ] }) : null,
+      contextTab === "history" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "contextBody", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { children: "Revision history" }),
+        revisions.map((revision) => /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "contextListItem", onClick: () => void restoreRevision(revision), children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("strong", { children: [
+            "Revision ",
+            revision.revision
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("small", { children: [
+            new Date(revision.created_at).toLocaleString(),
+            " · ",
+            revision.author_kind
+          ] })
+        ] }, revision.revision))
+      ] }) : null
+    ] }) : null,
+    paletteOpen ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "commandPaletteBackdrop", role: "presentation", onMouseDown: () => setPaletteOpen(false), children: /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "commandPalette", role: "dialog", "aria-modal": "true", "aria-label": "Command palette", onMouseDown: (event) => event.stopPropagation(), children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Command palette" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", onClick: () => {
+        setPaletteOpen(false);
+        void createNewNote();
+      }, children: [
+        "New note ",
+        /* @__PURE__ */ jsxRuntimeExports.jsx("kbd", { children: "⌘N" })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", onClick: () => {
+        setPaletteOpen(false);
+        setDestination("search");
+      }, children: [
+        "Search knowledge ",
+        /* @__PURE__ */ jsxRuntimeExports.jsx("kbd", { children: "⌘⇧F" })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => {
+        setPaletteOpen(false);
+        setDestination("ask");
+      }, children: "Ask agent-memory" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => {
+        setPaletteOpen(false);
+        onOpenSystem();
+      }, children: "Open System" })
+    ] }) }) : null
+  ] });
+}
+function RailButton({ label, glyph, active, onClick }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: active ? "railButton active" : "railButton", onClick, title: label, "aria-label": label, children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: glyph }) });
+}
+function NotebookWelcome({ onCreate, onAsk }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "notebookWelcome", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "eyebrow", children: "Your shared second brain" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("h1", { children: [
+      "Write what matters.",
+      /* @__PURE__ */ jsxRuntimeExports.jsx("br", {}),
+      "Let your agents remember it."
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Notes you create here become grounded knowledge for search, recall, and future work." }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "primaryNotebookButton", onClick: onCreate, children: "Create a note" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: onAsk, children: "Ask this workspace" })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("dl", { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { children: "Markdown" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { children: "Write naturally with headings, tasks, tables, code, and links." })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { children: "Mermaid" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { children: "Turn fenced diagrams into readable system and process maps." })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { children: "Shared recall" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { children: "Human notes and agent memories contribute with visible provenance." })
+      ] })
+    ] })
+  ] });
+}
+function AskWorkspace(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "askWorkspace", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "askIntro", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "eyebrow", children: "Ask your second brain" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { children: "What do you need to know?" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Answers are assembled from your notes and agent memories. Sources stay attached." })
+    ] }),
+    props.answer ? /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "askAnswer", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(MarkdownView, { markdown: props.answer, clamp: false, theme: props.theme }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "askEvidence", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { children: "Sources" }),
+        props.evidence.map((memory) => {
+          var _a2, _b2, _c2, _d2, _e3, _f2, _g2;
+          return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "div",
+            {
+              className: ((_a2 = memory.source) == null ? void 0 : _a2.note_id) ? "askEvidenceItem navigable" : "askEvidenceItem",
+              role: ((_b2 = memory.source) == null ? void 0 : _b2.note_id) ? "button" : void 0,
+              tabIndex: ((_c2 = memory.source) == null ? void 0 : _c2.note_id) ? 0 : void 0,
+              onClick: ((_d2 = memory.source) == null ? void 0 : _d2.note_id) ? () => {
+                var _a3;
+                return props.onOpenEvidence(((_a3 = memory.source) == null ? void 0 : _a3.note_id) ?? "");
+              } : void 0,
+              onKeyDown: ((_e3 = memory.source) == null ? void 0 : _e3.note_id) ? (event) => {
+                var _a3;
+                if (event.key === "Enter" || event.key === " ") props.onOpenEvidence(((_a3 = memory.source) == null ? void 0 : _a3.note_id) ?? "");
+              } : void 0,
+              children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: ((_f2 = memory.source) == null ? void 0 : _f2.note_id) ? "sourceBadge human" : "sourceBadge agent", children: ((_g2 = memory.source) == null ? void 0 : _g2.note_id) ? "Human note" : "Agent memory" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: memory.content.slice(0, 180) })
+              ]
+            },
+            memory.id
+          );
+        })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "askAnswerActions", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: props.onSaveNew, children: "Save as new note" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: props.onAppend, disabled: !props.canAppend, children: "Append to active note" })
+      ] })
+    ] }) : null,
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "askScope", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [
+      "Search scope",
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("select", { value: props.scope, onChange: (event) => props.onScopeChange(event.target.value), children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "active", disabled: !props.canUseActive, children: "Active note" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "workspace", children: "Current workspace" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "all", children: "All workspaces" })
+      ] })
+    ] }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "askComposer", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("textarea", { "aria-label": "Ask agent-memory", value: props.value, onChange: (event) => props.onChange(event.target.value), onKeyDown: (event) => {
+        if (event.key === "Enter" && !event.shiftKey) {
+          event.preventDefault();
+          props.onSubmit();
+        }
+      }, placeholder: "Ask about a decision, project, person, or past session…" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: props.busy || !props.value.trim(), onClick: props.onSubmit, children: props.busy ? "Thinking…" : "Ask" })
+    ] })
+  ] });
+}
+function nextUntitledTitle(notes) {
+  let index = 1;
+  const titles = new Set(notes.map((note2) => note2.title.toLowerCase()));
+  const paths = new Set(notes.map((note2) => note2.path.toLowerCase()));
+  while (true) {
+    const candidate = index === 1 ? "untitled" : `untitled ${index}`;
+    if (!titles.has(candidate) && !paths.has(`${candidate}.md`)) break;
+    index += 1;
+  }
+  return index === 1 ? "Untitled" : `Untitled ${index}`;
+}
+function noteTitleFromBody(body, fallback) {
+  const firstLine = body.split(/\r?\n/, 1)[0].trim();
+  const withoutHeading = /^#{1,6}(?:[ \t]+|$)/.test(firstLine) ? firstLine.replace(/^#{1,6}(?:[ \t]+|$)/, "").replace(/[ \t]+#+$/, "").trim() : firstLine;
+  return withoutHeading || fallback.trim();
+}
+function groupNotesByFolder(notes) {
+  const groups = /* @__PURE__ */ new Map();
+  for (const note2 of notes) {
+    const slash = note2.path.lastIndexOf("/");
+    const folder = slash >= 0 ? note2.path.slice(0, slash) : "";
+    groups.set(folder, [...groups.get(folder) ?? [], note2]);
+  }
+  return [...groups.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([folder, groupNotes]) => ({
+    folder,
+    notes: [...groupNotes].sort((left, right) => left.title.localeCompare(right.title))
+  }));
+}
+function parseOutline(markdown) {
+  return markdown.split("\n").flatMap((line2, index) => {
+    const match = /^(#{1,6})\s+(.+)$/.exec(line2);
+    return match ? [{ level: match[1].length, text: match[2].trim(), line: index + 1 }] : [];
+  });
+}
+function parseInternalLinks(markdown) {
+  const links = /* @__PURE__ */ new Set();
+  for (const match of markdown.matchAll(/\[\[([^\]|#]+)(?:#[^\]|]+)?(?:\|[^\]]+)?\]\]/g)) links.add(match[1].trim());
+  return [...links];
+}
+function focusEditorLine(editor, line2) {
+  if (!editor) return;
+  const offset = editor.value.split("\n").slice(0, Math.max(0, line2 - 1)).reduce((total, value) => total + value.length + 1, 0);
+  editor.focus();
+  editor.setSelectionRange(offset, offset);
+}
+function noteStatusText(note2, state2) {
+  if (!note2) return "";
+  if (state2 === "dirty") return "Unsaved changes";
+  if (state2 === "saving") return "Saving";
+  if (state2 === "error") return "Save failed";
+  if (note2.index_state === "failed") return "Saved, indexing failed";
+  if (note2.index_state === "pending" || note2.index_state === "indexing") return "Saved · indexing";
+  if (note2.index_state === "ready") return "Saved · ready for AI";
+  return state2 === "saved" ? "Saved" : "Ready";
+}
+function propertyTags(properties) {
+  const value = properties == null ? void 0 : properties.tags;
+  return Array.isArray(value) ? value.map(String) : [];
+}
+function formatEvidenceLinks(evidence) {
+  if (!evidence.length) return "_No sources were returned._";
+  return evidence.map((memory) => {
+    var _a2;
+    return `- ${((_a2 = memory.source) == null ? void 0 : _a2.note_path) ? `[[${memory.source.note_path.replace(/\.md$/i, "")}]]` : `Agent memory \`${memory.id}\``}`;
+  }).join("\n");
+}
+function safePathTitle(value) {
+  return value.replace(/[\\/:*?"<>|]/g, "-").replace(/\s+/g, " ").trim() || "AI research";
+}
+function capitalize(value) {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+function messageOf(reason) {
+  return reason instanceof Error ? reason.message : String(reason);
+}
+const __vite_import_meta_env__ = {};
+const notebookEnabled = (__vite_import_meta_env__ == null ? void 0 : __vite_import_meta_env__.VITE_NOTEBOOK_ENABLED) !== "false";
 function App() {
   var _a2, _b2, _c2, _d2;
-  const [surface, setSurface] = reactExports.useState("overview");
+  const [surface, setSurface] = reactExports.useState(notebookEnabled ? "notes" : "overview");
   const [viewingJSON, setViewingJSON] = reactExports.useState(null);
   const [projects, setProjects] = reactExports.useState([]);
   const [workspace, setWorkspace] = reactExports.useState("");
@@ -37580,6 +38613,9 @@ function App() {
   const [observations, setObservations] = reactExports.useState([]);
   const [observationsBusy, setObservationsBusy] = reactExports.useState(false);
   const [observationsErr, setObservationsErr] = reactExports.useState("");
+  const [replayEvents, setReplayEvents] = reactExports.useState([]);
+  const [replayBusy, setReplayBusy] = reactExports.useState(false);
+  const [replayErr, setReplayErr] = reactExports.useState("");
   const [promotionBusyFor, setPromotionBusyFor] = reactExports.useState("");
   const [promotionResults, setPromotionResults] = reactExports.useState({});
   const [overviewExperimentFocusKey, setOverviewExperimentFocusKey] = reactExports.useState(0);
@@ -37623,7 +38659,10 @@ function App() {
   const [skills, setSkills] = reactExports.useState([]);
   const [skillsBusy, setSkillsBusy] = reactExports.useState(false);
   const [skillsErr, setSkillsErr] = reactExports.useState("");
+  const [navOpen, setNavOpen] = reactExports.useState(false);
   const threadRef = reactExports.useRef(null);
+  const navMenuRef = reactExports.useRef(null);
+  const navTriggerRef = reactExports.useRef(null);
   reactExports.useEffect(() => {
     document.body.classList.remove("light", "dark");
     document.body.classList.add(theme);
@@ -37635,7 +38674,13 @@ function App() {
   }, [surface]);
   reactExports.useEffect(() => {
     const handleEscape = (event) => {
+      var _a3;
       if (event.key !== "Escape") return;
+      if (navOpen) {
+        setNavOpen(false);
+        (_a3 = navTriggerRef.current) == null ? void 0 : _a3.focus();
+        return;
+      }
       if (wikiDiagramMemory) {
         setWikiDiagramMemory(null);
         return;
@@ -37654,7 +38699,26 @@ function App() {
     };
     window.addEventListener("keydown", handleEscape);
     return () => window.removeEventListener("keydown", handleEscape);
-  }, [rawStatsOpen, selectedMemory, wikiConsolidatedOpen, wikiDiagramMemory]);
+  }, [navOpen, rawStatsOpen, selectedMemory, wikiConsolidatedOpen, wikiDiagramMemory]);
+  reactExports.useEffect(() => {
+    if (!navOpen) return;
+    const handleOutsidePointer = (event) => {
+      var _a3;
+      if (!((_a3 = navMenuRef.current) == null ? void 0 : _a3.contains(event.target))) {
+        setNavOpen(false);
+      }
+    };
+    window.addEventListener("pointerdown", handleOutsidePointer);
+    return () => window.removeEventListener("pointerdown", handleOutsidePointer);
+  }, [navOpen]);
+  reactExports.useEffect(() => {
+    const desktopNavigation = window.matchMedia("(min-width: 2161px)");
+    const closeCompactNavigation = () => {
+      if (desktopNavigation.matches) setNavOpen(false);
+    };
+    desktopNavigation.addEventListener("change", closeCompactNavigation);
+    return () => desktopNavigation.removeEventListener("change", closeCompactNavigation);
+  }, []);
   const selectedProject = reactExports.useMemo(() => projects.find((x2) => x2.name === workspace), [projects, workspace]);
   const projectLabel = reactExports.useMemo(() => {
     if (!selectedProject) return workspace || "workspace";
@@ -37866,6 +38930,29 @@ function App() {
     }).finally(() => {
       if (cancelled) return;
       setObservationsBusy(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedSessionID, workspace]);
+  reactExports.useEffect(() => {
+    let cancelled = false;
+    if (!workspace || !selectedSessionID) {
+      setReplayEvents([]);
+      setReplayErr("");
+      return;
+    }
+    setReplayBusy(true);
+    setReplayErr("");
+    listReplayEvents({ workspace, session_id: selectedSessionID, limit: 400 }).then((response) => {
+      if (!cancelled) setReplayEvents(response.events ?? []);
+    }).catch((error) => {
+      if (!cancelled) {
+        setReplayEvents([]);
+        setReplayErr(error instanceof Error ? error.message : String(error));
+      }
+    }).finally(() => {
+      if (!cancelled) setReplayBusy(false);
     });
     return () => {
       cancelled = true;
@@ -38185,6 +39272,45 @@ function App() {
     setWikiDiagramMemory(null);
     setWikiOptionsOpen(false);
   }
+  const navigationItems = [
+    ...notebookEnabled ? [{ key: "00", label: "Notes", surface: "notes", open: () => setSurface("notes") }] : [],
+    { key: "01", label: "Overview", surface: "overview", open: () => setSurface("overview") },
+    { key: "02", label: "Sessions", surface: "sessions", open: openSessions },
+    { key: "03", label: "Diagnostics", surface: "diagnostics", open: () => setSurface("diagnostics") },
+    { key: "04", label: "Benchmark", surface: "benchmark", open: openBenchmark },
+    { key: "05", label: "Lifecycle", surface: "lifecycle", open: () => setSurface("lifecycle") },
+    { key: "06", label: "Wiki", surface: "wiki", open: () => openWiki() },
+    { key: "07", label: "Feedback", surface: "feedback", open: () => {
+      setSurface("feedback");
+      setSelectedMemory(null);
+    } },
+    { key: "08", label: "Skills", surface: "skills", open: () => {
+      setSurface("skills");
+      setSelectedMemory(null);
+    } }
+  ];
+  const activeNavigationItem = navigationItems.find((item) => item.surface === surface) ?? navigationItems[0];
+  function activateNavigationItem(item) {
+    item.open();
+    setNavOpen(false);
+  }
+  if (notebookEnabled && surface === "notes") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(
+      NotebookWorkspace,
+      {
+        workspace,
+        projects,
+        theme,
+        onWorkspaceChange: (nextWorkspace) => {
+          setWorkspace(nextWorkspace);
+          setWikiScope(nextWorkspace);
+          setSelectedMemory(null);
+        },
+        onOpenSystem: () => setSurface("overview"),
+        onThemeChange: () => setTheme((current) => current === "dark" ? "light" : "dark")
+      }
+    );
+  }
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: surface === "wiki" ? "shell chatShell shellWikiMode" : surface === "feedback" ? "shell chatShell shellFeedbackMode" : "shell chatShell", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("header", { className: "topbar chatTopbar", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "topbarLeft", children: [
@@ -38221,45 +39347,65 @@ function App() {
           }
         )
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("nav", { className: "topbarCenter", "aria-label": "Mode switcher", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { className: surface === "overview" ? "navItem navItemOn" : "navItem", onClick: () => setSurface("overview"), type: "button", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "navKey", children: "[01]" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "navLabel", children: "Overview" })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { className: surface === "sessions" ? "navItem navItemOn" : "navItem", onClick: openSessions, type: "button", "aria-label": "Sessions", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "navKey", children: "[02]" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "navLabel", children: "Sessions" })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { className: surface === "diagnostics" ? "navItem navItemOn" : "navItem", onClick: () => setSurface("diagnostics"), type: "button", "aria-label": "Diagnostics", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "navKey", children: "[03]" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "navLabel", children: "Diagnostics" })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { className: surface === "benchmark" ? "navItem navItemOn" : "navItem", onClick: openBenchmark, type: "button", "aria-label": "Benchmark", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "navKey", children: "[04]" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "navLabel", children: "Benchmark" })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { className: surface === "lifecycle" ? "navItem navItemOn" : "navItem", onClick: () => setSurface("lifecycle"), type: "button", "aria-label": "Lifecycle", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "navKey", children: "[05]" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "navLabel", children: "Lifecycle" })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { className: surface === "wiki" ? "navItem navItemOn" : "navItem", onClick: () => openWiki(), type: "button", "aria-label": "Wiki", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "navKey", children: "[06]" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "navLabel", children: "Wiki" })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { className: surface === "feedback" ? "navItem navItemOn" : "navItem", onClick: () => {
-          setSurface("feedback");
-          setSelectedMemory(null);
-        }, type: "button", "aria-label": "Feedback", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "navKey", children: "[07]" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "navLabel", children: "Feedback" })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { className: surface === "skills" ? "navItem navItemOn" : "navItem", onClick: () => {
-          setSurface("skills");
-          setSelectedMemory(null);
-        }, type: "button", "aria-label": "Skills", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "navKey", children: "[08]" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "navLabel", children: "Skills" })
-        ] })
+      /* @__PURE__ */ jsxRuntimeExports.jsx("nav", { className: "topbarCenter", "aria-label": "Mode switcher", children: navigationItems.map((item) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "button",
+        {
+          className: surface === item.surface ? "navItem navItemOn" : "navItem",
+          onClick: () => activateNavigationItem(item),
+          type: "button",
+          "aria-current": surface === item.surface ? "page" : void 0,
+          children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "navKey", children: [
+              "[",
+              item.key,
+              "]"
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "navLabel", children: item.label })
+          ]
+        },
+        item.surface
+      )) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "navMenuShell", ref: navMenuRef, children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "button",
+          {
+            ref: navTriggerRef,
+            className: "navMenuTrigger",
+            type: "button",
+            "aria-expanded": navOpen,
+            "aria-controls": "responsive-navigation-menu",
+            onClick: () => setNavOpen((open) => !open),
+            children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "navMenuPrompt", children: "menu" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "navKey", children: [
+                "[",
+                activeNavigationItem.key,
+                "]"
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "navMenuCurrent", children: activeNavigationItem.label }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "navMenuChevron", "aria-hidden": "true", children: navOpen ? "[-]" : "[+]" })
+            ]
+          }
+        ),
+        navOpen ? /* @__PURE__ */ jsxRuntimeExports.jsx("nav", { id: "responsive-navigation-menu", className: "navMenuPanel", "aria-label": "Mode switcher", children: navigationItems.map((item) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "button",
+          {
+            className: surface === item.surface ? "navMenuItem navMenuItemOn" : "navMenuItem",
+            type: "button",
+            onClick: () => activateNavigationItem(item),
+            "aria-current": surface === item.surface ? "page" : void 0,
+            children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "navKey", children: [
+                "[",
+                item.key,
+                "]"
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: item.label }),
+              surface === item.surface ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "navMenuStatus", children: "active" }) : null
+            ]
+          },
+          item.surface
+        )) }) : null
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "topbarRight", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -38317,7 +39463,10 @@ function App() {
             promotionResult: selectedSession ? promotionResults[selectedSession.session_id] : void 0,
             promotionBusy: Boolean(selectedSession && promotionBusyFor === selectedSession.session_id),
             onSelectSession: setSelectedSessionID,
-            onPromote: promoteSelectedSession
+            onPromote: promoteSelectedSession,
+            replayEvents,
+            replayBusy,
+            replayErr
           }
         ) : null,
         surface === "diagnostics" ? /* @__PURE__ */ jsxRuntimeExports.jsx(

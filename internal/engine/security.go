@@ -30,19 +30,19 @@ type SecurityValidationInput struct {
 }
 
 type securityLimiter struct {
-	mu      sync.Mutex
-	writes  map[string][]time.Time
+	mu     sync.Mutex
+	writes map[string][]time.Time
 }
 
 type RegexSecurityFilter struct {
-	policy      SecurityPolicy
-	secrets     []*regexp.Regexp
-	pii         []*regexp.Regexp
-	poison      []*regexp.Regexp
-	allowlist   []*regexp.Regexp
-	onAnomaly   func(SecurityEvent)
-	limiter     securityLimiter
-	nowFn       func() time.Time
+	policy    SecurityPolicy
+	secrets   []*regexp.Regexp
+	pii       []*regexp.Regexp
+	poison    []*regexp.Regexp
+	allowlist []*regexp.Regexp
+	onAnomaly func(SecurityEvent)
+	limiter   securityLimiter
+	nowFn     func() time.Time
 }
 
 func DefaultSecurityPolicy() SecurityPolicy {

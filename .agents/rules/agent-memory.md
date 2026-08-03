@@ -17,7 +17,7 @@ Always use `agent-memory` as the memory system:
     1. Write the new corrected memory first using `agent-memory write` and copy the new memory ID.
     2. Link the old incorrect memory to the new one by running `agent-memory feedback --memory-id <old_id> --outcome rejected --reconsolidation-action superseded --successor-memory-id <new_id> --reason "<explanation>"`.
 - After learning durable new knowledge: write it to memory immediately.
-- Be self-aware of reusable scripts, grep queries, or workflows: package them into custom skills under `.agents/skills/` (using `agent-memory distill` or manual packaging) for later reuse.
+- You MUST proactively package reusable scripts, grep queries, workflows, or complex setup/learnings into a custom agent skill under `.agents/skills/` (using `agent-memory distill` or manual packaging) if they are valuable and highly likely to be reused. Do NOT wait for the user to ask; proactively distill skills once a workflow or learning pattern is successfully validated.
   - Do NOT use generic, numbered, or index-based filenames (like `part1.md`, `workflows_part1.md`).
   - Always use clear, descriptive, and meaningful names for all custom skill reference files (e.g., `db_performance.md`, `ui_fixes.md`).
   - Limit every individual skill file's size strictly to a maximum of 12,000 characters. If a skill grows beyond this, partition it by domain/feature and place the detailed references into a `references/` subdirectory with descriptive, meaningful filenames.
@@ -31,6 +31,6 @@ Commands:
 - `agent-memory feedback --memory-id "<old_id>" --outcome rejected --reconsolidation-action superseded --successor-memory-id "<new_id>" --reason "<explanation>"`
 - `agent-memory write --type semantic --content "<durable fact + source>"`
 - `agent-memory write --type procedural --content "<repeatable steps/checklist>"`
-- `agent-memory write --type outcome --content "<what you tried>" --outcome-result success|failure|partial --outcome-approach "<how>" --outcome-reason "<why>"`
+- `agent-memory write --type outcome --content "<what you tried> (result: success|failure|partial, approach: <how>, reason: <why>)"`
 - `agent-memory session-end --transcript "<session summary or transcript>" --format json`
 

@@ -16,14 +16,14 @@ import (
 )
 
 type reembedWorkspaceResult struct {
-	Workspace            string            `json:"workspace"`
-	DBPath               string            `json:"db_path"`
-	TotalMemories        int               `json:"total_memories"`
-	ReEmbedded           int               `json:"re_embedded"`
-	Skipped              int               `json:"skipped"`
-	SkipReasons          map[string]int    `json:"skip_reasons,omitempty"`
-	Provider             string            `json:"provider"`
-	ProviderDistribution map[string]int    `json:"provider_distribution,omitempty"`
+	Workspace            string         `json:"workspace"`
+	DBPath               string         `json:"db_path"`
+	TotalMemories        int            `json:"total_memories"`
+	ReEmbedded           int            `json:"re_embedded"`
+	Skipped              int            `json:"skipped"`
+	SkipReasons          map[string]int `json:"skip_reasons,omitempty"`
+	Provider             string         `json:"provider"`
+	ProviderDistribution map[string]int `json:"provider_distribution,omitempty"`
 }
 
 type reembedResult struct {
@@ -160,7 +160,7 @@ func runReembedWorkspace(ctx context.Context, workspace, dbPath string, provider
 	if err != nil {
 		return reembedWorkspaceResult{}, err
 	}
-	
+
 	// Build map of memory_id -> (provider, model_version)
 	vectorProvenance := make(map[string]struct {
 		provider     string
@@ -186,7 +186,7 @@ func runReembedWorkspace(ctx context.Context, workspace, dbPath string, provider
 		SkipReasons:   map[string]int{},
 		Provider:      targetProvider,
 	}
-	
+
 	for _, memory := range memories {
 		// Check if memory already has correct provider and model version
 		if prov, ok := vectorProvenance[memory.ID]; ok {
@@ -196,20 +196,20 @@ func runReembedWorkspace(ctx context.Context, workspace, dbPath string, provider
 				continue
 			}
 		}
-		
+
 		text := memoryVectorText(memory)
 		if strings.TrimSpace(text) == "" {
 			result.Skipped++
 			result.SkipReasons["empty_content"]++
 			continue
 		}
-		
+
 		// In dry-run mode, skip actual embedding and database writes
 		if dryRun {
 			result.ReEmbedded++
 			continue
 		}
-		
+
 		vec, err := provider.Embed(ctx, text)
 		if err != nil {
 			result.Skipped++
@@ -224,13 +224,13 @@ func runReembedWorkspace(ctx context.Context, workspace, dbPath string, provider
 	if len(result.SkipReasons) == 0 {
 		result.SkipReasons = nil
 	}
-	
+
 	// Add final provider distribution after re-embedding (or dry-run preview)
 	providerDist, err := store.CountMemoryVectorsByProvider(ctx, workspace)
 	if err == nil && len(providerDist) > 0 {
 		result.ProviderDistribution = providerDist
 	}
-	
+
 	return result, nil
 }
 

@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -37,6 +38,8 @@ type upgradeResult struct {
 	EnvUpdated       bool                                        `json:"env_updated,omitempty"`
 	EnvError         string                                      `json:"env_error,omitempty"`
 	TuningCommand    string                                      `json:"tuning_command,omitempty"`
+	TermIndexes      map[string]*workspace.TermIndexSetupResult  `json:"term_indexes,omitempty"`
+	TermIndexErrors  map[string]string                           `json:"term_index_errors,omitempty"`
 }
 
 func validateTextOrJSONFormat(s string) (string, error) {
@@ -381,8 +384,9 @@ Use --hooks-only to push hooks without touching the binary (useful for existing 
 
 			writeAgentFiles := func(force bool) (*workspace.WriteAgentFilesResult, error) {
 				return workspace.WriteAgentFiles(workspace.WriteAgentFilesOptions{
-					CWD:   cwd,
-					Force: force,
+					CWD:     cwd,
+					DataDir: defaultAgentMemoryDataDir(),
+					Force:   force,
 				})
 			}
 
@@ -391,18 +395,23 @@ Use --hooks-only to push hooks without touching the binary (useful for existing 
 				if err != nil {
 					return nil, err
 				}
-				projects, err := mgr.List(cmd.Context())
+				projectNames, err := mgr.ProjectNames()
 				if err != nil {
 					return nil, err
 				}
 				res := make(map[string]*workspace.WriteAgentFilesResult)
-				for _, proj := range projects {
+				for _, projectName := range projectNames {
+					proj, err := mgr.Project(projectName)
+					if err != nil {
+						continue
+					}
 					if proj.WorkspaceRoot == "" {
 						continue
 					}
 					af, err := workspace.WriteAgentFiles(workspace.WriteAgentFilesOptions{
 						CWD:       proj.WorkspaceRoot,
 						Workspace: proj.Name,
+						DataDir:   defaultAgentMemoryDataDir(),
 						Force:     force,
 					})
 					if err != nil {
@@ -565,6 +574,12 @@ Use --hooks-only to push hooks without touching the binary (useful for existing 
 			if method == "go-build" {
 				_ = os.Remove(installedFrom)
 			}
+			prepared, failures, prepareErr := prepareRegisteredTermIndexes(cmd.Context(), defaultAgentMemoryDataDir())
+			if prepareErr != nil {
+				failures = map[string]string{"_registry": prepareErr.Error()}
+			}
+			res.TermIndexes = prepared
+			res.TermIndexErrors = failures
 
 			if !noHooks {
 				if all {
@@ -612,6 +627,15 @@ Use --hooks-only to push hooks without touching the binary (useful for existing 
 			} else if envPath != "" {
 				res.EnvFile = envPath
 			}
+			if envPath, updated, err := ensureEnvVarIfPresent("AGENT_MEMORY_TERM_BLOOM_MODE", "shadow"); err != nil {
+				res.EnvFile = envPath
+				res.EnvError = err.Error()
+			} else if updated {
+				res.EnvFile = envPath
+				res.EnvUpdated = true
+			} else if envPath != "" {
+				res.EnvFile = envPath
+			}
 			if envPath := filepath.Join(defaultAgentMemoryDataDir(), "agent-memory.env"); strings.TrimSpace(envPath) != "" {
 				if updated, err := ensureAdaptiveTuningGuidance(envPath); err != nil {
 					if res.EnvFile == "" {
@@ -623,6 +647,12 @@ Use --hooks-only to push hooks without touching the binary (useful for existing 
 					res.EnvUpdated = true
 				} else if res.EnvFile == "" && fileExists(envPath) {
 					res.EnvFile = envPath
+				}
+				if updated, err := ensureTermBloomGuidance(envPath); err != nil {
+					res.EnvError = err.Error()
+				} else if updated {
+					res.EnvFile = envPath
+					res.EnvUpdated = true
 				}
 			}
 
@@ -648,6 +678,12 @@ Use --hooks-only to push hooks without touching the binary (useful for existing 
 			} else if strings.TrimSpace(res.EnvError) != "" {
 				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  env update skipped: %s\n", res.EnvError)
 			}
+			for project, result := range res.TermIndexes {
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  term index ready: %s (%d terms)\n", project, result.DistinctTerms)
+			}
+			for project, message := range res.TermIndexErrors {
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  term index preparation failed: %s: %s\n", project, message)
+			}
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  inspect tuning: %s\n", res.TuningCommand)
 			return nil
 		},
@@ -669,14 +705,27 @@ Use --hooks-only to push hooks without touching the binary (useful for existing 
 	return cmd
 }
 
+func prepareRegisteredTermIndexes(ctx context.Context, dataDir string) (map[string]*workspace.TermIndexSetupResult, map[string]string, error) {
+	mgr, err := workspace.NewManager(dataDir)
+	if err != nil {
+		return nil, nil, err
+	}
+	return mgr.PrepareAllTermIndexes(ctx)
+}
+
 func ensureEnvVarIfPresent(key, value string) (string, bool, error) {
 	envPath := filepath.Join(defaultAgentMemoryDataDir(), "agent-memory.env")
+	updated, err := ensureEnvVarAtPath(envPath, key, value)
+	if errors.Is(err, os.ErrNotExist) {
+		return "", false, nil
+	}
+	return envPath, updated, err
+}
+
+func ensureEnvVarAtPath(envPath, key, value string) (bool, error) {
 	b, err := os.ReadFile(envPath)
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return "", false, nil
-		}
-		return envPath, false, err
+		return false, err
 	}
 	content := strings.ReplaceAll(string(b), "\r\n", "\n")
 	lines := strings.Split(content, "\n")
@@ -693,7 +742,7 @@ func ensureEnvVarIfPresent(key, value string) (string, bool, error) {
 		}
 	}
 	if found {
-		return envPath, false, nil
+		return false, nil
 	}
 
 	newLine := formatEnvAssignmentLine(key, value)
@@ -702,7 +751,7 @@ func ensureEnvVarIfPresent(key, value string) (string, bool, error) {
 		out += "\n"
 	}
 	out += newLine + "\n"
-	return envPath, true, os.WriteFile(envPath, []byte(out), 0o644)
+	return true, os.WriteFile(envPath, []byte(out), 0o644)
 }
 
 func parseEnvAssignmentLine(line string) (string, string, bool) {

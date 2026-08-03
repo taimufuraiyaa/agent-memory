@@ -14,13 +14,19 @@ import (
 )
 
 type ObservationInsert struct {
-	Workspace   string
-	SessionID   string
-	OccurredAt  time.Time
-	Kind        string
-	ToolName    string
-	Summary     string
-	ContentHash string
+	Workspace       string
+	SessionID       string
+	OccurredAt      time.Time
+	Kind            string
+	ToolName        string
+	Summary         string
+	ContentHash     string
+	SourceAgent     string
+	SourceAdapter   string
+	HookEvent       string
+	ExternalEventID string
+	SchemaVersion   string
+	CaptureMode     string
 }
 
 type ObserveUpsertSessionInput struct {
@@ -100,9 +106,12 @@ LIMIT 1
 
 	_, err = s.db.ExecContext(ctx, `
 INSERT INTO observations (
-  id, workspace, session_id, occurred_at, kind, tool_name, summary, content_hash, created_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-`, id, in.Workspace, in.SessionID, occurredAt.Format(time.RFC3339Nano), in.Kind, toolName, in.Summary, hash, createdAt.Format(time.RFC3339Nano))
+  id, workspace, session_id, occurred_at, kind, tool_name, summary, content_hash,
+  source_agent, source_adapter, hook_event, external_event_id, schema_version, capture_mode, created_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`, id, in.Workspace, in.SessionID, occurredAt.Format(time.RFC3339Nano), in.Kind, toolName, in.Summary, hash,
+		strings.TrimSpace(in.SourceAgent), strings.TrimSpace(in.SourceAdapter), strings.TrimSpace(in.HookEvent),
+		strings.TrimSpace(in.ExternalEventID), strings.TrimSpace(in.SchemaVersion), strings.TrimSpace(in.CaptureMode), createdAt.Format(time.RFC3339Nano))
 	if err != nil {
 		return core.Observation{}, false, err
 	}
@@ -112,14 +121,20 @@ INSERT INTO observations (
 		toolPtr = &toolName
 	}
 	return core.Observation{
-		ID:         id,
-		Workspace:  in.Workspace,
-		SessionID:  in.SessionID,
-		OccurredAt: occurredAt,
-		Kind:       in.Kind,
-		ToolName:   toolPtr,
-		Summary:    in.Summary,
-		CreatedAt:  createdAt,
+		ID:              id,
+		Workspace:       in.Workspace,
+		SessionID:       in.SessionID,
+		OccurredAt:      occurredAt,
+		Kind:            in.Kind,
+		ToolName:        toolPtr,
+		Summary:         in.Summary,
+		SourceAgent:     strings.TrimSpace(in.SourceAgent),
+		SourceAdapter:   strings.TrimSpace(in.SourceAdapter),
+		HookEvent:       strings.TrimSpace(in.HookEvent),
+		ExternalEventID: strings.TrimSpace(in.ExternalEventID),
+		SchemaVersion:   strings.TrimSpace(in.SchemaVersion),
+		CaptureMode:     strings.TrimSpace(in.CaptureMode),
+		CreatedAt:       createdAt,
 	}, false, nil
 }
 
@@ -214,7 +229,8 @@ func (s *Store) ListObservations(
 	args = append(args, limit)
 
 	q := `
-SELECT id, workspace, session_id, occurred_at, kind, tool_name, summary, created_at
+SELECT id, workspace, session_id, occurred_at, kind, tool_name, summary,
+       source_agent, source_adapter, hook_event, external_event_id, schema_version, capture_mode, created_at
 FROM observations
 WHERE ` + strings.Join(where, " AND ") + `
 ORDER BY occurred_at DESC
@@ -230,9 +246,9 @@ LIMIT ?
 	out := make([]core.Observation, 0, limit)
 	for rows.Next() {
 		var (
-			id, ws, sid, occurredAtRaw, kind, toolNameRaw, summary, createdAtRaw string
+			id, ws, sid, occurredAtRaw, kind, toolNameRaw, summary, sourceAgent, sourceAdapter, hookEvent, externalEventID, schemaVersion, captureMode, createdAtRaw string
 		)
-		if err := rows.Scan(&id, &ws, &sid, &occurredAtRaw, &kind, &toolNameRaw, &summary, &createdAtRaw); err != nil {
+		if err := rows.Scan(&id, &ws, &sid, &occurredAtRaw, &kind, &toolNameRaw, &summary, &sourceAgent, &sourceAdapter, &hookEvent, &externalEventID, &schemaVersion, &captureMode, &createdAtRaw); err != nil {
 			return nil, err
 		}
 		occurredAt, _ := time.Parse(time.RFC3339Nano, occurredAtRaw)
@@ -243,14 +259,20 @@ LIMIT ?
 			toolPtr = &v
 		}
 		out = append(out, core.Observation{
-			ID:         id,
-			Workspace:  ws,
-			SessionID:  sid,
-			OccurredAt: occurredAt,
-			Kind:       kind,
-			ToolName:   toolPtr,
-			Summary:    summary,
-			CreatedAt:  createdAt,
+			ID:              id,
+			Workspace:       ws,
+			SessionID:       sid,
+			OccurredAt:      occurredAt,
+			Kind:            kind,
+			ToolName:        toolPtr,
+			Summary:         summary,
+			SourceAgent:     sourceAgent,
+			SourceAdapter:   sourceAdapter,
+			HookEvent:       hookEvent,
+			ExternalEventID: externalEventID,
+			SchemaVersion:   schemaVersion,
+			CaptureMode:     captureMode,
+			CreatedAt:       createdAt,
 		})
 	}
 	return out, rows.Err()

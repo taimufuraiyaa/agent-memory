@@ -98,6 +98,7 @@ export function OverviewPanel({
   const lowReachThreshold = stats?.low_reach_threshold ?? 0
   const lowReachMemoryCount = stats?.low_reach_memory_count ?? 0
   const topRetrievedMemories = stats?.top_retrieved_memories ?? []
+  const advisor = stats?.advisor
   const scheduler = stats?.scheduler
   const schedulerWorkspace = scheduler?.workspace
   const schedulerState = scheduler?.enabled
@@ -198,6 +199,58 @@ export function OverviewPanel({
           detail={`${formatNumber(stats?.feedback_stats?.total_feedback_count ?? 0)} request scores`}
         />
       </div>
+
+      <section className="comparisonSection">
+        <div className="comparisonHeader">
+          <div>
+            <div className="breakdownTitle">Memory Advisor</div>
+            <div className="breakdownSubtitle">
+              Deterministic workspace guidance from retrieval feedback, recall context metrics, lifecycle state, coverage, and provenance.
+            </div>
+          </div>
+          <span className={`statusBadge statusBadge${advisor?.neutral ? 'Warn' : advisor && advisor.score >= 80 ? 'Good' : advisor && advisor.score >= 60 ? 'Warn' : 'Bad'}`}>
+            {advisor ? (advisor.neutral ? 'N/A' : `${advisor.grade} · ${advisor.score}/100`) : 'Loading'}
+          </span>
+        </div>
+        {!advisor ? (
+          <div className="emptyInline">Advisor data is not available from this server yet.</div>
+        ) : (
+          <div className="overviewColumns">
+            <BreakdownCard title="Dimensions" subtitle={advisor.neutral ? 'More evidence is needed before scoring' : 'Available dimensions only contribute to the composite'}>
+              <div className="diagnosticsList">
+                {advisor.dimensions.map((dimension) => (
+                  <DiagnosticRow
+                    key={dimension.key}
+                    label={dimension.label}
+                    value={dimension.available ? `${dimension.score}/100` : 'N/A'}
+                  />
+                ))}
+              </div>
+              <div className="breakdownSubtitle" style={{ marginTop: '12px' }}>
+                Context efficiency is a deterministic recall-context proxy, not provider-billed cost.
+              </div>
+            </BreakdownCard>
+            <BreakdownCard title="Recommendations" subtitle={`${formatNumber(advisor.recommendations.length)} active signals`}>
+              {advisor.recommendations.length === 0 ? (
+                <div className="emptyInline">No advisor recommendations for the available evidence.</div>
+              ) : (
+                <div style={{ display: 'grid', gap: '10px' }}>
+                  {advisor.recommendations.map((recommendation) => (
+                    <article className="feedbackSummaryCard" key={recommendation.id}>
+                      <div className="feedbackSummaryLabel">
+                        [{recommendation.severity.toUpperCase()}] {recommendation.category}
+                      </div>
+                      <div style={{ fontWeight: 700, marginTop: '4px' }}>{recommendation.title}</div>
+                      <p className="breakdownSubtitle" style={{ margin: '6px 0 0' }}>{recommendation.detail}</p>
+                      {recommendation.metric ? <div className="mono" style={{ marginTop: '8px' }}>{recommendation.metric}</div> : null}
+                    </article>
+                  ))}
+                </div>
+              )}
+            </BreakdownCard>
+          </div>
+        )}
+      </section>
 
       <div className="overviewColumns">
         <BreakdownCard title="Memory Types" subtitle={`${formatNumber(sumCounts(stats?.memory_type_counts))} total`}>

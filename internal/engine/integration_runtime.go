@@ -12,9 +12,9 @@ import (
 
 // SessionEndLifecycleResult combines extraction output with the opportunistic REM run.
 type SessionEndLifecycleResult struct {
-	TotalExtracted  int               `json:"total_extracted"`
-	WrittenIDs      []string          `json:"written_ids"`
-	LifecycleRan    bool              `json:"lifecycle_ran"`
+	TotalExtracted   int               `json:"total_extracted"`
+	WrittenIDs       []string          `json:"written_ids"`
+	LifecycleRan     bool              `json:"lifecycle_ran"`
 	LifecycleMetrics *LifecycleMetrics `json:"lifecycle_metrics,omitempty"`
 }
 
@@ -37,9 +37,9 @@ func RunSessionEndLifecycle(ctx context.Context, workspace, transcript string, s
 		return nil, err
 	}
 	return &SessionEndLifecycleResult{
-		TotalExtracted:  out.TotalExtracted,
-		WrittenIDs:      append([]string(nil), out.WrittenIDs...),
-		LifecycleRan:    true,
+		TotalExtracted:   out.TotalExtracted,
+		WrittenIDs:       append([]string(nil), out.WrittenIDs...),
+		LifecycleRan:     true,
 		LifecycleMetrics: metrics,
 	}, nil
 }

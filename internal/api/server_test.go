@@ -55,8 +55,34 @@ func TestServerWriteSearchRecall(t *testing.T) {
 	ts := httptest.NewServer(NewMux(svc))
 	defer ts.Close()
 
-	postJSON(t, ts.URL+"/api/v1/memories/write", map[string]any{"type": "semantic", "content": "orders service publishes order.created"})
+	postJSON(t, ts.URL+"/api/v1/memories/write", map[string]any{
+		"type":     "semantic",
+		"content":  "orders service publishes order.created",
+		"keywords": []string{"Orders", "order.created"},
+	})
 	postJSON(t, ts.URL+"/api/v1/memories/write", map[string]any{"type": "semantic", "content": "orders service publishes order.cancelled"})
+	assets, err := svc.resolve(context.Background(), "ws")
+	if err != nil {
+		t.Fatalf("resolve written workspace: %v", err)
+	}
+	writtenMemories, err := assets.Store.ListMemoriesByWorkspace(context.Background(), "ws")
+	if err != nil {
+		t.Fatalf("list written memories: %v", err)
+	}
+	var createdID string
+	for _, memory := range writtenMemories {
+		if memory.Content == "orders service publishes order.created" {
+			createdID = memory.ID
+			break
+		}
+	}
+	terms, err := assets.Store.ListMemoryTerms(context.Background(), "ws", createdID)
+	if err != nil {
+		t.Fatalf("list API-written terms: %v", err)
+	}
+	if len(terms) != 2 || terms[0].Term != "orders" || terms[1].Term != "order.created" {
+		t.Fatalf("API keywords were not persisted: %#v", terms)
+	}
 
 	recent := getJSON(t, ts.URL+"/api/v1/memories/recent?workspace=ws&limit=1")
 	recentResults, _ := recent["results"].([]any)
@@ -71,6 +97,17 @@ func TestServerWriteSearchRecall(t *testing.T) {
 	searchResp := postJSON(t, ts.URL+"/api/v1/memories/search", map[string]any{"query": "order event", "top_k": 1, "mode": "search"})
 	if len(searchResp["results"].([]any)) == 0 {
 		t.Fatalf("expected search hits")
+	}
+	termResp := postJSON(t, ts.URL+"/api/v1/memories/search", map[string]any{
+		"query":     "#ORDERS order.created",
+		"workspace": "ws",
+		"top_k":     5,
+		"mode":      "terms",
+		"operator":  "and",
+	})
+	termResults, _ := termResp["results"].([]any)
+	if len(termResults) != 1 || termResp["strategy"] != "exact_terms" {
+		t.Fatalf("unexpected term search response: %+v", termResp)
 	}
 	searchExplainResp := postJSON(t, ts.URL+"/api/v1/memories/search", map[string]any{
 		"query":     "order event",
@@ -1496,5 +1533,3 @@ func TestRequestFeedbackAPI(t *testing.T) {
 		t.Fatalf("expected to find both feedback entries in response list with correct useful/total counts, got: %v", listData)
 	}
 }
-
-

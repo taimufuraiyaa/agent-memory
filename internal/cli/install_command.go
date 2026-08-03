@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/taimufuraiyaa/agent-memory/internal/api/dashboard"
 	"github.com/taimufuraiyaa/agent-memory/internal/bootstrap"
 	"github.com/taimufuraiyaa/agent-memory/internal/workspace"
-	"github.com/taimufuraiyaa/agent-memory/internal/api/dashboard"
 )
 
 func newInstallCommand() *cobra.Command {
@@ -47,6 +47,12 @@ configure environment variables, and initialize the current directory as a proje
 			}
 			if dashboardDir == "" {
 				dashboardDir = filepath.Join(dataDir, "dashboard")
+			}
+			if len(ideTargets) == 0 {
+				// A fresh install configures every supported agent surface. This keeps
+				// Codex and other agents zero-configuration even in repositories that
+				// do not contain an IDE marker yet.
+				ideTargets = []string{"all"}
 			}
 
 			fmt.Fprintln(errOut, "— agent-memory installer —")
@@ -144,8 +150,30 @@ configure environment variables, and initialize the current directory as a proje
 				if err != nil {
 					fmt.Fprintf(errOut, "  ! env file write failed: %v\n", err)
 				}
+				if _, err := ensureEnvVarAtPath(envPath, "AGENT_MEMORY_TERM_BLOOM_MODE", "shadow"); err != nil {
+					fmt.Fprintf(errOut, "  ! term Bloom env setup failed: %v\n", err)
+				}
 				if err := ensureShellAutoload(envPath); err != nil {
 					fmt.Fprintf(errOut, "  ! shell setup skipped: %v\n", err)
+				}
+			}
+
+			if installTargetSelected(ideTargets, "codex") {
+				// Codex requires the memory database root to be writable before a
+				// project-local trusted configuration can take effect. Install a narrow,
+				// preserved user-wide layer so first use requires no manual config edits.
+				codexHome := strings.TrimSpace(os.Getenv("CODEX_HOME"))
+				if codexHome == "" {
+					if home, err := os.UserHomeDir(); err == nil {
+						codexHome = filepath.Join(home, ".codex")
+					}
+				}
+				if codexHome != "" {
+					paths, err := workspace.WriteCodexGlobalFiles(codexHome, dataDir)
+					if err != nil {
+						return fmt.Errorf("Codex setup failed: %w", err)
+					}
+					fmt.Fprintf(errOut, "  ✓ configured Codex: %s\n", strings.Join(paths, ", "))
 				}
 			}
 
@@ -218,11 +246,21 @@ configure environment variables, and initialize the current directory as a proje
 	cmd.Flags().StringVar(&dashboardDir, "dashboard-dir", "", "dashboard install directory")
 	cmd.Flags().BoolVar(&writeEnvFile, "write-env", true, "write an env file with environment settings")
 	cmd.Flags().StringVarP(&projectName, "project-name", "n", "", "project name for workspace setup (default: cwd basename)")
-	cmd.Flags().StringSliceVar(&ideTargets, "ide", nil, "IDE rule targets (repeatable, default: auto-detect): cursor|antigravity|claude|aierules|cursorrules|trae|windsurfrules|generic|all")
+	cmd.Flags().StringSliceVar(&ideTargets, "ide", nil, "IDE rule targets (repeatable, default: all): cursor|antigravity|claude|zcode|codex|aierules|cursorrules|trae|windsurfrules|generic|all")
 	cmd.Flags().BoolVar(&noInit, "no-init", false, "skip workspace project auto-initialization")
 	cmd.Flags().BoolVar(&force, "force", false, "force recreate project workspace if it already exists")
 
 	return cmd
+}
+
+func installTargetSelected(targets []string, target string) bool {
+	for _, raw := range targets {
+		selected := strings.ToLower(strings.TrimSpace(raw))
+		if selected == "all" || selected == target {
+			return true
+		}
+	}
+	return false
 }
 
 func installOrCopyBinary(out, errOut io.Writer, binDir, src string) (string, error) {

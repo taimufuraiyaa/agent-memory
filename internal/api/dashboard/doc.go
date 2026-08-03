@@ -10,11 +10,11 @@
 //
 // The dashboard package uses a two-tier serving strategy:
 //
-//   1. External assets (development): When a dashboard source directory is available,
-//      serve from that directory to enable hot-reload and rapid iteration.
+//  1. External assets (development): When a dashboard source directory is available,
+//     serve from that directory to enable hot-reload and rapid iteration.
 //
-//   2. Embedded assets (production): When no external directory is available,
-//      serve pre-built assets embedded in the binary at compile time.
+//  2. Embedded assets (production): When no external directory is available,
+//     serve pre-built assets embedded in the binary at compile time.
 //
 // # Asset Embedding
 //

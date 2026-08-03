@@ -57,4 +57,3 @@ func TestAdapterBudgetGuard(t *testing.T) {
 		t.Fatalf("expected budget error")
 	}
 }
-

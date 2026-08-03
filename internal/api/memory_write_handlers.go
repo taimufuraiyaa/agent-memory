@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/taimufuraiyaa/agent-memory/internal/application"
 	"github.com/taimufuraiyaa/agent-memory/internal/core"
 	"github.com/taimufuraiyaa/agent-memory/internal/engine"
 )
@@ -34,6 +35,7 @@ func writeMemoryHandler(svc *Service) http.HandlerFunc {
 			Content   string             `json:"content"`
 			Entities  []string           `json:"entities"`
 			Tags      []string           `json:"tags"`
+			Keywords  []string           `json:"keywords"`
 			Outcome   *core.Outcome      `json:"outcome"`
 			Source    *core.MemorySource `json:"source"`
 		}
@@ -47,19 +49,20 @@ func writeMemoryHandler(svc *Service) http.HandlerFunc {
 		}
 		assets, err := svc.resolve(r.Context(), ws)
 		if err != nil {
-			writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
+			writeWorkspaceResolveError(w, err)
 			return
 		}
 		src := core.MemorySource{Type: core.SourceUserInput}
 		if req.Source != nil && req.Source.Type != "" {
 			src = *req.Source
 		}
-		out, err := assets.Writer.Write(r.Context(), engine.WriteInput{
+		out, err := assets.Application.Write(r.Context(), engine.WriteInput{
 			Workspace: ws,
 			Type:      req.Type,
 			Content:   req.Content,
 			Entities:  req.Entities,
 			Tags:      req.Tags,
+			Keywords:  req.Keywords,
 			Outcome:   req.Outcome,
 			Source:    src,
 			Mode:      engine.ExtractFast,
@@ -96,7 +99,7 @@ func memoriesFeedbackHandler(svc *Service) http.HandlerFunc {
 		}
 		assets, err := svc.resolve(r.Context(), ws)
 		if err != nil {
-			writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
+			writeWorkspaceResolveError(w, err)
 			return
 		}
 		if assets.Store == nil {
@@ -112,17 +115,16 @@ func memoriesFeedbackHandler(svc *Service) http.HandlerFunc {
 				return
 			}
 		}
-		updated, err := assets.Store.ApplyRetrievalFeedback(r.Context(), req.MemoryID, req.Outcome, at)
+		updated, err := assets.Application.Feedback(r.Context(), application.FeedbackInput{
+			MemoryID:              req.MemoryID,
+			Outcome:               req.Outcome,
+			OccurredAt:            at,
+			ReconsolidationAction: req.ReconsolidationAction,
+			SuccessorMemoryID:     req.SuccessorMemoryID,
+		})
 		if err != nil {
 			writeErr(w, http.StatusBadRequest, "runtime", err.Error())
 			return
-		}
-		if strings.TrimSpace(string(req.ReconsolidationAction)) != "" {
-			updated, err = assets.Store.ApplyReconsolidation(r.Context(), req.MemoryID, req.ReconsolidationAction, strings.TrimSpace(req.SuccessorMemoryID), at)
-			if err != nil {
-				writeErr(w, http.StatusBadRequest, "runtime", err.Error())
-				return
-			}
 		}
 		writeOK(w, http.StatusOK, map[string]any{
 			"workspace":              ws,
@@ -163,7 +165,7 @@ func memoriesPinHandler(svc *Service) http.HandlerFunc {
 		}
 		assets, err := svc.resolve(r.Context(), ws)
 		if err != nil {
-			writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
+			writeWorkspaceResolveError(w, err)
 			return
 		}
 		if assets.Store == nil {
@@ -227,14 +229,14 @@ func memoriesDeleteHandler(svc *Service) http.HandlerFunc {
 		}
 		assets, err := svc.resolve(r.Context(), ws)
 		if err != nil {
-			writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
+			writeWorkspaceResolveError(w, err)
 			return
 		}
 		if assets.Store == nil {
 			writeErr(w, http.StatusInternalServerError, "runtime", "store is not available")
 			return
 		}
-		if err := assets.Store.DeleteByIDs(r.Context(), ids); err != nil {
+		if err := assets.Application.Delete(r.Context(), ws, ids, "http", "api", "", "requested deletion"); err != nil {
 			writeErr(w, http.StatusBadRequest, "runtime", err.Error())
 			return
 		}

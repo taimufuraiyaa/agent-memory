@@ -17,7 +17,6 @@ func defaultBinDir() string {
 	return cwd
 }
 
-
 func checkPATHAdvice(out io.Writer, dir string) {
 	if isOnPath(dir) {
 		return

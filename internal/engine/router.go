@@ -51,4 +51,3 @@ func containsPinned(tags []string) bool {
 	}
 	return false
 }
-

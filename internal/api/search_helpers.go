@@ -11,6 +11,14 @@ import (
 	"github.com/taimufuraiyaa/agent-memory/internal/engine"
 )
 
+func sumHitTokens(hits []engine.RetrievalHit) int {
+	total := 0
+	for _, hit := range hits {
+		total += len(strings.Fields(hit.Memory.Content))
+	}
+	return total
+}
+
 func parseIntOrDefault(raw string, def int) int {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {

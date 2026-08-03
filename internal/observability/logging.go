@@ -51,7 +51,7 @@ func SetLogger(logger *Logger) {
 // NewLogger creates a new structured logger.
 func NewLogger(level LogLevel, format LogFormat) *Logger {
 	var handler slog.Handler
-	
+
 	// Determine log level
 	var slogLevel slog.Level
 	switch level {
@@ -66,12 +66,12 @@ func NewLogger(level LogLevel, format LogFormat) *Logger {
 	default:
 		slogLevel = slog.LevelInfo
 	}
-	
+
 	opts := &slog.HandlerOptions{
-		Level: slogLevel,
+		Level:     slogLevel,
 		AddSource: false,
 	}
-	
+
 	// Create handler based on format
 	switch format {
 	case LogFormatJSON:
@@ -81,7 +81,7 @@ func NewLogger(level LogLevel, format LogFormat) *Logger {
 	default:
 		handler = slog.NewTextHandler(os.Stderr, opts)
 	}
-	
+
 	return &Logger{
 		Logger: slog.New(handler),
 	}
@@ -126,10 +126,10 @@ func (l *Logger) WithError(err error) *Logger {
 func (l *Logger) LogOperation(ctx context.Context, operation string, fn func() error) error {
 	timer := NewTimer()
 	l.InfoContext(ctx, "operation started", "operation", operation)
-	
+
 	err := fn()
 	duration := timer.Duration()
-	
+
 	if err != nil {
 		l.ErrorContext(ctx, "operation failed",
 			"operation", operation,
@@ -138,7 +138,7 @@ func (l *Logger) LogOperation(ctx context.Context, operation string, fn func() e
 		)
 		return err
 	}
-	
+
 	l.InfoContext(ctx, "operation completed",
 		"operation", operation,
 		"duration", duration,

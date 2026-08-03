@@ -19,7 +19,7 @@ const onnxRuntimeVersion = "1.25.0"
 // TODO: Replace with actual SHA256 checksums from https://github.com/microsoft/onnxruntime/releases/tag/v1.25.0
 // The checksums should be obtained from the official release assets or calculated from downloaded files.
 var runtimeChecksums = map[string]string{
-	"darwin-arm64":    "65405dc8793c86cadb98b5e07f6d3bdde84f8300f1b030d4736b41c17610d6c1",
+	"darwin-arm64": "65405dc8793c86cadb98b5e07f6d3bdde84f8300f1b030d4736b41c17610d6c1",
 	// Other platforms are commented out to allow a warning path rather than failing on placeholder mismatch.
 	// "darwin-amd64":  "",
 	// "linux-amd64":   "",
@@ -49,7 +49,7 @@ func EnsureONNXRuntime(dataDir string, quiet bool) (string, error) {
 		if err := downloadFile(url, archivePath); err != nil {
 			return "", fmt.Errorf("download failed: %w (url: %s)", err, url)
 		}
-		
+
 		// Validate checksum if not using override URL
 		if strings.TrimSpace(os.Getenv("AGENT_MEMORY_ONNX_RUNTIME_URL")) == "" {
 			platformKey := runtime.GOOS + "-" + runtime.GOARCH
@@ -232,12 +232,12 @@ func validateFileChecksum(path, expectedHex string) error {
 		return err
 	}
 	defer f.Close()
-	
+
 	h := sha256.New()
 	if _, err := io.Copy(h, f); err != nil {
 		return err
 	}
-	
+
 	actual := hex.EncodeToString(h.Sum(nil))
 	if actual != expectedHex {
 		return fmt.Errorf("checksum mismatch: got %s, want %s", actual, expectedHex)

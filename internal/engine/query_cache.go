@@ -14,8 +14,8 @@ import (
 // QueryCache implements TTL-based caching for query embeddings and retrieval results.
 // Caching dramatically reduces latency for repeated queries within a session.
 type QueryCache struct {
-	embeddingCache *lruCache  // query text hash → embedding vector
-	resultCache    *lruCache  // query key → retrieval results
+	embeddingCache *lruCache // query text hash → embedding vector
+	resultCache    *lruCache // query key → retrieval results
 	ttl            time.Duration
 	mu             sync.RWMutex
 	enabled        bool
@@ -37,8 +37,8 @@ type CachedResult struct {
 
 // QueryCacheConfig configures cache behavior.
 type QueryCacheConfig struct {
-	Enabled            bool
-	TTL                time.Duration
+	Enabled             bool
+	TTL                 time.Duration
 	MaxEmbeddingEntries int
 	MaxResultEntries    int
 }
@@ -46,8 +46,8 @@ type QueryCacheConfig struct {
 // DefaultQueryCacheConfig returns recommended cache settings.
 func DefaultQueryCacheConfig() QueryCacheConfig {
 	return QueryCacheConfig{
-		Enabled:            true,
-		TTL:                5 * time.Minute,
+		Enabled:             true,
+		TTL:                 5 * time.Minute,
 		MaxEmbeddingEntries: 1000,
 		MaxResultEntries:    500,
 	}
@@ -58,7 +58,7 @@ func NewQueryCache(cfg QueryCacheConfig) *QueryCache {
 	if !cfg.Enabled {
 		return &QueryCache{enabled: false}
 	}
-	
+
 	return &QueryCache{
 		embeddingCache: newLRUCache(cfg.MaxEmbeddingEntries),
 		resultCache:    newLRUCache(cfg.MaxResultEntries),
@@ -110,7 +110,7 @@ func (c *QueryCache) SetEmbedding(ctx context.Context, queryText string, vector 
 
 	key := hashQueryText(queryText)
 	now := time.Now()
-	
+
 	qvec, err := embeddings.QuantizeTurbo(vector)
 	if err != nil {
 		return
@@ -150,7 +150,7 @@ func (c *QueryCache) GetResults(ctx context.Context, opt RetrievalOptions) []Ret
 	}
 
 	observability.GetRegistry().CacheHits.WithLabelValues("result").Inc()
-	
+
 	// Return a copy of the hits slice to prevent future external mutations
 	hitsCopy := make([]RetrievalHit, len(cached.Hits))
 	copy(hitsCopy, cached.Hits)
@@ -168,11 +168,11 @@ func (c *QueryCache) SetResults(ctx context.Context, opt RetrievalOptions, hits 
 
 	key := hashRetrievalOptions(opt)
 	now := time.Now()
-	
+
 	// Create a copy of the hits slice to prevent future external mutations
 	hitsCopy := make([]RetrievalHit, len(hits))
 	copy(hitsCopy, hits)
-	
+
 	cached := CachedResult{
 		Hits:      hitsCopy,
 		CachedAt:  now,
@@ -188,10 +188,10 @@ func (c *QueryCache) InvalidateWorkspace(workspace string) {
 	if !c.enabled {
 		return
 	}
-	
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	
+
 	// Invalidate only results belonging to this workspace using prefix matching
 	prefix := fmt.Sprintf("ws=%s|", workspace)
 	c.resultCache.invalidate(func(key string) bool {
@@ -204,18 +204,18 @@ func (c *QueryCache) Stats() CacheStats {
 	if !c.enabled {
 		return CacheStats{Enabled: false}
 	}
-	
+
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	
+
 	return CacheStats{
-		Enabled:           true,
-		EmbeddingEntries:  c.embeddingCache.size(),
-		ResultEntries:     c.resultCache.size(),
-		EmbeddingHits:     c.embeddingCache.hits,
-		EmbeddingMisses:   c.embeddingCache.misses,
-		ResultHits:        c.resultCache.hits,
-		ResultMisses:      c.resultCache.misses,
+		Enabled:          true,
+		EmbeddingEntries: c.embeddingCache.size(),
+		ResultEntries:    c.resultCache.size(),
+		EmbeddingHits:    c.embeddingCache.hits,
+		EmbeddingMisses:  c.embeddingCache.misses,
+		ResultHits:       c.resultCache.hits,
+		ResultMisses:     c.resultCache.misses,
 	}
 }
 
@@ -340,7 +340,7 @@ func newLRUCache(maxSize int) *lruCache {
 	tail := &lruNode{}
 	head.next = tail
 	tail.prev = head
-	
+
 	return &lruCache{
 		items:   make(map[string]*lruNode, maxSize),
 		head:    head,
@@ -352,13 +352,13 @@ func newLRUCache(maxSize int) *lruCache {
 func (c *lruCache) get(key string) (interface{}, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	
+
 	node, ok := c.items[key]
 	if !ok {
 		c.misses++
 		return nil, false
 	}
-	
+
 	c.hits++
 	c.moveToFront(node)
 	return node.value, true
@@ -367,17 +367,17 @@ func (c *lruCache) get(key string) (interface{}, bool) {
 func (c *lruCache) set(key string, value interface{}) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	
+
 	if node, ok := c.items[key]; ok {
 		node.value = value
 		c.moveToFront(node)
 		return
 	}
-	
+
 	node := &lruNode{key: key, value: value}
 	c.items[key] = node
 	c.addToFront(node)
-	
+
 	if len(c.items) > c.maxSize {
 		c.removeLRU()
 	}
@@ -418,7 +418,7 @@ func (c *lruCache) removeLRU() {
 func (c *lruCache) invalidate(filter func(key string) bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	
+
 	for key, node := range c.items {
 		if filter(key) {
 			c.removeNode(node)

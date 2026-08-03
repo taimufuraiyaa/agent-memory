@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/taimufuraiyaa/agent-memory/internal/engine"
+	"github.com/taimufuraiyaa/agent-memory/internal/storage/sqlite"
 )
 
 // memoriesExportHandler implements GET /api/v1/memories/export.
@@ -18,7 +19,7 @@ func memoriesExportHandler(svc *Service) http.HandlerFunc {
 		ws := workspaceFromRequest(r, svc.Workspace)
 		assets, err := svc.resolve(r.Context(), ws)
 		if err != nil {
-			writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
+			writeWorkspaceResolveError(w, err)
 			return
 		}
 		format := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("format")))
@@ -50,7 +51,7 @@ func memoriesImportHandler(svc *Service) http.HandlerFunc {
 		ws := workspaceFromRequest(r, svc.Workspace)
 		assets, err := svc.resolve(r.Context(), ws)
 		if err != nil {
-			writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
+			writeWorkspaceResolveError(w, err)
 			return
 		}
 		var req engine.ExportBundle
@@ -86,6 +87,7 @@ func memoriesImportHandler(svc *Service) http.HandlerFunc {
 			}
 			imported++
 		}
+		_, _ = assets.Store.AppendAuditEvent(r.Context(), sqlite.AuditEventInput{Workspace: ws, Operation: "import", Outcome: "success", Actor: "http", Source: "api", TargetType: "memory", TargetCount: imported, Reason: "memory bundle import", Metadata: map[string]any{"skipped": len(skipped)}})
 		writeOK(w, http.StatusOK, map[string]any{
 			"version":  req.Version,
 			"imported": imported,
@@ -116,7 +118,7 @@ func memoriesReconstructHandler(svc *Service) http.HandlerFunc {
 		}
 		assets, err := svc.resolve(r.Context(), ws)
 		if err != nil {
-			writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
+			writeWorkspaceResolveError(w, err)
 			return
 		}
 		re := engine.NewReconstructionEngine(assets.Store, assets.Writer)

@@ -14,7 +14,7 @@ func BenchmarkValidateWorkspaceName(b *testing.B) {
 		"workspace.prod",
 		"test-workspace-long-name-with-many-parts",
 	}
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		name := names[i%len(names)]
@@ -30,7 +30,7 @@ func BenchmarkValidateWorkspaceNameInvalid(b *testing.B) {
 		"workspace\nwith\nnewlines",
 		strings.Repeat("a", 100), // too long
 	}
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		name := invalidNames[i%len(invalidNames)]
@@ -46,7 +46,7 @@ func BenchmarkValidateFilePath(b *testing.B) {
 		"/usr/local/bin/agent-memory",
 		"./local/path/data.json",
 	}
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		path := paths[i%len(paths)]
@@ -62,7 +62,7 @@ func BenchmarkValidateFilePathInvalid(b *testing.B) {
 		"path/with/../traversal",
 		"./../../sensitive/data",
 	}
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		path := maliciousPaths[i%len(maliciousPaths)]
@@ -78,7 +78,7 @@ func BenchmarkValidateContentLength(b *testing.B) {
 		strings.Repeat("A", 1000),
 		strings.Repeat("Long content ", 5000),
 	}
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		content := contents[i%len(contents)]
@@ -90,7 +90,7 @@ func BenchmarkValidateContentLength(b *testing.B) {
 func BenchmarkValidateContentLengthLarge(b *testing.B) {
 	// Create content at various sizes
 	sizes := []int{10_000, 50_000, 100_000, 500_000, 1_000_000}
-	
+
 	for _, size := range sizes {
 		content := strings.Repeat("x", size)
 		b.Run(fmt.Sprintf("size_%d", size), func(b *testing.B) {
@@ -110,7 +110,7 @@ func BenchmarkValidateDiagramCode(b *testing.B) {
 		strings.Repeat("node", 100),
 		"flowchart LR\nStart --> End",
 	}
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		diagram := diagrams[i%len(diagrams)]
@@ -126,7 +126,7 @@ func BenchmarkSanitizeWorkspaceName(b *testing.B) {
 		"test/workspace\\name",
 		"UPPERCASE-workspace",
 	}
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		name := names[i%len(names)]
@@ -139,7 +139,7 @@ func BenchmarkValidationPipeline(b *testing.B) {
 	workspace := "my-workspace"
 	filePath := "/path/to/file.txt"
 	content := strings.Repeat("Content with various data. ", 100)
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		if err := ValidateWorkspaceName(workspace); err != nil {
@@ -162,14 +162,14 @@ func BenchmarkConcurrentValidation(b *testing.B) {
 		strings.Repeat("Medium content. ", 50),
 		strings.Repeat("Longer content with data. ", 100),
 	}
-	
+
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		i := 0
 		for pb.Next() {
 			workspace := workspaces[i%len(workspaces)]
 			content := contents[i%len(contents)]
-			
+
 			_ = ValidateWorkspaceName(workspace)
 			_ = ValidateContentLength(content)
 			i++
@@ -185,7 +185,7 @@ func BenchmarkUTF8Validation(b *testing.B) {
 		"日本語のテキスト",
 		"Смешанный текст with multiple scripts",
 	}
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		text := validUTF8[i%len(validUTF8)]
@@ -202,7 +202,7 @@ func BenchmarkPathTraversalDetection(b *testing.B) {
 		"~/user/home/file",
 		"./relative/./path/./with/./dots",
 	}
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		path := paths[i%len(paths)]
@@ -213,7 +213,7 @@ func BenchmarkPathTraversalDetection(b *testing.B) {
 // BenchmarkLongWorkspaceNames benchmarks validation of varying name lengths
 func BenchmarkLongWorkspaceNames(b *testing.B) {
 	lengths := []int{5, 10, 20, 40, 64} // 64 is the max
-	
+
 	for _, length := range lengths {
 		name := strings.Repeat("a", length)
 		b.Run(fmt.Sprintf("len_%d", length), func(b *testing.B) {

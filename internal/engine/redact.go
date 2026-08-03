@@ -15,6 +15,7 @@ var secretPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)Bearer\s+[A-Za-z0-9._\-+/=]{20,}`),
 	regexp.MustCompile(`sk-ant-[A-Za-z0-9\-_]{20,}`),
 	regexp.MustCompile(`sk-proj-[A-Za-z0-9\-_]{20,}`),
+	regexp.MustCompile(`\bsk-[A-Za-z0-9\-_]{20,}`),
 	regexp.MustCompile(`github_pat_[A-Za-z0-9_]{22,}`),
 	regexp.MustCompile(`gh[pus]_[A-Za-z0-9]{36,}`),
 	regexp.MustCompile(`xoxb-[A-Za-z0-9\-]+`),
@@ -48,4 +49,3 @@ func ClipString(s string, max int) string {
 	out = strings.TrimRight(out, " \n\r\t")
 	return out
 }
-

@@ -12,12 +12,12 @@ import (
 
 // DeepConsolidationResult summarises a cross-session consolidation run.
 type DeepConsolidationResult struct {
-	SessionsScanned    int           `json:"sessions_scanned"`
-	MemoriesMerged     int           `json:"memories_merged"`
-	ProceduralPromoted int           `json:"procedural_promoted"`
-	ConflictsResolved  int           `json:"conflicts_resolved"`
-	DurationMs         int64         `json:"duration_ms"`
-	DryRun             bool          `json:"dry_run"`
+	SessionsScanned    int   `json:"sessions_scanned"`
+	MemoriesMerged     int   `json:"memories_merged"`
+	ProceduralPromoted int   `json:"procedural_promoted"`
+	ConflictsResolved  int   `json:"conflicts_resolved"`
+	DurationMs         int64 `json:"duration_ms"`
+	DryRun             bool  `json:"dry_run"`
 }
 
 // DeepConsolidationOptions controls the deep consolidation pass.

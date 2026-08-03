@@ -22,6 +22,7 @@ const (
 	ModeRelate      RetrievalMode = "relate"
 	ModeOutcomes    RetrievalMode = "outcomes"
 	ModeGraphExpand RetrievalMode = "graph-expand"
+	ModeTerms       RetrievalMode = "terms"
 )
 
 // RetrievalOptions controls retrieval behavior.
@@ -198,7 +199,7 @@ func (e *RetrievalEngine) Retrieve(ctx context.Context, opt RetrievalOptions) (r
 	if cachedHits := e.cache.GetResults(ctx, opt); cachedHits != nil {
 		weights := modeWeights(opt.Mode)
 		policy := policyForMode(opt.Mode, opt.Policy)
-		
+
 		return &RetrievalResult{
 			Mode:       opt.Mode,
 			Weights:    weights,
@@ -208,7 +209,7 @@ func (e *RetrievalEngine) Retrieve(ctx context.Context, opt RetrievalOptions) (r
 			WeakHits:   filterWeakHits(cachedHits),
 		}, nil
 	}
-	
+
 	if opt.TopK <= 0 {
 		opt.TopK = 10
 	}
@@ -364,10 +365,10 @@ func (e *RetrievalEngine) Retrieve(ctx context.Context, opt RetrievalOptions) (r
 	if opt.Mode != ModeRecall {
 		visible = append(append([]RetrievalHit{}, strong...), weak...)
 	}
-	
+
 	// Store results in cache for future queries
 	e.cache.SetResults(ctx, opt, visible)
-	
+
 	return &RetrievalResult{
 		Mode:           opt.Mode,
 		Weights:        weights,
@@ -702,7 +703,7 @@ func (e *RetrievalEngine) retrieveGraphExpand(ctx context.Context, opt Retrieval
 	}
 
 	queue := make([]bfsNode, 0)
-	visited := make(map[string]int) // ID -> distance
+	visited := make(map[string]int)        // ID -> distance
 	pathWeight := make(map[string]float64) // ID -> max relation weight
 
 	for _, h := range seedHits {
@@ -823,5 +824,3 @@ func (e *RetrievalEngine) retrieveGraphExpand(ctx context.Context, opt Retrieval
 	sort.Slice(ranked, func(i, j int) bool { return ranked[i].Score > ranked[j].Score })
 	return ranked, nil
 }
-
-

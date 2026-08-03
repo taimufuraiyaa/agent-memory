@@ -1,7 +1,7 @@
 APP := agent-memory
 BIN_DIR := bin
 
-.PHONY: help build test lint clean setup test-verbose test-coverage bench bench-mem bench-cpu fmt vet clean-all install-dev build-dashboard embed-dashboard build-with-dashboard hygiene-clean
+.PHONY: help build test integration-test lint clean setup test-verbose test-coverage bench bench-mem bench-cpu fmt vet clean-all install-dev build-dashboard embed-dashboard build-with-dashboard hygiene-clean
 
 .DEFAULT_GOAL := help
 
@@ -53,6 +53,12 @@ install-dev: build ## Build and install locally for development
 
 test: ## Run all tests
 	go test ./...
+
+integration-test: ## Run integration parity, privacy, benchmark, MCP, and dashboard gates
+	go test ./internal/application ./internal/api ./internal/cli ./internal/connectors ./internal/hooks ./internal/replay ./internal/storage/sqlite
+	python3 -m unittest benchmark.test_benchmark.IntegrationReliabilityFixtureTest
+	cd tools/agent-memory/mcp-server && npm test && npm run build
+	cd tools/agent-memory/dashboard && npm run build
 
 test-verbose: ## Run tests with verbose output
 	go test -v -race ./...

@@ -4,7 +4,7 @@ import react from '@vitejs/plugin-react'
 const apiTarget = process.env.VITE_API_TARGET || 'http://localhost:3210'
 
 export default defineConfig({
-  base: '/',
+  base: './',
   plugins: [react()],
   optimizeDeps: {
     // Mermaid pulls in dayjs and lazy-loaded diagram modules in dev.
