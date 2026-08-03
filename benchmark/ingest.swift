@@ -1,6 +1,8 @@
 import Foundation
 
-let reportPath = "/Users/time/.gemini/antigravity-ide/scratch/score_report.json"
+let reportPath = ProcessInfo.processInfo.environment["AGENT_MEMORY_SCORE_REPORT"]
+    ?? FileManager.default.homeDirectoryForCurrentUser
+        .appendingPathComponent(".gemini/antigravity-ide/scratch/score_report.json").path
 let reportData = try Data(contentsOf: URL(fileURLWithPath: reportPath))
 
 guard var report = try JSONSerialization.jsonObject(with: reportData, options: []) as? [String: Any] else {

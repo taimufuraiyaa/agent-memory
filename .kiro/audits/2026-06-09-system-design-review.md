@@ -659,7 +659,7 @@ Risk: Medium (new retrieval mode)
 
 ## References
 
-1. Repository: `/Users/time/timebooks/agent-memory/`
+1. Repository: `$HOME/timebooks/agent-memory/`
 2. Architecture Improvement Spec: `.kiro/specs/archicture-imrpovement/`
 3. Benchmark Results: `benchmark/results/continuation-full-10000/score_report.json`
 4. Core Types: `internal/core/types.go`

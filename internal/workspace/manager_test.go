@@ -579,7 +579,7 @@ func TestWriteAgentFilesDeploysPredefinedSkills(t *testing.T) {
 }
 
 func TestDebugList(t *testing.T) {
-	mgr, err := NewManager("/Users/time/.agent-memory")
+	mgr, err := NewManager(t.TempDir())
 	if err != nil {
 		t.Fatalf("new manager: %v", err)
 	}
@@ -589,4 +589,3 @@ func TestDebugList(t *testing.T) {
 	}
 	t.Logf("List succeeded: %d items", len(items))
 }
-

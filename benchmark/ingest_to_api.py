@@ -1,8 +1,14 @@
 import json
+import os
 import urllib.request
 from pathlib import Path
 
-report_path = Path("/Users/time/.gemini/antigravity-ide/scratch/score_report.json")
+report_path = Path(
+    os.environ.get(
+        "AGENT_MEMORY_SCORE_REPORT",
+        Path.home() / ".gemini/antigravity-ide/scratch/score_report.json",
+    )
+)
 with report_path.open("r", encoding="utf-8") as f:
     report = json.load(f)
 

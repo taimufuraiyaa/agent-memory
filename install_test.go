@@ -12,6 +12,42 @@ import (
 	amconfig "github.com/taimufuraiyaa/agent-memory/internal/config"
 )
 
+func TestRepositoryDoesNotContainDeveloperSpecificHomePath(t *testing.T) {
+	forbiddenPath := strings.Join([]string{"", "Users", "ti" + "me"}, "/")
+	root, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("get repository root: %v", err)
+	}
+
+	err = filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() && (entry.Name() == ".git" || entry.Name() == "node_modules") {
+			return filepath.SkipDir
+		}
+		if entry.IsDir() || !entry.Type().IsRegular() {
+			return nil
+		}
+
+		contents, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return readErr
+		}
+		if bytes.Contains(contents, []byte(forbiddenPath)) {
+			relativePath, relErr := filepath.Rel(root, path)
+			if relErr != nil {
+				relativePath = path
+			}
+			t.Errorf("developer-specific home path found in %s", relativePath)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("scan repository: %v", err)
+	}
+}
+
 func TestMergeEnvFileAddsAdaptiveTuningGuidance(t *testing.T) {
 	merged, err := mergeEnvFile("/tmp/agent-memory.env", map[string]string{
 		"AGENT_MEMORY_ENABLED": "1",
