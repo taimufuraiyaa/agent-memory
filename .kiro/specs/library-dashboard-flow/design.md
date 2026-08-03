@@ -88,4 +88,3 @@ Embedding the flow inside Ask was rejected because ordinary memory recall and so
 ## 12. Rollout and recovery
 
 The Library destination uses the already default-enabled backend feature with its existing emergency-off environment switch. If the server disables the route, the dashboard surfaces the not-enabled response while Notes remains usable. Embedded assets are rebuilt only after source tests, typecheck, and build pass. Rollback is the additive removal of the destination/component/API methods; no schema rollback is required.
-

@@ -79,4 +79,3 @@ Acceptance criteria:
 - Dashboard test, typecheck, and production build pass.
 - Embedded dashboard assets are rebuilt from source.
 - Repository-wide Go tests and the developer-path portability test pass.
-
