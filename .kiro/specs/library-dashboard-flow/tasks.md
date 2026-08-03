@@ -32,3 +32,10 @@
 - [x] Run repository-wide Go tests.
 - [x] Run the developer-specific-path regression test.
 - [x] Confirm no unresolved merge state or uncommitted files remain.
+
+## Task L5 — Present responsive sidebar destination icons
+
+- [ ] Add failing contract coverage for icon-only collapsed navigation and icon-plus-name expanded navigation.
+- [ ] Replace letter abbreviations with recognizable, accessible destination icons.
+- [ ] Bind the rail's expanded presentation to the existing explorer-open state.
+- [ ] Verify dashboard tests, typecheck, production build, and embedded assets.

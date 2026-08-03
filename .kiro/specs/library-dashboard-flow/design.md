@@ -88,3 +88,9 @@ Embedding the flow inside Ask was rejected because ordinary memory recall and so
 ## 12. Rollout and recovery
 
 The Library destination uses the already default-enabled backend feature with its existing emergency-off environment switch. If the server disables the route, the dashboard surfaces the not-enabled response while Notes remains usable. Embedded assets are rebuilt only after source tests, typecheck, and build pass. Rollback is the additive removal of the destination/component/API methods; no schema rollback is required.
+
+## 13. Sidebar destination presentation
+
+The existing explorer-open state also controls the width and presentation of the primary navigation rail. With the explorer closed, the rail stays compact and exposes icon-only destination buttons; accessible names and native hover titles preserve meaning for assistive technology and pointer users. With the explorer open, the rail widens and places each destination name below the same icon, keeping the navigation order and click targets unchanged.
+
+Inline SVG icons are preferred over letter abbreviations because they remain recognizable across locales without adding a runtime icon dependency or remote asset. The mobile bottom navigation remains icon-only so labels do not overflow narrow screens. Reduced-motion behavior continues to disable rail transitions. The main risks are horizontal space loss and breakpoint drift; a single rail-width variable is used by the desktop grid, explorer overlay offset, and context overlay calculation to keep those contracts aligned.

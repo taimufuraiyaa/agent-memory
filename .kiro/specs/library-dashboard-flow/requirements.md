@@ -15,6 +15,8 @@ Acceptance criteria:
 - Library is reachable from desktop and compact navigation.
 - Changing the selected project changes the library API workspace.
 - Existing Notes, Search, Ask, Activity, and System destinations remain reachable.
+- When the left sidebar is collapsed, every destination is represented by a recognizable icon with an accessible name.
+- When the left sidebar is expanded, every destination shows its icon with the destination name below it.
 
 ### R2 — Portable reader identity and library scope
 

@@ -113,3 +113,14 @@ test('notebook layout has responsive explorer and context behavior', () => {
   assert.match(stylesSource, /@media \(max-width: 640px\)/)
   assert.match(stylesSource, /prefers-reduced-motion/)
 })
+
+test('sidebar destinations use icons when collapsed and add names below icons when expanded', () => {
+  assert.match(notebookSource, /className=\{`notebookShell \$\{explorerOpen \? 'railExpanded' : 'railCollapsed'\}`\}/)
+  assert.match(notebookSource, /function RailIcon\(/)
+  assert.match(notebookSource, /<RailIcon name=\{icon\} \/>/)
+  assert.match(notebookSource, /<span className="railLabel">\{label\}<\/span>/)
+  assert.doesNotMatch(notebookSource, /glyph="[NLSAR]"/)
+  assert.match(stylesSource, /\.railLabel\s*\{[^}]*display:\s*none;/s)
+  assert.match(stylesSource, /\.railExpanded \.railLabel\s*\{[^}]*display:\s*block;/s)
+  assert.match(stylesSource, /\.railButton svg\s*\{[^}]*width:\s*20px;/s)
+})
