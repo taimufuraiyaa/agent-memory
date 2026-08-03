@@ -32,18 +32,18 @@ func Open(ctx context.Context, dbPath string) (*Store, error) {
 	// Add query parameters for WAL mode and busy timeout
 	// These need to be in the connection string for modernc.org/sqlite
 	connStr := dbPath + "?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(10000)"
-	
+
 	db, err := sql.Open("sqlite", connStr)
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite: %w", err)
 	}
-	
+
 	// Connection pool configuration for concurrent access
 	// WAL mode allows multiple readers + one writer concurrently
-	db.SetMaxOpenConns(10)             // Allow up to 10 concurrent connections
-	db.SetMaxIdleConns(5)              // Keep 5 warm connections in pool
-	db.SetConnMaxLifetime(time.Hour)   // Rotate connections every hour
-	
+	db.SetMaxOpenConns(10)           // Allow up to 10 concurrent connections
+	db.SetMaxIdleConns(5)            // Keep 5 warm connections in pool
+	db.SetConnMaxLifetime(time.Hour) // Rotate connections every hour
+
 	if err := ping(ctx, db); err != nil {
 		_ = db.Close()
 		return nil, err
@@ -84,8 +84,8 @@ func applyPragmas(ctx context.Context, db *sql.DB) error {
 		"PRAGMA foreign_keys = ON",
 		"PRAGMA journal_mode = WAL",
 		"PRAGMA synchronous = NORMAL",
-		"PRAGMA busy_timeout = 10000",  // 10 seconds for concurrent operations
-		"PRAGMA cache_size = -64000",    // 64MB cache
+		"PRAGMA busy_timeout = 10000", // 10 seconds for concurrent operations
+		"PRAGMA cache_size = -64000",  // 64MB cache
 	}
 	for _, stmt := range pragmas {
 		if _, err := db.ExecContext(ctx, stmt); err != nil {
@@ -380,6 +380,146 @@ func (s *Store) Migrate(ctx context.Context) error {
 			created_at TEXT NOT NULL
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_retrieval_requests_workspace_created ON retrieval_requests(workspace, created_at)`,
+		`CREATE TABLE IF NOT EXISTS book_works (
+			id TEXT PRIMARY KEY,
+			title TEXT NOT NULL,
+			normalized_title TEXT NOT NULL,
+			created_at TEXT NOT NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_book_works_normalized_title ON book_works(normalized_title)`,
+		`CREATE TABLE IF NOT EXISTS book_editions (
+			id TEXT PRIMARY KEY,
+			work_id TEXT NOT NULL,
+			label TEXT NOT NULL,
+			language TEXT NOT NULL,
+			content_fingerprint TEXT NOT NULL,
+			created_at TEXT NOT NULL,
+			FOREIGN KEY(work_id) REFERENCES book_works(id) ON DELETE CASCADE,
+			UNIQUE(work_id, content_fingerprint)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_book_editions_work ON book_editions(work_id)`,
+		`CREATE TABLE IF NOT EXISTS source_assets (
+			id TEXT PRIMARY KEY,
+			edition_id TEXT NOT NULL,
+			format TEXT NOT NULL,
+			byte_fingerprint TEXT NOT NULL UNIQUE,
+			normalized_fingerprint TEXT NOT NULL,
+			parser_version TEXT NOT NULL,
+			policy_json TEXT NOT NULL,
+			imported_at TEXT NOT NULL,
+			FOREIGN KEY(edition_id) REFERENCES book_editions(id) ON DELETE CASCADE
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_source_assets_edition ON source_assets(edition_id)`,
+		`CREATE TABLE IF NOT EXISTS structural_nodes (
+			id TEXT PRIMARY KEY,
+			edition_id TEXT NOT NULL,
+			parent_id TEXT,
+			kind TEXT NOT NULL,
+			ordinal INTEGER NOT NULL,
+			title TEXT NOT NULL,
+			start_offset INTEGER NOT NULL DEFAULT 0,
+			end_offset INTEGER NOT NULL DEFAULT 0,
+			explicit INTEGER NOT NULL DEFAULT 0,
+			FOREIGN KEY(edition_id) REFERENCES book_editions(id) ON DELETE CASCADE
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_structural_nodes_edition_order ON structural_nodes(edition_id, ordinal)`,
+		`CREATE TABLE IF NOT EXISTS source_passages (
+			id TEXT PRIMARY KEY,
+			edition_id TEXT NOT NULL,
+			source_asset_id TEXT NOT NULL,
+			structural_node_id TEXT NOT NULL,
+			text TEXT NOT NULL,
+			locator_json TEXT NOT NULL,
+			fingerprint TEXT NOT NULL,
+			FOREIGN KEY(edition_id) REFERENCES book_editions(id) ON DELETE CASCADE,
+			FOREIGN KEY(source_asset_id) REFERENCES source_assets(id) ON DELETE CASCADE,
+			FOREIGN KEY(structural_node_id) REFERENCES structural_nodes(id) ON DELETE CASCADE
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_source_passages_edition ON source_passages(edition_id)`,
+		`CREATE TABLE IF NOT EXISTS source_citations (
+			id TEXT PRIMARY KEY,
+			passage_id TEXT NOT NULL,
+			citation_json TEXT NOT NULL,
+			created_at TEXT NOT NULL,
+			FOREIGN KEY(passage_id) REFERENCES source_passages(id) ON DELETE RESTRICT
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_source_citations_passage ON source_citations(passage_id)`,
+		`CREATE TABLE IF NOT EXISTS libraries (
+			id TEXT PRIMARY KEY,
+			kind TEXT NOT NULL,
+			owner_id TEXT NOT NULL,
+			owner_kind TEXT NOT NULL,
+			organization_id TEXT NOT NULL DEFAULT ''
+		)`,
+		`CREATE TABLE IF NOT EXISTS library_memberships (
+			library_id TEXT NOT NULL,
+			principal_id TEXT NOT NULL,
+			capabilities_json TEXT NOT NULL,
+			version TEXT NOT NULL,
+			active INTEGER NOT NULL DEFAULT 1,
+			PRIMARY KEY(library_id, principal_id),
+			FOREIGN KEY(library_id) REFERENCES libraries(id) ON DELETE CASCADE
+		)`,
+		`CREATE TABLE IF NOT EXISTS library_resources (
+			library_id TEXT NOT NULL,
+			resource_type TEXT NOT NULL,
+			resource_id TEXT NOT NULL,
+			policy_json TEXT NOT NULL,
+			PRIMARY KEY(resource_type, resource_id),
+			FOREIGN KEY(library_id) REFERENCES libraries(id) ON DELETE CASCADE
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_library_resources_library ON library_resources(library_id, resource_type)`,
+		`CREATE TABLE IF NOT EXISTS book_annotations (
+			id TEXT PRIMARY KEY,
+			edition_id TEXT NOT NULL,
+			citation_id TEXT NOT NULL DEFAULT '',
+			content TEXT NOT NULL,
+			owner_id TEXT NOT NULL,
+			owner_kind TEXT NOT NULL,
+			visibility TEXT NOT NULL,
+			organization_id TEXT NOT NULL DEFAULT '',
+			created_at TEXT NOT NULL,
+			FOREIGN KEY(edition_id) REFERENCES book_editions(id) ON DELETE CASCADE
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_book_annotations_edition ON book_annotations(edition_id, created_at)`,
+		`CREATE TABLE IF NOT EXISTS book_memory_proposals (
+			id TEXT PRIMARY KEY,
+			workspace TEXT NOT NULL,
+			status TEXT NOT NULL,
+			proposal_json TEXT NOT NULL,
+			created_at TEXT NOT NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_book_memory_proposals_workspace ON book_memory_proposals(workspace, status)`,
+		`CREATE TABLE IF NOT EXISTS book_memory_lineage (
+			memory_id TEXT PRIMARY KEY,
+			proposal_id TEXT NOT NULL,
+			lineage_json TEXT NOT NULL,
+			created_at TEXT NOT NULL,
+			FOREIGN KEY(memory_id) REFERENCES memories(id) ON DELETE CASCADE,
+			FOREIGN KEY(proposal_id) REFERENCES book_memory_proposals(id) ON DELETE RESTRICT
+		)`,
+		`CREATE TABLE IF NOT EXISTS study_sessions (
+			id TEXT PRIMARY KEY, workspace TEXT NOT NULL, session_json TEXT NOT NULL, created_at TEXT NOT NULL
+		)`,
+		`CREATE TABLE IF NOT EXISTS study_turns (
+			id TEXT PRIMARY KEY, session_id TEXT NOT NULL, turn_json TEXT NOT NULL, created_at TEXT NOT NULL,
+			FOREIGN KEY(session_id) REFERENCES study_sessions(id) ON DELETE CASCADE
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_study_turns_session ON study_turns(session_id,created_at)`,
+		`CREATE TABLE IF NOT EXISTS reading_progress (
+			principal_id TEXT NOT NULL, edition_id TEXT NOT NULL, progress_json TEXT NOT NULL, updated_at TEXT NOT NULL,
+			PRIMARY KEY(principal_id,edition_id), FOREIGN KEY(edition_id) REFERENCES book_editions(id) ON DELETE CASCADE
+		)`,
+		`CREATE TABLE IF NOT EXISTS knowledge_edges (
+			id TEXT PRIMARY KEY, from_id TEXT NOT NULL, to_id TEXT NOT NULL, edge_json TEXT NOT NULL, created_at TEXT NOT NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_knowledge_edges_from ON knowledge_edges(from_id,id)`,
+		`CREATE TABLE IF NOT EXISTS knowledge_reviews (id TEXT PRIMARY KEY, review_json TEXT NOT NULL, state TEXT NOT NULL, version INTEGER NOT NULL)`,
+		`CREATE TABLE IF NOT EXISTS knowledge_review_transitions (review_id TEXT NOT NULL, version INTEGER NOT NULL, transition_json TEXT NOT NULL, occurred_at TEXT NOT NULL, PRIMARY KEY(review_id,version), FOREIGN KEY(review_id) REFERENCES knowledge_reviews(id) ON DELETE RESTRICT)`,
+		`CREATE TABLE IF NOT EXISTS book_reconsolidations (id TEXT PRIMARY KEY, previous_memory_id TEXT NOT NULL, new_memory_id TEXT NOT NULL, record_json TEXT NOT NULL, created_at TEXT NOT NULL, FOREIGN KEY(previous_memory_id) REFERENCES memories(id) ON DELETE RESTRICT, FOREIGN KEY(new_memory_id) REFERENCES memories(id) ON DELETE RESTRICT)`,
+		`CREATE TABLE IF NOT EXISTS library_import_jobs (id TEXT PRIMARY KEY, workspace TEXT NOT NULL, state TEXT NOT NULL, job_json TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
+		`CREATE INDEX IF NOT EXISTS idx_library_import_jobs_workspace ON library_import_jobs(workspace,state)`,
+		`CREATE TABLE IF NOT EXISTS source_deletions (source_asset_id TEXT PRIMARY KEY, mode TEXT NOT NULL, deleted_at TEXT NOT NULL, FOREIGN KEY(source_asset_id) REFERENCES source_assets(id) ON DELETE CASCADE)`,
 	}
 	for _, stmt := range stmts {
 		if _, err := s.db.ExecContext(ctx, stmt); err != nil {
@@ -531,7 +671,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 	if _, err := s.db.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_memory_vectors_model_version ON memory_vectors(embedding_model_version)`); err != nil {
 		return fmt.Errorf("create embedding_model_version index: %w", err)
 	}
-	
+
 	// Migrate existing memory vectors from json to blob
 	if err := s.migrateJSONVectorsToBlobs(ctx); err != nil {
 		return fmt.Errorf("migrate JSON vectors to blobs: %w", err)
@@ -1159,7 +1299,7 @@ func (s *Store) PopulateSupersedesRelations(ctx context.Context, memories []core
 	query := fmt.Sprintf(`
 		SELECT source_id, target_id, weight, metadata_json 
 		FROM relations 
-		WHERE type = 'supersedes' AND source_id IN (%s)`, 
+		WHERE type = 'supersedes' AND source_id IN (%s)`,
 		strings.Join(placeholders, ","),
 	)
 
@@ -1713,4 +1853,3 @@ func (s *Store) hydrateTurbovecIndex(ctx context.Context) error {
 	}
 	return nil
 }
-

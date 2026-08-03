@@ -1,0 +1,12 @@
+{
+  "version": "library-corpus-v1",
+  "rights": "Synthetic fixtures created for this repository; CC0-style redistribution permitted.",
+  "formats": ["markdown", "epub", "pdf", "web"],
+  "cases": [
+    {"id":"known-author-claim","kind":"known_answer","expects_attribution":true,"expects_citation":true},
+    {"id":"conflicting-books","kind":"conflicting_answer","expects_contradiction":true,"expects_citation":true},
+    {"id":"not-in-library","kind":"unanswerable","expects_unanswerable":true},
+    {"id":"remembered-quote","kind":"inexact_quote","expects_exact_rejection":true}
+  ],
+  "contracts": ["stable_reimport", "citation_resolution", "authorization", "deletion"]
+}

@@ -15,6 +15,7 @@ import (
 	"github.com/taimufuraiyaa/agent-memory/internal/embeddings"
 	"github.com/taimufuraiyaa/agent-memory/internal/engine"
 	"github.com/taimufuraiyaa/agent-memory/internal/observability"
+	"github.com/taimufuraiyaa/agent-memory/internal/readingroom"
 	"github.com/taimufuraiyaa/agent-memory/internal/storage/sqlite"
 	"github.com/taimufuraiyaa/agent-memory/internal/workspace"
 )
@@ -24,9 +25,13 @@ type Service struct {
 	BaseDir           string
 	EmbeddingProvider embeddings.Provider
 	Scheduler         Scheduler
+	LibraryRoleRunner readingroom.RoleRunner
 
-	mu     sync.RWMutex
-	stores map[string]*workspaceAssets
+	mu             sync.RWMutex
+	stores         map[string]*workspaceAssets
+	libraryJobs    map[string]LibraryImportJob
+	seminarRuns    map[string]*SeminarRunState
+	wikiProjectors map[string]*WikiProjector
 }
 
 const allProjectsScope = "__all_projects__"
@@ -60,15 +65,15 @@ func (s *Service) resolve(ctx context.Context, ws string) (*workspaceAssets, err
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Create shared cache for efficient query reuse
 	cache := engine.NewQueryCache(engine.DefaultQueryCacheConfig())
 	searcher := engine.NewVectorSearcher(store, s.EmbeddingProvider)
 	retrieval := engine.NewRetrievalEngineWithSharedCache(searcher, cache)
-	
+
 	assets = &workspaceAssets{
-		Store:     store,
-		Writer:    engine.NewWritePipelineWithOptions(store, engine.WritePipelineOptions{
+		Store: store,
+		Writer: engine.NewWritePipelineWithOptions(store, engine.WritePipelineOptions{
 			Embedder: s.EmbeddingProvider,
 			Cache:    cache,
 		}),
@@ -207,6 +212,16 @@ func NewMux(svc *Service) *http.ServeMux {
 	mux.HandleFunc("/api/v1/feedback", listFeedbackHandler(svc))
 	mux.HandleFunc("/api/v1/skills", workspaceSkillsHandler(svc))
 
+	mux.HandleFunc("/api/v1/library/imports", libraryImportHandler(svc))
+	mux.HandleFunc("/api/v1/library/jobs", libraryJobHandler(svc))
+	mux.HandleFunc("/api/v1/library/structure", libraryStructureHandler(svc))
+	mux.HandleFunc("/api/v1/library/query", libraryQueryHandler(svc))
+	mux.HandleFunc("/api/v1/library/memory-review", libraryMemoryReviewHandler(svc))
+	mux.HandleFunc("/api/v1/library/seminars/start", seminarStartHandler(svc))
+	mux.HandleFunc("/api/v1/library/seminars/status", seminarStatusHandler(svc))
+	mux.HandleFunc("/api/v1/library/seminars/cancel", seminarCancelHandler(svc))
+	mux.HandleFunc("/api/v1/library/wiki", wikiProjectionHandler(svc))
+
 	// Visualization endpoints
 	mux.HandleFunc("/api/v1/visualizations/graph", handleMemoryGraph(svc))
 	mux.HandleFunc("/api/v1/visualizations/decay-timeline", handleDecayTimeline(svc))
@@ -260,4 +275,3 @@ func serveDashboard() http.Handler {
 	}
 	return http.StripPrefix("/dashboard/", dashboard.GetEmbeddedHandler())
 }
-

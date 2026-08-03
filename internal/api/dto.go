@@ -6,6 +6,40 @@ import (
 	"github.com/taimufuraiyaa/agent-memory/internal/core"
 )
 
+type LibraryPrincipalRequest struct {
+	PrincipalID     string   `json:"principal_id"`
+	OrganizationIDs []string `json:"organization_ids,omitempty"`
+}
+
+type LibraryImportRequest struct {
+	Workspace      string `json:"workspace"`
+	LibraryID      string `json:"library_id"`
+	LibraryKind    string `json:"library_kind,omitempty"`
+	OrganizationID string `json:"organization_id,omitempty"`
+	PrincipalID    string `json:"principal_id"`
+	Title          string `json:"title"`
+	EditionLabel   string `json:"edition_label"`
+	Language       string `json:"language"`
+	Markdown       string `json:"markdown"`
+}
+
+type LibraryQueryRequest struct {
+	Workspace       string   `json:"workspace"`
+	PrincipalID     string   `json:"principal_id"`
+	OrganizationIDs []string `json:"organization_ids,omitempty"`
+	Question        string   `json:"question"`
+	Limit           int      `json:"limit,omitempty"`
+	ProposeMemory   bool     `json:"propose_memory,omitempty"`
+	MemoryContent   string   `json:"memory_content,omitempty"`
+}
+
+type LibraryMemoryReviewRequest struct {
+	Workspace   string `json:"workspace"`
+	ProposalID  string `json:"proposal_id"`
+	PrincipalID string `json:"principal_id"`
+	Decision    string `json:"decision"`
+}
+
 var validate = validator.New()
 
 // WriteMemoryRequest is the API wrapper validated at transport boundary.
