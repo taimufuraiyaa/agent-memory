@@ -17,7 +17,7 @@ type lifecycleFlags struct {
 }
 
 func addLifecycleFlags(cmd *cobra.Command, f *lifecycleFlags) {
-	cmd.Flags().StringVarP(&f.format, "format", "f", formatJSON, "Output format: json|text")
+	cmd.Flags().StringVarP(&f.format, "format", "f", formatJSON, "Output format: json")
 	cmd.Flags().StringVar(&f.baseDir, "base-dir", "", "Workspace registry base directory (default ~/.agent-memory)")
 }
 

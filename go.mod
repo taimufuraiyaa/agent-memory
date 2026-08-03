@@ -4,6 +4,7 @@ go 1.26.3
 
 require (
 	github.com/go-playground/validator/v10 v10.30.2
+	github.com/ledongthuc/pdf v0.0.0-20250511090121-5959a4027728
 	github.com/prometheus/client_golang v1.20.5
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.11.1

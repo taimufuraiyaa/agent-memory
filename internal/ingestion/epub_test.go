@@ -16,11 +16,11 @@ import (
 func TestEPUBStructureCitationAndReimport(t *testing.T) {
 	source := syntheticEPUB(t)
 	adapter := ingestion.EPUBAdapter{ParserVersion: "epub-v1", NormalizationVersion: "text-v1"}
-	first, err := adapter.Extract("edition", source)
+	first, err := adapter.Extract("edition", "asset:edition", source)
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := adapter.Extract("edition", source)
+	second, err := adapter.Extract("edition", "asset:edition", source)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,7 +65,7 @@ func TestEPUBStructureCitationAndReimport(t *testing.T) {
 	}
 }
 func TestEPUBMalformedContainerDoesNotPublishPartialDocument(t *testing.T) {
-	_, err := (ingestion.EPUBAdapter{ParserVersion: "v1", NormalizationVersion: "v1"}).Extract("edition", []byte("not a zip"))
+	_, err := (ingestion.EPUBAdapter{ParserVersion: "v1", NormalizationVersion: "v1"}).Extract("edition", "asset", []byte("not a zip"))
 	if err == nil {
 		t.Fatal("malformed EPUB accepted")
 	}

@@ -10,7 +10,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "dompurify": "^3.2.6",
+    "dompurify": "^3.4.13",
     "marked": "^15.0.12",
     "mermaid": "^11.12.0",
     "react": "^18.3.1",

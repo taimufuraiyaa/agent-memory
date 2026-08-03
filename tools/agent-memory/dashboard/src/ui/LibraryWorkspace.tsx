@@ -11,6 +11,7 @@ import {
 } from '../lib/api'
 
 type LibraryKind = 'personal' | 'organization'
+type BookFileFormat = 'pdf' | 'epub' | 'markdown' | 'text'
 
 type LibraryWorkspaceProps = {
   workspace: string
@@ -33,6 +34,8 @@ export function LibraryWorkspace({ workspace }: LibraryWorkspaceProps) {
   const [editionLabel, setEditionLabel] = useState('Imported edition')
   const [language, setLanguage] = useState('en')
   const [source, setSource] = useState('')
+  const [sourceFile, setSourceFile] = useState<File | null>(null)
+  const [sourceFormat, setSourceFormat] = useState<BookFileFormat>('markdown')
   const [job, setJob] = useState<LibraryImportJob | null>(null)
   const [nodes, setNodes] = useState<LibraryStructuralNode[]>([])
   const [rememberedStatement, setRememberedStatement] = useState('')
@@ -46,6 +49,7 @@ export function LibraryWorkspace({ workspace }: LibraryWorkspaceProps) {
 
   useEffect(() => {
     setJob(null)
+    setSourceFile(null)
     setNodes([])
     setEvidence([])
     setProposal(null)
@@ -67,15 +71,15 @@ export function LibraryWorkspace({ workspace }: LibraryWorkspaceProps) {
 
   async function importBook() {
     const scopeError = validateScope()
-    if (scopeError || !title.trim() || !editionLabel.trim() || !language.trim() || !source.trim()) {
-      setError(scopeError || 'Title, edition, language, and complete source text are required.')
+    if (scopeError || !title.trim() || !editionLabel.trim() || !language.trim() || (!sourceFile && !source.trim())) {
+      setError(scopeError || 'Title, edition, language, and a complete source file or pasted text are required.')
       return
     }
     setBusy('import')
     setError('')
     try {
       persistScope()
-      const imported = await importLibraryBook({
+      const metadata = {
         workspace,
         library_id: libraryID.trim(),
         library_kind: libraryKind,
@@ -84,8 +88,10 @@ export function LibraryWorkspace({ workspace }: LibraryWorkspaceProps) {
         title: title.trim(),
         edition_label: editionLabel.trim(),
         language: language.trim(),
-        markdown: source,
-      })
+      }
+      const imported = sourceFile
+        ? await importLibraryBook({ ...metadata, format: sourceFormat, source_file: sourceFile })
+        : await importLibraryBook({ ...metadata, format: sourceFormat === 'text' ? 'text' : 'markdown', markdown: source })
       setJob(imported)
       setProposal(null)
       setEvidence([])
@@ -166,7 +172,7 @@ export function LibraryWorkspace({ workspace }: LibraryWorkspaceProps) {
       </header>
 
       <section className="libraryCard">
-        <div className="libraryCardHeader"><div><span>1</span><h2>Import a whole book</h2></div><small>Markdown / plain text</small></div>
+        <div className="libraryCardHeader"><div><span>1</span><h2>Import a whole book</h2></div><small>PDF · EPUB · Markdown · plain text</small></div>
         <div className="libraryScopeGrid">
           <label>Reader ID<input value={principalID} onChange={(event) => setPrincipalID(event.target.value)} /></label>
           <label>Library ID<input value={libraryID} onChange={(event) => setLibraryID(event.target.value)} /></label>
@@ -177,22 +183,37 @@ export function LibraryWorkspace({ workspace }: LibraryWorkspaceProps) {
           <label>Title<input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Book title" /></label>
           <label>Edition<input value={editionLabel} onChange={(event) => setEditionLabel(event.target.value)} /></label>
           <label>Language<input value={language} onChange={(event) => setLanguage(event.target.value)} /></label>
-          <label className="libraryFile">Source file<input type="file" accept=".md,.markdown,.txt,text/markdown,text/plain" onChange={(event) => {
+          <label className="libraryFile">Source file<input type="file" accept=".pdf,.epub,.md,.markdown,.txt,application/pdf,application/epub+zip,text/markdown,text/plain" onChange={(event) => {
             const file = event.target.files?.[0]
             if (!file) return
-            void file.text().then((text) => {
-              setSource(text)
-              if (!title.trim()) setTitle(file.name.replace(/\.(md|markdown|txt)$/i, ''))
-            }).catch((reason: unknown) => setError(messageOf(reason)))
+            const format = bookFormatForFile(file.name)
+            if (!format) {
+              setError('Unsupported file. Choose PDF, EPUB, Markdown, or plain text.')
+              return
+            }
+            setSourceFile(file)
+            setSourceFormat(format)
+            setError('')
+            if (!title.trim()) setTitle(file.name.replace(/\.(pdf|epub|md|markdown|txt)$/i, ''))
+            if (format === 'markdown' || format === 'text') {
+              void file.text().then(setSource).catch((reason: unknown) => setError(messageOf(reason)))
+            } else {
+              setSource('')
+            }
           }} /></label>
         </div>
-        <label>Complete source<textarea className="librarySource" value={source} onChange={(event) => setSource(event.target.value)} placeholder="# Chapter 1\n\nPaste the complete Markdown or plain-text book here…" /></label>
+        {sourceFile ? <p className="notebookHint">Selected: {sourceFile.name} · {sourceFormat.toUpperCase()} · {formatBytes(sourceFile.size)}. PDF and EPUB stay binary until the server extracts citable structure.</p> : null}
+        <label>Paste Markdown or plain text<textarea className="librarySource" value={source} onChange={(event) => {
+          setSource(event.target.value)
+          setSourceFile(null)
+          setSourceFormat('markdown')
+        }} placeholder="# Chapter 1\n\nPaste the complete Markdown or plain-text book here…" /></label>
         <button className="primaryNotebookButton" type="button" onClick={() => void importBook()} disabled={busy !== ''}>{busy === 'import' ? 'Reading and indexing…' : 'Import and index book'}</button>
       </section>
 
       <section className="libraryCard">
         <div className="libraryCardHeader"><div><span>2</span><h2>Book contents and index</h2></div><small>{job?.result?.existing ? 'Existing edition reused' : job ? 'New edition indexed' : 'Waiting for import'}</small></div>
-        {job?.result ? <div className="libraryFacts"><Fact label="Work" value={job.result.work_id} /><Fact label="Edition" value={job.result.edition_id} /><Fact label="Source asset" value={job.result.asset_id} /><Fact label="Contents" value={`${job.result.node_count} nodes · ${job.result.passage_count ?? '—'} passages`} /></div> : <p className="notebookHint">The agent reads hierarchically: source → structure → passages → sections → complete work.</p>}
+        {job?.result ? <div className="libraryFacts"><Fact label="Work" value={job.result.work_id} /><Fact label="Edition" value={job.result.edition_id} /><Fact label="Source asset" value={job.result.asset_id} /><Fact label="Format" value={job.result.format.toUpperCase()} /><Fact label="Contents" value={`${job.result.node_count} nodes · ${job.result.passage_count ?? '—'} passages`} /></div> : <p className="notebookHint">The agent reads hierarchically: source → structure → passages → sections → complete work.</p>}
         {nodes.length ? <ol className="libraryContents">{nodes.map((node) => <li key={node.id}><span>{node.ordinal + 1}</span><div><strong>{node.title}</strong><small>{node.kind} · offsets {node.start_offset ?? 0}–{node.end_offset ?? 0}</small></div></li>)}</ol> : null}
         <div className="libraryPlanes"><div><strong>Source</strong><span>Policy-controlled original</span></div><div><strong>Index</strong><span>Rebuildable passages and locators</span></div><div><strong>Memory</strong><span>Reviewed knowledge with lineage</span></div></div>
       </section>
@@ -220,4 +241,18 @@ function Fact({ label, value }: { label: string; value: string }) {
 
 function messageOf(reason: unknown) {
   return reason instanceof Error ? reason.message : String(reason)
+}
+
+function bookFormatForFile(filename: string): BookFileFormat | null {
+  const extension = filename.toLowerCase().split('.').pop()
+  if (extension === 'pdf' || extension === 'epub') return extension
+  if (extension === 'md' || extension === 'markdown') return 'markdown'
+  if (extension === 'txt') return 'text'
+  return null
+}
+
+function formatBytes(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`
 }

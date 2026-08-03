@@ -5,7 +5,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
+	"mime"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -16,6 +20,8 @@ import (
 	"github.com/taimufuraiyaa/agent-memory/internal/readingroom"
 	"github.com/taimufuraiyaa/agent-memory/internal/retrieval"
 )
+
+const maxLibraryUploadBytes int64 = 128 << 20
 
 type LibraryImportJob struct {
 	ID        string                 `json:"id"`
@@ -42,9 +48,9 @@ func libraryImportHandler(svc *Service) http.HandlerFunc {
 			writeErr(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
 			return
 		}
-		var req LibraryImportRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
+		req, source, sourceFormat, status, err := decodeLibraryImportRequest(w, r)
+		if err != nil {
+			writeErr(w, status, "bad_request", err.Error())
 			return
 		}
 		if strings.TrimSpace(req.Workspace) == "" || strings.TrimSpace(req.LibraryID) == "" || strings.TrimSpace(req.PrincipalID) == "" {
@@ -77,9 +83,15 @@ func libraryImportHandler(svc *Service) http.HandlerFunc {
 			}
 		}
 		policy := core.SourcePolicy{Retention: core.RetentionRetained, StoreOriginal: true, StoreNormalized: true, AllowSearch: true, AllowQuote: true, MaxQuoteRunes: 280}
-		adapter := ingestion.MarkdownAdapter{ParserVersion: "markdown-v1", NormalizationVersion: "text-v1"}
-		result, err := ingestion.NewMarkdownImporter(assets.Store, adapter).Import(r.Context(), ingestion.MarkdownImportInput{Title: req.Title, EditionLabel: req.EditionLabel, Language: req.Language, Source: []byte(req.Markdown), Policy: policy})
-		job := LibraryImportJob{ID: libraryID("job", req.Workspace, req.LibraryID, req.Title, req.Markdown), State: "completed", Result: result, CreatedAt: time.Now().UTC()}
+		textAdapter := ingestion.MarkdownAdapter{ParserVersion: "markdown-v1", NormalizationVersion: "text-v1"}
+		importer := ingestion.NewBookImporter(assets.Store,
+			ingestion.MarkdownBookExtractor{Adapter: textAdapter},
+			ingestion.MarkdownBookExtractor{Adapter: textAdapter, AsText: true},
+			ingestion.EPUBBookExtractor{Adapter: ingestion.EPUBAdapter{ParserVersion: "epub-v1", NormalizationVersion: "text-v1"}},
+			ingestion.PDFBookExtractor{Adapter: ingestion.PDFAdapter{ParserVersion: "pdf-ledongthuc-5959a402", NormalizationVersion: "text-v1", Extractor: ingestion.NativePDFExtractor{}}},
+		)
+		result, err := importer.Import(r.Context(), ingestion.BookImportInput{Title: req.Title, EditionLabel: req.EditionLabel, Language: req.Language, Format: sourceFormat, Source: source, Policy: policy})
+		job := LibraryImportJob{ID: libraryID("job", req.Workspace, req.LibraryID, req.Title, core.FingerprintText(string(source))), State: "completed", Result: result, CreatedAt: time.Now().UTC()}
 		if err != nil {
 			job.State, job.Error = "failed", err.Error()
 		} else {
@@ -105,6 +117,84 @@ func libraryImportHandler(svc *Service) http.HandlerFunc {
 			return
 		}
 		writeOK(w, http.StatusAccepted, job)
+	}
+}
+
+func decodeLibraryImportRequest(w http.ResponseWriter, r *http.Request) (LibraryImportRequest, []byte, library.SourceFormat, int, error) {
+	contentType, _, err := mime.ParseMediaType(r.Header.Get("content-type"))
+	if err != nil {
+		return LibraryImportRequest{}, nil, "", http.StatusBadRequest, errors.New("invalid content type")
+	}
+	if contentType != "multipart/form-data" {
+		var req LibraryImportRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			return LibraryImportRequest{}, nil, "", http.StatusBadRequest, err
+		}
+		formatValue := req.Format
+		if strings.TrimSpace(formatValue) == "" {
+			formatValue = "markdown"
+		}
+		format, err := normalizeBookFormat(formatValue, "")
+		if err != nil {
+			return LibraryImportRequest{}, nil, "", http.StatusBadRequest, err
+		}
+		if format != library.FormatMarkdown && format != library.FormatText {
+			return LibraryImportRequest{}, nil, "", http.StatusBadRequest, errors.New("PDF and EPUB imports require multipart file upload")
+		}
+		return req, []byte(req.Markdown), format, http.StatusBadRequest, nil
+	}
+	if r.ContentLength > maxLibraryUploadBytes {
+		return LibraryImportRequest{}, nil, "", http.StatusRequestEntityTooLarge, fmt.Errorf("book upload exceeds %d MiB limit", maxLibraryUploadBytes>>20)
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, maxLibraryUploadBytes)
+	if err := r.ParseMultipartForm(8 << 20); err != nil {
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			return LibraryImportRequest{}, nil, "", http.StatusRequestEntityTooLarge, fmt.Errorf("book upload exceeds %d MiB limit", maxLibraryUploadBytes>>20)
+		}
+		return LibraryImportRequest{}, nil, "", http.StatusBadRequest, fmt.Errorf("parse book upload: %w", err)
+	}
+	if r.MultipartForm != nil {
+		defer r.MultipartForm.RemoveAll()
+	}
+	req := LibraryImportRequest{
+		Workspace: r.FormValue("workspace"), LibraryID: r.FormValue("library_id"), LibraryKind: r.FormValue("library_kind"),
+		OrganizationID: r.FormValue("organization_id"), PrincipalID: r.FormValue("principal_id"), Title: r.FormValue("title"),
+		EditionLabel: r.FormValue("edition_label"), Language: r.FormValue("language"), Format: r.FormValue("format"),
+	}
+	file, header, err := r.FormFile("source")
+	if err != nil {
+		return LibraryImportRequest{}, nil, "", http.StatusBadRequest, errors.New("source file is required")
+	}
+	defer file.Close()
+	source, err := io.ReadAll(file)
+	if err != nil {
+		return LibraryImportRequest{}, nil, "", http.StatusBadRequest, fmt.Errorf("read source file: %w", err)
+	}
+	format, err := normalizeBookFormat(req.Format, filepath.Ext(header.Filename))
+	if err != nil {
+		return LibraryImportRequest{}, nil, "", http.StatusBadRequest, err
+	}
+	req.Format = string(format)
+	return req, source, format, http.StatusBadRequest, nil
+}
+
+func normalizeBookFormat(value, extension string) (library.SourceFormat, error) {
+	normalized := strings.ToLower(strings.TrimSpace(value))
+	if normalized == "" {
+		normalized = strings.TrimPrefix(strings.ToLower(strings.TrimSpace(extension)), ".")
+	}
+	switch normalized {
+	case "md", "markdown":
+		return library.FormatMarkdown, nil
+	case "txt", "text", "plain", "plaintext":
+		return library.FormatText, nil
+	case "epub":
+		return library.FormatEPUB, nil
+	case "pdf":
+		return library.FormatPDF, nil
+	default:
+		return "", fmt.Errorf("unsupported book format %q; use PDF, EPUB, Markdown, or plain text", normalized)
 	}
 }
 

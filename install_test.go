@@ -48,6 +48,17 @@ func TestRepositoryDoesNotContainDeveloperSpecificHomePath(t *testing.T) {
 	}
 }
 
+func TestReleaseBuildUsesTrimpath(t *testing.T) {
+	contents, err := os.ReadFile("Makefile")
+	if err != nil {
+		t.Fatal(err)
+	}
+	makefile := string(contents)
+	if strings.Count(makefile, "go build -trimpath -o $(BIN_DIR)/$(APP) ./cmd/agent-memory") != 2 {
+		t.Fatalf("development and embedded release builds must both use -trimpath")
+	}
+}
+
 func TestMergeEnvFileAddsAdaptiveTuningGuidance(t *testing.T) {
 	merged, err := mergeEnvFile("/tmp/agent-memory.env", map[string]string{
 		"AGENT_MEMORY_ENABLED":         "1",

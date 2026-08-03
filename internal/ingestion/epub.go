@@ -26,8 +26,8 @@ type EPUBExtraction struct {
 }
 type EPUBAdapter struct{ ParserVersion, NormalizationVersion string }
 
-func (a EPUBAdapter) Extract(editionID string, source []byte) (EPUBExtraction, error) {
-	if editionID == "" || a.ParserVersion == "" || a.NormalizationVersion == "" {
+func (a EPUBAdapter) Extract(editionID, assetID string, source []byte) (EPUBExtraction, error) {
+	if editionID == "" || assetID == "" || a.ParserVersion == "" || a.NormalizationVersion == "" {
 		return EPUBExtraction{}, errors.New("epub adapter identity and versions are required")
 	}
 	reader, err := zip.NewReader(bytes.NewReader(source), int64(len(source)))
@@ -110,8 +110,8 @@ func (a EPUBAdapter) Extract(editionID string, source []byte) (EPUBExtraction, e
 		end := offset + len(text)
 		node := library.StructuralNode{ID: nodeID, EditionID: editionID, Kind: library.NodeChapter, Ordinal: ordinal, Title: title, StartOffset: offset, EndOffset: end, Explicit: true}
 		section := ExtractedSection{NodeID: nodeID, SourceText: text, NormalizedText: text, Span: SourceSpan{SourceStart: 0, SourceEnd: len(content), NormalizedStart: offset, NormalizedEnd: end}}
-		passageID := stableImportID("passage", editionID, filePath, text)
-		passage := library.Passage{ID: passageID, EditionID: editionID, SourceAssetID: "asset:" + editionID, StructuralNodeID: nodeID, Text: text, Fingerprint: core.FingerprintText(text), Locator: core.SourceLocator{Kind: core.LocatorEPUB, Display: title, ParserVersion: a.ParserVersion, NormalizationVersion: a.NormalizationVersion, EPUB: &core.EPUBLocator{SpineItem: filePath, CFI: fmt.Sprintf("epubcfi(/6/%d)", (ordinal+1)*2)}}}
+		passageID := stableImportID("passage", editionID, assetID, filePath, text)
+		passage := library.Passage{ID: passageID, EditionID: editionID, SourceAssetID: assetID, StructuralNodeID: nodeID, Text: text, Fingerprint: core.FingerprintText(text), Locator: core.SourceLocator{Kind: core.LocatorEPUB, Display: title, ParserVersion: a.ParserVersion, NormalizationVersion: a.NormalizationVersion, EPUB: &core.EPUBLocator{SpineItem: filePath, CFI: fmt.Sprintf("epubcfi(/6/%d)", (ordinal+1)*2)}}}
 		out.Spine = append(out.Spine, filePath)
 		out.Document.Nodes = append(out.Document.Nodes, node)
 		out.Document.Sections = append(out.Document.Sections, section)

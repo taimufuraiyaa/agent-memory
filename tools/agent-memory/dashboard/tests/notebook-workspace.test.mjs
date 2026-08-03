@@ -49,7 +49,7 @@ test('library is a notebook destination backed by the complete study API flow', 
 
 test('library workspace separates whole-book indexing source evidence and interpretation review', () => {
   assert.match(librarySource, /Import a whole book/)
-  assert.match(librarySource, /accept="\.md,\.markdown,\.txt,text\/markdown,text\/plain"/)
+  assert.match(librarySource, /accept="\.pdf,\.epub,\.md,\.markdown,\.txt/)
   assert.match(librarySource, /Book contents and index/)
   assert.match(librarySource, /Grounded evidence/)
   assert.match(librarySource, /Reader interpretation/)

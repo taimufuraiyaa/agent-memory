@@ -20,6 +20,7 @@ type LibraryImportRequest struct {
 	Title          string `json:"title"`
 	EditionLabel   string `json:"edition_label"`
 	Language       string `json:"language"`
+	Format         string `json:"format,omitempty"`
 	Markdown       string `json:"markdown"`
 }
 

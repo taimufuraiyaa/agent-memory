@@ -64,7 +64,7 @@ func (a PDFAdapter) Extract(ctx context.Context, editionID, assetID string, sour
 				return leftColumn < rightColumn
 			}
 			if left.Y != right.Y {
-				return left.Y < right.Y
+				return left.Y > right.Y
 			}
 			return left.X < right.X
 		})

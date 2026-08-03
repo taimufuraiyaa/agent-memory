@@ -50,13 +50,20 @@ export type LibraryImportRequest = {
   title: string
   edition_label: string
   language: string
+  format?: 'markdown' | 'text'
   markdown: string
+}
+
+export type LibraryFileImportRequest = Omit<LibraryImportRequest, 'markdown' | 'format'> & {
+  format: 'pdf' | 'epub' | 'markdown' | 'text'
+  source_file: File
 }
 
 export type LibraryImportResult = {
   work_id: string
   edition_id: string
   asset_id: string
+  format: 'pdf' | 'epub' | 'markdown' | 'text'
   node_count: number
   passage_count?: number
   existing: boolean
@@ -584,13 +591,14 @@ export type DeleteMemoriesResponse = {
 }
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
+  const headers = new Headers(init?.headers)
+  headers.set('accept', 'application/json')
+  if (!(typeof FormData !== 'undefined' && init?.body instanceof FormData)) {
+    headers.set('content-type', 'application/json')
+  }
   const res = await fetch(path, {
     ...init,
-    headers: {
-      accept: 'application/json',
-      'content-type': 'application/json',
-      ...(init?.headers ?? {}),
-    },
+    headers,
   })
   const body = await res.text()
   let json: unknown
@@ -690,7 +698,21 @@ export function retryNoteIndex(input: { workspace: string; note_id: string }): P
   return api('/api/v1/notes/index/retry', { method: 'POST', body: JSON.stringify(input) })
 }
 
-export function importLibraryBook(input: LibraryImportRequest): Promise<LibraryImportJob> {
+export function importLibraryBook(input: LibraryImportRequest | LibraryFileImportRequest): Promise<LibraryImportJob> {
+  if ('source_file' in input) {
+    const form = new FormData()
+    form.append('workspace', input.workspace)
+    form.append('library_id', input.library_id)
+    form.append('library_kind', input.library_kind ?? 'personal')
+    if (input.organization_id) form.append('organization_id', input.organization_id)
+    form.append('principal_id', input.principal_id)
+    form.append('title', input.title)
+    form.append('edition_label', input.edition_label)
+    form.append('language', input.language)
+    form.append('format', input.format)
+    form.append('source', input.source_file)
+    return api('/api/v1/library/imports', { method: 'POST', body: form })
+  }
   return api('/api/v1/library/imports', { method: 'POST', body: JSON.stringify(input) })
 }
 
