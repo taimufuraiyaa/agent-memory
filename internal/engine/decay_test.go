@@ -126,3 +126,69 @@ func openDecayStoreBenchmark(b *testing.B) (*sqlite.Store, func()) {
 	}
 	return store, func() { _ = store.Close() }
 }
+
+// TestDecayAccumulatesAcrossRuns proves the decay age base is stable under
+// maintenance: two runs with an advancing clock must strictly increase the
+// decay score, and SetDecayScores must never restamp updated_at.
+func TestDecayAccumulatesAcrossRuns(t *testing.T) {
+	store := openDecayStore(t)
+	defer func() { _ = store.Close() }()
+	ctx := context.Background()
+
+	entry := &core.MemoryEntry{
+		ID:          "m-acc",
+		Type:        core.SemanticMemory,
+		Content:     "decay accumulation check",
+		Workspace:   "ws",
+		Source:      core.MemorySource{Type: core.SourceAgentObservation},
+		StorageTier: core.TierVector,
+		Confidence:  0.9,
+		CreatedAt:   time.Now().UTC().Add(-48 * time.Hour),
+		UpdatedAt:   time.Now().UTC().Add(-48 * time.Hour),
+	}
+	if err := store.UpsertMemory(ctx, entry); err != nil {
+		t.Fatalf("upsert: %v", err)
+	}
+	// UpsertMemory stamps UpdatedAt; use the stored value as the age base so
+	// the engine clock is anchored to the real row.
+	mem, err := store.GetMemory(ctx, entry.ID)
+	if err != nil {
+		t.Fatalf("get memory: %v", err)
+	}
+	U := mem.UpdatedAt
+	if U.IsZero() {
+		t.Fatalf("expected upsert to stamp updated_at")
+	}
+
+	eng := NewDecayEngine(store)
+	eng.clock = func() time.Time { return U.Add(48 * time.Hour) }
+	if _, err := eng.UpdateWorkspaceDecay(ctx, "ws"); err != nil {
+		t.Fatalf("first decay run: %v", err)
+	}
+	d1, err := store.GetMemory(ctx, entry.ID)
+	if err != nil {
+		t.Fatalf("get memory after first run: %v", err)
+	}
+
+	eng.clock = func() time.Time { return U.Add(72 * time.Hour) }
+	if _, err := eng.UpdateWorkspaceDecay(ctx, "ws"); err != nil {
+		t.Fatalf("second decay run: %v", err)
+	}
+	d2, err := store.GetMemory(ctx, entry.ID)
+	if err != nil {
+		t.Fatalf("get memory after second run: %v", err)
+	}
+
+	if d1.DecayScore <= 0 || d1.DecayScore > 1 {
+		t.Fatalf("expected d1 in (0,1], got %f", d1.DecayScore)
+	}
+	if d2.DecayScore <= 0 || d2.DecayScore > 1 {
+		t.Fatalf("expected d2 in (0,1], got %f", d2.DecayScore)
+	}
+	if d2.DecayScore <= d1.DecayScore {
+		t.Fatalf("expected decay to accumulate across runs: d1=%f d2=%f", d1.DecayScore, d2.DecayScore)
+	}
+	if !d1.UpdatedAt.Equal(U) || !d2.UpdatedAt.Equal(U) {
+		t.Fatalf("SetDecayScores must not restamp updated_at: U=%v d1=%v d2=%v", U, d1.UpdatedAt, d2.UpdatedAt)
+	}
+}

@@ -176,11 +176,11 @@ func replaceFileAtomic(dst string, src string) error {
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return err
 	}
-	tmp := dst + ".upgrade." + time.Now().UTC().Format("20060102T150405Z")
-	out, err := os.OpenFile(tmp, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o755)
+	out, err := os.CreateTemp(filepath.Dir(dst), "."+filepath.Base(dst)+".upgrade.*")
 	if err != nil {
 		return err
 	}
+	tmp := out.Name()
 	_, copyErr := io.Copy(out, in)
 	closeErr := out.Close()
 	if copyErr != nil {
@@ -195,8 +195,11 @@ func replaceFileAtomic(dst string, src string) error {
 		_ = os.Remove(tmp)
 		return err
 	}
-	_ = os.Remove(dst)
-	return os.Rename(tmp, dst)
+	if err := atomicReplaceFile(tmp, dst); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	return nil
 }
 
 func defaultAgentMemoryDataDir() string {

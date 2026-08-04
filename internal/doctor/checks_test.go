@@ -2,9 +2,72 @@ package doctor
 
 import (
 	"context"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
+
+func TestDefaultChecksWarnWhenExecutableDirectoryIsMissingFromPATH(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	t.Setenv("SHELL", "/opt/homebrew/bin/fish")
+	results := NewRunner(DefaultChecks(Options{
+		Root:       t.TempDir(),
+		DataDir:    t.TempDir(),
+		Workspace:  "missing",
+		ServiceURL: "http://127.0.0.1:1",
+		ModelDir:   t.TempDir(),
+	})...).Run(context.Background())
+
+	byName := map[string]Result{}
+	for _, result := range results {
+		byName[result.Name] = result
+	}
+	binary := byName["binary"]
+	if binary.Status != StatusWarning {
+		t.Fatalf("expected PATH warning, got %+v", binary)
+	}
+	if !strings.Contains(strings.ToLower(binary.NextAction), "path") {
+		t.Fatalf("expected actionable PATH guidance, got %+v", binary)
+	}
+	if !strings.Contains(binary.NextAction, "fish_add_path") {
+		t.Fatalf("expected Fish-specific PATH guidance, got %+v", binary)
+	}
+}
+
+func TestDefaultChecksUseRegisteredDatabasePath(t *testing.T) {
+	dataDir := t.TempDir()
+	customDB := filepath.Join(t.TempDir(), "custom.db")
+	if err := os.WriteFile(customDB, []byte("sqlite placeholder"), 0o600); err != nil {
+		t.Fatalf("write custom database: %v", err)
+	}
+	registry := `{"projects":[{"name":"registered","db_path":` + quotedJSON(customDB) + `}]}`
+	if err := os.WriteFile(filepath.Join(dataDir, "workspaces.json"), []byte(registry), 0o600); err != nil {
+		t.Fatalf("write registry: %v", err)
+	}
+
+	results := NewRunner(DefaultChecks(Options{
+		Root:       t.TempDir(),
+		DataDir:    dataDir,
+		Workspace:  "registered",
+		ServiceURL: "http://127.0.0.1:1",
+		ModelDir:   t.TempDir(),
+	})...).Run(context.Background())
+	byName := map[string]Result{}
+	for _, result := range results {
+		byName[result.Name] = result
+	}
+	if byName["workspace_registry"].Status != StatusPass {
+		t.Fatalf("expected registered workspace pass, got %+v", byName["workspace_registry"])
+	}
+	if byName["database"].Status != StatusPass || !strings.Contains(byName["database"].Evidence, customDB) {
+		t.Fatalf("expected custom database path, got %+v", byName["database"])
+	}
+}
+
+func quotedJSON(value string) string {
+	return `"` + strings.ReplaceAll(value, `\`, `\\`) + `"`
+}
 
 func TestDefaultChecksReportMissingRuntimeArtifactsIndependently(t *testing.T) {
 	root := t.TempDir()

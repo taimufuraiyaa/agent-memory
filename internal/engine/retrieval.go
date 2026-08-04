@@ -304,7 +304,7 @@ func (e *RetrievalEngine) Retrieve(ctx context.Context, opt RetrievalOptions) (r
 		tierBias := tierBiasScore(h.Memory.StorageTier)
 		salience := salienceSignal(now, h.Memory)
 		suppression := suppressionSignal(now, h.Memory)
-		activation := weights.Semantic*h.Score + weights.Recency*recency + weights.Outcome*outcome + weights.Decay*decay + weights.TierBias*tierBias + salience
+		activation := weights.Semantic*math.Max(0, h.Score) + weights.Recency*recency + weights.Outcome*outcome + weights.Decay*decay + weights.TierBias*tierBias + salience
 		total := activation - suppression
 		ranked = append(ranked, RetrievalHit{
 			Memory: h.Memory,
@@ -796,7 +796,7 @@ func (e *RetrievalEngine) retrieveGraphExpand(ctx context.Context, opt Retrieval
 		// Calculate total score using path distance and relationship weight
 		relWeight := pathWeight[id]
 		distanceFactor := 1.0 / (1.0 + float64(dist))
-		totalScore := score * distanceFactor * relWeight
+		totalScore := math.Max(0, score) * distanceFactor * relWeight
 
 		recency := recencyScore(now, m.UpdatedAt)
 		outcome := outcomeScore(opt.Mode, *m)

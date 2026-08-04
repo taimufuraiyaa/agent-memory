@@ -120,7 +120,15 @@ func (s *Store) DeleteByIDsAudited(ctx context.Context, ids []string, input Audi
 	if _, err := tx.ExecContext(ctx, auditInsertSQL, event.ID, event.SchemaVersion, event.Workspace, event.Operation, event.Outcome, event.Actor, event.Source, event.RequestID, event.SessionID, event.TargetType, idsJSON, event.TargetCount, event.Reason, metadataJSON, event.OccurredAt.Format(time.RFC3339Nano)); err != nil {
 		return err
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	if s.useTurbovec && s.turbovecIndex != nil {
+		for _, id := range clean {
+			s.turbovecIndex.Delete(id)
+		}
+	}
+	return nil
 }
 
 func (s *Store) ListAuditEvents(ctx context.Context, filter AuditFilter) ([]AuditEvent, error) {

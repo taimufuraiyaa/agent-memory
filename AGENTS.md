@@ -30,6 +30,7 @@ Always use `agent-memory` as the memory system:
     1. Write the new corrected memory first using `agent-memory write` and copy the new memory ID.
     2. Link the old incorrect memory to the new one by running `agent-memory feedback --memory-id <old_id> --outcome rejected --reconsolidation-action superseded --successor-memory-id <new_id> --reason "<explanation>"`.
 - After learning durable new knowledge: write it to memory immediately.
+- When writing a memory: Choose up to three explicit keywords: names, terms, or helpful locators a human would search later. Do not copy the full content into keywords.
 - You MUST proactively package reusable scripts, grep queries, workflows, or complex setup/learnings into a custom agent skill under `.agents/skills/` (using `agent-memory distill` or manual packaging) if they are valuable and highly likely to be reused. Do NOT wait for the user to ask; proactively distill skills once a workflow or learning pattern is successfully validated.
   - Do NOT use generic, numbered, or index-based filenames (like `part1.md`, `workflows_part1.md`).
   - Always use clear, descriptive, and meaningful names for all custom skill reference files (e.g., `db_performance.md`, `ui_fixes.md`).

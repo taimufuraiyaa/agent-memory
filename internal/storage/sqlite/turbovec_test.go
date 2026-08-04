@@ -114,4 +114,43 @@ func TestTurbovecIndexIntegration(t *testing.T) {
 	if _, ok := store.turbovecIndex.Get(m1.ID); ok {
 		t.Errorf("m1 vector should have been deleted from turbovec index")
 	}
+
+	// Insert a third memory through the primary insert path; it must land in
+	// the in-memory turbovec index without a restart.
+	m3 := &core.MemoryEntry{
+		ID:        "mem-3",
+		Workspace: workspace,
+		Type:      core.SemanticMemory,
+		Content:   "Third memory about query planning",
+		Source: core.MemorySource{
+			Type: "test",
+		},
+	}
+	v3 := make([]float32, dim)
+	for i := 0; i < dim; i++ {
+		v3[i] = rand.Float32()
+	}
+	if err := store.InsertMemoryByHashWithVector(ctx, m3, "hash-3", provider, "1.0", v3); err != nil {
+		t.Fatalf("failed to insert m3: %v", err)
+	}
+	if _, ok := store.turbovecIndex.Get(m3.ID); !ok {
+		t.Errorf("mem-3 missing from turbovec index after primary insert")
+	}
+
+	hits, err = store.SearchMemoryVectorsGo(ctx, workspace, provider, query, 10, nil, nil)
+	if err != nil {
+		t.Fatalf("failed to search after m3 insert: %v", err)
+	}
+	if len(hits) != 2 {
+		t.Fatalf("expected 2 hits after m3 insert (mem-2, mem-3), got %d", len(hits))
+	}
+	found3 := false
+	for _, h := range hits {
+		if h.MemoryID == m3.ID {
+			found3 = true
+		}
+	}
+	if !found3 {
+		t.Errorf("expected mem-3 among search hits, got %#v", hits)
+	}
 }

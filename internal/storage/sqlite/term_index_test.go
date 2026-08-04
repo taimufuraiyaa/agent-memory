@@ -271,3 +271,65 @@ func seedTermMemory(t *testing.T, store *Store, id, workspace string) {
 		t.Fatalf("seed memory %s: %v", id, err)
 	}
 }
+
+// TestRoutineTermReplacementDoesNotInflateStaleDeleteCount proves that
+// routine DELETE+INSERT term replacement dirties the snapshot but must not
+// count as eviction pressure; only a real memories DELETE may increment
+// stale_delete_count.
+func TestRoutineTermReplacementDoesNotInflateStaleDeleteCount(t *testing.T) {
+	ctx := context.Background()
+	store, err := Open(ctx, filepath.Join(t.TempDir(), "term-routine-replace.db"))
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	seedTermMemory(t, store, "memory-a", "project-a")
+
+	// Seeding alone creates no term_index_state row (no insert trigger on
+	// memories); establish a baseline via the term insert trigger.
+	if err := store.ReplaceMemoryTerms(ctx, "project-a", "memory-a", []core.MemoryTerm{
+		{Term: "baseline", Source: core.TermSourceExplicit, NormalizationVersion: "locator-v1", ExtractorVersion: "deterministic-v1"},
+	}); err != nil {
+		t.Fatalf("seed baseline terms: %v", err)
+	}
+	before, err := store.GetTermIndexState(ctx, "project-a")
+	if err != nil || before == nil {
+		t.Fatalf("get state before replacement: state=%#v err=%v", before, err)
+	}
+
+	// Routine replacement is DELETE+INSERT; it must not count as an eviction.
+	if err := store.ReplaceMemoryTerms(ctx, "project-a", "memory-a", []core.MemoryTerm{
+		{Term: "replacement", Source: core.TermSourceExplicit, NormalizationVersion: "locator-v1", ExtractorVersion: "deterministic-v1"},
+	}); err != nil {
+		t.Fatalf("replace terms: %v", err)
+	}
+	after, err := store.GetTermIndexState(ctx, "project-a")
+	if err != nil || after == nil {
+		t.Fatalf("get state after replacement: state=%#v err=%v", after, err)
+	}
+	if after.State != TermIndexDirty {
+		t.Fatalf("expected dirty state after replacement, got %q", after.State)
+	}
+	if after.CorpusGeneration <= before.CorpusGeneration {
+		t.Fatalf("routine replacement did not invalidate snapshot: before=%d after=%d", before.CorpusGeneration, after.CorpusGeneration)
+	}
+	if after.StaleDeleteCount != before.StaleDeleteCount {
+		t.Fatalf("routine replacement inflated stale-delete pressure: before=%d after=%d", before.StaleDeleteCount, after.StaleDeleteCount)
+	}
+
+	// A real eviction must count exactly once.
+	if err := store.DeleteByIDs(ctx, []string{"memory-a"}); err != nil {
+		t.Fatalf("delete memory: %v", err)
+	}
+	final, err := store.GetTermIndexState(ctx, "project-a")
+	if err != nil || final == nil {
+		t.Fatalf("get state after delete: state=%#v err=%v", final, err)
+	}
+	if final.State != TermIndexDirty {
+		t.Fatalf("expected state still dirty after delete, got %q", final.State)
+	}
+	if final.StaleDeleteCount != before.StaleDeleteCount+1 {
+		t.Fatalf("delete did not count exactly one stale delete: before=%d after=%d", before.StaleDeleteCount, final.StaleDeleteCount)
+	}
+}

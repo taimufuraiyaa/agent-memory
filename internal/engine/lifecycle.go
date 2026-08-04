@@ -134,8 +134,12 @@ func (m *LifecycleManager) applyEvictionPromotion(ctx context.Context, workspace
 	over := len(memories) - m.maxEntries
 	toDelete := make([]string, 0, over)
 	toDeleteSet := make(map[string]struct{}, over)
-	for i := len(memories) - 1; i >= 0 && len(toDelete) < over; i-- {
-		mm := memories[i]
+	candidates := append([]core.MemoryEntry(nil), memories...)
+	sort.SliceStable(candidates, func(i, j int) bool { return candidates[i].DecayScore > candidates[j].DecayScore })
+	for _, mm := range candidates {
+		if len(toDelete) >= over {
+			break
+		}
 		if mm.Pinned || mm.Type == core.ProceduralMemory {
 			continue
 		}

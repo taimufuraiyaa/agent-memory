@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -43,25 +44,45 @@ func DefaultChecks(options Options) []Check {
 			if err != nil {
 				return failed(err, "reinstall agent-memory")
 			}
+			info, err := os.Stat(path)
+			if err != nil {
+				return failed(err, "reinstall agent-memory")
+			}
+			if !info.Mode().IsRegular() {
+				return failed(fmt.Errorf("executable path is not a regular file: %s", path), "reinstall agent-memory")
+			}
+			if runtime.GOOS != "windows" && info.Mode().Perm()&0o111 == 0 {
+				return failed(fmt.Errorf("executable bits are not set: %s", path), "restore executable permissions or reinstall agent-memory")
+			}
+			if !directoryOnPATH(filepath.Dir(path), os.Getenv("PATH")) {
+				return warning(path, pathNextAction(filepath.Dir(path)))
+			}
 			return passed(path)
 		}},
 		namedCheck{"workspace_registry", func(context.Context) Result {
-			path := filepath.Join(options.DataDir, "workspaces.json")
-			data, err := os.ReadFile(path)
+			path, registry, err := loadRegistry(options.DataDir)
 			if err != nil {
 				return failed(err, "run agent-memory init")
 			}
-			var registry any
-			if err := json.Unmarshal(data, &registry); err != nil {
-				return failed(err, "repair or restore workspaces.json")
+			for _, project := range registry.Projects {
+				if project.Name == strings.TrimSpace(options.Workspace) {
+					return passed(path)
+				}
 			}
-			return passed(path)
+			return failed(fmt.Errorf("workspace %q is not registered", options.Workspace), "run agent-memory init")
 		}},
 		namedCheck{"database", func(context.Context) Result {
-			path := filepath.Join(options.DataDir, strings.TrimSpace(options.Workspace)+".db")
+			path := registeredDatabasePath(options)
 			info, err := os.Stat(path)
 			if err != nil {
 				return failed(err, "initialize or repair the workspace")
+			}
+			file, err := os.OpenFile(path, os.O_RDWR, 0)
+			if err != nil {
+				return failed(err, "restore read/write access to the workspace database")
+			}
+			if err := file.Close(); err != nil {
+				return failed(err, "inspect the workspace database filesystem")
 			}
 			return passed(fmt.Sprintf("%s (%d bytes)", path, info.Size()))
 		}},
@@ -114,10 +135,17 @@ func DefaultChecks(options Options) []Check {
 		namedCheck{"writable_root", func(context.Context) Result {
 			info, err := os.Stat(options.DataDir)
 			if err != nil {
-				return failed(err, "create the data directory")
+				result := failed(err, "run agent-memory doctor --fix")
+				result.RepairAvailable = true
+				return result
 			}
-			if info.Mode().Perm()&0o200 == 0 {
-				return failed(fmt.Errorf("owner write bit is not set"), "grant owner write permission")
+			if !info.IsDir() {
+				return failed(fmt.Errorf("data root is not a directory"), "move the conflicting path and run agent-memory doctor --fix")
+			}
+			if info.Mode().Perm()&0o700 != 0o700 {
+				result := failed(fmt.Errorf("owner read/write/execute bits are not all set"), "run agent-memory doctor --fix")
+				result.RepairAvailable = true
+				return result
 			}
 			return passed(options.DataDir)
 		}},
@@ -168,6 +196,71 @@ func DefaultChecks(options Options) []Check {
 			return passed(fmt.Sprintf("%d configured connector(s) healthy", len(options.Connectors)))
 		}},
 	}
+}
+
+type registryFile struct {
+	Projects []registryProject `json:"projects"`
+}
+
+type registryProject struct {
+	Name   string `json:"name"`
+	DBPath string `json:"db_path"`
+}
+
+func loadRegistry(dataDir string) (string, registryFile, error) {
+	path := filepath.Join(dataDir, "workspaces.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return path, registryFile{}, err
+	}
+	var registry registryFile
+	if err := json.Unmarshal(data, &registry); err != nil {
+		return path, registryFile{}, fmt.Errorf("parse %s: %w", path, err)
+	}
+	return path, registry, nil
+}
+
+func registeredDatabasePath(options Options) string {
+	_, registry, err := loadRegistry(options.DataDir)
+	if err == nil {
+		for _, project := range registry.Projects {
+			if project.Name == strings.TrimSpace(options.Workspace) && strings.TrimSpace(project.DBPath) != "" {
+				return project.DBPath
+			}
+		}
+	}
+	return filepath.Join(options.DataDir, strings.TrimSpace(options.Workspace)+".db")
+}
+
+func directoryOnPATH(directory, pathValue string) bool {
+	want := normalizedPath(directory)
+	for _, candidate := range filepath.SplitList(pathValue) {
+		if candidate != "" && normalizedPath(candidate) == want {
+			return true
+		}
+	}
+	return false
+}
+
+func normalizedPath(path string) string {
+	abs, err := filepath.Abs(path)
+	if err == nil {
+		path = abs
+	}
+	if resolved, err := filepath.EvalSymlinks(path); err == nil {
+		path = resolved
+	}
+	return filepath.Clean(path)
+}
+
+func pathNextAction(directory string) string {
+	if runtime.GOOS == "windows" {
+		return fmt.Sprintf("add %s to the user PATH and open a new shell", directory)
+	}
+	if strings.Contains(strings.ToLower(os.Getenv("SHELL")), "fish") {
+		return fmt.Sprintf("run fish_add_path %q and open a new shell", directory)
+	}
+	return fmt.Sprintf("add %s to PATH in your shell configuration and open a new shell", directory)
 }
 
 func serviceHealthResult(body []byte) Result {

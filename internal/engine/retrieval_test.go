@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"math"
 	"path/filepath"
 	"testing"
 	"time"
@@ -273,4 +274,77 @@ func TestPolicyForModeFinalDefaultSemanticFloors(t *testing.T) {
 
 func floatPtr(v float64) *float64 {
 	return &v
+}
+
+type negativeVectorProvider struct{}
+
+func (negativeVectorProvider) Name() string         { return "stub-provider" }
+func (negativeVectorProvider) ModelVersion() string { return "test-v1" }
+func (negativeVectorProvider) Dimension() int       { return 4 }
+func (negativeVectorProvider) Embed(ctx context.Context, text string) ([]float32, error) {
+	return []float32{-1, 0, 0, 0}, nil
+}
+func (negativeVectorProvider) EmbedBatch(ctx context.Context, texts []string) ([][]float32, error) {
+	out := make([][]float32, len(texts))
+	for i := range texts {
+		out[i] = []float32{-1, 0, 0, 0}
+	}
+	return out, nil
+}
+
+// TestRetrievalClampsNegativeSemanticContribution proves the semantic term is
+// clamped to [0,1] before the weighted mix: a negative-cosine hit must not
+// drag the total below the sum of the non-semantic signals.
+func TestRetrievalClampsNegativeSemanticContribution(t *testing.T) {
+	store, err := sqlite.Open(context.Background(), filepath.Join(t.TempDir(), "clamp.db"))
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	ctx := context.Background()
+
+	stub := negativeVectorProvider{}
+	m := &core.MemoryEntry{
+		ID:          "m-neg",
+		Type:        core.SemanticMemory,
+		Content:     "payment timeout workaround",
+		Workspace:   "ws",
+		Source:      core.MemorySource{Type: core.SourceAgentObservation},
+		StorageTier: core.TierVector,
+		Confidence:  0.9,
+	}
+	if err := store.InsertMemoryByHashWithVector(ctx, m, "hash-neg", "stub-provider", "test-v1", []float32{1, 0, 0, 0}); err != nil {
+		t.Fatalf("insert memory: %v", err)
+	}
+
+	searcher := &VectorSearcher{store: store, provider: stub, cache: nil}
+	eng := NewRetrievalEngine(searcher)
+	eng.clock = func() time.Time { return time.Now().UTC() }
+
+	// Loosen the semantic gate so the negative-cosine hit reaches the mixer.
+	res, err := eng.Retrieve(ctx, RetrievalOptions{
+		Workspace: "ws",
+		Query:     "payment timeout workaround",
+		TopK:      2,
+		Mode:      ModeSearch,
+		Policy:    RetrievalPolicy{MinSemanticScore: floatPtr(-1.0)},
+	})
+	if err != nil {
+		t.Fatalf("retrieve: %v", err)
+	}
+	if len(res.Hits) == 0 {
+		t.Fatalf("expected at least one hit")
+	}
+	hit := res.Hits[0]
+	if hit.Breakdown.Semantic >= 0 {
+		t.Fatalf("expected negative cosine to reach the mixer, got %v", hit.Breakdown.Semantic)
+	}
+	expected := res.Weights.Recency*hit.Breakdown.Recency +
+		res.Weights.Outcome*hit.Breakdown.Outcome +
+		res.Weights.Decay*hit.Breakdown.Decay +
+		res.Weights.TierBias*hit.Breakdown.TierBias +
+		hit.Breakdown.Salience - hit.Breakdown.Suppression
+	if math.Abs(hit.Breakdown.Total-expected) >= 1e-9 {
+		t.Fatalf("semantic term contributed nonzero drag: total=%v expected-without-semantic=%v", hit.Breakdown.Total, expected)
+	}
 }

@@ -155,3 +155,67 @@ func openLifecycleStore(t *testing.T) *sqlite.Store {
 	}
 	return store
 }
+
+// TestEvictionPrefersMostDecayed proves eviction picks the most-decayed
+// unpinned memory first, and that pinned/low-decay memories survive.
+// It drives applyEvictionPromotion directly because Run() recomputes decay
+// first, which would erase the explicitly seeded decay scores.
+func TestEvictionPrefersMostDecayed(t *testing.T) {
+	store := openLifecycleStore(t)
+	defer func() { _ = store.Close() }()
+	pipe := NewWritePipeline(store)
+	ctx := context.Background()
+
+	entries := []*core.MemoryEntry{
+		{ID: "m1", Type: core.SemanticMemory, Content: "pinned memory", Workspace: "ws", Source: core.MemorySource{Type: core.SourceAgentObservation}, StorageTier: core.TierVector, Pinned: true, Confidence: 0.9},
+		{ID: "m2", Type: core.SemanticMemory, Content: "most decayed memory", Workspace: "ws", Source: core.MemorySource{Type: core.SourceAgentObservation}, StorageTier: core.TierVector, DecayScore: 0.9, Confidence: 0.9},
+		{ID: "m3", Type: core.SemanticMemory, Content: "fresh memory", Workspace: "ws", Source: core.MemorySource{Type: core.SourceAgentObservation}, StorageTier: core.TierVector, DecayScore: 0.2, Confidence: 0.9},
+	}
+	for _, mm := range entries {
+		if err := store.InsertMemoryByHash(ctx, mm, "hash-"+mm.ID); err != nil {
+			t.Fatalf("insert %s: %v", mm.ID, err)
+		}
+	}
+
+	lm := NewLifecycleManager(store, pipe)
+	lm.maxEntries = 2
+	lm.summarizer = nil // keep the eviction path focused
+
+	evicted, _, _, _, err := lm.applyEvictionPromotion(ctx, "ws")
+	if err != nil {
+		t.Fatalf("eviction run: %v", err)
+	}
+	if evicted != 1 {
+		t.Fatalf("expected exactly 1 eviction, got %d", evicted)
+	}
+	memories, err := store.ListMemoriesByWorkspace(ctx, "ws")
+	if err != nil {
+		t.Fatalf("list memories: %v", err)
+	}
+	byID := make(map[string]core.MemoryEntry, len(memories))
+	for _, mm := range memories {
+		byID[mm.ID] = mm
+	}
+	if _, ok := byID["m2"]; ok {
+		t.Fatalf("expected most-decayed memory m2 to be evicted")
+	}
+	if _, ok := byID["m1"]; !ok {
+		t.Fatalf("expected pinned memory m1 to remain")
+	}
+	if _, ok := byID["m3"]; !ok {
+		t.Fatalf("expected low-decay memory m3 to remain")
+	}
+	tombstones, err := store.ListTombstones(ctx, "ws", "")
+	if err != nil {
+		t.Fatalf("list tombstones: %v", err)
+	}
+	found := false
+	for _, tb := range tombstones {
+		if tb.MemoryID == "m2" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected a tombstone for evicted memory m2")
+	}
+}

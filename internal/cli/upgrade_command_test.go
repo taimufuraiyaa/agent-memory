@@ -6,11 +6,57 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/taimufuraiyaa/agent-memory/internal/core"
 	"github.com/taimufuraiyaa/agent-memory/internal/storage/sqlite"
 )
+
+func TestReplaceFileAtomicKeepsDestinationContinuouslyAvailable(t *testing.T) {
+	dir := t.TempDir()
+	dst := filepath.Join(dir, "agent-memory")
+	src := filepath.Join(dir, "replacement")
+	if err := os.WriteFile(dst, []byte("old"), 0o755); err != nil {
+		t.Fatalf("write destination: %v", err)
+	}
+	if err := os.WriteFile(src, []byte("new"), 0o755); err != nil {
+		t.Fatalf("write replacement: %v", err)
+	}
+
+	var missing atomic.Bool
+	stop := make(chan struct{})
+	var watcher sync.WaitGroup
+	watcher.Add(1)
+	go func() {
+		defer watcher.Done()
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+				if _, err := os.Stat(dst); os.IsNotExist(err) {
+					missing.Store(true)
+					return
+				}
+			}
+		}
+	}()
+
+	for i := 0; i < 10_000 && !missing.Load(); i++ {
+		if err := replaceFileAtomic(dst, src); err != nil {
+			close(stop)
+			watcher.Wait()
+			t.Fatalf("replace destination: %v", err)
+		}
+	}
+	close(stop)
+	watcher.Wait()
+	if missing.Load() {
+		t.Fatal("destination disappeared during replacement")
+	}
+}
 
 func TestRunDashboardNPMCIRetriesAfterCleanup(t *testing.T) {
 	dst := t.TempDir()

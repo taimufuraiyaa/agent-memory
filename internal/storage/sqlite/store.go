@@ -288,8 +288,18 @@ func (s *Store) Migrate(ctx context.Context) error {
 			VALUES (OLD.workspace, 'dirty', 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 			ON CONFLICT(workspace) DO UPDATE SET
 				state = 'dirty',
-				stale_delete_count = term_index_state.stale_delete_count + 1,
 				corpus_generation = term_index_state.corpus_generation + 1,
+				updated_at = excluded.updated_at;
+		END`,
+		`CREATE TRIGGER IF NOT EXISTS trg_memories_delete_pressure
+		AFTER DELETE ON memories
+		BEGIN
+			INSERT INTO term_index_state (workspace, state, corpus_generation, stale_delete_count, updated_at)
+			VALUES (OLD.workspace, 'dirty', 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+			ON CONFLICT(workspace) DO UPDATE SET
+				state = 'dirty',
+				corpus_generation = term_index_state.corpus_generation + 1,
+				stale_delete_count = term_index_state.stale_delete_count + 1,
 				updated_at = excluded.updated_at;
 		END`,
 		`CREATE TABLE IF NOT EXISTS memory_vectors (
@@ -861,15 +871,30 @@ func (s *Store) Migrate(ctx context.Context) error {
 	if _, err := s.db.ExecContext(ctx, `CREATE TRIGGER trg_memory_terms_delete_state
 		AFTER DELETE ON memory_terms
 		BEGIN
-			INSERT INTO term_index_state (workspace, state, corpus_generation, stale_delete_count, updated_at)
-			VALUES (OLD.workspace, 'dirty', 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+			INSERT INTO term_index_state (workspace, state, corpus_generation, updated_at)
+			VALUES (OLD.workspace, 'dirty', 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 			ON CONFLICT(workspace) DO UPDATE SET
 				state = 'dirty',
-				stale_delete_count = term_index_state.stale_delete_count + 1,
 				corpus_generation = term_index_state.corpus_generation + 1,
 				updated_at = excluded.updated_at;
 		END`); err != nil {
 		return fmt.Errorf("create memory term delete trigger: %w", err)
+	}
+	if _, err := s.db.ExecContext(ctx, `DROP TRIGGER IF EXISTS trg_memories_delete_pressure`); err != nil {
+		return fmt.Errorf("drop legacy memories delete pressure trigger: %w", err)
+	}
+	if _, err := s.db.ExecContext(ctx, `CREATE TRIGGER trg_memories_delete_pressure
+		AFTER DELETE ON memories
+		BEGIN
+			INSERT INTO term_index_state (workspace, state, corpus_generation, stale_delete_count, updated_at)
+			VALUES (OLD.workspace, 'dirty', 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+			ON CONFLICT(workspace) DO UPDATE SET
+				state = 'dirty',
+				corpus_generation = term_index_state.corpus_generation + 1,
+				stale_delete_count = term_index_state.stale_delete_count + 1,
+				updated_at = excluded.updated_at;
+		END`); err != nil {
+		return fmt.Errorf("create memories delete pressure trigger: %w", err)
 	}
 	// Add indexes for vector provenance columns
 	if _, err := s.db.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_memory_vectors_provider ON memory_vectors(embedding_provider)`); err != nil {
@@ -1144,6 +1169,9 @@ ON CONFLICT(memory_id) DO UPDATE SET
 
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit insert memory with vector: %w", err)
+	}
+	if s.useTurbovec && s.turbovecIndex != nil {
+		_ = s.turbovecIndex.Upsert(m.ID, embedding)
 	}
 	committed = true
 	s.logSlowQuery(ctx, "insert_memory", m.Workspace, time.Since(_startInsert))
@@ -1547,8 +1575,8 @@ func (s *Store) PopulateSupersedesRelations(ctx context.Context, memories []core
 	}
 
 	query := fmt.Sprintf(`
-		SELECT source_id, target_id, weight, metadata_json 
-		FROM relations 
+		SELECT source_id, target_id, weight, metadata_json
+		FROM relations
 		WHERE type = 'supersedes' AND source_id IN (%s)`,
 		strings.Join(placeholders, ","),
 	)
@@ -1636,15 +1664,14 @@ func (s *Store) SetDecayScores(ctx context.Context, byID map[string]float64) err
 	if err != nil {
 		return err
 	}
-	stmt, err := tx.PrepareContext(ctx, `UPDATE memories SET decay_score = ?, updated_at = ? WHERE id = ?`)
+	stmt, err := tx.PrepareContext(ctx, `UPDATE memories SET decay_score = ? WHERE id = ?`)
 	if err != nil {
 		_ = tx.Rollback()
 		return err
 	}
 	defer func() { _ = stmt.Close() }()
-	now := time.Now().UTC().Format(time.RFC3339Nano)
 	for id, score := range byID {
-		if _, err := stmt.ExecContext(ctx, score, now, id); err != nil {
+		if _, err := stmt.ExecContext(ctx, score, id); err != nil {
 			_ = tx.Rollback()
 			return err
 		}

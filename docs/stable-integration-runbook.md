@@ -6,6 +6,12 @@ Build with `make build`, initialize a workspace with `agent-memory init`, then
 run `agent-memory doctor`. The supported local path is macOS or Linux with Go
 1.24+, Node 20+ for MCP/dashboard builds, and SQLite storage.
 
+Doctor is read-only by default. Preview its bounded data-directory repairs with
+`agent-memory doctor --fix --dry-run`, then apply them with `agent-memory doctor
+--fix`. PATH, model/runtime downloads, daemon lifecycle, registry/database
+reconstruction, and agent configuration remain explicit recommendations rather
+than automatic repairs.
+
 Start one multi-workspace service for every registered project with
 `agent-memory serve --start`. See `docs/multi-workspace-daemon.md`; individual
 workspace services and per-workspace ports are no longer required.
