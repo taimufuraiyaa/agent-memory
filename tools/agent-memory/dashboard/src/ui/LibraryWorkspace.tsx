@@ -1,15 +1,20 @@
 import { useEffect, useRef, useState } from 'react'
 import {
+  getLibraryLocalLLMStatus,
   getLibraryStructure,
   importLibraryBook,
   queryLibrary,
   reviewLibraryMemory,
+  saveLibraryLocalLLM,
+  testLibraryLocalLLM,
   type BookMemoryProposal,
   type LibraryImportJob,
   type LibraryImportResult,
   type LibraryPassageResult,
   type LibraryStructuralNode,
   type NoteDocument,
+  type LocalLLMConfig,
+  type LocalLLMStatus,
 } from '../lib/api'
 
 type LibraryKind = 'personal' | 'organization'
@@ -48,6 +53,12 @@ const bookLanguageOptions = [
   { value: 'th', label: 'ไทย' },
   { value: 'id', label: 'Bahasa Indonesia' },
 ]
+const importModeStorageKey = 'agent-memory:library-import-mode'
+
+function savedPreference(key: string, fallback: string) {
+  if (typeof window === 'undefined') return fallback
+  return window.localStorage.getItem(key) || fallback
+}
 
 export function LibraryWorkspace({ workspace, onBookImported, onOpenBookNote }: LibraryWorkspaceProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -69,8 +80,43 @@ export function LibraryWorkspace({ workspace, onBookImported, onOpenBookNote }: 
   const [evidence, setEvidence] = useState<LibraryPassageResult[]>([])
   const [proposal, setProposal] = useState<BookMemoryProposal | null>(null)
   const [queried, setQueried] = useState(false)
-  const [busy, setBusy] = useState<'import' | 'query' | 'review' | 'memory' | ''>('')
+  const [busy, setBusy] = useState<'import' | 'query' | 'review' | 'memory' | 'llm' | ''>('')
   const [error, setError] = useState('')
+  const [localLLMStatus, setLocalLLMStatus] = useState<LocalLLMStatus | null>(null)
+  const [localLLMNotice, setLocalLLMNotice] = useState('')
+  const [importDecisionOpen, setImportDecisionOpen] = useState(false)
+  const [setupOpen, setSetupOpen] = useState(false)
+  const [rememberParserOnly, setRememberParserOnly] = useState(false)
+  const [parserOnlyRemembered, setParserOnlyRemembered] = useState(() => savedPreference(importModeStorageKey, '') === 'parser')
+  const [localLLMConfig, setLocalLLMConfig] = useState<LocalLLMConfig>({
+    enabled: true,
+    base_url: 'http://127.0.0.1:11434/v1',
+    text_model: '',
+    vision_model: '',
+    api_key: '',
+    timeout_seconds: 3,
+  })
+
+  useEffect(() => {
+    let active = true
+    void getLibraryLocalLLMStatus().then((status) => {
+      if (!active) return
+      setLocalLLMStatus(status)
+      if (status.configured) {
+        setLocalLLMConfig({
+          enabled: status.config.enabled,
+          base_url: status.config.base_url,
+          text_model: status.config.text_model,
+          vision_model: status.config.vision_model ?? '',
+          api_key: '',
+          timeout_seconds: status.config.timeout_seconds,
+        })
+      }
+    }).catch((reason: unknown) => {
+      if (active) setLocalLLMNotice(`Local endpoint status unavailable: ${messageOf(reason)}. The built-in parser remains available.`)
+    })
+    return () => { active = false }
+  }, [])
 
   useEffect(() => {
     resetBook()
@@ -94,6 +140,8 @@ export function LibraryWorkspace({ workspace, onBookImported, onOpenBookNote }: 
     setProposal(null)
     setQueried(false)
     setError('')
+    setImportDecisionOpen(false)
+    setSetupOpen(false)
   }
 
   function validateScope() {
@@ -119,12 +167,30 @@ export function LibraryWorkspace({ workspace, onBookImported, onOpenBookNote }: 
     }
   }
 
-  async function importBook() {
+  function validateImport() {
     const scopeError = validateScope()
     if (scopeError || !title.trim() || !editionLabel.trim() || !language.trim() || (!sourceFile && !source.trim())) {
-      setError(scopeError || 'Check the title, edition, language, and selected book before continuing.')
+      return scopeError || 'Check the title, edition, language, and selected book before continuing.'
+    }
+    return ''
+  }
+
+  async function beginImport() {
+    const validationError = validateImport()
+    if (validationError) {
+      setError(validationError)
       return
     }
+    const localReady = Boolean(localLLMStatus?.enabled && localLLMStatus.reachable && localLLMStatus.text_model_available)
+    if (!localReady && !parserOnlyRemembered) {
+      setError('')
+      setImportDecisionOpen(true)
+      return
+    }
+    await importBook()
+  }
+
+  async function importBook() {
     setBusy('import')
     setIndexStatus('reading')
     setError('')
@@ -170,6 +236,35 @@ export function LibraryWorkspace({ workspace, onBookImported, onOpenBookNote }: 
     } catch (reason) {
       setIndexStatus('failed')
       setError(messageOf(reason))
+    } finally {
+      setBusy('')
+    }
+  }
+
+  async function continueWithParser() {
+    if (rememberParserOnly) {
+      window.localStorage.setItem(importModeStorageKey, 'parser')
+      setParserOnlyRemembered(true)
+    }
+    setImportDecisionOpen(false)
+    setSetupOpen(false)
+    await importBook()
+  }
+
+  async function checkLocalLLM(save: boolean) {
+    setBusy('llm')
+    setError('')
+    setLocalLLMNotice('')
+    try {
+      const status = save ? await saveLibraryLocalLLM(localLLMConfig) : await testLibraryLocalLLM(localLLMConfig)
+      setLocalLLMStatus(status)
+      if (status.reachable && status.text_model_available) {
+        setLocalLLMNotice(save ? 'Setup saved. Local endpoint is reachable and the text model is available.' : 'Connection succeeded and the text model is available.')
+      } else {
+        setLocalLLMNotice(status.error || 'The endpoint responded, but the configured text model is unavailable.')
+      }
+    } catch (reason) {
+      setLocalLLMNotice(messageOf(reason))
     } finally {
       setBusy('')
     }
@@ -294,7 +389,41 @@ export function LibraryWorkspace({ workspace, onBookImported, onOpenBookNote }: 
             <label>Library<select value={libraryKind} onChange={(event) => setLibraryKind(event.target.value as LibraryKind)}><option value="personal">Personal library</option><option value="organization">Organization library</option></select></label>
             {libraryKind === 'organization' ? <label>Organization ID<input value={organizationID} onChange={(event) => setOrganizationID(event.target.value)} /></label> : null}
           </div>
-          <footer><p>Indexing happens in the background. The original source stays separate from any memory you choose to keep.</p><button className="primaryNotebookButton" type="button" onClick={() => void importBook()}>Start reading</button></footer>
+          <div className="libraryPlanes"><div><strong>Built-in parser</strong><span>Always available · citation baseline</span></div><div><strong>Local endpoint</strong><span>{localLLMStatus?.reachable && localLLMStatus.text_model_available ? 'Connected' : 'Optional · not operational'}</span></div><div><strong>OCR</strong><span>Separate processing stage</span></div></div>
+          {parserOnlyRemembered ? <p className="notebookHint">Parser-only choice remembered on this device. <button type="button" onClick={() => {
+            window.localStorage.removeItem(importModeStorageKey)
+            setParserOnlyRemembered(false)
+          }}>Ask again</button></p> : null}
+          <footer><p>Indexing happens in the background. The original source stays separate from any memory you choose to keep.</p><button className="primaryNotebookButton" type="button" onClick={() => void beginImport()}>Start reading</button></footer>
+
+          {importDecisionOpen ? <div className="libraryProposal" role="dialog" aria-label="Choose book processing mode">
+            <div><span className="sourceBadge agent">Optional local processing</span><strong>Decision required</strong></div>
+            <h3>No operational local LLM is configured</h3>
+            <p>Set up an OpenAI-compatible local endpoint, or continue with the built-in parser. The deterministic parser still creates citations and remains the source of truth.</p>
+            <p>Scanned PDFs still require the OCR processing stage; parser-only import cannot invent text for image-only pages.</p>
+            {localLLMStatus?.error ? <p className="notebookHint">Endpoint status: {localLLMStatus.error}</p> : null}
+            <label><input type="checkbox" checked={rememberParserOnly} onChange={(event) => setRememberParserOnly(event.target.checked)} /> Remember parser-only choice on this device</label>
+            <div>
+              <button className="primaryNotebookButton" type="button" onClick={() => setSetupOpen(true)} disabled={busy !== ''}>Set up local LLM</button>
+              <button type="button" onClick={() => void continueWithParser()} disabled={busy !== ''}>Continue with built-in parser</button>
+              <button type="button" onClick={() => { setImportDecisionOpen(false); setSetupOpen(false) }} disabled={busy !== ''}>Cancel import</button>
+            </div>
+          </div> : null}
+
+          {setupOpen ? <div className="libraryProposal" aria-label="Local LLM setup">
+            <div><span className="sourceBadge agent">Local setup</span><strong>OpenAI-compatible</strong></div>
+            <h3>Connect a local model server</h3>
+            <p>Use an OpenAI-compatible local endpoint from Ollama, LM Studio, vLLM, or an equivalent server. Initial setup accepts loopback addresses only.</p>
+            <div className="libraryScopeGrid">
+              <label>Base URL<input value={localLLMConfig.base_url} onChange={(event) => setLocalLLMConfig({ ...localLLMConfig, base_url: event.target.value })} placeholder="http://127.0.0.1:11434/v1" /></label>
+              <label>Text model<input value={localLLMConfig.text_model} onChange={(event) => setLocalLLMConfig({ ...localLLMConfig, text_model: event.target.value })} placeholder="Local model ID" /></label>
+              <label>Vision model <span className="optionalLabel">optional</span><input value={localLLMConfig.vision_model ?? ''} onChange={(event) => setLocalLLMConfig({ ...localLLMConfig, vision_model: event.target.value })} placeholder="Vision model ID" /></label>
+              <label>API key <span className="optionalLabel">write-only</span><input type="password" value={localLLMConfig.api_key ?? ''} onChange={(event) => setLocalLLMConfig({ ...localLLMConfig, api_key: event.target.value })} placeholder={localLLMStatus?.config.api_key_configured ? 'Stored key unchanged when blank' : 'Optional'} /></label>
+            </div>
+            <p className="notebookHint">A successful test proves connectivity only. Local summary and OCR jobs will report their own processing provenance when those stages run.</p>
+            {localLLMNotice ? <p className="notebookHint" role="status">{localLLMNotice}</p> : null}
+            <div><button className="primaryNotebookButton" type="button" onClick={() => void checkLocalLLM(false)} disabled={busy !== ''}>{busy === 'llm' ? 'Checking…' : 'Test connection'}</button><button type="button" onClick={() => void checkLocalLLM(true)} disabled={busy !== ''}>Save setup</button><button type="button" onClick={() => setSetupOpen(false)} disabled={busy !== ''}>Back</button></div>
+          </div> : null}
         </section>
       ) : null}
 

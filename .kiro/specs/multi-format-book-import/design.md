@@ -86,3 +86,40 @@ Identity derivation is deterministic and stateless, so it adds no migration, loo
 Requiring Poppler was rejected because installation must work across client devices without a separately managed executable. Browser-side PDF parsing was rejected because it would duplicate backend provenance logic and make API/CLI imports inconsistent. Treating every binary as plain text was rejected because it destroys reading order and citation locators.
 
 Browser-generated random IDs were rejected because browser storage is origin-specific and can change with the dashboard address. Persisting a new installation identity in every workspace database was rejected for this local single-reader flow because it would require a migration and cross-workspace coordination. Deterministic server-side IDs preserve stable behavior without new state.
+
+## 10. Local inference provider contract
+
+The optional provider uses the OpenAI-compatible HTTP surface rather than an Ollama-specific API. The minimum setup fields are enabled state, loopback base URL, text model, optional vision model, optional API key, and bounded request timeout. The configuration store belongs to the backend data directory, uses owner-only permissions, and never returns the credential value.
+
+Connectivity validation calls the provider model-list endpoint with a short timeout and reports four independent facts: whether configuration exists, whether it is enabled, whether the endpoint is reachable, and whether the configured text model is advertised. Reachability is diagnostic, not proof that a book was processed. Import jobs must later record the processing mode and model/version actually used before any generated artifact can claim local-model provenance.
+
+Only loopback HTTP endpoints are accepted in the initial local-only rollout. This prevents the dashboard from becoming an arbitrary server-side request primitive. Supporting remote private-network endpoints requires a later explicit allowlist and transport-security design.
+
+## 11. Import decision flow
+
+```mermaid
+flowchart TD
+    Select["Reader selects a complete book"] --> Status["Load local inference status"]
+    Status --> Ready{"Endpoint enabled and reachable?"}
+    Ready -->|"Yes"| Baseline["Run deterministic format parser"]
+    Ready -->|"No"| Decision{"Reader decision"}
+    Decision -->|"Set up"| Setup["Configure and test OpenAI-compatible endpoint"]
+    Decision -->|"Use parser"| Baseline
+    Decision -->|"Cancel"| Stop["Leave source unmodified"]
+    Baseline --> Index["Persist source structure passages and locators"]
+    Index --> Future["Optional observable enrichment task"]
+```
+
+The decision gate appears only when no remembered parser-only choice exists and the endpoint is not operational. Remembering parser-only mode is a device-local convenience, not an authorization or source-retention decision. It can be reset from the import card.
+
+## 12. Failure modes, performance, and rollout
+
+- Missing configuration: return a stable disabled status without network traffic.
+- Malformed or non-loopback URL: reject before persistence or connection attempts.
+- Provider timeout, refusal, invalid JSON, or missing model: retain configuration state, report an actionable diagnostic, and keep parser-only import available.
+- Credential update with an empty API-key field: preserve the existing secret; explicit credential removal requires a dedicated clear operation.
+- Concurrent dashboard requests: serialize atomic configuration replacement and write through a temporary file before rename.
+- Status latency: use a short bounded timeout and allow the UI to display saved configuration before connectivity resolves.
+- Rollout: ship configuration/status and the parser decision gate first; add text enrichment next; add rendered-page vision/OCR only after locator reconciliation and OCR verification are specified.
+
+The main alternative was browser-owned configuration. It was rejected because storing credentials in local storage exposes them to dashboard JavaScript and prevents CLI/background jobs from sharing the provider. Reusing embedding configuration was rejected because embedding and generative/vision models have different contracts, lifecycle, and security boundaries.

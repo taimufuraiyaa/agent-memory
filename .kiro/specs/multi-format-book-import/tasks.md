@@ -47,3 +47,30 @@
 - [x] Add a failing dashboard contract test for a language dropdown with English default and representative Latin, CJK, RTL, and Indic options.
 - [x] Replace free-text language entry with a BCP 47-tagged selector while preserving the existing import payload.
 - [x] Synchronize embedded dashboard assets and verify dashboard tests, bundle syntax, and the production Go build.
+
+## Task M8 - Local inference configuration contract
+
+- [x] Add failing tests for default status, loopback validation, secret redaction, atomic persistence, and OpenAI-compatible model discovery.
+- [x] Implement a backend-owned local inference configuration store and bounded connectivity client.
+- [x] Expose library-scoped status, test, and save endpoints without enabling arbitrary remote requests.
+- [x] Verify focused configuration and API tests.
+
+## Task M9 - Import setup-or-parser gate
+
+- [x] Add failing dashboard contract coverage for setup, parser-only continuation, cancellation, remembered choice, and unreachable-provider messaging.
+- [x] Add API client contracts for local inference status, test, and save operations.
+- [x] Implement the import decision panel while keeping the built-in parser as the default operational path.
+- [x] Verify dashboard tests, typecheck, and production build.
+
+## Task M10 - Local inference processing stages
+
+- [ ] Add model-attributed text enrichment jobs over deterministic passages.
+- [ ] Add rendered-page vision/OCR with locator reconciliation and explicit OCR confidence.
+- [ ] Gate generated summaries, claims, and quotes through provenance and citation verification.
+- [ ] Keep these capabilities disabled until their end-to-end evaluation thresholds pass.
+
+## Task M11 - Release verification
+
+- [x] Rebuild and smoke-test embedded dashboard assets.
+- [x] Run repository tests, touched-package race checks, vet, portability, and diff checks.
+- [x] Record durable knowledge and preserve unrelated working-tree changes.

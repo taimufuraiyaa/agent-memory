@@ -23,7 +23,10 @@ func TestRepositoryDoesNotContainDeveloperSpecificHomePath(t *testing.T) {
 		if walkErr != nil {
 			return walkErr
 		}
-		if entry.IsDir() && (entry.Name() == ".git" || entry.Name() == "node_modules") {
+		// .codex contains runtime-generated client integration state. It may
+		// legitimately contain the current user's resolved data directory and is
+		// not portable repository source.
+		if entry.IsDir() && (entry.Name() == ".git" || entry.Name() == ".codex" || entry.Name() == "node_modules") {
 			return filepath.SkipDir
 		}
 		if entry.IsDir() || !entry.Type().IsRegular() {

@@ -55,6 +55,21 @@ Extend the existing Living Knowledge Library import workflow so a reader can upl
 - The selected tag is sent unchanged with both file uploads and pasted-text imports.
 - Book content remains Unicode/UTF-8 regardless of the selected language; selection records language metadata and does not transcode source text.
 
+### R8 - Optional local LLM setup
+
+- Local inference uses a generic OpenAI-compatible HTTP endpoint so Ollama, LM Studio, vLLM, and equivalent local servers can share one contract.
+- Local inference is disabled by default and must never be required for native-text PDF, EPUB, Markdown, or plain-text ingestion.
+- Configuration is stored by the backend with restrictive file permissions; API keys are write-only and never returned to the dashboard.
+- The backend exposes configured, enabled, and reachable states independently so the UI never treats saved but unreachable settings as operational.
+- The initial rollout validates and stores the endpoint contract without claiming that enrichment or OCR has executed; those stages remain separately observable processing tasks.
+
+### R9 - Parser fallback decision
+
+- Before the first import without an operational local endpoint, the dashboard asks the reader to set up a local LLM, continue with the built-in parser, or cancel.
+- Continuing with the built-in parser is the safe default and can be remembered on the current device.
+- A configured but unreachable endpoint does not block parser-only import and produces an actionable status message.
+- Fully scanned PDFs are never reported as completely read by the parser-only path; they remain rejected or explicitly OCR-pending until a vision/OCR processor is connected.
+
 ## Commands
 
 - Backend tests: `go test ./internal/ingestion ./internal/api -run 'TestBookImport|TestLibraryImport'`
@@ -68,6 +83,7 @@ Extend the existing Living Knowledge Library import workflow so a reader can upl
 - Always: preserve exact locator provenance, authorize before retrieval, and keep legacy Markdown JSON import working.
 - Ask first: introduce a hosted parser/OCR provider or transmit source bytes to a third party.
 - Never: treat OCR output as verified native text, infer author claims from missing pages, or compile a device-specific path.
+- Never: return stored local-model credentials, permit arbitrary remote URLs under a local-only policy, or imply that connectivity testing performed book enrichment.
 
 ## Success criteria
 
@@ -76,8 +92,10 @@ Extend the existing Living Knowledge Library import workflow so a reader can upl
 - Existing Markdown workflow, repository tests, and embedded dashboard release checks pass.
 - A dashboard user can complete the import, retrieval, and review flow without seeing or entering reader or library IDs.
 - A dashboard user can choose a supported book language from a dropdown and import non-Latin Unicode content without text conversion.
+- A reader can securely save and test a loopback OpenAI-compatible endpoint, see its actual reachability, and explicitly choose parser-only import when it is unavailable.
 
 ## Deferred
 
 - Scanned-PDF OCR execution remains behind the existing configurable OCR boundary.
+- Local-model summary, claim extraction, and vision/OCR execution remain later processing stages; this setup slice only establishes their provider contract and import policy.
 - Web-book capture remains a URL/capture workflow with robots and immutable capture semantics; it is not modeled as a local file upload.

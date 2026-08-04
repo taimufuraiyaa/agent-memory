@@ -1,8 +1,0 @@
-# BEGIN agent-memory managed Codex sandbox
-default_permissions = "agent-memory-workspace"
-permissions.agent-memory-workspace.filesystem.":root" = "read"
-permissions.agent-memory-workspace.filesystem.":tmpdir" = "write"
-permissions.agent-memory-workspace.filesystem.":slash_tmp" = "write"
-permissions.agent-memory-workspace.filesystem."/Users/time/.agent-memory" = "write"
-permissions.agent-memory-workspace.filesystem.":workspace_roots" = { "." = "write", ".git" = "read", ".agents" = "read", ".codex" = "read" }
-# END agent-memory managed Codex sandbox
