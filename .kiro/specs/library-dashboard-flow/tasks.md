@@ -35,7 +35,7 @@
 
 ## Task L5 — Present responsive sidebar destination icons
 
-- [ ] Add failing contract coverage for icon-only collapsed navigation and icon-plus-name expanded navigation.
-- [ ] Replace letter abbreviations with recognizable, accessible destination icons.
-- [ ] Bind the rail's expanded presentation to the existing explorer-open state.
+- [x] Add failing contract coverage for icon-only collapsed navigation and icon-plus-name expanded navigation.
+- [x] Replace letter abbreviations with recognizable, accessible destination icons.
+- [x] Bind the rail's expanded presentation to the existing explorer-open state.
 - [ ] Verify dashboard tests, typecheck, production build, and embedded assets.

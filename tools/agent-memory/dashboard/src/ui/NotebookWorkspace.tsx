@@ -27,6 +27,7 @@ type EditorMode = 'edit' | 'preview' | 'split'
 type ContextTab = 'ask' | 'backlinks' | 'outline' | 'properties' | 'history'
 type SaveState = 'idle' | 'dirty' | 'saving' | 'saved' | 'error'
 type AskScope = 'active' | 'workspace' | 'all'
+type RailIconName = 'notes' | 'library' | 'search' | 'ask' | 'activity' | 'system' | 'sun' | 'moon'
 
 type NotebookWorkspaceProps = {
   workspace: string
@@ -439,17 +440,17 @@ export function NotebookWorkspace({
   const statusText = noteStatusText(activeNote, saveState)
 
   return (
-    <section className="notebookShell">
+    <section className={`notebookShell ${explorerOpen ? 'railExpanded' : 'railCollapsed'}`}>
       <aside className="notebookRail" aria-label="Primary navigation">
         <button className="notebookBrand" type="button" onClick={() => setDestination('notes')} aria-label="Agent Memory notebook">am</button>
-        <RailButton label="Notes" active={destination === 'notes'} onClick={() => setDestination('notes')} glyph="N" />
-        <RailButton label="Library" active={destination === 'library'} onClick={() => setDestination('library')} glyph="L" />
-        <RailButton label="Search" active={destination === 'search'} onClick={() => setDestination('search')} glyph="S" />
-        <RailButton label="Ask" active={destination === 'ask'} onClick={() => setDestination('ask')} glyph="A" />
-        <RailButton label="Activity" active={destination === 'activity'} onClick={() => setDestination('activity')} glyph="R" />
+        <RailButton label="Notes" active={destination === 'notes'} onClick={() => setDestination('notes')} icon="notes" />
+        <RailButton label="Library" active={destination === 'library'} onClick={() => setDestination('library')} icon="library" />
+        <RailButton label="Search" active={destination === 'search'} onClick={() => setDestination('search')} icon="search" />
+        <RailButton label="Ask" active={destination === 'ask'} onClick={() => setDestination('ask')} icon="ask" />
+        <RailButton label="Activity" active={destination === 'activity'} onClick={() => setDestination('activity')} icon="activity" />
         <div className="notebookRailSpacer" />
-        <RailButton label="System" active={false} onClick={onOpenSystem} glyph="SYS" />
-        <RailButton label={theme === 'dark' ? 'Light theme' : 'Dark theme'} active={false} onClick={onThemeChange} glyph={theme === 'dark' ? '☼' : '◐'} />
+        <RailButton label="System" active={false} onClick={onOpenSystem} icon="system" />
+        <RailButton label={theme === 'dark' ? 'Light theme' : 'Dark theme'} active={false} onClick={onThemeChange} icon={theme === 'dark' ? 'sun' : 'moon'} />
       </aside>
 
       {explorerOpen ? (
@@ -703,8 +704,28 @@ export function NotebookWorkspace({
   )
 }
 
-function RailButton({ label, glyph, active, onClick }: { label: string; glyph: string; active: boolean; onClick: () => void }) {
-  return <button type="button" className={active ? 'railButton active' : 'railButton'} onClick={onClick} title={label} aria-label={label}><span>{glyph}</span></button>
+function RailButton({ label, icon, active, onClick }: { label: string; icon: RailIconName; active: boolean; onClick: () => void }) {
+  return (
+    <button type="button" className={active ? 'railButton active' : 'railButton'} onClick={onClick} title={label} aria-label={label}>
+      <RailIcon name={icon} />
+      <span className="railLabel">{label}</span>
+    </button>
+  )
+}
+
+function RailIcon({ name }: { name: RailIconName }) {
+  const paths: Record<RailIconName, React.ReactNode> = {
+    notes: <><path d="M6 3h9l3 3v15H6z" /><path d="M15 3v4h4M9 11h6M9 15h6" /></>,
+    library: <><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" /></>,
+    search: <><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></>,
+    ask: <><path d="M21 12a8 8 0 0 1-8 8H6l-4 2 1.5-4A9 9 0 1 1 21 12z" /><path d="M9.5 9a2.5 2.5 0 0 1 4.8.9c0 1.8-2.3 2-2.3 3.6M12 17h.01" /></>,
+    activity: <path d="M3 12h4l2.5-7 5 14 2.5-7h4" />,
+    system: <><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3A1.7 1.7 0 0 0 10 3V2.8h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1z" /></>,
+    sun: <><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></>,
+    moon: <path d="M20.5 15.5A8.5 8.5 0 0 1 8.5 3.5a8.5 8.5 0 1 0 12 12z" />,
+  }
+
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>
 }
 
 function NotebookWelcome({ onCreate, onAsk }: { onCreate: () => void; onAsk: () => void }) {

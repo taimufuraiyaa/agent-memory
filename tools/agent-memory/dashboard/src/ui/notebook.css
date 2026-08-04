@@ -10,12 +10,17 @@
   --nb-accent: #7eb39a;
   --nb-accent-soft: #233b30;
   --nb-danger: #d48c82;
+  --notebook-rail-width: 52px;
   min-height: 100dvh;
   display: grid;
-  grid-template-columns: 52px minmax(220px, 280px) minmax(0, 1fr) minmax(260px, 330px);
+  grid-template-columns: var(--notebook-rail-width) minmax(220px, 280px) minmax(0, 1fr) minmax(260px, 330px);
   background: var(--nb-bg);
   color: var(--nb-text);
   font-family: "Avenir Next", Avenir, "Segoe UI", sans-serif;
+}
+
+.notebookShell.railExpanded {
+  --notebook-rail-width: 76px;
 }
 
 body.light .notebookShell {
@@ -52,6 +57,7 @@ body.light .notebookShell {
   padding: 10px 6px;
   border-right: 1px solid var(--nb-border);
   background: #0c100e;
+  transition: width 160ms ease;
 }
 
 body.light .notebookRail {
@@ -72,6 +78,14 @@ body.light .notebookRail {
   transition: background-color 160ms ease, color 160ms ease, transform 160ms ease;
 }
 
+.railExpanded .railButton {
+  width: 64px;
+  height: 54px;
+  grid-template-rows: 22px auto;
+  align-content: center;
+  gap: 3px;
+}
+
 .notebookBrand {
   margin-bottom: 12px;
   background: var(--nb-accent);
@@ -80,10 +94,24 @@ body.light .notebookRail {
   letter-spacing: -0.08em;
 }
 
-.railButton span {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 11px;
-  font-weight: 700;
+.railButton svg {
+  width: 20px;
+  height: 20px;
+}
+
+.railLabel {
+  display: none;
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 9px;
+  font-weight: 650;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.railExpanded .railLabel {
+  display: block;
 }
 
 .railButton:hover,
@@ -935,7 +963,7 @@ button.unifiedResult,
 
 @media (max-width: 1240px) {
   .notebookShell {
-    grid-template-columns: 52px minmax(210px, 250px) minmax(0, 1fr);
+    grid-template-columns: var(--notebook-rail-width) minmax(210px, 250px) minmax(0, 1fr);
   }
 
   .notebookContext {
@@ -944,23 +972,23 @@ button.unifiedResult,
     right: 0;
     bottom: 0;
     z-index: 90;
-    width: min(340px, calc(100vw - 52px));
+    width: min(340px, calc(100vw - var(--notebook-rail-width)));
     box-shadow: -20px 0 50px rgba(0, 0, 0, 0.25);
   }
 }
 
 @media (max-width: 1024px) {
   .notebookShell {
-    grid-template-columns: 52px minmax(0, 1fr);
+    grid-template-columns: var(--notebook-rail-width) minmax(0, 1fr);
   }
 
   .notebookExplorer {
     position: fixed;
     top: 0;
     bottom: 0;
-    left: 52px;
+    left: var(--notebook-rail-width);
     z-index: 100;
-    width: min(300px, calc(100vw - 52px));
+    width: min(300px, calc(100vw - var(--notebook-rail-width)));
     box-shadow: 20px 0 50px rgba(0, 0, 0, 0.28);
   }
 
@@ -976,6 +1004,7 @@ button.unifiedResult,
 
 @media (max-width: 640px) {
   .notebookShell {
+    --notebook-rail-width: 52px;
     grid-template-columns: 1fr;
     grid-template-rows: minmax(0, 1fr) 52px;
   }
@@ -994,6 +1023,16 @@ button.unifiedResult,
 
   .notebookBrand,
   .notebookRailSpacer {
+    display: none;
+  }
+
+  .railExpanded .railButton {
+    width: 40px;
+    height: 40px;
+    display: grid;
+  }
+
+  .railExpanded .railLabel {
     display: none;
   }
 

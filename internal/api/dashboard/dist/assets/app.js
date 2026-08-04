@@ -38973,17 +38973,17 @@ ${formatEvidenceLinks(askEvidence)}
   const outline = reactExports.useMemo(() => parseOutline((activeNote == null ? void 0 : activeNote.body) ?? ""), [activeNote == null ? void 0 : activeNote.body]);
   const outgoingLinks = reactExports.useMemo(() => parseInternalLinks((activeNote == null ? void 0 : activeNote.body) ?? ""), [activeNote == null ? void 0 : activeNote.body]);
   const statusText = noteStatusText(activeNote, saveState);
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "notebookShell", children: [
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: `notebookShell ${explorerOpen ? "railExpanded" : "railCollapsed"}`, children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("aside", { className: "notebookRail", "aria-label": "Primary navigation", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "notebookBrand", type: "button", onClick: () => setDestination("notes"), "aria-label": "Agent Memory notebook", children: "am" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(RailButton, { label: "Notes", active: destination === "notes", onClick: () => setDestination("notes"), glyph: "N" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(RailButton, { label: "Library", active: destination === "library", onClick: () => setDestination("library"), glyph: "L" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(RailButton, { label: "Search", active: destination === "search", onClick: () => setDestination("search"), glyph: "S" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(RailButton, { label: "Ask", active: destination === "ask", onClick: () => setDestination("ask"), glyph: "A" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(RailButton, { label: "Activity", active: destination === "activity", onClick: () => setDestination("activity"), glyph: "R" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(RailButton, { label: "Notes", active: destination === "notes", onClick: () => setDestination("notes"), icon: "notes" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(RailButton, { label: "Library", active: destination === "library", onClick: () => setDestination("library"), icon: "library" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(RailButton, { label: "Search", active: destination === "search", onClick: () => setDestination("search"), icon: "search" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(RailButton, { label: "Ask", active: destination === "ask", onClick: () => setDestination("ask"), icon: "ask" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(RailButton, { label: "Activity", active: destination === "activity", onClick: () => setDestination("activity"), icon: "activity" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "notebookRailSpacer" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(RailButton, { label: "System", active: false, onClick: onOpenSystem, glyph: "SYS" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(RailButton, { label: theme === "dark" ? "Light theme" : "Dark theme", active: false, onClick: onThemeChange, glyph: theme === "dark" ? "☼" : "◐" })
+      /* @__PURE__ */ jsxRuntimeExports.jsx(RailButton, { label: "System", active: false, onClick: onOpenSystem, icon: "system" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(RailButton, { label: theme === "dark" ? "Light theme" : "Dark theme", active: false, onClick: onThemeChange, icon: theme === "dark" ? "sun" : "moon" })
     ] }),
     explorerOpen ? /* @__PURE__ */ jsxRuntimeExports.jsxs("aside", { className: "notebookExplorer", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "notebookWorkspacePicker", children: [
@@ -39250,8 +39250,42 @@ ${formatEvidenceLinks(askEvidence)}
     ] }) }) : null
   ] });
 }
-function RailButton({ label, glyph, active, onClick }) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: active ? "railButton active" : "railButton", onClick, title: label, "aria-label": label, children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: glyph }) });
+function RailButton({ label, icon: icon2, active, onClick }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: active ? "railButton active" : "railButton", onClick, title: label, "aria-label": label, children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(RailIcon, { name: icon2 }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "railLabel", children: label })
+  ] });
+}
+function RailIcon({ name }) {
+  const paths = {
+    notes: /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M6 3h9l3 3v15H6z" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M15 3v4h4M9 11h6M9 15h6" })
+    ] }),
+    library: /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M4 19.5A2.5 2.5 0 0 1 6.5 17H20" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" })
+    ] }),
+    search: /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("circle", { cx: "11", cy: "11", r: "7" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "m20 20-4-4" })
+    ] }),
+    ask: /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M21 12a8 8 0 0 1-8 8H6l-4 2 1.5-4A9 9 0 1 1 21 12z" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M9.5 9a2.5 2.5 0 0 1 4.8.9c0 1.8-2.3 2-2.3 3.6M12 17h.01" })
+    ] }),
+    activity: /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M3 12h4l2.5-7 5 14 2.5-7h4" }),
+    system: /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("circle", { cx: "12", cy: "12", r: "3" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3A1.7 1.7 0 0 0 10 3V2.8h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1z" })
+    ] }),
+    sun: /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("circle", { cx: "12", cy: "12", r: "4" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" })
+    ] }),
+    moon: /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M20.5 15.5A8.5 8.5 0 0 1 8.5 3.5a8.5 8.5 0 1 0 12 12z" })
+  };
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("svg", { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true", children: paths[name] });
 }
 function NotebookWelcome({ onCreate, onAsk }) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "notebookWelcome", children: [
