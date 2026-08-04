@@ -39,7 +39,7 @@ func TestAdvisorCommandJSONEnvelope(t *testing.T) {
 	if err := json.Unmarshal(out.Bytes(), &payload); err != nil {
 		t.Fatalf("invalid advisor json: %v raw=%q", err, out.String())
 	}
-	if !payload.OK || payload.Command != "advisor" || payload.Data.Workspace != "client" || payload.Data.Grade != "N/A" || !payload.Data.Neutral {
+	if !payload.OK || payload.Command != "advisor" || payload.Data.Workspace != "client" || (payload.Data.Grade != "N/A" && payload.Data.Grade != "U") || !payload.Data.Neutral {
 		t.Fatalf("unexpected advisor envelope: %+v", payload)
 	}
 }
@@ -57,7 +57,7 @@ func TestAdvisorCommandDefaultsToText(t *testing.T) {
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("execute advisor text: %v", err)
 	}
-	for _, want := range []string{"Memory Advisor", "workspace: client", "grade: N/A", "recommendations:"} {
+	for _, want := range []string{"Memory Advisor", "workspace: client", "grade: U", "recommendations:"} {
 		if !strings.Contains(out.String(), want) {
 			t.Fatalf("expected %q in advisor output, got %q", want, out.String())
 		}

@@ -31,6 +31,15 @@ type LifecycleManager struct {
 	archive        *ColdArchive // nil = archiving disabled
 	maxEntries     int
 	markdownBudget int
+
+	// OnWorkspaceChange, when non-nil, is invoked at the end of Run with the
+	// workspace that was maintained, after decay/consolidation/eviction have
+	// mutated stored data. Wire it to drop stale retrieval-cache entries for
+	// that workspace (e.g. retrievalEngine.InvalidateCache(workspace)); the
+	// query-cache TTL remains the backstop for runs that never reach the hook.
+	// TODO(engine): wire this at the LifecycleManager construction site in
+	// internal/cli/serve_command.go (runWorkspace) once that file is editable.
+	OnWorkspaceChange func(workspace string)
 }
 
 func NewLifecycleManager(store *sqlite.Store, pipeline *WritePipeline) *LifecycleManager {
@@ -67,6 +76,12 @@ func (m *LifecycleManager) Run(ctx context.Context, workspace string) (*Lifecycl
 			observability.RecordSpanError(ctx, runErr)
 		}
 		observability.GetRegistry().LifecycleDuration.WithLabelValues(workspace, status).Observe(time.Since(_start).Seconds())
+		// Notify listeners that maintenance ran (or partially ran, on error):
+		// decay and consolidation may have changed scores even when a later
+		// step failed, so stale caches should be dropped in either case.
+		if m.OnWorkspaceChange != nil {
+			m.OnWorkspaceChange(workspace)
+		}
 	}()
 
 	metrics := &LifecycleMetrics{}

@@ -8,19 +8,45 @@ import (
 )
 
 const (
+	// Recommendation thresholds — lenient triggers for surfacing issues early.
+	// These are intentionally lower than evidence floors so that users receive
+	// actionable guidance before they have enough data for a reliable grade.
+	// Provisional; will be calibrated against benchmark-validity.
 	minimumFeedbackSamples = 3
 	minimumRecallRecords   = 3
-	lowFeedbackAverage     = 3.5
-	lowUsefulRatio         = 0.5
-	lowRecallSavings       = 20.0
-	highDecayScore         = 0.75
-	staleShareWarning      = 0.25
-	lowCoverageShare       = 0.30
-	coverageMinimumMemory  = 20
-	lowConfidence          = 0.50
-	trustShareWarning      = 0.10
+
+	// Evidence floors per dimension. A dimension is marked insufficient
+	// and contributes 0 to the composite score when its evidence count
+	// falls below this floor.
+	// Provisional; will be calibrated against benchmark-validity.
+	qualityEvidenceFloor    = 10  // scored feedback samples required for reliable quality measurement
+	trustEvidenceFloor      = 5   // active memories required for trust assessment
+	coverageEvidenceFloor   = 10  // retrieved (reached) memories required for coverage measurement
+	hygieneEvidenceFloor    = 100 // total memory count required for hygiene assessment
+	efficiencyEvidenceFloor = 10  // recall sessions required for context efficiency measurement
+
+	// Anti-gaming: retention baseline for hygiene scoring.
+	// When active memory count falls below this baseline, the hygiene score
+	// is scaled down to prevent rewarding deletion of healthy memories.
+	// Provisional; will be calibrated against benchmark-validity.
+	hygieneRetentionBaseline = 50
+
+	// Score / warning thresholds.
+	// Provisional; will be calibrated against benchmark-validity.
+	lowFeedbackAverage    = 3.5
+	lowUsefulRatio        = 0.5
+	lowRecallSavings      = 20.0
+	highDecayScore        = 0.75
+	staleShareWarning     = 0.25
+	lowCoverageShare      = 0.30
+	coverageMinimumMemory = 20
+	lowConfidence         = 0.50
+	trustShareWarning     = 0.10
 )
 
+// Dimension weights sum to 1.0. Each weight reflects the relative importance
+// of that dimension in the composite health score.
+// Provisional; will be calibrated against benchmark-validity.
 var dimensionDefinitions = []struct {
 	key    DimensionKey
 	label  string
@@ -34,6 +60,7 @@ var dimensionDefinitions = []struct {
 }
 
 type analysisMetrics struct {
+	totalMemories    int
 	activeMemories   int
 	reachedMemories  int
 	staleMemories    int
@@ -55,12 +82,12 @@ type analysisMetrics struct {
 func Analyze(snapshot Snapshot) Report {
 	metrics := collectMetrics(snapshot)
 	dimensions := scoreDimensions(metrics)
-	score, neutral := compositeScore(dimensions)
+	score, allInsufficient := compositeScore(dimensions)
 	report := Report{
 		Workspace:       snapshot.Workspace,
 		Score:           score,
-		Grade:           gradeFor(score, neutral),
-		Neutral:         neutral,
+		Grade:           gradeFor(score, allInsufficient),
+		Neutral:         allInsufficient,
 		Dimensions:      dimensions,
 		Recommendations: recommendations(metrics),
 		Evidence: Evidence{
@@ -76,6 +103,7 @@ func Analyze(snapshot Snapshot) Report {
 
 func collectMetrics(snapshot Snapshot) analysisMetrics {
 	var metrics analysisMetrics
+	metrics.totalMemories = len(snapshot.Memories)
 	var scoreTotal float64
 	var usefulTotal float64
 	for _, memory := range snapshot.Memories {
@@ -139,55 +167,147 @@ func collectMetrics(snapshot Snapshot) analysisMetrics {
 func scoreDimensions(metrics analysisMetrics) []Dimension {
 	dimensions := make([]Dimension, 0, len(dimensionDefinitions))
 	for _, definition := range dimensionDefinitions {
-		dimension := Dimension{Key: definition.key, Label: definition.label, Weight: definition.weight}
+		dimension := Dimension{
+			Key:    definition.key,
+			Label:  definition.label,
+			Weight: definition.weight,
+		}
 		switch definition.key {
 		case DimensionQuality:
-			dimension.Available = metrics.scoredRequests >= minimumFeedbackSamples
+			dimension.EvidenceCount = metrics.scoredRequests
+			dimension.Sufficient = metrics.scoredRequests >= qualityEvidenceFloor
+			dimension.Available = metrics.scoredRequests > 0
 			if dimension.Available {
 				score := metrics.averageScore / 5 * 100
 				if metrics.usefulSamples > 0 {
 					score = score*0.60 + metrics.usefulRatio*100*0.40
 				}
+				// Anti-gaming: down-weight self-ratings by sample size factor.
+				// log(N)/log(floor) ensures few samples contribute proportionally less.
+				// At the floor (10), factor = 1.0; at 3 samples, factor ≈ 0.48.
+				// Provisional; will be calibrated against benchmark-validity.
+				if metrics.scoredRequests < qualityEvidenceFloor {
+					sampleFactor := math.Log(float64(metrics.scoredRequests)) / math.Log(float64(qualityEvidenceFloor))
+					score *= sampleFactor
+				}
 				dimension.Score = clampScore(score)
-				dimension.Detail = fmt.Sprintf("%d scored requests; %.2f/5 average", metrics.scoredRequests, metrics.averageScore)
-			} else {
-				dimension.Detail = fmt.Sprintf("%d of %d scored requests required", metrics.scoredRequests, minimumFeedbackSamples)
 			}
+			if dimension.Sufficient {
+				dimension.Reason = "sufficient evidence"
+				dimension.Detail = fmt.Sprintf("%d scored requests; %.2f/5 average; meets floor of %d",
+					metrics.scoredRequests, metrics.averageScore, qualityEvidenceFloor)
+			} else if dimension.Available {
+				dimension.Reason = fmt.Sprintf("insufficient_evidence: need %d scored requests, have %d",
+					qualityEvidenceFloor, metrics.scoredRequests)
+				dimension.Detail = fmt.Sprintf("%d scored requests; %.2f/5 average; below floor of %d",
+					metrics.scoredRequests, metrics.averageScore, qualityEvidenceFloor)
+			} else {
+				dimension.Reason = fmt.Sprintf("insufficient_evidence: need %d scored requests, have 0",
+					qualityEvidenceFloor)
+				dimension.Detail = fmt.Sprintf("0 scored requests; need %d for quality measurement",
+					qualityEvidenceFloor)
+			}
+
 		case DimensionEfficiency:
-			dimension.Available = metrics.recallRecords >= minimumRecallRecords && metrics.recallBaseline > 0
+			dimension.EvidenceCount = metrics.recallRecords
+			dimension.Sufficient = metrics.recallRecords >= efficiencyEvidenceFloor && metrics.recallBaseline > 0
+			dimension.Available = metrics.recallRecords > 0 && metrics.recallBaseline > 0
 			if dimension.Available {
 				dimension.Score = clampScore(metrics.recallSavings)
-				dimension.Detail = fmt.Sprintf("%.1f%% deterministic recall context savings across %d records", metrics.recallSavings, metrics.recallRecords)
-			} else {
-				dimension.Detail = fmt.Sprintf("%d of %d recall metric records required", metrics.recallRecords, minimumRecallRecords)
 			}
+			if dimension.Sufficient {
+				dimension.Reason = "sufficient evidence"
+				dimension.Detail = fmt.Sprintf("%.1f%% deterministic recall context savings across %d records; meets floor of %d",
+					metrics.recallSavings, metrics.recallRecords, efficiencyEvidenceFloor)
+			} else if dimension.Available {
+				dimension.Reason = fmt.Sprintf("insufficient_evidence: need %d recall records, have %d",
+					efficiencyEvidenceFloor, metrics.recallRecords)
+				dimension.Detail = fmt.Sprintf("%.1f%% savings across %d records; below floor of %d",
+					metrics.recallSavings, metrics.recallRecords, efficiencyEvidenceFloor)
+			} else {
+				dimension.Reason = fmt.Sprintf("insufficient_evidence: need %d recall records, have 0",
+					efficiencyEvidenceFloor)
+				dimension.Detail = fmt.Sprintf("0 recall records; need %d for efficiency measurement",
+					efficiencyEvidenceFloor)
+			}
+
 		case DimensionHygiene:
+			dimension.EvidenceCount = metrics.totalMemories
+			dimension.Sufficient = metrics.totalMemories >= hygieneEvidenceFloor
 			dimension.Available = metrics.activeMemories > 0
 			if dimension.Available {
 				negativeShare := float64(metrics.negativeMemories) / float64(metrics.activeMemories)
 				staleShare := float64(metrics.staleMemories) / float64(metrics.activeMemories)
-				dimension.Score = clampScore(100 - negativeShare*60 - staleShare*40)
-				dimension.Detail = fmt.Sprintf("%d negative-feedback and %d high-decay active memories", metrics.negativeMemories, metrics.staleMemories)
+				rawScore := 100 - negativeShare*60 - staleShare*40
+				// Anti-gaming: cap hygiene when memory count is below the retention
+				// baseline. Deleting healthy memories to achieve a clean slate must
+				// not improve the hygiene score.
+				// Provisional; will be calibrated against benchmark-validity.
+				if metrics.activeMemories < hygieneRetentionBaseline {
+					capFactor := float64(metrics.activeMemories) / float64(hygieneRetentionBaseline)
+					rawScore *= capFactor
+				}
+				dimension.Score = clampScore(rawScore)
+			}
+			if dimension.Sufficient {
+				dimension.Reason = "sufficient evidence"
+				dimension.Detail = fmt.Sprintf("%d negative-feedback and %d high-decay active memories; %d total memories meets floor of %d",
+					metrics.negativeMemories, metrics.staleMemories, metrics.totalMemories, hygieneEvidenceFloor)
+			} else if dimension.Available {
+				dimension.Reason = fmt.Sprintf("insufficient_evidence: need %d total memories, have %d",
+					hygieneEvidenceFloor, metrics.totalMemories)
+				dimension.Detail = fmt.Sprintf("%d negative-feedback and %d high-decay active memories; %d total memories below floor of %d",
+					metrics.negativeMemories, metrics.staleMemories, metrics.totalMemories, hygieneEvidenceFloor)
 			} else {
+				dimension.Reason = fmt.Sprintf("insufficient_evidence: need %d total memories, have 0",
+					hygieneEvidenceFloor)
 				dimension.Detail = "No active memories"
 			}
+
 		case DimensionCoverage:
+			dimension.EvidenceCount = metrics.reachedMemories
+			dimension.Sufficient = metrics.reachedMemories >= coverageEvidenceFloor
 			dimension.Available = metrics.activeMemories > 0
 			if dimension.Available {
 				coverage := float64(metrics.reachedMemories) / float64(metrics.activeMemories) * 100
 				dimension.Score = clampScore(coverage)
-				dimension.Detail = fmt.Sprintf("%d of %d active memories retrieved", metrics.reachedMemories, metrics.activeMemories)
+			}
+			if dimension.Sufficient {
+				dimension.Reason = "sufficient evidence"
+				dimension.Detail = fmt.Sprintf("%d of %d active memories retrieved; %d retrieved meets floor of %d",
+					metrics.reachedMemories, metrics.activeMemories, metrics.reachedMemories, coverageEvidenceFloor)
+			} else if dimension.Available {
+				dimension.Reason = fmt.Sprintf("insufficient_evidence: need %d retrieved memories, have %d",
+					coverageEvidenceFloor, metrics.reachedMemories)
+				dimension.Detail = fmt.Sprintf("%d of %d active memories retrieved; %d retrieved below floor of %d",
+					metrics.reachedMemories, metrics.activeMemories, metrics.reachedMemories, coverageEvidenceFloor)
 			} else {
+				dimension.Reason = fmt.Sprintf("insufficient_evidence: need %d retrieved memories, have 0",
+					coverageEvidenceFloor)
 				dimension.Detail = "No active memories"
 			}
+
 		case DimensionTrust:
+			dimension.EvidenceCount = metrics.activeMemories
+			dimension.Sufficient = metrics.activeMemories >= trustEvidenceFloor
 			dimension.Available = metrics.activeMemories > 0
 			if dimension.Available {
 				lowConfidenceShare := float64(metrics.lowConfidence) / float64(metrics.activeMemories)
 				missingSourceShare := float64(metrics.missingSource) / float64(metrics.activeMemories)
 				dimension.Score = clampScore(100 - lowConfidenceShare*60 - missingSourceShare*40)
-				dimension.Detail = fmt.Sprintf("%d low-confidence and %d missing-provenance active memories", metrics.lowConfidence, metrics.missingSource)
+			}
+			if dimension.Sufficient {
+				dimension.Reason = "sufficient evidence"
+				dimension.Detail = fmt.Sprintf("%d low-confidence and %d missing-provenance active memories; %d active meets floor of %d",
+					metrics.lowConfidence, metrics.missingSource, metrics.activeMemories, trustEvidenceFloor)
+			} else if dimension.Available {
+				dimension.Reason = fmt.Sprintf("insufficient_evidence: need %d active memories, have %d",
+					trustEvidenceFloor, metrics.activeMemories)
+				dimension.Detail = fmt.Sprintf("%d low-confidence and %d missing-provenance active memories; %d active below floor of %d",
+					metrics.lowConfidence, metrics.missingSource, metrics.activeMemories, trustEvidenceFloor)
 			} else {
+				dimension.Reason = fmt.Sprintf("insufficient_evidence: need %d active memories, have 0",
+					trustEvidenceFloor)
 				dimension.Detail = "No active memories"
 			}
 		}
@@ -196,20 +316,33 @@ func scoreDimensions(metrics analysisMetrics) []Dimension {
 	return dimensions
 }
 
+// compositeScore computes the overall workspace health score.
+// Only dimensions that meet their evidence floor (Sufficient=true) contribute.
+// The weighted average of sufficient dimensions is multiplied by an evidence
+// completeness factor (sufficient_count / total_dimensions) so that a
+// workspace with only a few measured dimensions cannot reach the top grade.
+// Returns (score, allInsufficient) where allInsufficient is true when no
+// dimension meets its evidence floor.
+// Provisional calibration; will be tuned against benchmark-validity.
 func compositeScore(dimensions []Dimension) (int, bool) {
 	var weighted float64
 	var weights float64
+	sufficientCount := 0
+	totalDimensions := len(dimensions)
 	for _, dimension := range dimensions {
-		if !dimension.Available {
+		if !dimension.Sufficient {
 			continue
 		}
 		weighted += float64(dimension.Score) * dimension.Weight
 		weights += dimension.Weight
+		sufficientCount++
 	}
-	if weights == 0 {
+	if sufficientCount == 0 {
 		return 0, true
 	}
-	return clampScore(weighted / weights), false
+	// Weighted average over sufficient dimensions, scaled by completeness.
+	completenessFactor := float64(sufficientCount) / float64(totalDimensions)
+	return clampScore((weighted / weights) * completenessFactor), false
 }
 
 func recommendations(metrics analysisMetrics) []Recommendation {
@@ -330,9 +463,13 @@ func severityRank(severity Severity) int {
 	}
 }
 
-func gradeFor(score int, neutral bool) string {
-	if neutral {
-		return "N/A"
+// gradeFor maps a composite score to a letter grade.
+// When allInsufficient is true, returns "U" (insufficient data) to
+// communicate that no dimension meets its evidence floor.
+// Grade thresholds are provisional; will be calibrated against benchmark-validity.
+func gradeFor(score int, allInsufficient bool) string {
+	if allInsufficient {
+		return "U"
 	}
 	switch {
 	case score >= 90:

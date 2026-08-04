@@ -72,14 +72,18 @@ func writeAdvisorText(w io.Writer, report advisor.Report) {
 	_, _ = fmt.Fprintln(w, "Memory Advisor")
 	_, _ = fmt.Fprintf(w, "workspace: %s\n", report.Workspace)
 	if report.Neutral {
-		_, _ = fmt.Fprintln(w, "grade: N/A (insufficient evidence)")
+		_, _ = fmt.Fprintln(w, "grade: U — insufficient evidence in all dimensions")
 	} else {
 		_, _ = fmt.Fprintf(w, "grade: %s (%d/100)\n", report.Grade, report.Score)
 	}
 	_, _ = fmt.Fprintln(w, "dimensions:")
 	for _, dimension := range report.Dimensions {
 		if dimension.Available {
-			_, _ = fmt.Fprintf(w, "  %s: %d/100 — %s\n", dimension.Label, dimension.Score, dimension.Detail)
+			sufficientMark := ""
+			if !dimension.Sufficient {
+				sufficientMark = " [insufficient evidence]"
+			}
+			_, _ = fmt.Fprintf(w, "  %s: %d/100%s — %s\n", dimension.Label, dimension.Score, sufficientMark, dimension.Detail)
 		} else {
 			_, _ = fmt.Fprintf(w, "  %s: N/A — %s\n", dimension.Label, dimension.Detail)
 		}

@@ -9,6 +9,35 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
+// workspaceRegistry tracks known workspace names to bound Prometheus label
+// cardinality. Unknown workspace names are collapsed to a single "other" label
+// value to prevent user-controlled workspace names from exploding metric
+// cardinality.
+var workspaceRegistry sync.Map
+
+// RegisterWorkspace adds a workspace name to the known set.
+// Call this when a workspace is initialized or renamed.
+func RegisterWorkspace(name string) {
+	if name != "" {
+		workspaceRegistry.Store(name, struct{}{})
+	}
+}
+
+// UnregisterWorkspace removes a workspace name from the known set.
+func UnregisterWorkspace(name string) {
+	workspaceRegistry.Delete(name)
+}
+
+// WorkspaceLabel returns the label value to use for a workspace in Prometheus
+// metrics. Known (registered) workspaces emit their actual name; unknown names
+// are collapsed to "other" to prevent high-cardinality label explosion.
+func WorkspaceLabel(workspace string) string {
+	if _, ok := workspaceRegistry.Load(workspace); ok {
+		return workspace
+	}
+	return "other"
+}
+
 // MetricsRegistry holds all Prometheus metrics for agent-memory.
 type MetricsRegistry struct {
 	// Write pipeline metrics
@@ -95,12 +124,23 @@ func GetRegistry() *MetricsRegistry {
 func newMetricsRegistry() *MetricsRegistry {
 	return &MetricsRegistry{
 		// Write pipeline metrics
+		//
+		// Cardinality budgets (per-family worst-case):
+		//   WriteTotal:           |types| × |statuses| ≈ 4 × 3 = 12 (aggregate, no workspace)
+		//   WriteDuration:        bounded by workspace registry + |types|
+		//   WriteErrors:          bounded by workspace registry + |types| × |error_types|
+		//   WriteBytes:           bounded by workspace registry + |types|
+		//   WriteEmbedding*:      bounded by workspace registry + |providers|
+		//
+		// WriteTotal is the highest-frequency write metric; it uses aggregate
+		// counters only (no workspace label). Per-workspace drill-down is
+		// available via SQLite queries.
 		WriteTotal: promauto.NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "agent_memory_write_total",
-				Help: "Total number of memory write operations",
+				Help: "Total number of memory write operations (aggregate; no workspace label to bound cardinality)",
 			},
-			[]string{"workspace", "type", "status"},
+			[]string{"type", "status"},
 		),
 		WriteDuration: promauto.NewHistogramVec(
 			prometheus.HistogramOpts{
@@ -149,12 +189,22 @@ func newMetricsRegistry() *MetricsRegistry {
 		),
 
 		// Retrieval metrics
+		//
+		// Cardinality budgets (per-family worst-case):
+		//   RetrievalTotal:      |modes| × |statuses| ≈ 3 × 3 = 9 (aggregate, no workspace)
+		//   RetrievalDuration:   bounded by workspace registry + |modes|
+		//   RetrievalHits:       bounded by workspace registry + |modes|
+		//   RetrievalErrors:     bounded by workspace registry + |modes| × |error_types|
+		//
+		// RetrievalTotal is the highest-frequency retrieval metric; it uses
+		// aggregate counters only (no workspace label). Per-workspace drill-down
+		// is available via SQLite queries.
 		RetrievalTotal: promauto.NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "agent_memory_retrieval_total",
-				Help: "Total number of memory retrieval operations",
+				Help: "Total number of memory retrieval operations (aggregate; no workspace label to bound cardinality)",
 			},
-			[]string{"workspace", "mode", "status"},
+			[]string{"mode", "status"},
 		),
 		RetrievalDuration: promauto.NewHistogramVec(
 			prometheus.HistogramOpts{
@@ -216,6 +266,8 @@ func newMetricsRegistry() *MetricsRegistry {
 		),
 
 		// Storage metrics
+		//
+		// Cardinality budgets: bounded by workspace registry × operation/status cardinality
 		StorageOperations: promauto.NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "agent_memory_storage_operations_total",
@@ -252,7 +304,7 @@ func newMetricsRegistry() *MetricsRegistry {
 			[]string{"workspace"},
 		),
 
-		// Embedding metrics
+		// Embedding metrics (no workspace labels — bounded cardinality)
 		EmbeddingTotal: promauto.NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "agent_memory_embedding_total",

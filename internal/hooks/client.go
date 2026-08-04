@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/taimufuraiyaa/agent-memory/internal/core"
 	"github.com/taimufuraiyaa/agent-memory/internal/engine"
 )
 
@@ -137,9 +138,7 @@ func (c *Client) Deliver(ctx context.Context, event Event) error {
 
 func (c *Client) normalize(event Event) Event {
 	event.Summary = engine.RedactPrivateAndSecrets(strings.TrimSpace(event.Summary))
-	if len(event.Summary) > c.config.MaxSummaryBytes {
-		event.Summary = event.Summary[:c.config.MaxSummaryBytes]
-	}
+	event.Summary = core.TruncateUTF8(event.Summary, c.config.MaxSummaryBytes)
 	if strings.TrimSpace(event.SchemaVersion) == "" {
 		event.SchemaVersion = "v1"
 	}

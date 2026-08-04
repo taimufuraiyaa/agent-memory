@@ -2,7 +2,10 @@ package sqlite
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -87,7 +90,7 @@ func replaceMemoryTermsTx(ctx context.Context, tx *sql.Tx, workspace, memoryID s
 		return errors.New("workspace and memory id are required")
 	}
 	if len(terms) > 3 {
-		return errors.New("memory terms must contain at most 3 terms")
+		return fmt.Errorf("%w: memory terms must contain at most 3 terms", core.ErrInvalidInput)
 	}
 
 	var storedWorkspace string
@@ -125,6 +128,12 @@ INSERT INTO memory_terms (
 		); err != nil {
 			return err
 		}
+	}
+	// R3: incremental bitmap update — add new term bits to the live Bloom snapshot
+	// so gate mode can stay eligible between rebuilds. Failures leave state dirty
+	// (the delete trigger already dirtied it; fail-open is safe).
+	if len(terms) > 0 {
+		_ = tryIncrementalTermIndexUpdate(ctx, tx, workspace, terms, now)
 	}
 	return nil
 }
@@ -382,4 +391,89 @@ LIMIT ?`, strings.TrimSpace(workspace), strings.TrimSpace(normalizationVersion),
 func parseTermIndexTime(value string) time.Time {
 	parsed, _ := time.Parse(time.RFC3339Nano, value)
 	return parsed
+}
+
+// tryIncrementalTermIndexUpdate adds term bits to the live Bloom snapshot so gate
+// mode stays eligible between rebuilds. Fails silently on any error — the delete
+// trigger already dirtied the state, so fail-open is safe.
+func tryIncrementalTermIndexUpdate(ctx context.Context, tx *sql.Tx, workspace string, terms []core.MemoryTerm, now string) error {
+	var state TermIndexState
+	var status string
+	err := tx.QueryRowContext(ctx,
+		`SELECT workspace, bitmap, state, bit_count, hash_count, corpus_generation, filter_generation, checksum
+		 FROM term_index_state WHERE workspace = ?`, workspace).Scan(
+		&state.Workspace, &state.Bitmap, &status, &state.BitCount, &state.HashCount,
+		&state.CorpusGeneration, &state.FilterGeneration, &state.Checksum,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil // no state row — nothing to update
+		}
+		return err
+	}
+	state.State = TermIndexStatus(status)
+
+	// Update the snapshot when we have a valid bitmap to add to, regardless of
+	// whether the delete trigger fired (dirty) or no trigger fired (ready).
+	if len(state.Bitmap) == 0 || state.HashCount == 0 || state.BitCount == 0 {
+		return nil
+	}
+	if state.State != TermIndexReady && state.State != TermIndexDirty {
+		return nil // building / corrupt — rebuild machinery handles it
+	}
+
+	bitmap := append([]byte(nil), state.Bitmap...)
+	for _, term := range terms {
+		addTermToBloomBitmap(bitmap, term.Term, state.BitCount, state.HashCount)
+	}
+	checksum := bloomChecksum(bitmap)
+
+	// Persist the updated bitmap with advanced generations (both bumped so they
+	// stay in sync) and ready state.
+	nextGen := state.CorpusGeneration + 1
+	_, err = tx.ExecContext(ctx,
+		`UPDATE term_index_state
+		 SET bitmap = ?, state = 'ready', checksum = ?,
+		     corpus_generation = ?, filter_generation = ?, updated_at = ?
+		 WHERE workspace = ?`,
+		bitmap, checksum, nextGen, nextGen, now, workspace,
+	)
+	return err
+}
+
+// addTermToBloomBitmap adds one term's k bits to the byteslice bitmap using the
+// same double-hashing as engine.TermBloom (sha256 double-hash with coprime guard).
+func addTermToBloomBitmap(bitmap []byte, term string, bitCount int64, hashCount int) {
+	sum := sha256.Sum256([]byte(term))
+	h1 := binary.LittleEndian.Uint64(sum[0:8])
+	h2 := binary.LittleEndian.Uint64(sum[8:16])
+	if h2 == 0 {
+		h2 = 0x9e3779b97f4a7c15
+	}
+	m := uint64(bitCount)
+	if m < 2 {
+		return
+	}
+	h1 %= m
+	h2 %= m
+	for h2%m == 0 || gcd64(h2, m) != 1 {
+		h2 = (h2 + 1) % m
+	}
+	for i := 0; i < hashCount; i++ {
+		pos := (h1 + uint64(i)*h2) % m
+		bitmap[pos/8] |= byte(1 << (pos % 8))
+	}
+}
+
+// bloomChecksum returns the hex-encoded SHA-256 of the bitmap.
+func bloomChecksum(bitmap []byte) string {
+	sum := sha256.Sum256(bitmap)
+	return hex.EncodeToString(sum[:])
+}
+
+func gcd64(a, b uint64) uint64 {
+	for b != 0 {
+		a, b = b, a%b
+	}
+	return a
 }

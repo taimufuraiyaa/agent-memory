@@ -700,6 +700,11 @@ func TestServerRecallAutoReconstruction(t *testing.T) {
 	}, "evict", ""); err != nil {
 		t.Fatalf("add tombstone 2: %v", err)
 	}
+	// Fresh tombstones sit in a 7-day cooldown; move them out so the
+	// recall-time reconstruction path sees them.
+	if err := assets.Store.SetTombstoneCooldownForWorkspace(context.Background(), "ws", time.Now().UTC().Add(-time.Hour)); err != nil {
+		t.Fatalf("expire tombstone cooldown: %v", err)
+	}
 
 	ts := httptest.NewServer(NewMux(svc))
 	defer ts.Close()

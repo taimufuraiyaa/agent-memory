@@ -51,6 +51,26 @@ jobs:
       - name: go test
         run: go test ./...
 
+  benchmark:
+    name: python benchmark (core)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: build binary
+        run: go build -o /tmp/agent-memory ./cmd/agent-memory
+
+      - name: install agent-memory binary
+        run: sudo install -m 755 /tmp/agent-memory /usr/local/bin/agent-memory
+
+      - name: run benchmark tests
+        run: python3 -m unittest benchmark.test_benchmark -v
+
   lint:
     name: golangci-lint
     runs-on: ubuntu-latest

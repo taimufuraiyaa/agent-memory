@@ -19,9 +19,10 @@ import (
 
 // Store provides SQLite-backed persistence for memory entries.
 type Store struct {
-	db            *sql.DB
-	turbovecIndex *TurbovecIndex
-	useTurbovec   bool
+	db                  *sql.DB
+	turbovecIndex       *TurbovecIndex
+	useTurbovec         bool
+	migrationAdvisories []string // populated by migrations; for test observation
 }
 
 // ErrDuplicateContent indicates idempotency duplicate detection hit.
@@ -127,8 +128,13 @@ func (s *Store) logSlowQuery(ctx context.Context, operation, workspace string, d
 	}
 }
 
-// Migrate applies schema changes idempotently.
+// Migrate applies schema changes exactly once per database, in version order.
 func (s *Store) Migrate(ctx context.Context) error {
+	return s.applyMigrations(ctx)
+}
+
+// migrateBaselineSchema applies the idempotent initial schema in one step.
+func migrateBaselineSchema(ctx context.Context, s *Store) error {
 	stmts := []string{
 		`CREATE TABLE IF NOT EXISTS schema_migrations (
 			version INTEGER PRIMARY KEY,
@@ -271,16 +277,8 @@ func (s *Store) Migrate(ctx context.Context) error {
 			built_at TEXT NOT NULL DEFAULT '',
 			updated_at TEXT NOT NULL
 		)`,
-		`CREATE TRIGGER IF NOT EXISTS trg_memory_terms_insert_state
-		AFTER INSERT ON memory_terms
-		BEGIN
-			INSERT INTO term_index_state (workspace, state, corpus_generation, updated_at)
-			VALUES (NEW.workspace, 'dirty', 1, NEW.created_at)
-			ON CONFLICT(workspace) DO UPDATE SET
-				state = 'dirty',
-				corpus_generation = term_index_state.corpus_generation + 1,
-				updated_at = excluded.updated_at;
-		END`,
+		`CREATE INDEX IF NOT EXISTS idx_memory_terms_workspace_term ON memory_terms(workspace, normalized_term)`,
+		`CREATE INDEX IF NOT EXISTS idx_memory_terms_workspace_memory ON memory_terms(workspace, memory_id)`,
 		`CREATE TRIGGER IF NOT EXISTS trg_memory_terms_delete_state
 		AFTER DELETE ON memory_terms
 		BEGIN
@@ -904,18 +902,13 @@ func (s *Store) Migrate(ctx context.Context) error {
 		return fmt.Errorf("create embedding_model_version index: %w", err)
 	}
 
-	// Migrate existing memory vectors from json to blob
-	if err := s.migrateJSONVectorsToBlobs(ctx); err != nil {
-		return fmt.Errorf("migrate JSON vectors to blobs: %w", err)
-	}
 	return nil
 }
 
-// UpsertMemory inserts or updates a memory entry by ID.
+// UpsertMemory inserts or updates a memory entry by ID. Lifecycle counters
+// (access_count, decay_score, useful_count, etc.) are preserved on update.
+// When Keywords is nil, existing terms are cleared to avoid stale rows.
 func (s *Store) UpsertMemory(ctx context.Context, m *core.MemoryEntry) error {
-	if m.Keywords == nil {
-		return s.upsertMemory(ctx, s.db, m, "")
-	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -924,7 +917,11 @@ func (s *Store) UpsertMemory(ctx context.Context, m *core.MemoryEntry) error {
 	if err := s.upsertMemory(ctx, tx, m, ""); err != nil {
 		return err
 	}
-	if err := replaceMemoryTermsTx(ctx, tx, m.Workspace, m.ID, m.Keywords); err != nil {
+	terms := m.Keywords
+	if terms == nil {
+		terms = []core.MemoryTerm{}
+	}
+	if err := replaceMemoryTermsTx(ctx, tx, m.Workspace, m.ID, terms); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -976,8 +973,8 @@ func (s *Store) InsertMemoryByHash(ctx context.Context, m *core.MemoryEntry, con
 	}()
 
 	query := `
-INSERT OR IGNORE INTO memories (id, type, content, diagram_lang, diagram_code, workspace, content_hash, source_json, entities_json, tags_json, confidence, storage_tier, pinned, superseded_by, access_count, last_accessed, decay_score, salience_score, suppression_score, useful_count, ignored_count, rejected_count, harmful_count, last_helpful_at, last_rejected_at, suppression_until, familiarity_band_last, outcome_json, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+INSERT OR IGNORE INTO memories (id, type, content, diagram_lang, diagram_code, workspace, content_hash, session_id, source_json, entities_json, tags_json, confidence, storage_tier, pinned, superseded_by, access_count, last_accessed, decay_score, salience_score, suppression_score, useful_count, ignored_count, rejected_count, harmful_count, last_helpful_at, last_rejected_at, suppression_until, familiarity_band_last, outcome_json, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	_startInsert := time.Now()
 	res, err := tx.ExecContext(
@@ -990,6 +987,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 
 		nullDiagramCode(m),
 		m.Workspace,
 		contentHash,
+		m.Source.SessionID,
 		string(sourceJSON),
 		string(entitiesJSON),
 		string(tagsJSON),
@@ -1102,8 +1100,8 @@ func (s *Store) InsertMemoryByHashWithVector(ctx context.Context, m *core.Memory
 	res, err := tx.ExecContext(
 		ctx,
 		`
-INSERT OR IGNORE INTO memories (id, type, content, diagram_lang, diagram_code, workspace, content_hash, source_json, entities_json, tags_json, confidence, storage_tier, pinned, superseded_by, access_count, last_accessed, decay_score, salience_score, suppression_score, useful_count, ignored_count, rejected_count, harmful_count, last_helpful_at, last_rejected_at, suppression_until, familiarity_band_last, outcome_json, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+INSERT OR IGNORE INTO memories (id, type, content, diagram_lang, diagram_code, workspace, content_hash, session_id, source_json, entities_json, tags_json, confidence, storage_tier, pinned, superseded_by, access_count, last_accessed, decay_score, salience_score, suppression_score, useful_count, ignored_count, rejected_count, harmful_count, last_helpful_at, last_rejected_at, suppression_until, familiarity_band_last, outcome_json, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		m.ID,
 		string(m.Type),
 		m.Content,
@@ -1111,6 +1109,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 
 		nullDiagramCode(m),
 		m.Workspace,
 		contentHash,
+		m.Source.SessionID,
 		string(sourceJSON),
 		string(entitiesJSON),
 		string(tagsJSON),
@@ -1213,15 +1212,16 @@ func (s *Store) upsertMemory(ctx context.Context, execer sqlExecer, m *core.Memo
 	m.UpdatedAt = time.Now().UTC()
 
 	query := `
-INSERT INTO memories (id, type, content, diagram_lang, diagram_code, workspace, content_hash, source_json, entities_json, tags_json, confidence, storage_tier, pinned, superseded_by, access_count, last_accessed, decay_score, salience_score, suppression_score, useful_count, ignored_count, rejected_count, harmful_count, last_helpful_at, last_rejected_at, suppression_until, familiarity_band_last, outcome_json, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-ON CONFLICT(id) DO UPDATE SET
+INSERT INTO memories (id, type, content, diagram_lang, diagram_code, workspace, content_hash, session_id, source_json, entities_json, tags_json, confidence, storage_tier, pinned, superseded_by, access_count, last_accessed, decay_score, salience_score, suppression_score, useful_count, ignored_count, rejected_count, harmful_count, last_helpful_at, last_rejected_at, suppression_until, familiarity_band_last, outcome_json, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	ON CONFLICT(id) DO UPDATE SET
 	type=excluded.type,
 	content=excluded.content,
 	diagram_lang=excluded.diagram_lang,
 	diagram_code=excluded.diagram_code,
 	workspace=excluded.workspace,
 	content_hash=excluded.content_hash,
+	session_id=excluded.session_id,
 	source_json=excluded.source_json,
 	entities_json=excluded.entities_json,
 	tags_json=excluded.tags_json,
@@ -1229,19 +1229,6 @@ ON CONFLICT(id) DO UPDATE SET
 	storage_tier=excluded.storage_tier,
 	pinned=excluded.pinned,
 	superseded_by=excluded.superseded_by,
-	access_count=excluded.access_count,
-	last_accessed=excluded.last_accessed,
-	decay_score=excluded.decay_score,
-	salience_score=excluded.salience_score,
-	suppression_score=excluded.suppression_score,
-	useful_count=excluded.useful_count,
-	ignored_count=excluded.ignored_count,
-	rejected_count=excluded.rejected_count,
-	harmful_count=excluded.harmful_count,
-	last_helpful_at=excluded.last_helpful_at,
-	last_rejected_at=excluded.last_rejected_at,
-	suppression_until=excluded.suppression_until,
-	familiarity_band_last=excluded.familiarity_band_last,
 	outcome_json=excluded.outcome_json,
 	updated_at=excluded.updated_at`
 
@@ -1255,6 +1242,7 @@ ON CONFLICT(id) DO UPDATE SET
 		nullDiagramCode(m),
 		m.Workspace,
 		contentHash,
+		m.Source.SessionID,
 		string(sourceJSON),
 		string(entitiesJSON),
 		string(tagsJSON),
@@ -1766,7 +1754,7 @@ func (s *Store) GetSessionMemories(ctx context.Context, workspace, sessionID str
 	rows, err := s.db.QueryContext(ctx, `
 SELECT id, type, content, diagram_lang, diagram_code, workspace, source_json, entities_json, tags_json, confidence, storage_tier, pinned, superseded_by, access_count, last_accessed, decay_score, salience_score, suppression_score, useful_count, ignored_count, rejected_count, harmful_count, last_helpful_at, last_rejected_at, suppression_until, familiarity_band_last, outcome_json, created_at, updated_at
 FROM memories
-WHERE workspace = ? AND json_extract(source_json, '$.session_id') = ?
+WHERE workspace = ? AND session_id = ?
 ORDER BY created_at DESC`, workspace, sessionID)
 	if err != nil {
 		s.logSlowQuery(ctx, "get_session_memories", workspace, time.Since(_startList))
@@ -2090,7 +2078,9 @@ func (s *Store) migrateJSONVectorsToBlobs(ctx context.Context) error {
 	for _, item := range items {
 		var emb []float32
 		if err := json.Unmarshal([]byte(item.json), &emb); err != nil {
-			// If JSON is invalid, skip instead of failing the entire migration
+			// If JSON is invalid, log advisory and skip.
+			s.migrationAdvisories = append(s.migrationAdvisories, "vector "+item.id+": invalid JSON")
+			log.Printf("migration: memory_vectors row %s has invalid JSON, skipping", item.id)
 			continue
 		}
 		if len(emb) == 0 {

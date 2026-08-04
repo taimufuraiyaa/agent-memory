@@ -11,11 +11,11 @@ import (
 	"github.com/taimufuraiyaa/agent-memory/internal/validation"
 )
 
-// sanitizeImportedMemory applies the same input-validation, secret/PII
+// SanitizeImportedMemory applies the same input-validation, secret/PII
 // redaction, and content-safety checks that the write pipeline applies to
 // newly written memories (see internal/validation and
 // internal/engine.RedactPrivateAndSecrets / RegexSecurityFilter) to a memory
-// arriving via /api/v1/memories/import.
+// arriving via import (API or CLI).
 //
 // Without this, an imported bundle from an untrusted source could inject
 // unredacted secrets, oversized content, or invalid records directly into
@@ -24,7 +24,7 @@ import (
 // It mutates m in place (assigning an ID if missing, and redacting Content
 // and any Diagram code) and returns a non-empty skip reason if the memory
 // should not be imported.
-func sanitizeImportedMemory(ctx context.Context, m *core.MemoryEntry, filter engine.SecurityFilter) string {
+func SanitizeImportedMemory(ctx context.Context, m *core.MemoryEntry, filter engine.SecurityFilter) string {
 	if strings.TrimSpace(m.ID) == "" {
 		m.ID = uuid.NewString()
 	}

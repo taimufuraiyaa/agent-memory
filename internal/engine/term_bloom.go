@@ -10,7 +10,10 @@ import (
 
 const (
 	TermBloomFormatVersion = "bloom-v1"
-	TermBloomHashVersion   = "sha256-double-v1"
+	// v2: termBloomProbeHashes guarantees h2 is coprime to the bit count so
+	// probes never collapse; persisted snapshots built with v1 probing are
+	// rejected by the HashVersion gate and must be rebuilt.
+	TermBloomHashVersion = "sha256-double-v2"
 )
 
 // TermBloom is a standard, non-counting Bloom filter for normalized terms.
@@ -30,6 +33,11 @@ func NewTermBloom(capacity int64, targetFPP float64) (*TermBloom, error) {
 	}
 	n := float64(capacity)
 	m := uint64(math.Ceil(-n * math.Log(targetFPP) / math.Pow(math.Ln2, 2)))
+	if m < 2 {
+		// A one-slot filter cannot host the coprime probe guard: no probe
+		// offset is non-zero mod 1, so every query would be a false positive.
+		return nil, errors.New("Bloom bit count must be at least 2")
+	}
 	if remainder := m % 8; remainder != 0 {
 		m += 8 - remainder
 	}
@@ -65,7 +73,7 @@ func (b *TermBloom) Add(term string) {
 	if b == nil || b.bitCount == 0 {
 		return
 	}
-	h1, h2 := termBloomHashes(term)
+	h1, h2 := termBloomProbeHashes(term, b.bitCount)
 	for i := uint32(0); i < b.hashCount; i++ {
 		position := (h1 + uint64(i)*h2) % b.bitCount
 		b.bitmap[position/8] |= byte(1 << (position % 8))
@@ -77,7 +85,7 @@ func (b *TermBloom) MightContain(term string) bool {
 	if b == nil || b.bitCount == 0 {
 		return false
 	}
-	h1, h2 := termBloomHashes(term)
+	h1, h2 := termBloomProbeHashes(term, b.bitCount)
 	for i := uint32(0); i < b.hashCount; i++ {
 		position := (h1 + uint64(i)*h2) % b.bitCount
 		if b.bitmap[position/8]&byte(1<<(position%8)) == 0 {
@@ -131,4 +139,37 @@ func termBloomHashes(term string) (uint64, uint64) {
 		h2 = 0x9e3779b97f4a7c15
 	}
 	return h1, h2
+}
+
+// termBloomProbeHashes returns the double-hash pair used to probe a filter
+// with m bits. h1 is only reduced mod m (probe positions depend solely on
+// h1 mod m, so the double-hash base offset is preserved), while h2 is
+// deterministically re-derived until it is coprime to m. That guarantees the
+// k probes (h1 + i*h2) mod m land on k distinct slots: without the guard, a
+// term whose h2 shares a factor with m (in particular h2 % m == 0) collapses
+// every probe onto a small subset of slots and drives its false-positive rate
+// toward 1. Reducing both hashes also keeps the probe arithmetic free of
+// uint64 overflow for any m < 2^61, and because the re-derivation happens
+// exactly here, Add and MightContain always agree on the probe positions.
+func termBloomProbeHashes(term string, m uint64) (uint64, uint64) {
+	h1, h2 := termBloomHashes(term)
+	if m < 2 {
+		// One-slot (or empty) filters have no degenerate probe pattern.
+		return h1, h2
+	}
+	h1 %= m
+	h2 %= m
+	for h2%m == 0 || gcd64(h2, m) != 1 {
+		// Adding 1 mod m cycles through every residue, so a value coprime to
+		// m is guaranteed to be reached for any m >= 2.
+		h2 = (h2 + 1) % m
+	}
+	return h1, h2
+}
+
+func gcd64(a, b uint64) uint64 {
+	for b != 0 {
+		a, b = b, a%b
+	}
+	return a
 }

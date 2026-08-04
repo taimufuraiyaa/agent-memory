@@ -24,12 +24,15 @@ const (
 )
 
 type Dimension struct {
-	Key       DimensionKey `json:"key"`
-	Label     string       `json:"label"`
-	Score     int          `json:"score"`
-	Weight    float64      `json:"weight"`
-	Available bool         `json:"available"`
-	Detail    string       `json:"detail"`
+	Key           DimensionKey `json:"key"`
+	Label         string       `json:"label"`
+	Score         int          `json:"score"`
+	Weight        float64      `json:"weight"`
+	Available     bool         `json:"available"`
+	EvidenceCount int          `json:"evidence_count"`
+	Sufficient    bool         `json:"sufficient"`
+	Reason        string       `json:"reason"`
+	Detail        string       `json:"detail"`
 }
 
 type Recommendation struct {

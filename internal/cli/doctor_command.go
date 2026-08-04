@@ -14,6 +14,10 @@ import (
 
 const defaultServiceURL = "http://127.0.0.1:3211"
 
+// errDoctorUnhealthy is returned once the doctor report has been written so
+// the process exits non-zero when any check fails (summary.healthy == false).
+var errDoctorUnhealthy = errors.New("doctor: workspace unhealthy")
+
 type doctorSummary struct {
 	Total   int  `json:"total"`
 	Pass    int  `json:"pass"`
@@ -101,9 +105,16 @@ func newDoctorCommand() *cobra.Command {
 				report.BeforeSummary = &beforeSummary
 			}
 			if outputFormat == "json" {
-				return writeSuccessEnvelope(cmd.OutOrStdout(), "doctor", report)
+				if err := writeSuccessEnvelope(cmd.OutOrStdout(), "doctor", report); err != nil {
+					return err
+				}
+			} else if err := writeDoctorText(cmd, report, fixRequested); err != nil {
+				return err
 			}
-			return writeDoctorText(cmd, report, fixRequested)
+			if !report.Summary.Healthy {
+				return errDoctorUnhealthy
+			}
+			return nil
 		},
 	}
 	cmd.Flags().StringVar(&root, "root", "", "Project root to inspect")

@@ -89,6 +89,7 @@ func (s *VectorSearcher) SearchWithOptions(ctx context.Context, opt VectorSearch
 	// Fast path: Go-based vector search over binary SQLite blobs
 	sqlScores, err := s.store.SearchMemoryVectorsGo(ctx, opt.Workspace, activeProvider, qv, opt.TopK, opt.Types, opt.Tiers)
 	if err == nil && len(sqlScores) > 0 {
+		AddVectorSearchCount(1)
 		ids := make([]string, len(sqlScores))
 		for i, sc := range sqlScores {
 			ids[i] = sc.MemoryID
@@ -115,6 +116,7 @@ func (s *VectorSearcher) SearchWithOptions(ctx context.Context, opt VectorSearch
 	if err != nil {
 		return nil, err
 	}
+	AddVectorSearchCount(1)
 	cachedRows, err := s.store.ListMemoryVectorRowsByWorkspace(ctx, opt.Workspace)
 	if err != nil {
 		return nil, err

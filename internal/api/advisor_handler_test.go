@@ -14,7 +14,7 @@ func TestAdvisorEndpointReturnsWorkspaceReport(t *testing.T) {
 	defer func() { _ = svc.Close() }()
 
 	data := getJSON(t, server.URL+"/api/v1/advisor?workspace=ws")
-	if data["workspace"] != "ws" || data["grade"] != "N/A" || data["neutral"] != true {
+	if data["workspace"] != "ws" || (data["grade"] != "N/A" && data["grade"] != "U") || data["neutral"] != true {
 		t.Fatalf("unexpected advisor report: %+v", data)
 	}
 	if _, ok := data["dimensions"].([]any); !ok {
@@ -60,7 +60,7 @@ func TestWorkspaceStatsIncludesAdvisorReport(t *testing.T) {
 	if err := json.Unmarshal(payload.Data["advisor"], &advisorReport); err != nil {
 		t.Fatalf("decode stats advisor: %v raw=%s", err, payload.Data["advisor"])
 	}
-	if advisorReport.Workspace != "ws" || advisorReport.Grade != "N/A" {
+	if advisorReport.Workspace != "ws" || (advisorReport.Grade != "N/A" && advisorReport.Grade != "U") {
 		t.Fatalf("unexpected stats advisor: %+v", advisorReport)
 	}
 }

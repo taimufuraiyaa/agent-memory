@@ -2,6 +2,7 @@ package core
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 )
@@ -297,7 +298,7 @@ func (m *MemoryEntry) Validate() error {
 		return errors.New("confidence must be between 0 and 1")
 	}
 	if len(m.Keywords) > 3 {
-		return errors.New("keywords must contain at most 3 terms")
+		return fmt.Errorf("%w: keywords must contain at most 3 terms", ErrInvalidInput)
 	}
 	return nil
 }

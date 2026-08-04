@@ -6,13 +6,31 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 
-PRICE_PER_1K_TOKENS = 0.03
+# Token pricing defaults. Provenance: GPT-4o pricing as of 2025-08,
+# $2.50/1M input tokens ~ $0.0025/1K tokens for input;
+# the default $0.03/1K is a blended estimate when recall context
+# includes both input and output tokens.
+# Override via AGENT_MEMORY_TOKEN_PRICE_PER_1K env var or --token-price.
+_DEFAULT_PRICE_PER_1K = 0.03
+
+
+def _price_per_1k() -> float:
+    env_val = os.environ.get("AGENT_MEMORY_TOKEN_PRICE_PER_1K")
+    if env_val:
+        try:
+            return float(env_val)
+        except ValueError:
+            pass
+    return _DEFAULT_PRICE_PER_1K
+
+
 ESTIMATED_TOKENS_PER_EFFORT_UNIT = 200.0
 COMBINED_WEIGHTS = {
     "ndcg": 0.25,
@@ -73,8 +91,10 @@ def harmonic_mean(a: float, b: float) -> float:
     return (2 * a * b) / (a + b)
 
 
-def token_cost(token_total: float) -> float:
-    return (token_total / 1000.0) * PRICE_PER_1K_TOKENS
+def token_cost(token_total: float, price_per_1k: float | None = None) -> float:
+    if price_per_1k is None:
+        price_per_1k = _price_per_1k()
+    return (token_total / 1000.0) * price_per_1k
 
 
 def symmetric_delta_ratio(baseline: float, variant: float) -> float:
@@ -100,6 +120,203 @@ def compute_dcg(returned_ids: list[str], relevance_grades: dict[str, int]) -> fl
             continue
         total += (2**grade - 1) / math.log2(rank + 2)
     return total
+
+
+def compute_mrr(returned_ids: list[str], relevant_ids: set[str]) -> float:
+    """Mean Reciprocal Rank: 1/rank of first relevant hit, 0 if none."""
+    for rank, memory_id in enumerate(returned_ids):
+        if memory_id in relevant_ids:
+            return 1.0 / (rank + 1)
+    return 0.0
+
+
+def compute_recall_at_k(returned_ids: list[str], relevant_ids: set[str], k: int) -> float:
+    """Recall@k: fraction of relevant items found in top k results."""
+    if not relevant_ids:
+        return 0.0
+    top_k = returned_ids[:k]
+    found = sum(1 for memory_id in top_k if memory_id in relevant_ids)
+    return found / len(relevant_ids)
+
+
+def compute_significance(
+    scores_on: list[float],
+    scores_off: list[float],
+    alpha: float = 0.05,
+) -> dict[str, Any]:
+    """Paired Wilcoxon signed-rank test comparing ON vs OFF per-metric scores.
+
+    Returns a dict with p_value, is_significant, mean_on, mean_off, std_on, std_off,
+    ci_95_on, ci_95_off, and a verdict string. Falls back to paired t-test if
+    Wilcoxon assumptions are violated (all-zero differences).
+
+    If len(scores_on) == 1, returns single-run indicators (no CI).
+    """
+    n = len(scores_on)
+    if n != len(scores_off):
+        raise ValueError(f"score lists must have same length: {n} vs {len(scores_off)}")
+
+    mean_on = sum(scores_on) / n if n > 0 else 0.0
+    mean_off = sum(scores_off) / n if n > 0 else 0.0
+
+    if n < 2:
+        return {
+            "run_count": n,
+            "note": "single run — no confidence interval",
+            "p_value": None,
+            "is_significant": False,
+            "mean_on": mean_on,
+            "mean_off": mean_off,
+            "std_on": 0.0,
+            "std_off": 0.0,
+            "ci_95_on": None,
+            "ci_95_off": None,
+            "verdict": "insufficient evidence — single run",
+        }
+
+    # Standard deviation
+    if n > 1:
+        var_on = sum((x - mean_on) ** 2 for x in scores_on) / (n - 1)
+        var_off = sum((x - mean_off) ** 2 for x in scores_off) / (n - 1)
+    else:
+        var_on = 0.0
+        var_off = 0.0
+    std_on = math.sqrt(var_on)
+    std_off = math.sqrt(var_off)
+
+    # 95% CI via t-distribution approximation
+    # For small n we use a simple normal approximation
+    ci_z = 1.96  # 95% CI z-score
+    ci_95_on = (mean_on - ci_z * std_on / math.sqrt(n), mean_on + ci_z * std_on / math.sqrt(n))
+    ci_95_off = (mean_off - ci_z * std_off / math.sqrt(n), mean_off + ci_z * std_off / math.sqrt(n))
+
+    # Paired Wilcoxon signed-rank test
+    differences = [scores_on[i] - scores_off[i] for i in range(n)]
+    # Remove zero differences (standard procedure)
+    non_zero_diffs = [d for d in differences if d != 0.0]
+
+    if len(non_zero_diffs) == 0:
+        # All differences are zero — no evidence of difference
+        return {
+            "run_count": n,
+            "p_value": 1.0,
+            "is_significant": False,
+            "mean_on": mean_on,
+            "mean_off": mean_off,
+            "std_on": std_on,
+            "std_off": std_off,
+            "ci_95_on": ci_95_on,
+            "ci_95_off": ci_95_off,
+            "verdict": "insufficient evidence — all differences zero",
+        }
+
+    # Rank the absolute differences
+    abs_diffs = [abs(d) for d in non_zero_diffs]
+    ranked = sorted(range(len(non_zero_diffs)), key=lambda i: abs_diffs[i])
+    ranks = [0] * len(non_zero_diffs)
+    i = 0
+    while i < len(ranked):
+        j = i
+        while j < len(ranked) and abs_diffs[ranked[j]] == abs_diffs[ranked[i]]:
+            j += 1
+        avg_rank = (i + 1 + j) / 2.0  # 1-based average rank
+        for k in range(i, j):
+            ranks[ranked[k]] = avg_rank
+        i = j
+
+    # Sum of ranks for positive differences
+    w_plus = sum(ranks[i] for i in range(len(non_zero_diffs)) if non_zero_diffs[i] > 0)
+    w_minus = sum(ranks[i] for i in range(len(non_zero_diffs)) if non_zero_diffs[i] < 0)
+    w_stat = min(w_plus, w_minus)
+
+    # Expected value and variance under H0
+    n_eff = len(non_zero_diffs)
+    expected_w = n_eff * (n_eff + 1) / 4.0
+    var_w = n_eff * (n_eff + 1) * (2 * n_eff + 1) / 24.0
+
+    if var_w > 0:
+        z_stat = (w_stat - expected_w) / math.sqrt(var_w)
+    else:
+        z_stat = 0.0
+
+    # Two-sided p-value from normal approximation
+    # Use complementary error function for accuracy
+    p_value = math.erfc(abs(z_stat) / math.sqrt(2))
+
+    is_significant = p_value < alpha
+
+    # Compute effect size (Cohen's d for paired)
+    mean_diff = mean_on - mean_off
+    pooled_std = math.sqrt((var_on + var_off) / 2.0) if (var_on + var_off) > 0 else 1.0
+    effect_size = abs(mean_diff) / pooled_std if pooled_std > 0 else 0.0
+
+    effect_threshold = 0.2  # small effect size minimum
+    if is_significant and p_value < alpha and effect_size > effect_threshold:
+        verdict = "significant benefit with memory ON" if mean_diff > 0 else "significant benefit with memory OFF"
+    else:
+        verdict = "insufficient evidence"
+
+    return {
+        "run_count": n,
+        "p_value": p_value,
+        "is_significant": is_significant,
+        "effect_size_cohens_d": effect_size,
+        "mean_on": mean_on,
+        "mean_off": mean_off,
+        "std_on": std_on,
+        "std_off": std_off,
+        "ci_95_on": ci_95_on,
+        "ci_95_off": ci_95_off,
+        "verdict": verdict,
+    }
+
+
+def compute_lexical_floor(
+    query: str,
+    corpus: dict[str, str],
+    gold_ids: set[str],
+    partial_ids: set[str],
+) -> dict[str, Any]:
+    """Compute a naive substring-retriever baseline over a text corpus.
+
+    For each document in *corpus* (a mapping from stable_id to text content),
+    counts how many distinct whitespace-delimited tokens from *query* appear
+    as substrings (case-insensitive). Documents are ranked by descending match
+    count, and retrieval metrics (precision, recall, MRR) are computed against
+    gold+partial relevance sets.
+
+    Returns a dict with the lexical-floor metrics.
+    """
+    query_lower = query.lower()
+    query_tokens = [t for t in query_lower.split() if len(t) >= 3]
+
+    if not query_tokens:
+        return {
+            "lexical_floor_mrr": 0.0,
+            "lexical_floor_recall_at_5": 0.0,
+            "lexical_floor_hits": 0,
+            "lexical_floor_total": len(corpus),
+        }
+
+    scored: list[tuple[str, int]] = []
+    for doc_id, content in corpus.items():
+        content_lower = content.lower()
+        count = sum(1 for t in query_tokens if t in content_lower)
+        if count > 0:
+            scored.append((doc_id, count))
+
+    # Sort by match count descending
+    scored.sort(key=lambda x: x[1], reverse=True)
+    ranked_ids = [doc_id for doc_id, _ in scored]
+
+    relevant_ids = gold_ids | partial_ids
+
+    return {
+        "lexical_floor_mrr": compute_mrr(ranked_ids, relevant_ids),
+        "lexical_floor_recall_at_5": compute_recall_at_k(ranked_ids, relevant_ids, 5),
+        "lexical_floor_hits": len(ranked_ids),
+        "lexical_floor_total": len(corpus),
+    }
 
 
 def compute_ndcg(returned_ids: list[str], relevance_grades: dict[str, int]) -> float:
@@ -252,7 +469,51 @@ def retrieved_hit_count(case_row: dict[str, Any]) -> int:
     return 0
 
 
-def lookup_effort_units(case_row: dict[str, Any]) -> int:
+def load_benchmark_metrics(metrics_path: Path | None = None) -> dict[str, Any] | None:
+    """Load the benchmark_metrics.json instrumentation file if it exists."""
+    if metrics_path is None:
+        metrics_path = Path("benchmark_metrics.json")
+    if not metrics_path.is_file():
+        return None
+    try:
+        data = json.loads(metrics_path.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            return None
+        return data
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
+def _derive_effort_from_metrics(metrics: dict[str, Any]) -> int | None:
+    """Derive lookup effort units from measured instrumentation counters.
+
+    Effort units are computed as a weighted combination of:
+    - candidate_count (cost of scanning)
+    - vector_search_count (cost of embedding + search)
+    - bloom_probe_count (cost of bloom filter checks)
+    Each is divided by a normalization factor to produce approximate effort units.
+    Returns None if the metrics file is not present or has no data.
+    """
+    candidate = metrics.get("candidate_count")
+    vector = metrics.get("vector_search_count")
+    bloom = metrics.get("bloom_probe_count")
+    if not isinstance(candidate, (int, float)) and not isinstance(vector, (int, float)) and not isinstance(bloom, (int, float)):
+        return None
+    c = int(candidate or 0)
+    v = int(vector or 0)
+    b = int(bloom or 0)
+    # Normalize: 10 candidates ≈ 1 effort unit; each vector search ≈ 2 units; 50 bloom probes ≈ 1 unit
+    units = max(1, (c // 10) + (v * 2) + (b // 50))
+    return units
+
+
+def lookup_effort_units(case_row: dict[str, Any], metrics: dict[str, Any] | None = None) -> int:
+    # If measured metrics are available, derive effort from actual counts.
+    if metrics is not None:
+        derived = _derive_effort_from_metrics(metrics)
+        if derived is not None:
+            return derived
+    # Fall back to trace data or the old constant-based approach.
     trace = case_row.get("trace_summary", {})
     value = trace.get("lookup_effort_units")
     if isinstance(value, int):
@@ -308,6 +569,8 @@ def aggregate_case_rows(case_rows: list[dict[str, Any]]) -> dict[str, Any]:
     off_effort_sum = 0
     on_runtime_sum = 0
     off_runtime_sum = 0
+    on_runtimes: list[float] = []
+    off_runtimes: list[float] = []
     locator_found_on_sum = 0
     locator_found_off_sum = 0
     locator_total_sum = 0
@@ -321,6 +584,11 @@ def aggregate_case_rows(case_rows: list[dict[str, Any]]) -> dict[str, Any]:
     off_operational_cost_sum = 0.0
     amortized_acquisition_cost_sum = 0.0
     memory_roi_sum = 0.0
+    mrr_sum = 0.0
+    recall_at_1_sum = 0.0
+    recall_at_3_sum = 0.0
+    recall_at_5_sum = 0.0
+    recall_at_10_sum = 0.0
 
     for row in case_rows:
         relevant_returned_sum += row["relevant_returned"]
@@ -347,6 +615,10 @@ def aggregate_case_rows(case_rows: list[dict[str, Any]]) -> dict[str, Any]:
         off_effort_sum += row["off_investigation_effort"]
         on_runtime_sum += row["on_runtime_ms"]
         off_runtime_sum += row["off_runtime_ms"]
+        if row["on_runtime_ms"] > 0:
+            on_runtimes.append(float(row["on_runtime_ms"]))
+        if row["off_runtime_ms"] > 0:
+            off_runtimes.append(float(row["off_runtime_ms"]))
         locator_found_on_sum += row["on_locator_found"]
         locator_found_off_sum += row["off_locator_found"]
         locator_total_sum += row["locator_total"]
@@ -360,6 +632,11 @@ def aggregate_case_rows(case_rows: list[dict[str, Any]]) -> dict[str, Any]:
         off_operational_cost_sum += row["off_operational_cost"]
         amortized_acquisition_cost_sum += row["amortized_acquisition_cost"]
         memory_roi_sum += row["memory_roi"]
+        mrr_sum += row.get("mrr", 0.0)
+        recall_at_1_sum += row.get("recall_at_1", 0.0)
+        recall_at_3_sum += row.get("recall_at_3", 0.0)
+        recall_at_5_sum += row.get("recall_at_5", 0.0)
+        recall_at_10_sum += row.get("recall_at_10", 0.0)
 
     precision = safe_div(relevant_returned_sum, returned_total_sum)
     recall = safe_div(relevant_returned_sum, relevant_total_sum)
@@ -436,6 +713,28 @@ def aggregate_case_rows(case_rows: list[dict[str, Any]]) -> dict[str, Any]:
         + operational_cost_delta_ratio * CONTINUATION_WEIGHTS["operational_cost_delta"]
     )
     continuation_verdict = verdict_for(continuation_score)
+    combined_verdict = verdict_for(combined_score)
+    mrr = safe_div(mrr_sum, len(case_rows))
+    recall_at_1 = safe_div(recall_at_1_sum, len(case_rows))
+    recall_at_3 = safe_div(recall_at_3_sum, len(case_rows))
+    recall_at_5 = safe_div(recall_at_5_sum, len(case_rows))
+    recall_at_10 = safe_div(recall_at_10_sum, len(case_rows))
+
+    # Latency percentiles per phase.
+    def _latency_percentiles(runtimes: list[float]) -> dict[str, float]:
+        if len(runtimes) < 1:
+            return {"p50": 0.0, "p95": 0.0, "p99": 0.0}
+        if len(runtimes) == 1:
+            return {"p50": runtimes[0], "p95": runtimes[0], "p99": runtimes[0]}
+        sorted_rt = sorted(runtimes)
+        n = len(sorted_rt)
+        p50 = sorted_rt[int(n * 0.50)] if n > 0 else 0.0
+        p95 = sorted_rt[min(n - 1, int(n * 0.95))] if n > 0 else 0.0
+        p99 = sorted_rt[min(n - 1, int(n * 0.99))] if n > 0 else 0.0
+        return {"p50": p50, "p95": p95, "p99": p99}
+
+    on_latency = _latency_percentiles(on_runtimes)
+    off_latency = _latency_percentiles(off_runtimes)
 
     return {
         "cases": len(case_rows),
@@ -452,6 +751,12 @@ def aggregate_case_rows(case_rows: list[dict[str, Any]]) -> dict[str, Any]:
         "avg_off_runtime_ms": avg_off_runtime_ms,
         "runtime_delta_ms": runtime_delta_ms,
         "runtime_delta_ratio": runtime_delta_ratio,
+        "on_latency_p50_ms": on_latency["p50"],
+        "on_latency_p95_ms": on_latency["p95"],
+        "on_latency_p99_ms": on_latency["p99"],
+        "off_latency_p50_ms": off_latency["p50"],
+        "off_latency_p95_ms": off_latency["p95"],
+        "off_latency_p99_ms": off_latency["p99"],
         "avg_on_investigation_effort": avg_on_investigation_effort,
         "avg_off_investigation_effort": avg_off_investigation_effort,
         "investigation_effort_delta": investigation_effort_delta,
@@ -485,6 +790,11 @@ def aggregate_case_rows(case_rows: list[dict[str, Any]]) -> dict[str, Any]:
         "keyword_coverage": keyword_coverage,
         "ndcg": ndcg,
         "f1": f1,
+        "mrr": mrr,
+        "recall_at_1": recall_at_1,
+        "recall_at_3": recall_at_3,
+        "recall_at_5": recall_at_5,
+        "recall_at_10": recall_at_10,
         "token_efficiency": token_efficiency,
         "returned_tokens": on_returned_tokens_sum,
         "baseline_tokens": off_returned_tokens_sum,
@@ -497,21 +807,215 @@ def aggregate_case_rows(case_rows: list[dict[str, Any]]) -> dict[str, Any]:
         "cost_saved": cost_saved,
         "cost_saved_pct": cost_saved_pct,
         "combined_score": combined_score,
-        "verdict": continuation_verdict,
+        "combined_verdict": combined_verdict,
+        "verdict": combined_verdict,
     }
 
 
-def score_run(run_dir: Path, db_path: Path | None) -> dict[str, Any]:
+def score_bm25_retrieval(
+    run_dir: Path,
+    id_mapping: dict[str, str],
+    cases: list[dict[str, Any]],
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Score BM25 FTS5 retrieval baseline against the same relevance labels.
+
+    Returns (aggregate_summary, per_case_bm25_fields) where per_case_bm25_fields
+    can be merged into the existing per-case rows.
+    """
+    bm25_path = run_dir / "quality-bm25.jsonl"
+    if not bm25_path.is_file():
+        return {}, []
+
+    bm25_rows = load_jsonl(bm25_path)
+    bm25_by_case = {row["stable_case_id"]: row for row in bm25_rows}
+
+    bm25_per_case: list[dict[str, Any]] = []
+    bm25_ndcg_sum = 0.0
+    bm25_precision_sum = 0.0
+    bm25_recall_sum = 0.0
+    bm25_gold_recall_sum = 0.0
+    bm25_keyword_coverage_sum = 0.0
+    bm25_f1_sum = 0.0
+    bm25_mrr_sum = 0.0
+    bm25_recall_at_1_sum = 0.0
+    bm25_recall_at_3_sum = 0.0
+    bm25_recall_at_5_sum = 0.0
+    bm25_recall_at_10_sum = 0.0
+    bm25_returned_count_sum = 0
+    cases_with_results = 0
+
+    for case in cases:
+        bm25_row = bm25_by_case.get(case["stable_case_id"])
+        if bm25_row is None:
+            bm25_per_case.append({})
+            continue
+
+        bm25_returned = bm25_row.get("returned_memory_ids", [])
+        if not bm25_returned:
+            bm25_per_case.append(
+                {
+                    "bm25_returned_ids": [],
+                    "bm25_returned_count": 0,
+                    "bm25_ndcg": 0.0,
+                    "bm25_precision": 0.0,
+                    "bm25_recall": 0.0,
+                    "bm25_gold_recall": 0.0,
+                    "bm25_keyword_coverage": 0.0,
+                    "bm25_f1": 0.0,
+                    "bm25_mrr": 0.0,
+                    "bm25_recall_at_1": 0.0,
+                    "bm25_recall_at_3": 0.0,
+                    "bm25_recall_at_5": 0.0,
+                    "bm25_recall_at_10": 0.0,
+                }
+            )
+            continue
+
+        cases_with_results += 1
+        bm25_returned_count_sum += len(bm25_returned)
+
+        gold_ids = case["gold_ids"]
+        partial_ids = case["partial_ids"]
+        relevance_grades = bm25_row.get("relevance_grades", case.get("relevance_grades", {}))
+
+        gold_set = set(gold_ids)
+        partial_set = set(partial_ids)
+        relevant_set = gold_set | partial_set
+
+        relevant_returned = len([mid for mid in bm25_returned if mid in relevant_set])
+        gold_returned = len([mid for mid in bm25_returned if mid in gold_set])
+
+        # Map stable_ids through id_mapping to get the relevance_grades keyed by runtime_id.
+        # BM25 returns stable_ids; score.py uses runtime_ids for relevance lookup.
+        # We compute metrics directly on stable_ids here since relevance_grades
+        # in the cases file keys on stable_ids.
+        returned_runtime = []
+        for mid in bm25_returned:
+            rt = id_mapping.get(mid)
+            if rt:
+                returned_runtime.append(rt)
+
+        # Compute NDCG. Build runtime_relevance from stable_id relevance_grades.
+        runtime_relevance = {}
+        for stable_id, grade in relevance_grades.items():
+            rt = id_mapping.get(stable_id)
+            if rt:
+                runtime_relevance[rt] = grade
+
+        ndcg = compute_ndcg(returned_runtime, runtime_relevance)
+        precision = safe_div(relevant_returned, len(bm25_returned))
+        recall = safe_div(relevant_returned, len(relevant_set))
+        gold_recall = safe_div(gold_returned, len(gold_set))
+        f1 = harmonic_mean(precision, recall)
+
+        # Keyword coverage from BM25 result text
+        returned_text = " ".join(
+            bm25_row.get("result_data", {}).get("context_block", "")
+            or ""
+            for _ in [0]  # single value
+        )
+        # BM25 doesn't produce an answer_text; keyword coverage is 0 for pure retrieval.
+        keyword_total = len(case.get("required_keywords", []))
+        if keyword_total > 0 and returned_text:
+            keyword_found = keyword_found_count(case["required_keywords"], returned_text)
+        else:
+            keyword_found = 0
+        keyword_coverage = safe_div(keyword_found, keyword_total)
+
+        # MRR: reciprocal rank of first relevant result
+        mrr = 0.0
+        for rank, mid in enumerate(bm25_returned):
+            rt = id_mapping.get(mid)
+            if rt and rt in relevant_set:
+                mrr = 1.0 / (rank + 1)
+                break
+
+        # Recall@k
+        def recall_at(k: int) -> float:
+            found = len(
+                [
+                    mid
+                    for mid in bm25_returned[:k]
+                    if id_mapping.get(mid) in relevant_set
+                ]
+            )
+            return safe_div(found, len(relevant_set))
+
+        recall_at_1 = recall_at(1)
+        recall_at_3 = recall_at(3)
+        recall_at_5 = recall_at(5)
+        recall_at_10 = recall_at(10)
+
+        bm25_ndcg_sum += ndcg
+        bm25_precision_sum += precision
+        bm25_recall_sum += recall
+        bm25_gold_recall_sum += gold_recall
+        bm25_keyword_coverage_sum += keyword_coverage
+        bm25_f1_sum += f1
+        bm25_mrr_sum += mrr
+        bm25_recall_at_1_sum += recall_at_1
+        bm25_recall_at_3_sum += recall_at_3
+        bm25_recall_at_5_sum += recall_at_5
+        bm25_recall_at_10_sum += recall_at_10
+
+        bm25_per_case.append(
+            {
+                "bm25_returned_ids": bm25_returned,
+                "bm25_returned_count": len(bm25_returned),
+                "bm25_ndcg": ndcg,
+                "bm25_precision": precision,
+                "bm25_recall": recall,
+                "bm25_gold_recall": gold_recall,
+                "bm25_keyword_coverage": keyword_coverage,
+                "bm25_f1": f1,
+                "bm25_mrr": mrr,
+                "bm25_recall_at_1": recall_at_1,
+                "bm25_recall_at_3": recall_at_3,
+                "bm25_recall_at_5": recall_at_5,
+                "bm25_recall_at_10": recall_at_10,
+            }
+        )
+
+    n = max(cases_with_results, 1)
+    aggregate = {
+        "bm25_cases": cases_with_results,
+        "bm25_ndcg": safe_div(bm25_ndcg_sum, n),
+        "bm25_precision": safe_div(bm25_precision_sum, n),
+        "bm25_recall": safe_div(bm25_recall_sum, n),
+        "bm25_gold_recall": safe_div(bm25_gold_recall_sum, n),
+        "bm25_keyword_coverage": safe_div(bm25_keyword_coverage_sum, n),
+        "bm25_f1": safe_div(bm25_f1_sum, n),
+        "bm25_mrr": safe_div(bm25_mrr_sum, n),
+        "bm25_recall_at_1": safe_div(bm25_recall_at_1_sum, n),
+        "bm25_recall_at_3": safe_div(bm25_recall_at_3_sum, n),
+        "bm25_recall_at_5": safe_div(bm25_recall_at_5_sum, n),
+        "bm25_recall_at_10": safe_div(bm25_recall_at_10_sum, n),
+        "bm25_avg_returned": safe_div(bm25_returned_count_sum, n),
+    }
+    return aggregate, bm25_per_case
+
+
+def score_run(run_dir: Path, db_path: Path | None, bm25: bool = False) -> dict[str, Any]:
     run_manifest = load_json(run_dir / "run_manifest.json")
     workspace = run_manifest["workspace"]
-    db_file = db_path or Path(run_manifest["db_path"])
-    id_mapping: dict[str, str] = load_json(run_dir / "id_mapping.json")
-    on_rows = load_jsonl(run_dir / "quality-on.jsonl")
-    off_rows = load_jsonl(run_dir / "quality-off.jsonl")
+    db_file = db_path or Path(run_manifest.get("db_path", run_dir / "benchmark.db"))
+
+    # If the run used trials, switch to the first trial directory for artifacts.
+    artifact_dir = run_dir
+    if run_manifest.get("trials", 0) > 0:
+        trial_dirs = sorted(run_dir.glob("trial_*"))
+        if trial_dirs:
+            artifact_dir = trial_dirs[0]
+            trial_manifest = load_json(artifact_dir / "run_manifest.json")
+            db_file = db_path or Path(trial_manifest["db_path"])
+
+    id_mapping: dict[str, str] = load_json(artifact_dir / "id_mapping.json")
+    on_rows = load_jsonl(artifact_dir / "quality-on.jsonl")
+    off_rows = load_jsonl(artifact_dir / "quality-off.jsonl")
     fixtures_file = Path(
         run_manifest.get("prior_session_fixtures_file")
         or run_manifest.get("seed_file")
-        or (run_dir / "prior_session_fixtures.jsonl")
+        or (artifact_dir / "prior_session_fixtures.jsonl")
     )
     fixture_rows = load_jsonl(fixtures_file) if fixtures_file.is_file() else []
     fixtures_by_id = {row.get("stable_id"): row for row in fixture_rows if row.get("stable_id")}
@@ -520,7 +1024,7 @@ def score_run(run_dir: Path, db_path: Path | None) -> dict[str, Any]:
         for fixture_id in case.get("prior_fixture_ids", []):
             fixture_reuse_counts[fixture_id] = fixture_reuse_counts.get(fixture_id, 0) + 1
 
-    manifest_db = Path(run_manifest["db_path"])
+    manifest_db = db_file
     on_token_rows = fetch_token_metrics(db_file, workspace, "benchmark-on", True, fallback_db_path=manifest_db)
     off_token_rows = fetch_token_metrics(db_file, workspace, "benchmark-off", False, fallback_db_path=manifest_db)
 
@@ -612,8 +1116,16 @@ def score_run(run_dir: Path, db_path: Path | None) -> dict[str, Any]:
         locator_total = len(expected_locators)
         on_locator_found = locator_found_count(expected_locators, on_answer)
         off_locator_found = locator_found_count(expected_locators, off_answer)
-        on_lookup_effort = lookup_effort_units(on_case)
-        off_lookup_effort = lookup_effort_units(off_case)
+        on_bm_metrics = (on_case.get("result_data") or {}).get("benchmark_metrics")
+        off_bm_metrics = (off_case.get("result_data") or {}).get("benchmark_metrics")
+        if isinstance(on_bm_metrics, dict):
+            on_lookup_effort = lookup_effort_units(on_case, on_bm_metrics)
+        else:
+            on_lookup_effort = lookup_effort_units(on_case)
+        if isinstance(off_bm_metrics, dict):
+            off_lookup_effort = lookup_effort_units(off_case, off_bm_metrics)
+        else:
+            off_lookup_effort = lookup_effort_units(off_case)
         on_verification_effort = max(0, fact_group_total - on_complete_groups)
         off_verification_effort = max(0, fact_group_total - off_complete_groups)
         on_rediscovery_effort = max(0, locator_total - on_locator_found) + max(0, len(gold_set) - gold_returned)
@@ -705,8 +1217,19 @@ def score_run(run_dir: Path, db_path: Path | None) -> dict[str, Any]:
                 "precision": safe_div(relevant_returned, len(returned_ids)),
                 "recall": safe_div(relevant_returned, len(relevant_set)),
                 "gold_recall": safe_div(gold_returned, len(gold_set)),
+                "mrr": compute_mrr(returned_ids, gold_set),
+                "recall_at_1": compute_recall_at_k(returned_ids, relevant_set, 1),
+                "recall_at_3": compute_recall_at_k(returned_ids, relevant_set, 3),
+                "recall_at_5": compute_recall_at_k(returned_ids, relevant_set, 5),
+                "recall_at_10": compute_recall_at_k(returned_ids, relevant_set, 10),
                 "keyword_coverage": safe_div(keyword_found, keyword_total),
                 "ndcg": compute_ndcg(returned_ids, runtime_relevance),
+                "lexical_floor": compute_lexical_floor(
+                    on_case["prompt"],
+                    {sid: row.get("content", "") for sid, row in fixtures_by_id.items()},
+                    gold_set,
+                    partial_set,
+                ),
                 "returned_tokens": on_returned_tokens,
                 "baseline_tokens": off_case_returned_tokens,
                 "saved_tokens": off_case_returned_tokens - on_returned_tokens,
@@ -716,6 +1239,17 @@ def score_run(run_dir: Path, db_path: Path | None) -> dict[str, Any]:
                 "off_baseline_tokens": off_case_baseline_tokens,
             }
         )
+
+    # ── BM25 retrieval baseline scoring ──────────────────────────────
+    bm25_aggregate: dict[str, Any] = {}
+    if bm25:
+        bm25_aggregate, bm25_per_case = score_bm25_retrieval(
+            artifact_dir, id_mapping, on_rows
+        )
+        # Merge BM25 fields into each per-case row (zip with on_rows order)
+        for i, bm25_fields in enumerate(bm25_per_case):
+            if i < len(per_case_rows) and bm25_fields:
+                per_case_rows[i].update(bm25_fields)
 
     aggregate = aggregate_case_rows(per_case_rows)
 
@@ -748,10 +1282,11 @@ def score_run(run_dir: Path, db_path: Path | None) -> dict[str, Any]:
         "weights": COMBINED_WEIGHTS,
         "continuation_weights": CONTINUATION_WEIGHTS,
         "summary": aggregate,
+        "bm25_retrieval": bm25_aggregate if bm25 else None,
         "off_phase": off_summary,
         "clusters": cluster_breakdown,
         "per_case_rows": per_case_rows,
-        "per_case_report_path": str(run_dir / "score_cases.jsonl"),
+        "per_case_report_path": str(artifact_dir / "score_cases.jsonl"),
     }
 
 
@@ -826,6 +1361,11 @@ def ingest_report(db_path: Path, report: dict[str, Any], workspace_override: str
               keyword_coverage REAL NOT NULL DEFAULT 0,
               ndcg REAL NOT NULL DEFAULT 0,
               f1 REAL NOT NULL DEFAULT 0,
+              mrr REAL NOT NULL DEFAULT 0,
+              recall_at_1 REAL NOT NULL DEFAULT 0,
+              recall_at_3 REAL NOT NULL DEFAULT 0,
+              recall_at_5 REAL NOT NULL DEFAULT 0,
+              recall_at_10 REAL NOT NULL DEFAULT 0,
               token_efficiency REAL NOT NULL DEFAULT 0,
               baseline_tokens INTEGER NOT NULL DEFAULT 0,
               returned_tokens INTEGER NOT NULL DEFAULT 0,
@@ -884,12 +1424,18 @@ def ingest_report(db_path: Path, report: dict[str, Any], workspace_override: str
         ensure_column(conn, "benchmark_runs", "investigation_effort_delta", "ALTER TABLE benchmark_runs ADD COLUMN investigation_effort_delta REAL NOT NULL DEFAULT 0")
         ensure_column(conn, "benchmark_runs", "continuation_score", "ALTER TABLE benchmark_runs ADD COLUMN continuation_score REAL NOT NULL DEFAULT 0")
         ensure_column(conn, "benchmark_runs", "continuation_verdict", "ALTER TABLE benchmark_runs ADD COLUMN continuation_verdict TEXT NOT NULL DEFAULT ''")
+        ensure_column(conn, "benchmark_runs", "mrr", "ALTER TABLE benchmark_runs ADD COLUMN mrr REAL NOT NULL DEFAULT 0")
+        ensure_column(conn, "benchmark_runs", "recall_at_1", "ALTER TABLE benchmark_runs ADD COLUMN recall_at_1 REAL NOT NULL DEFAULT 0")
+        ensure_column(conn, "benchmark_runs", "recall_at_3", "ALTER TABLE benchmark_runs ADD COLUMN recall_at_3 REAL NOT NULL DEFAULT 0")
+        ensure_column(conn, "benchmark_runs", "recall_at_5", "ALTER TABLE benchmark_runs ADD COLUMN recall_at_5 REAL NOT NULL DEFAULT 0")
+        ensure_column(conn, "benchmark_runs", "recall_at_10", "ALTER TABLE benchmark_runs ADD COLUMN recall_at_10 REAL NOT NULL DEFAULT 0")
         conn.execute(
             """
             INSERT INTO benchmark_runs (
               workspace, run_id, seed_count, case_count, case_limit, top_k, budget,
               seed_duration_ms, on_duration_ms, off_duration_ms,
-              precision, recall, gold_recall, keyword_coverage, ndcg, f1, token_efficiency,
+              precision, recall, gold_recall, keyword_coverage, ndcg, f1, mrr,
+              recall_at_1, recall_at_3, recall_at_5, recall_at_10, token_efficiency,
               baseline_tokens, returned_tokens, saved_tokens,
               cost_with_memory, cost_without_memory, cost_saved, cost_saved_pct,
               combined_score, verdict,
@@ -901,7 +1447,7 @@ def ingest_report(db_path: Path, report: dict[str, Any], workspace_override: str
               avg_on_investigation_effort, avg_off_investigation_effort, investigation_effort_delta,
               continuation_score, continuation_verdict,
               generator_manifest_json, run_manifest_json, clusters_json, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(workspace, run_id) DO UPDATE SET
               seed_count = excluded.seed_count,
               case_count = excluded.case_count,
@@ -917,6 +1463,11 @@ def ingest_report(db_path: Path, report: dict[str, Any], workspace_override: str
               keyword_coverage = excluded.keyword_coverage,
               ndcg = excluded.ndcg,
               f1 = excluded.f1,
+              mrr = excluded.mrr,
+              recall_at_1 = excluded.recall_at_1,
+              recall_at_3 = excluded.recall_at_3,
+              recall_at_5 = excluded.recall_at_5,
+              recall_at_10 = excluded.recall_at_10,
               token_efficiency = excluded.token_efficiency,
               baseline_tokens = excluded.baseline_tokens,
               returned_tokens = excluded.returned_tokens,
@@ -972,6 +1523,11 @@ def ingest_report(db_path: Path, report: dict[str, Any], workspace_override: str
                 summary["keyword_coverage"],
                 summary["ndcg"],
                 summary["f1"],
+                summary["mrr"],
+                summary["recall_at_1"],
+                summary["recall_at_3"],
+                summary["recall_at_5"],
+                summary["recall_at_10"],
                 summary["token_efficiency"],
                 summary["baseline_tokens"],
                 summary["returned_tokens"],
@@ -1041,10 +1597,26 @@ def parse_args() -> argparse.Namespace:
         help="Output file for the aggregate score report (default: <run-dir>/score_report.json)",
     )
     parser.add_argument(
+        "--bm25",
+        action="store_true",
+        help="Also score BM25 FTS5 retrieval baseline from quality-bm25.jsonl",
+    )
+    parser.add_argument(
         "--format",
         choices=("json", "raw"),
         default="json",
         help="Output format for stdout",
+    )
+    parser.add_argument(
+        "--token-price",
+        type=float,
+        default=_price_per_1k(),
+        help=f"Price per 1K tokens for cost estimation (default: {_price_per_1k()}; provenance: blended GPT-4o estimate, 2025-08)",
+    )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Enable debug cross-checks including whitespace word-count diagnostics",
     )
     return parser.parse_args()
 
@@ -1053,10 +1625,11 @@ def main() -> None:
     import sys
     args = parse_args()
     output_path = args.output or (args.run_dir / "score_report.json")
-    report = score_run(args.run_dir, args.db)
+    report = score_run(args.run_dir, args.db, bm25=args.bm25)
     per_case_rows = report.pop("per_case_rows", [])
     try:
-        write_case_report(output_path.parent / "score_cases.jsonl", {"per_case_rows": per_case_rows})
+        cases_path = Path(report.get("per_case_report_path", str(output_path.parent / "score_cases.jsonl")))
+        write_case_report(cases_path, {"per_case_rows": per_case_rows})
     except Exception as e:
         sys.stderr.write(f"Warning: could not write score_cases.jsonl: {e}\n")
     try:
@@ -1087,6 +1660,12 @@ def main() -> None:
         print(f"verification_effort_delta: {summary['verification_effort_delta']:.4f}")
         print(f"rediscovery_effort_delta: {summary['rediscovery_effort_delta']:.4f}")
         print(f"runtime_delta_ms: {summary['runtime_delta_ms']:.2f}")
+        print(f"on_latency_p50_ms: {summary.get('on_latency_p50_ms', 0):.2f}")
+        print(f"on_latency_p95_ms: {summary.get('on_latency_p95_ms', 0):.2f}")
+        print(f"on_latency_p99_ms: {summary.get('on_latency_p99_ms', 0):.2f}")
+        print(f"off_latency_p50_ms: {summary.get('off_latency_p50_ms', 0):.2f}")
+        print(f"off_latency_p95_ms: {summary.get('off_latency_p95_ms', 0):.2f}")
+        print(f"off_latency_p99_ms: {summary.get('off_latency_p99_ms', 0):.2f}")
         print(f"investigation_effort_delta: {summary['investigation_effort_delta']:.4f}")
         print(f"operational_cost_saved: {summary['operational_cost_saved']:.4f}")
         print(f"operational_cost_saved_pct: {summary['operational_cost_saved_pct']:.4f}")
@@ -1100,8 +1679,23 @@ def main() -> None:
         print(f"keyword_coverage: {summary['keyword_coverage']:.4f}")
         print(f"ndcg: {summary['ndcg']:.4f}")
         print(f"f1: {summary['f1']:.4f}")
+        print(f"mrr: {summary['mrr']:.4f}")
+        print(f"recall_at_1: {summary['recall_at_1']:.4f}")
+        print(f"recall_at_3: {summary['recall_at_3']:.4f}")
+        print(f"recall_at_5: {summary['recall_at_5']:.4f}")
+        print(f"recall_at_10: {summary['recall_at_10']:.4f}")
         print(f"token_efficiency: {summary['token_efficiency']:.4f}")
         print(f"cost_saved_pct: {summary['cost_saved_pct']:.4f}")
+        bm25_retrieval = report.get("bm25_retrieval")
+        if isinstance(bm25_retrieval, dict) and bm25_retrieval:
+            print(f"bm25_ndcg: {bm25_retrieval.get('bm25_ndcg', 0):.4f}")
+            print(f"bm25_precision: {bm25_retrieval.get('bm25_precision', 0):.4f}")
+            print(f"bm25_recall: {bm25_retrieval.get('bm25_recall', 0):.4f}")
+            print(f"bm25_f1: {bm25_retrieval.get('bm25_f1', 0):.4f}")
+            print(f"bm25_mrr: {bm25_retrieval.get('bm25_mrr', 0):.4f}")
+            print(f"bm25_recall_at_5: {bm25_retrieval.get('bm25_recall_at_5', 0):.4f}")
+            print(f"bm25_recall_at_10: {bm25_retrieval.get('bm25_recall_at_10', 0):.4f}")
+            print(f"bm25_avg_returned: {bm25_retrieval.get('bm25_avg_returned', 0):.2f}")
         if args.ingest:
             print(f"ingested_db: {args.ingest_db or args.db or Path(report['db_path'])}")
             if args.ingest_workspace:

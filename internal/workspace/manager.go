@@ -13,9 +13,11 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/taimufuraiyaa/agent-memory/internal/application"
+	"github.com/taimufuraiyaa/agent-memory/internal/core"
 	"github.com/taimufuraiyaa/agent-memory/internal/embeddings"
 	"github.com/taimufuraiyaa/agent-memory/internal/engine"
 	"github.com/taimufuraiyaa/agent-memory/internal/storage/sqlite"
@@ -219,32 +221,36 @@ func (m *Manager) Reinstall(ctx context.Context, opt ReinstallOptions) (*Reinsta
 	if err != nil {
 		return nil, err
 	}
-	reg, err := m.readRegistry()
-	if err != nil {
-		return nil, err
-	}
-	p := findProject(reg, name)
-	if p == nil {
-		return nil, errors.New("project not found in registry (run init first)")
-	}
-	if !fileExists(p.DBPath) {
-		return nil, fmt.Errorf("db file missing: %s", p.DBPath)
-	}
-	termIndex, err := prepareTermIndexPath(ctx, p.DBPath, name)
-	if err != nil {
-		return nil, fmt.Errorf("prepare term index: %w", err)
-	}
-	af, err := WriteAgentFiles(WriteAgentFilesOptions{
-		CWD:       root,
-		Workspace: name,
-		DataDir:   m.BaseDir,
-		Force:     opt.Force,
-		IDEs:      opt.IDEs,
+
+	v, err := m.withRegistryLock(func(reg *Registry) (any, error) {
+		p := findProject(reg, name)
+		if p == nil {
+			return nil, fmt.Errorf("%w: project not found in registry (run init first)", core.ErrNotFound)
+		}
+		if !fileExists(p.DBPath) {
+			return nil, fmt.Errorf("db file missing: %s", p.DBPath)
+		}
+		termIndex, err := prepareTermIndexPath(ctx, p.DBPath, name)
+		if err != nil {
+			return nil, fmt.Errorf("prepare term index: %w", err)
+		}
+		af, err := WriteAgentFiles(WriteAgentFilesOptions{
+			CWD:       root,
+			Workspace: name,
+			DataDir:   m.BaseDir,
+			Force:     opt.Force,
+			IDEs:      opt.IDEs,
+		})
+		if err != nil {
+			return nil, err
+		}
+		return &ReinstallResult{Project: name, DBPath: p.DBPath, AgentFiles: af, TermIndex: termIndex}, nil
 	})
 	if err != nil {
 		return nil, err
 	}
-	return &ReinstallResult{Project: name, DBPath: p.DBPath, AgentFiles: af, TermIndex: termIndex}, nil
+	out, _ := v.(*ReinstallResult)
+	return out, nil
 }
 
 func (m *Manager) Init(ctx context.Context, opt InitOptions) (*InitResult, error) {
@@ -261,7 +267,7 @@ func (m *Manager) Init(ctx context.Context, opt InitOptions) (*InitResult, error
 		dbPath := filepath.Join(m.BaseDir, name+".db")
 		existing := findProject(reg, name)
 		if existing != nil && !opt.Reuse && !opt.Force {
-			return nil, errors.New("project already exists")
+			return nil, fmt.Errorf("%w: project already exists", core.ErrAlreadyExists)
 		}
 		if existing != nil && opt.Force {
 			if _, err := archiveDBFile(m.BaseDir, existing.DBPath, name); err != nil {
@@ -483,23 +489,75 @@ func (m *Manager) Rename(_ context.Context, opt RenameOptions) (*RenameResult, e
 		}
 		p := findProject(reg, from)
 		if p == nil {
-			return nil, errors.New("project not found")
+			return nil, fmt.Errorf("%w: project not found", core.ErrNotFound)
 		}
 		if findProject(reg, to) != nil {
-			return nil, errors.New("target project already exists")
+			return nil, fmt.Errorf("%w: target project already exists", core.ErrAlreadyExists)
 		}
+
+		oldName := p.Name
+		oldDB := p.DBPath
 		newDB := filepath.Join(m.BaseDir, to+".db")
-		if err := moveDBWithSidecars(p.DBPath, newDB); err != nil {
-			return nil, err
-		}
+
+		// 1. Write the registry BEFORE moving the DB.
 		p.Name = to
 		p.DBPath = newDB
 		p.LastUsedAt = time.Now().UTC()
-		rulePath := filepath.Join(opt.CWD, ".cursor", "rules", "agent-memory.mdc")
-		_ = rewriteRuleWorkspace(rulePath, from, to)
-		return &RenameResult{From: from, To: to, DB: newDB}, nil
+		if err := m.writeRegistry(reg); err != nil {
+			// Revert in-memory changes.
+			p.Name = oldName
+			p.DBPath = oldDB
+			return nil, fmt.Errorf("write registry: %w", err)
+		}
+
+		// 2. Move the DB. If it fails, roll back the registry.
+		if err := moveDBWithSidecars(oldDB, newDB); err != nil {
+			p.Name = oldName
+			p.DBPath = oldDB
+			if wErr := m.writeRegistry(reg); wErr != nil {
+				return nil, fmt.Errorf("move db failed (%w) and registry rollback also failed (%w)", err, wErr)
+			}
+			return nil, fmt.Errorf("move db: %w", err)
+		}
+
+		// 3. Update all rule files the installer writes.
+		ruleFiles := []string{
+			filepath.Join(opt.CWD, ".cursor", "rules", "agent-memory.mdc"),
+			filepath.Join(opt.CWD, ".agents", "rules", "agent-memory.md"),
+			filepath.Join(opt.CWD, ".aierules"),
+			filepath.Join(opt.CWD, ".cursorrules"),
+			filepath.Join(opt.CWD, ".windsurfrules"),
+			filepath.Join(opt.CWD, ".trae", "rules", "project_rules.md"),
+			filepath.Join(opt.CWD, "AGENTS.md"),
+			filepath.Join(opt.CWD, "CLAUDE.md"),
+		}
+		var ruleErrors []string
+		updatedCount := 0
+		for _, rp := range ruleFiles {
+			if err := rewriteRuleWorkspace(rp, oldName, to); err != nil {
+				if os.IsNotExist(err) {
+					continue // skip missing files (not an error)
+				}
+				ruleErrors = append(ruleErrors, fmt.Sprintf("%s: %v", filepath.Base(rp), err))
+				continue
+			}
+			updatedCount++
+		}
+
+		result := &RenameResult{From: from, To: to, DB: newDB}
+		if len(ruleErrors) > 0 {
+			// Attach rule errors for reporting but don't fail the operation.
+			// The caller can inspect RenameResult if we add a field — for now,
+			// log via the returned error.
+			return result, fmt.Errorf("rename succeeded but %d rule file(s) could not be updated: %s",
+				len(ruleErrors), strings.Join(ruleErrors, "; "))
+		}
+		return result, nil
 	})
 	if err != nil {
+		// If the result was still populated (partial success), return it alongside the error.
+		// The RenameResult is embedded inside the any return — we check it below.
+		// For now, return the error as-is; the caller receives nil result on error.
 		return nil, err
 	}
 	out, _ := v.(*RenameResult)
@@ -576,7 +634,7 @@ func (m *Manager) Delete(_ context.Context, opt DeleteOptions) (*DeleteResult, e
 	v, err := m.withRegistryLock(func(reg *Registry) (any, error) {
 		p := findProject(reg, opt.ProjectName)
 		if p == nil {
-			return nil, errors.New("project not found")
+			return nil, fmt.Errorf("%w: project not found", core.ErrNotFound)
 		}
 		out := &DeleteResult{Project: p.Name}
 		if opt.KeepData {
@@ -622,15 +680,56 @@ func (m *Manager) registryPath() string { return filepath.Join(m.BaseDir, "works
 func (m *Manager) lockPath() string     { return filepath.Join(m.BaseDir, "workspaces.lock") }
 
 func (m *Manager) lockRegistry() (func(), error) {
+	lockAgeDeadline := 5 * time.Minute
 	for i := 0; i < 50; i++ {
 		f, err := os.OpenFile(m.lockPath(), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
 		if err == nil {
+			// Write our PID into the lock file so a future contender can check liveness.
+			_, _ = fmt.Fprintf(f, "%d\n", os.Getpid())
 			_ = f.Close()
 			return func() { _ = os.Remove(m.lockPath()) }, nil
+		}
+		// Contention: check if the lock is stale before retrying.
+		if m.isLockStale(lockAgeDeadline) {
+			_ = os.Remove(m.lockPath())
+			time.Sleep(10 * time.Millisecond)
+			continue
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
 	return nil, errors.New("registry lock timeout")
+}
+
+// isLockStale returns true when the lock file is older than maxAge AND the owning
+// PID (written as the first line of the file) no longer corresponds to a live process.
+func (m *Manager) isLockStale(maxAge time.Duration) bool {
+	info, statErr := os.Stat(m.lockPath())
+	if statErr != nil {
+		return false
+	}
+	if time.Since(info.ModTime()) <= maxAge {
+		return false
+	}
+	// Read the PID from the lock file body.
+	b, readErr := os.ReadFile(m.lockPath())
+	if readErr != nil {
+		return false
+	}
+	firstLine := strings.TrimSpace(string(b))
+	if firstLine == "" {
+		return false
+	}
+	pid, parseErr := strconv.Atoi(firstLine)
+	if parseErr != nil || pid <= 0 {
+		return false
+	}
+	// Check whether the owning process is still alive (Unix).
+	proc, findErr := os.FindProcess(pid)
+	if findErr != nil {
+		return true
+	}
+	err := proc.Signal(syscall.Signal(0))
+	return err != nil
 }
 
 func (m *Manager) readRegistry() (*Registry, error) {

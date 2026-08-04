@@ -16,7 +16,9 @@ func TestRunSessionEndLifecycleRunsLifecycle(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = store.Close() })
 
-	out, err := RunSessionEndLifecycle(context.Background(), "ws", "always run migrations\nresult was success", store, NewWritePipeline(store))
+	transcript := "Always run database migrations before deploying the orders API to production." +
+		" The deployment was successful after fixing the connection timeout configuration."
+	out, err := RunSessionEndLifecycle(context.Background(), "ws", transcript, store, NewWritePipeline(store))
 	if err != nil {
 		t.Fatalf("run session-end lifecycle: %v", err)
 	}

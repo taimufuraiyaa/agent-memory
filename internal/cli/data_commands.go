@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/taimufuraiyaa/agent-memory/internal/api"
 	"github.com/taimufuraiyaa/agent-memory/internal/engine"
 	"github.com/taimufuraiyaa/agent-memory/internal/storage/sqlite"
 )
@@ -117,31 +118,31 @@ func newExportCommand() *cobra.Command {
 		Short: "Export workspace memories to json, markdown, or csv",
 		Long: `Export all workspace memories to a file for backup, analysis, or migration.
 
-Export formats:
-  json     - Complete data with all fields (default)
-  markdown - Human-readable grouped by memory type
-  csv      - Tabular format for spreadsheet analysis (16 columns)
+	Export formats:
+	  json     - Complete data with all fields (default)
+	  markdown - Human-readable grouped by memory type
+	  csv      - Tabular format for spreadsheet analysis (16 columns)
 
-The export includes all memory metadata: content, type, confidence,
-storage tier, access counts, decay scores, outcomes, and timestamps.`,
+	The export includes all memory metadata: content, type, confidence,
+	storage tier, access counts, decay scores, outcomes, and timestamps.`,
 		Example: `  # Export to JSON (complete backup)
-  agent-memory export --workspace my-project \
-    --export-format json --out backup.json
+	  agent-memory export --workspace my-project \
+	    --export-format json --out backup.json
 
-  # Export to Markdown (human-readable)
-  agent-memory export --workspace my-project \
-    --export-format markdown --out memories.md
+	  # Export to Markdown (human-readable)
+	  agent-memory export --workspace my-project \
+	    --export-format markdown --out memories.md
 
-  # Export to CSV (for Excel/Google Sheets)
-  agent-memory export --workspace my-project \
-    --export-format csv --out data.csv
+	  # Export to CSV (for Excel/Google Sheets)
+	  agent-memory export --workspace my-project \
+	    --export-format csv --out data.csv
 
-  # Print JSON to stdout
-  agent-memory export --workspace my-project
+	  # Print JSON to stdout
+	  agent-memory export --workspace my-project
 
-  # Export from specific database file
-  agent-memory export --workspace my-project \
-    --db /path/to/memories.db --export-format json --out export.json`,
+	  # Export from specific database file
+	  agent-memory export --workspace my-project \
+	    --db /path/to/memories.db --export-format json --out export.json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 			cfg, err := resolveRuntime(flags)
@@ -246,19 +247,60 @@ func newImportCommand() *cobra.Command {
 					return err
 				}
 				defer func() { _ = store.Close() }()
+
+				filter := engine.NewRegexSecurityFilter()
 				imported := 0
+				skipped := make([]map[string]any, 0)
+				failed := make([]map[string]any, 0)
+
 				for _, m := range bundle.Memories {
 					mm := m
 					if strings.TrimSpace(mm.Workspace) == "" {
 						mm.Workspace = cfg.workspace
 					}
+					if reason := api.SanitizeImportedMemory(ctx, &mm, filter); reason != "" {
+						skipped = append(skipped, map[string]any{
+							"id":     mm.ID,
+							"reason": reason,
+						})
+						continue
+					}
 					if err := store.UpsertMemory(ctx, &mm); err != nil {
-						return err
+						failed = append(failed, map[string]any{
+							"id":     mm.ID,
+							"reason": err.Error(),
+						})
+						continue
 					}
 					imported++
 				}
-				_, _ = store.AppendAuditEvent(ctx, sqlite.AuditEventInput{Workspace: cfg.workspace, Operation: "import", Outcome: "success", Actor: "cli", Source: "bundle", TargetType: "memory", TargetCount: imported, Reason: "memory bundle import"})
-				out = map[string]any{"version": bundle.Version, "imported": imported}
+
+				auditOutcome := "success"
+				if imported == 0 && len(bundle.Memories) > 0 {
+					auditOutcome = "failure"
+				}
+				_, _ = store.AppendAuditEvent(ctx, sqlite.AuditEventInput{
+					Workspace:   cfg.workspace,
+					Operation:   "import",
+					Outcome:     auditOutcome,
+					Actor:       "cli",
+					Source:      "bundle",
+					TargetType:  "memory",
+					TargetCount: imported,
+					Reason:      "memory bundle import",
+				})
+
+				out = map[string]any{
+					"version":  bundle.Version,
+					"imported": imported,
+					"skipped":  skipped,
+					"failed":   failed,
+				}
+
+				// Exit non-zero only when ALL items failed (and there were items)
+				if imported == 0 && len(skipped)+len(failed) == len(bundle.Memories) && len(bundle.Memories) > 0 {
+					return fmt.Errorf("import failed: all %d items rejected", len(bundle.Memories))
+				}
 			}
 			return writeSuccessEnvelope(cmd.OutOrStdout(), "import", out)
 		},

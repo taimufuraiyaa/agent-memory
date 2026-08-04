@@ -179,10 +179,10 @@ func (p *AuditLogPlugin) logJSON(event string, details map[string]interface{}) e
 	return nil
 }
 
-// truncate truncates a string to maxLen characters.
+// truncate truncates a string to maxLen bytes without splitting a UTF-8 rune.
 func truncate(s string, maxLen int) string {
 	if len(s) <= maxLen {
 		return s
 	}
-	return s[:maxLen] + "..."
+	return core.TruncateUTF8(s, maxLen) + "..."
 }

@@ -91,6 +91,10 @@ func (p *ObservationPromoter) Promote(ctx context.Context, req PromoteRequest) (
 		return nil, errors.New("promotion content is empty")
 	}
 
+	// Redact the full assembled content once more before writing, ensuring
+	// no secret fragments survived the per-line redaction inside BuildPromotionText.
+	content = RedactPrivateAndSecrets(content)
+
 	out, err := p.writer.Write(ctx, WriteInput{
 		Workspace: req.Workspace,
 		Type:      req.MemoryType,

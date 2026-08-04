@@ -2,6 +2,8 @@ package workspace
 
 import (
 	"context"
+	"fmt"
+	"time"
 	"os"
 	"path/filepath"
 	"strings"
@@ -1006,5 +1008,122 @@ func TestWriteCodexGlobalFilesPreservesExistingWritableRoots(t *testing.T) {
 	config, _ := os.ReadFile(filepath.Join(codexHome, "config.toml"))
 	if strings.Count(string(config), existingRoot) != 1 || strings.Count(string(config), dataDir) != 1 {
 		t.Fatalf("expected both writable roots exactly once, got %s", config)
+	}
+}
+
+func TestRegistryLockStaleRecovery(t *testing.T) {
+	base := t.TempDir()
+	mgr, err := NewManager(base)
+	if err != nil {
+		t.Fatalf("new manager: %v", err)
+	}
+
+	// Create a fake stale lock file with a dead PID and old timestamp.
+	lockPath := filepath.Join(base, "workspaces.lock")
+	// PID 99999 is very unlikely to exist.
+	content := fmt.Sprintf("%d\n", 99999)
+	if err := os.WriteFile(lockPath, []byte(content), 0o644); err != nil {
+		t.Fatalf("write fake lock: %v", err)
+	}
+	// Set the modification time to 10 minutes ago.
+	oldTime := time.Now().Add(-10 * time.Minute)
+	if err := os.Chtimes(lockPath, oldTime, oldTime); err != nil {
+		t.Fatalf("chtimes: %v", err)
+	}
+
+	// The lock should be detected as stale and reclaimed, allowing init to succeed.
+	out, err := mgr.Init(context.Background(), InitOptions{
+		CWD:         t.TempDir(),
+		ProjectName: "stale-recovery",
+	})
+	if err != nil {
+		t.Fatalf("init with stale lock: %v", err)
+	}
+	if out.Project != "stale-recovery" {
+		t.Fatalf("unexpected project: %s", out.Project)
+	}
+
+	// Verify the lock file was cleaned up and a new one is working.
+	// After init completes, the lock should be released.
+	if _, statErr := os.Stat(lockPath); !os.IsNotExist(statErr) {
+		t.Fatalf("lock file should be removed after init completes")
+	}
+}
+
+func TestRenameUpdatesAllRuleFiles(t *testing.T) {
+	base := t.TempDir()
+	cwd := t.TempDir()
+	mgr, err := NewManager(base)
+	if err != nil {
+		t.Fatalf("new manager: %v", err)
+	}
+
+	// Init with all IDE rule files.
+	out, err := mgr.Init(context.Background(), InitOptions{
+		CWD:         cwd,
+		ProjectName: "old-name",
+		IDEs:        []string{"all"},
+	})
+	if err != nil {
+		t.Fatalf("init: %v", err)
+	}
+	if len(out.RuleFiles) == 0 {
+		t.Fatalf("expected rule files")
+	}
+
+	// Verify all rule files reference the old workspace name.
+	ruleFiles := []string{
+		filepath.Join(cwd, ".cursor", "rules", "agent-memory.mdc"),
+		filepath.Join(cwd, ".agents", "rules", "agent-memory.md"),
+		filepath.Join(cwd, ".aierules"),
+		filepath.Join(cwd, ".cursorrules"),
+		filepath.Join(cwd, ".windsurfrules"),
+		filepath.Join(cwd, ".trae", "rules", "project_rules.md"),
+		filepath.Join(cwd, "AGENTS.md"),
+		filepath.Join(cwd, "CLAUDE.md"),
+	}
+	for _, rp := range ruleFiles {
+		b, readErr := os.ReadFile(rp)
+		if readErr != nil {
+			t.Fatalf("read %s: %v", rp, readErr)
+		}
+		if !strings.Contains(string(b), "workspace: old-name") {
+			t.Fatalf("expected 'workspace: old-name' in %s, got: %s", rp, string(b))
+		}
+	}
+
+	// Rename the workspace.
+	ren, err := mgr.Rename(context.Background(), RenameOptions{
+		CWD: cwd,
+		From: "old-name",
+		To:   "new-name",
+	})
+	if err != nil {
+		t.Fatalf("rename: %v", err)
+	}
+	if ren.To != "new-name" {
+		t.Fatalf("unexpected rename result: %+v", ren)
+	}
+
+	// Verify all rule files now reference the new workspace name.
+	for _, rp := range ruleFiles {
+		b, readErr := os.ReadFile(rp)
+		if readErr != nil {
+			t.Fatalf("read %s after rename: %v", rp, readErr)
+		}
+		if strings.Contains(string(b), "workspace: old-name") {
+			t.Fatalf("%s still references old workspace name", rp)
+		}
+		if !strings.Contains(string(b), "workspace: new-name") {
+			t.Fatalf("%s does not reference new workspace name: %s", rp, string(b))
+		}
+	}
+
+	// Verify DB path changed in the result.
+	if ren.DB == "" || ren.DB == out.DBPath {
+		t.Fatalf("DB path not updated: %s -> %s", out.DBPath, ren.DB)
+	}
+	if _, statErr := os.Stat(ren.DB); statErr != nil {
+		t.Fatalf("renamed DB not found: %v", statErr)
 	}
 }

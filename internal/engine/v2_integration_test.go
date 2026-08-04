@@ -362,7 +362,8 @@ func TestV2_NoV1Regressions(t *testing.T) {
 		t.Fatalf("dedup regression: expected same ID")
 	}
 
-	// Secret rejection still works
+	// Secret redaction still works (secrets are now redacted, not rejected,
+	// since redaction runs before validation in the write pipeline).
 	secret, err := pipe.Write(ctx, WriteInput{
 		Workspace: "ws",
 		Type:      core.SemanticMemory,
@@ -372,8 +373,18 @@ func TestV2_NoV1Regressions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("secret write: %v", err)
 	}
-	if !secret.Rejected {
-		t.Fatalf("secret regression: expected rejection")
+	if secret.Rejected {
+		t.Fatalf("secret should be redacted and written, not rejected: %s", secret.RejectReason)
+	}
+	mem, err := store.GetMemoryByHash(ctx, "ws", secret.ContentHash)
+	if err != nil {
+		t.Fatalf("get memory: %v", err)
+	}
+	if mem == nil {
+		t.Fatal("expected redacted memory to exist")
+	}
+	if strings.Contains(mem.Content, "AKIAIOSFODNN7EXAMPLE") {
+		t.Fatalf("expected AWS key to be redacted, got: %s", mem.Content)
 	}
 
 	// Session-end extraction still works

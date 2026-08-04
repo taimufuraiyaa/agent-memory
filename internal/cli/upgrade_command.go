@@ -506,6 +506,24 @@ Use --hooks-only to push hooks without touching the binary (useful for existing 
 				TuningCommand: "agent-memory tuning",
 			}
 
+			// Warn when --to signals a specific version but we fall back to a local checkout
+			// (go-build uses whatever is on disk, ignoring the version specifier).
+			toNormalized := strings.TrimSpace(to)
+			if method == "go-build" && toNormalized != "" && !strings.EqualFold(toNormalized, "latest") {
+				warnMsg := fmt.Sprintf(
+					"UPGRADE WARNING: --to %s specified but building from local checkout at %s. "+
+						"The version specifier is ignored when using a local source. "+
+						"Set AGENT_MEMORY_SRC_DIR to a checkout at the desired version, "+
+						"or unset it and remove --src to use 'go install %s' instead.",
+					to, srcDir, spec,
+				)
+				if f != "json" {
+					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "%s\n", warnMsg)
+				}
+				// Attach the warning to the result struct for both formats.
+				res.DashboardError = warnMsg
+			}
+
 			if dryRun {
 				if f == "json" {
 					return writeSuccessEnvelope(cmd.OutOrStdout(), "upgrade", res)

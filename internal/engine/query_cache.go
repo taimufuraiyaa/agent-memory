@@ -2,6 +2,8 @@ package engine
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"strings"
 	"sync"
@@ -13,24 +15,34 @@ import (
 
 // QueryCache implements TTL-based caching for query embeddings and retrieval results.
 // Caching dramatically reduces latency for repeated queries within a session.
+//
+// Keys are deterministic truncated SHA-256 digests, so raw query text is never
+// retained in the LRU map keys; the full identity of each entry is stored inside
+// the value and verified on read to guard against hash collisions. The TTL acts
+// as a backstop for stale entries that are not invalidated explicitly (see
+// InvalidateWorkspace and the LifecycleManager.OnWorkspaceChange hook).
 type QueryCache struct {
-	embeddingCache *lruCache // query text hash → embedding vector
-	resultCache    *lruCache // query key → retrieval results
+	embeddingCache *lruCache // normalized-query digest → CachedEmbedding
+	resultCache    *lruCache // retrieval-options digest → CachedResult
 	ttl            time.Duration
 	mu             sync.RWMutex
 	enabled        bool
 }
 
-// CachedEmbedding wraps an embedding with expiration metadata.
+// CachedEmbedding wraps an embedding with expiration metadata and the normalized
+// query it was computed for, verified on read against the requested query.
 type CachedEmbedding struct {
 	Quantized *embeddings.QuantizedVector
+	Key       string // normalized query text the embedding was computed for
 	CachedAt  time.Time
 	ExpiresAt time.Time
 }
 
-// CachedResult wraps retrieval results with expiration metadata.
+// CachedResult wraps retrieval results with expiration metadata and the full
+// retrieval-options key, verified on read against the requested options.
 type CachedResult struct {
 	Hits      []RetrievalHit
+	Key       string // full retrieval-options identity string
 	CachedAt  time.Time
 	ExpiresAt time.Time
 }
@@ -74,10 +86,12 @@ func (c *QueryCache) GetEmbedding(ctx context.Context, queryText string) []float
 		return nil
 	}
 
+	query := normalizeQuery(queryText)
+	key := embeddingCacheKey(query)
+
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	key := hashQueryText(queryText)
 	entry, ok := c.embeddingCache.get(key)
 	if !ok {
 		observability.GetRegistry().CacheMisses.WithLabelValues("embedding").Inc()
@@ -85,6 +99,12 @@ func (c *QueryCache) GetEmbedding(ctx context.Context, queryText string) []float
 	}
 
 	cached := entry.(CachedEmbedding)
+	if cached.Key != query {
+		// Truncated-hash collision: treat as a miss rather than returning the
+		// embedding for a different query.
+		observability.GetRegistry().CacheMisses.WithLabelValues("embedding").Inc()
+		return nil
+	}
 	if time.Now().After(cached.ExpiresAt) {
 		// Expired - will be cleaned up on next write
 		observability.GetRegistry().CacheMisses.WithLabelValues("embedding").Inc()
@@ -105,10 +125,12 @@ func (c *QueryCache) SetEmbedding(ctx context.Context, queryText string, vector 
 		return
 	}
 
+	query := normalizeQuery(queryText)
+	key := embeddingCacheKey(query)
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	key := hashQueryText(queryText)
 	now := time.Now()
 
 	qvec, err := embeddings.QuantizeTurbo(vector)
@@ -118,6 +140,7 @@ func (c *QueryCache) SetEmbedding(ctx context.Context, queryText string, vector 
 
 	cached := CachedEmbedding{
 		Quantized: qvec,
+		Key:       query,
 		CachedAt:  now,
 		ExpiresAt: now.Add(c.ttl),
 	}
@@ -132,10 +155,12 @@ func (c *QueryCache) GetResults(ctx context.Context, opt RetrievalOptions) []Ret
 		return nil
 	}
 
+	fullKey := resultCacheKey(opt)
+	key := cacheKeyDigest(fullKey)
+
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	key := hashRetrievalOptions(opt)
 	entry, ok := c.resultCache.get(key)
 	if !ok {
 		observability.GetRegistry().CacheMisses.WithLabelValues("result").Inc()
@@ -143,6 +168,12 @@ func (c *QueryCache) GetResults(ctx context.Context, opt RetrievalOptions) []Ret
 	}
 
 	cached := entry.(CachedResult)
+	if cached.Key != fullKey {
+		// Truncated-hash collision: treat as a miss rather than returning the
+		// results for a different retrieval.
+		observability.GetRegistry().CacheMisses.WithLabelValues("result").Inc()
+		return nil
+	}
 	if time.Now().After(cached.ExpiresAt) {
 		// Expired - will be cleaned up on next write
 		observability.GetRegistry().CacheMisses.WithLabelValues("result").Inc()
@@ -163,10 +194,12 @@ func (c *QueryCache) SetResults(ctx context.Context, opt RetrievalOptions, hits 
 		return
 	}
 
+	fullKey := resultCacheKey(opt)
+	key := cacheKeyDigest(fullKey)
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	key := hashRetrievalOptions(opt)
 	now := time.Now()
 
 	// Create a copy of the hits slice to prevent future external mutations
@@ -175,6 +208,7 @@ func (c *QueryCache) SetResults(ctx context.Context, opt RetrievalOptions, hits 
 
 	cached := CachedResult{
 		Hits:      hitsCopy,
+		Key:       fullKey,
 		CachedAt:  now,
 		ExpiresAt: now.Add(c.ttl),
 	}
@@ -182,8 +216,9 @@ func (c *QueryCache) SetResults(ctx context.Context, opt RetrievalOptions, hits 
 	observability.GetRegistry().CacheSize.WithLabelValues("result").Set(float64(c.resultCache.size()))
 }
 
-// InvalidateWorkspace removes all cache entries for a workspace.
-// Call this after writes to ensure fresh results.
+// InvalidateWorkspace removes all cached results for a workspace.
+// Call this after writes to ensure fresh results. Embedding entries are
+// workspace-independent and are intentionally left intact.
 func (c *QueryCache) InvalidateWorkspace(workspace string) {
 	if !c.enabled {
 		return
@@ -192,10 +227,14 @@ func (c *QueryCache) InvalidateWorkspace(workspace string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// Invalidate only results belonging to this workspace using prefix matching
+	// LRU map keys are digests, so match on the full key stored inside each
+	// CachedResult value (always prefixed "ws=<workspace>|").
 	prefix := fmt.Sprintf("ws=%s|", workspace)
-	c.resultCache.invalidate(func(key string) bool {
-		return strings.HasPrefix(key, prefix)
+	c.resultCache.invalidateByValue(func(value interface{}) bool {
+		if cached, ok := value.(CachedResult); ok {
+			return strings.HasPrefix(cached.Key, prefix)
+		}
+		return false
 	})
 }
 
@@ -248,13 +287,35 @@ func (s CacheStats) ResultHitRate() float64 {
 	return float64(s.ResultHits) / float64(total)
 }
 
-// hashQueryText returns the raw text directly to avoid hashing overhead and keep keys readable.
-func hashQueryText(text string) string {
-	return text
+// normalizeQuery canonicalizes query text for cache keys: surrounding whitespace
+// is trimmed and interior whitespace runs collapse to single spaces, so
+// "  foo\t bar " and "foo bar" share one cache entry.
+func normalizeQuery(q string) string {
+	return strings.Join(strings.Fields(q), " ")
 }
 
-// hashRetrievalOptions returns a deterministic key representing the retrieval options.
-func hashRetrievalOptions(opt RetrievalOptions) string {
+// cacheKeyDigest returns a deterministic truncated SHA-256 digest (128 bits,
+// hex-encoded) of the given key material. Cache map keys are digests, so raw
+// query text is never retained in keys; callers verify the full key stored in
+// the value on read to guard against collisions.
+func cacheKeyDigest(material string) string {
+	sum := sha256.Sum256([]byte(material))
+	return hex.EncodeToString(sum[:16])
+}
+
+// embeddingCacheKey derives the LRU key for an embedding: a digest of the
+// normalized query text. Embeddings are workspace-independent (the same text
+// yields the same vector regardless of workspace or mode), so the key
+// deliberately excludes workspace and mode to maximize reuse.
+func embeddingCacheKey(queryText string) string {
+	return cacheKeyDigest(normalizeQuery(queryText))
+}
+
+// resultCacheKey builds the full identity string for retrieval options: it
+// carries workspace, normalized query, mode, and every filter that affects
+// results. It is stored inside each CachedResult for equality checks and
+// workspace invalidation; the LRU map key is cacheKeyDigest of this string.
+func resultCacheKey(opt RetrievalOptions) string {
 	var outcome any
 	if opt.Filters.OutcomeResult != nil {
 		outcome = *opt.Filters.OutcomeResult
@@ -296,7 +357,7 @@ func hashRetrievalOptions(opt RetrievalOptions) string {
 
 	return fmt.Sprintf("ws=%s|q=%s|k=%d|m=%s|d=%d|types=%v|tiers=%v|outcome=%v|conf=%.4f|decay=%.4f|entities=%v|from=%s|to=%s|min_sem=%.4f|min_total=%.4f|rel=%.4f|w_sem=%.4f|w_total=%.4f|w_rel=%.4f",
 		opt.Workspace,
-		opt.Query,
+		normalizeQuery(opt.Query),
 		opt.TopK,
 		opt.Mode,
 		opt.Depth,
@@ -415,12 +476,12 @@ func (c *lruCache) removeLRU() {
 	delete(c.items, lru.key)
 }
 
-func (c *lruCache) invalidate(filter func(key string) bool) {
+func (c *lruCache) invalidateByValue(filter func(value interface{}) bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	for key, node := range c.items {
-		if filter(key) {
+		if filter(node.value) {
 			c.removeNode(node)
 			delete(c.items, key)
 		}

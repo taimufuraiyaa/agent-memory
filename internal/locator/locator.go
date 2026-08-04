@@ -111,7 +111,7 @@ func Extract(in Input) ([]core.MemoryTerm, error) {
 		}
 	}
 	if validExplicit > MaxTerms {
-		return nil, fmt.Errorf("keywords contain %d normalized tokens; maximum is %d", validExplicit, MaxTerms)
+		return nil, fmt.Errorf("%w: keywords contain %d normalized tokens; maximum is %d", core.ErrInvalidInput, validExplicit, MaxTerms)
 	}
 	for _, raw := range explicitTokens {
 		add(raw, core.TermSourceExplicit)

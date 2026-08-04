@@ -68,18 +68,8 @@ func NewRegexSecurityFilterWithPolicy(policy SecurityPolicy, onAnomaly func(Secu
 	f := &RegexSecurityFilter{
 		policy:    policy,
 		onAnomaly: onAnomaly,
-		secrets: []*regexp.Regexp{
-			regexp.MustCompile(`AKIA[0-9A-Z]{16}`),
-			regexp.MustCompile(`(?i)-----BEGIN (RSA|EC|OPENSSH|PRIVATE) KEY-----`),
-			regexp.MustCompile(`(?i)\b(password|passwd|pwd)\s*[:=]\s*['"]?[^'"\s]+`),
-			regexp.MustCompile(`(?i)\b(secret|api[_-]?key|token)\s*[:=]\s*['"]?[A-Za-z0-9_\-]{8,}`),
-			regexp.MustCompile(`eyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}`),
-		},
-		pii: []*regexp.Regexp{
-			regexp.MustCompile(`(?i)\b[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}\b`),
-			regexp.MustCompile(`\b(?:\+?1[\s\-]?)?(?:\(\d{3}\)|\d{3})[\s\-]?\d{3}[\s\-]?\d{4}\b`),
-			regexp.MustCompile(`\b\d{3}-\d{2}-\d{4}\b`),
-		},
+		secrets:   SecretPatterns,
+		pii:       PIISecretPatterns,
 		poison: []*regexp.Regexp{
 			regexp.MustCompile(`(?i)ignore (all )?previous instructions`),
 			regexp.MustCompile(`(?i)reveal (the )?system prompt`),

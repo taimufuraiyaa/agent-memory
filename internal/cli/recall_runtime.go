@@ -155,6 +155,9 @@ func executeRecall(
 		return nil, "", errors.New("provider is required when memory is enabled")
 	}
 
+	// Reset per-recall benchmark instrumentation counters.
+	engine.ResetBenchmarkMetrics()
+
 	// Create shared cache for searcher, retrieval, and pipeline
 	cache := engine.NewQueryCache(engine.DefaultQueryCacheConfig())
 	searcher := engine.NewVectorSearcher(store, provider)
@@ -176,6 +179,8 @@ func executeRecall(
 	if err != nil {
 		return nil, "", err
 	}
+	// Flush benchmark instrumentation metrics after each recall.
+	_ = engine.FlushBenchmarkMetrics()
 	payload := map[string]any{
 		"request_id":             result.RequestID,
 		"mode":                   result.Retrieved.Mode,
@@ -201,6 +206,7 @@ func executeRecall(
 		"search_probe":           result.Decision.Probe,
 		"deep_recall_used":       result.Decision.Strategy != engine.RecallStrategySearchSatisfied,
 		"reconstruction":         result.Reconstruction,
+		"benchmark_metrics":      engine.SnapshotBenchmarkMetrics(),
 	}
 	return payload, result.ContextBlock, nil
 }

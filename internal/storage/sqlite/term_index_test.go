@@ -181,8 +181,14 @@ func TestCascadeDeleteDirtiesTermIndexGeneration(t *testing.T) {
 		t.Fatalf("replace terms: %v", err)
 	}
 	before, err := store.GetTermIndexState(ctx, "project-a")
-	if err != nil || before == nil {
-		t.Fatalf("get state before delete: state=%#v err=%v", before, err)
+	if err != nil {
+		t.Fatalf("get state before delete: %v", err)
+	}
+	var beforeGen int64
+	var beforeStale int64
+	if before != nil {
+		beforeGen = before.CorpusGeneration
+		beforeStale = before.StaleDeleteCount
 	}
 
 	if err := store.DeleteByIDs(ctx, []string{"memory-a"}); err != nil {
@@ -192,11 +198,11 @@ func TestCascadeDeleteDirtiesTermIndexGeneration(t *testing.T) {
 	if err != nil || after == nil {
 		t.Fatalf("get state after delete: state=%#v err=%v", after, err)
 	}
-	if after.State != TermIndexDirty || after.CorpusGeneration <= before.CorpusGeneration {
-		t.Fatalf("cascade deletion did not advance dirty generation: before=%#v after=%#v", before, after)
+	if after.State != TermIndexDirty || after.CorpusGeneration <= beforeGen {
+		t.Fatalf("cascade deletion did not advance dirty generation: before=%v after=%#v", before, after)
 	}
-	if after.StaleDeleteCount != before.StaleDeleteCount+1 {
-		t.Fatalf("cascade deletion did not record stale-delete pressure: before=%#v after=%#v", before, after)
+	if after.StaleDeleteCount != beforeStale+1 {
+		t.Fatalf("cascade deletion did not record stale-delete pressure: before=%v after=%#v", before, after)
 	}
 }
 
@@ -294,8 +300,16 @@ func TestRoutineTermReplacementDoesNotInflateStaleDeleteCount(t *testing.T) {
 		t.Fatalf("seed baseline terms: %v", err)
 	}
 	before, err := store.GetTermIndexState(ctx, "project-a")
-	if err != nil || before == nil {
-		t.Fatalf("get state before replacement: state=%#v err=%v", before, err)
+	if err != nil {
+		t.Fatalf("get state before replacement: err=%v", err)
+	}
+	// before may be nil — the insert trigger was removed (R3 incremental Bloom);
+	// the first term write on a fresh workspace no longer auto-creates a state row.
+	var beforeGen int64
+	var beforeStale int64
+	if before != nil {
+		beforeGen = before.CorpusGeneration
+		beforeStale = before.StaleDeleteCount
 	}
 
 	// Routine replacement is DELETE+INSERT; it must not count as an eviction.
@@ -311,11 +325,11 @@ func TestRoutineTermReplacementDoesNotInflateStaleDeleteCount(t *testing.T) {
 	if after.State != TermIndexDirty {
 		t.Fatalf("expected dirty state after replacement, got %q", after.State)
 	}
-	if after.CorpusGeneration <= before.CorpusGeneration {
-		t.Fatalf("routine replacement did not invalidate snapshot: before=%d after=%d", before.CorpusGeneration, after.CorpusGeneration)
+	if after.CorpusGeneration <= beforeGen {
+		t.Fatalf("routine replacement did not invalidate snapshot: before=%d after=%d", beforeGen, after.CorpusGeneration)
 	}
-	if after.StaleDeleteCount != before.StaleDeleteCount {
-		t.Fatalf("routine replacement inflated stale-delete pressure: before=%d after=%d", before.StaleDeleteCount, after.StaleDeleteCount)
+	if after.StaleDeleteCount != beforeStale {
+		t.Fatalf("routine replacement inflated stale-delete pressure: before=%d after=%d", beforeStale, after.StaleDeleteCount)
 	}
 
 	// A real eviction must count exactly once.
@@ -329,7 +343,7 @@ func TestRoutineTermReplacementDoesNotInflateStaleDeleteCount(t *testing.T) {
 	if final.State != TermIndexDirty {
 		t.Fatalf("expected state still dirty after delete, got %q", final.State)
 	}
-	if final.StaleDeleteCount != before.StaleDeleteCount+1 {
-		t.Fatalf("delete did not count exactly one stale delete: before=%d after=%d", before.StaleDeleteCount, final.StaleDeleteCount)
+	if final.StaleDeleteCount != beforeStale+1 {
+		t.Fatalf("delete did not count exactly one stale delete: before=%d after=%d", beforeStale, final.StaleDeleteCount)
 	}
 }

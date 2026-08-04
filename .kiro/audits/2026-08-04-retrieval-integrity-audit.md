@@ -96,5 +96,12 @@ If h2 ≡ 0 (mod m) or gcd(h2, m) > 1, all k probes collapse to a subset of slot
 
 ## 8. Immediate Follow-ups
 
-- Spec: `.kiro/specs/retrieval-integrity/` (requirements/design/tasks) created for the P0 work package.
-- Versioned migrations (3.2) is the next highest-leverage item after this round.
+- Spec: `.kiro/specs/retrieval-integrity/` (requirements/design/tasks) created for the
+  P0 work package.
+- Spec packages for all remaining [PLANNED] items created 2026-08-04:
+  `storage-integrity` (3.2/3.7/3.8/3.9/3.10/3.11), `feedback-loop-atomicity`
+  (3.4/3.5/3.6), `learning-input-integrity` (5.1/5.2/5.3/5.5),
+  `advisor-trust-and-observability` (5.4/5.6/5.7), `cli-contract-integrity`
+  (4.2-4.8), `retrieval-scoring-calibration` (1.3/2.3/2.4), `benchmark-validity`
+  (6.1-6.9). See `.kiro/specs/README.md`.
+- Versioned migrations (3.2) is the next highest-leverage implementation item.

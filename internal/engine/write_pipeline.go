@@ -51,6 +51,10 @@ type WriteInput struct {
 	Outcome         *core.Outcome
 	Mode            ExtractMode
 	ContentHashSalt string
+	// MaxConfidence, when set, caps the estimated confidence score.
+	// If nil (default), no cap is applied. Used by session-end extraction
+	// to prevent low-quality outcomes from bypassing the confidence gate.
+	MaxConfidence *float64
 }
 
 // WriteResult reports final write status.
@@ -197,7 +201,8 @@ func (p *WritePipeline) Write(ctx context.Context, in WriteInput) (res *WriteRes
 				metrics.WriteBytes.WithLabelValues(in.Workspace, string(in.Type)).Observe(float64(len(in.Content)))
 			}
 		}
-		metrics.WriteTotal.WithLabelValues(in.Workspace, string(in.Type), status).Inc()
+		// WriteTotal is aggregate-only (no workspace label) to bound cardinality.
+		metrics.WriteTotal.WithLabelValues(string(in.Type), status).Inc()
 		timer.ObserveDuration(metrics.WriteDuration.WithLabelValues(in.Workspace, string(in.Type)))
 	}()
 
@@ -246,6 +251,16 @@ func (p *WritePipeline) Write(ctx context.Context, in WriteInput) (res *WriteRes
 	if in.Diagram != nil && strings.TrimSpace(in.Diagram.Code) != "" {
 		validationContent = strings.TrimSpace(validationContent) + "\n" + in.Diagram.Code
 	}
+
+	// Redact secrets and PII from the content before running the security
+	// filter, so that the filter operates on already-sanitized content.
+	// This is the same order used by sanitizeImportedMemory in the API layer.
+	validationContent = RedactPrivateAndSecrets(validationContent)
+	in.Content = RedactPrivateAndSecrets(in.Content)
+	if in.Diagram != nil && in.Diagram.Code != "" {
+		in.Diagram.Code = RedactPrivateAndSecrets(in.Diagram.Code)
+	}
+
 	if err := p.filter.Validate(ctx, SecurityValidationInput{
 		Workspace: in.Workspace,
 		Content:   validationContent,
@@ -292,6 +307,14 @@ func (p *WritePipeline) Write(ctx context.Context, in WriteInput) (res *WriteRes
 		confidence = 1.0 // failures are always stored at full confidence
 	} else {
 		confidence = EstimateConfidence(ctx, in, p.store)
+	}
+
+	// Apply caller-supplied confidence cap (e.g. session-end extraction).
+	if in.MaxConfidence != nil && confidence > *in.MaxConfidence {
+		confidence = *in.MaxConfidence
+	}
+
+	if !isFailureOutcome(in) {
 		band := ClassifyConfidence(confidence)
 		if band == ConfidenceLow {
 			return &WriteResult{
@@ -310,6 +333,23 @@ func (p *WritePipeline) Write(ctx context.Context, in WriteInput) (res *WriteRes
 	}
 	hash := contentHash(in.Workspace, in.Type, hashContent, in.Diagram)
 	decision := p.router.Decide(in)
+
+	// Dedup before embedding: check whether this content hash already exists.
+	// If it does, return the existing result immediately, skipping the costly
+	// embedding call entirely. The INSERT OR IGNORE below remains as a final
+	// concurrency guard for races between this lookup and the insert.
+	// Cardinality budget: 1 (aggregate) per family.
+	if existing, getErr := p.store.GetMemoryByHash(ctx, in.Workspace, hash); getErr == nil && existing != nil {
+		return &WriteResult{
+			ID:           existing.ID,
+			Deduplicated: true,
+			StorageTier:  existing.StorageTier,
+			RouteRule:    decision.Rule,
+			RouteReason:  decision.Reason,
+			ContentHash:  hash,
+		}, nil
+	}
+
 	tier := decision.Tier
 	entryID := strings.TrimSpace(in.ID)
 	if entryID == "" {

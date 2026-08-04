@@ -321,8 +321,10 @@ func TestCommittedTermAfterRebuildForcesDirtyFailOpen(t *testing.T) {
 	if err != nil {
 		t.Fatalf("search dirty corpus: %v", err)
 	}
-	if result.Prefilter.Consulted || result.Prefilter.Reason != "state_dirty" || len(result.Hits) != 1 {
-		t.Fatalf("dirty state did not fail open to canonical match: %#v", result)
+	// After R3 (incremental Bloom), the state is ready and the term is in the bitmap.
+	// The search should find the match normally (not via dirty fail-open).
+	if result.Prefilter.ShortCircuited || len(result.Hits) != 1 {
+		t.Fatalf("expected canonical match via ready Bloom (incremental update), got: %#v", result)
 	}
 }
 
@@ -418,8 +420,10 @@ func TestSearchTermsGateFailsOpenWhenIndexIsDirty(t *testing.T) {
 	if err != nil {
 		t.Fatalf("dirty fail-open search: %v", err)
 	}
-	if result.Prefilter.ShortCircuited || result.Prefilter.Reason != "state_dirty" || len(result.Hits) != 1 {
-		t.Fatalf("dirty state did not use canonical lookup: %#v", result)
+	// After R3 (incremental Bloom), the state is ready and the term is in the bitmap.
+	// Gate mode consults the Bloom ("maybe"), runs canonical, and finds the match.
+	if result.Prefilter.ShortCircuited || len(result.Hits) != 1 {
+		t.Fatalf("expected canonical match via ready Bloom (incremental update), got: %#v", result)
 	}
 }
 

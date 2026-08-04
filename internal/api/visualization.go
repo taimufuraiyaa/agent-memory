@@ -134,7 +134,7 @@ func buildGraphData(memories []core.MemoryEntry) GraphData {
 	for _, mem := range memories {
 		label := mem.Content
 		if len(label) > 50 {
-			label = label[:50] + "..."
+			label = core.TruncateUTF8(label, 50) + "..."
 		}
 
 		nodes = append(nodes, GraphNode{

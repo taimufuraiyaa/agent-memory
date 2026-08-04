@@ -40,7 +40,7 @@ func memoriesExportHandler(svc *Service) http.HandlerFunc {
 }
 
 // memoriesImportHandler implements POST /api/v1/memories/import: imports an
-// export bundle, sanitizing each memory (see sanitizeImportedMemory) before
+// export bundle, sanitizing each memory (see SanitizeImportedMemory) before
 // persisting it.
 func memoriesImportHandler(svc *Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -73,7 +73,7 @@ func memoriesImportHandler(svc *Service) http.HandlerFunc {
 			if strings.TrimSpace(m.Workspace) == "" {
 				m.Workspace = ws
 			}
-			if reason := sanitizeImportedMemory(r.Context(), &m, filter); reason != "" {
+			if reason := SanitizeImportedMemory(r.Context(), &m, filter); reason != "" {
 				skipped = append(skipped, map[string]any{
 					"id":        m.ID,
 					"workspace": m.Workspace,

@@ -3,10 +3,13 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/taimufuraiyaa/agent-memory/internal/core"
 )
 
 func TestWriteCommandJSONEnvelopeParseable(t *testing.T) {
@@ -70,5 +73,87 @@ func TestExecuteJSONErrorEnvelopeAndExitCode(t *testing.T) {
 	}
 	if ok, _ := payload["ok"].(bool); ok {
 		t.Fatalf("expected ok=false envelope")
+	}
+}
+
+// TestMapExitCodeTypedSentinels verifies every typed sentinel maps to the correct exit code.
+func TestMapExitCodeTypedSentinels(t *testing.T) {
+	tests := []struct {
+		err  error
+		want int
+	}{
+		{fmt.Errorf("%w: bad input", core.ErrInvalidInput), 3},
+		{fmt.Errorf("%w: not here", core.ErrNotFound), 4},
+		{fmt.Errorf("%w: already there", core.ErrAlreadyExists), 5},
+		{core.ErrInvalidInput, 3},
+		{core.ErrNotFound, 4},
+		{core.ErrAlreadyExists, 5},
+		{fmt.Errorf("some random error"), 1},
+	}
+	for _, tc := range tests {
+		t.Run(tc.err.Error(), func(t *testing.T) {
+			got := mapExitCode(tc.err)
+			if got != tc.want {
+				t.Errorf("mapExitCode(%v) = %d, want %d", tc.err, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestInitOnExistingProjectExitsConflict verifies that running init on an
+// already-initialized project returns CONFLICT exit code (5).
+func TestInitOnExistingProjectExitsConflict(t *testing.T) {
+	oldArgs := os.Args
+	defer func() { os.Args = oldArgs }()
+
+	dataDir := t.TempDir()
+	cwd := t.TempDir()
+
+	oldCwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	defer func() { _ = os.Chdir(oldCwd) }()
+	if err := os.Chdir(cwd); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+
+	// First init succeeds.
+	os.Args = []string{"agent-memory", "init", "--base-dir", dataDir, "--no-rule", "--project-name", "test-proj"}
+	code := Execute()
+	if code != 0 {
+		t.Fatalf("first init should succeed, got code %d", code)
+	}
+
+	// Second init on same project without --reuse or --force should be CONFLICT.
+	os.Args = []string{"agent-memory", "init", "--base-dir", dataDir, "--no-rule", "--project-name", "test-proj"}
+	code = Execute()
+	if code != 5 {
+		t.Fatalf("second init should return CONFLICT (5), got %d", code)
+	}
+}
+
+// TestTooManyKeywordsExitsValidation verifies that a write with >3 keywords
+// exits with VALIDATION error code (3).
+func TestTooManyKeywordsExitsValidation(t *testing.T) {
+	oldArgs := os.Args
+	defer func() { os.Args = oldArgs }()
+
+	dbPath := filepath.Join(t.TempDir(), "memory.db")
+
+	os.Args = []string{
+		"agent-memory", "write",
+		"--db", dbPath,
+		"--workspace", "test-ws",
+		"--content", "test content",
+		"--keyword", "one",
+		"--keyword", "two",
+		"--keyword", "three",
+		"--keyword", "four",
+		"--format", "json",
+	}
+	code := Execute()
+	if code != 3 {
+		t.Fatalf("expected VALIDATION (3) for >3 keywords, got %d", code)
 	}
 }

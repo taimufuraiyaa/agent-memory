@@ -3,6 +3,7 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"time"
@@ -39,6 +40,7 @@ func newWriteCommand() *cobra.Command {
 	var flags commonFlags
 	var mType, content string
 	var keywords []string
+	var outcomeResult, outcomeApproach string
 	cmd := &cobra.Command{
 		Use:   "write",
 		Short: "Write one memory entry",
@@ -86,12 +88,19 @@ The memory will be automatically:
 				return err
 			}
 			if cfg.apiURL != "" {
-				var out any
-				err := postAPI(ctx, cfg.apiURL, "/api/v1/memories/write", map[string]any{
+				body := map[string]any{
 					"type":     mType,
 					"content":  content,
 					"keywords": keywords,
-				}, &out)
+				}
+				if strings.TrimSpace(outcomeResult) != "" {
+					body["outcome_result"] = outcomeResult
+				}
+				if strings.TrimSpace(outcomeApproach) != "" {
+					body["outcome_approach"] = outcomeApproach
+				}
+				var out any
+				err := postAPI(ctx, cfg.apiURL, "/api/v1/memories/write", body, &out)
 				if err != nil {
 					return err
 				}
@@ -109,14 +118,30 @@ The memory will be automatically:
 			p := engine.NewWritePipelineWithEmbedder(store, provider)
 			app := application.NewMemoryService(store, p, nil)
 			mt := core.MemoryType(mType)
-			res, err := app.Write(ctx, engine.WriteInput{
+			in := engine.WriteInput{
 				Workspace: cfg.workspace,
 				Type:      mt,
 				Content:   content,
 				Keywords:  keywords,
 				Source:    core.MemorySource{Type: core.SourceUserInput},
 				Mode:      engine.ExtractFast,
-			})
+			}
+			if mt == core.OutcomeMemory {
+				o := &core.Outcome{}
+				hasOutcome := false
+				if strings.TrimSpace(outcomeResult) != "" {
+					o.Result = core.OutcomeResult(strings.ToLower(strings.TrimSpace(outcomeResult)))
+					hasOutcome = true
+				}
+				if strings.TrimSpace(outcomeApproach) != "" {
+					o.Approach = strings.TrimSpace(outcomeApproach)
+					hasOutcome = true
+				}
+				if hasOutcome {
+					in.Outcome = o
+				}
+			}
+			res, err := app.Write(ctx, in)
 			if err != nil {
 				return err
 			}
@@ -127,6 +152,8 @@ The memory will be automatically:
 	cmd.Flags().StringVar(&mType, "type", "semantic", "Memory type: episodic|semantic|procedural|outcome")
 	cmd.Flags().StringVar(&content, "content", "", "Memory content")
 	cmd.Flags().StringSliceVar(&keywords, "keyword", nil, "Exact locator keyword (repeatable, maximum 3)")
+	cmd.Flags().StringVar(&outcomeResult, "outcome-result", "", "Outcome result: success|failure|partial (for type=outcome)")
+	cmd.Flags().StringVar(&outcomeApproach, "outcome-approach", "", "Approach description (for type=outcome)")
 	_ = cmd.MarkFlagRequired("content")
 	return cmd
 }
@@ -779,6 +806,23 @@ func newSessionEndCommand() *cobra.Command {
 			if err := validateOutputFormat(flags.format, false); err != nil {
 				return err
 			}
+
+			// Read from stdin when --transcript is empty and stdin is a pipe
+			if strings.TrimSpace(transcript) == "" {
+				stat, _ := os.Stdin.Stat()
+				if (stat.Mode() & os.ModeCharDevice) == 0 {
+					b, err := io.ReadAll(os.Stdin)
+					if err != nil {
+						return fmt.Errorf("read stdin: %w", err)
+					}
+					transcript = string(b)
+				}
+			}
+
+			if strings.TrimSpace(transcript) == "" {
+				return errors.New("transcript is required (use --transcript or pipe via stdin)")
+			}
+
 			if !engine.MemoryEnabled() {
 				return writeSuccessEnvelope(cmd.OutOrStdout(), "session-end", map[string]any{
 					"skipped": true,
@@ -809,7 +853,6 @@ func newSessionEndCommand() *cobra.Command {
 		},
 	}
 	addCommonFlags(cmd, &flags)
-	cmd.Flags().StringVar(&transcript, "transcript", "", "Transcript text")
-	_ = cmd.MarkFlagRequired("transcript")
+	cmd.Flags().StringVar(&transcript, "transcript", "", "Transcript text (or omit to read from stdin)")
 	return cmd
 }
