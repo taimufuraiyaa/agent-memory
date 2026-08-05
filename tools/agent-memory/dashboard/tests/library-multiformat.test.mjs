@@ -80,3 +80,12 @@ test('ready Library is a book reader with a right index and bottom chat composer
   assert.match(librarySource, /placeholder="Ask this book anything…"/)
   assert.match(librarySource, /className="libraryReaderGrid"/)
 })
+
+test('successful book preparation creates an ordinary removable notebook note', () => {
+  assert.match(librarySource, /onBookImported: \(book: ImportedBookNoteInput\) => Promise<NoteDocument>/)
+  assert.match(librarySource, /onOpenBookNote: \(noteID: string\) => void/)
+  assert.match(librarySource, /const createdNote = await onBookImported\(\{/)
+  assert.match(librarySource, /setImportedNote\(createdNote\)/)
+  assert.match(librarySource, />Open note<\/button>/)
+  assert.match(librarySource, /Book imported, but its note could not be created/)
+})

@@ -128,3 +128,17 @@ Failure modes include unsupported files, failed metadata confirmation, import er
 Performance remains bounded by rendering at most the current structure response and eight retrieved passages. The index receives its own overflow container to avoid increasing the full page height. No virtualization is introduced until catalog or structure sizes demonstrate a need. The redesign adds no dependencies or remote assets.
 
 Rollout reuses the existing Library destination and API endpoints, so no storage migration or feature-flag expansion is required. Source and embedded bundles must remain synchronized. Rollback consists of reverting the Library component and styles; imported books and accepted memories remain intact because their contracts and persistence are unchanged.
+
+## 16. Imported-book note bridge
+
+`NotebookWorkspace` remains the owner of note creation, explorer refresh, note opening, and destination changes. `LibraryWorkspace` reports a successfully prepared book through a typed callback containing the confirmed customer metadata, import result, and structural-node count. This avoids teaching the Library component about the broader tab, revision, indexing, and Trash state machines.
+
+The parent creates one Markdown note under the `Library/` folder. Its body is intentionally readable: book title, edition, language, format, indexed section/passage counts, and guidance that the Library reading room remains the grounded conversation surface. Stable work, edition, and source-asset identifiers are stored in note properties rather than foregrounded in prose. The note uses the existing note indexer like every other note.
+
+Active-note paths are checked before creation. The preferred path is `Library/<safe title>.md`; collisions add a human-readable numeric suffix. A trashed note does not reserve the active path because storage already permits reuse when `deleted_at` is present. Re-importing therefore creates a distinct active note without overwriting user edits.
+
+The callback runs after import and structure loading reach ready state. Note creation failure is a secondary partial failure: the imported book remains usable and retrying the entire ingestion is not implied. The UI reports that it could not create the note. A successful callback returns the note identity so the reading-room header can expose “Open note”; opening delegates back to the parent, which uses the existing tab loader and switches to Notes.
+
+Removal does not delete the imported book, source asset, passages, or durable memories. It invokes the established recoverable note Trash action. Coupling note trash to source deletion was rejected because it would combine two retention domains, create unexpected data loss, and exceed the current API contract. Backend-created notes inside the import transaction were also rejected because note creation is a dashboard workflow concern and would make API clients receive notes they did not request.
+
+The main risks are duplicate paths, partial success, and stale explorer state. Numeric path allocation, separate error handling, and awaiting the existing explorer refresh mitigate them. No schema migration or new endpoint is required. Rollback removes the callback bridge and leaves already-created notes as ordinary user-removable notes.

@@ -154,3 +154,25 @@ test('Library reading room keeps the index right-aligned and chat composer ancho
   assert.match(stylesSource, /@media \(max-width: 900px\)[\s\S]*\.libraryReaderGrid\s*\{[^}]*grid-template-columns:\s*1fr;/s)
   assert.match(stylesSource, /prefers-reduced-motion/)
 })
+
+test('imported books create uniquely pathed notes and reuse the standard Trash lifecycle', () => {
+  assert.match(notebookSource, /const createImportedBookNote = useCallback/)
+  assert.match(notebookSource, /path: nextImportedBookPath\(book\.title, notes\)/)
+  assert.match(notebookSource, /body: importedBookNoteBody\(book\)/)
+  assert.match(notebookSource, /source: 'library import'/)
+  assert.match(notebookSource, /library_edition_id: book\.result\.edition_id/)
+  assert.match(notebookSource, /await refreshNotes\(\)/)
+  assert.match(notebookSource, /onBookImported=\{createImportedBookNote\}/)
+  assert.match(notebookSource, /onOpenBookNote=\{openImportedBookNote\}/)
+  assert.match(notebookSource, /await trashNote\(\{ workspace, note_id: note\.id \}\)/)
+
+  const helper = /function nextImportedBookPath\(title: string, notes: NoteDocument\[\]\) \{([\s\S]*?)\n\}/.exec(notebookSource)
+  assert.ok(helper, 'nextImportedBookPath source should exist')
+  const nextImportedBookPath = Function(`return function nextImportedBookPath(title, notes) {${helper[1]}\n}`)()
+  const notes = [
+    { path: 'Library/Systems Thinking.md' },
+    { path: 'library/systems thinking (2).md' },
+  ]
+  assert.equal(nextImportedBookPath('Systems Thinking', notes), 'Library/Systems Thinking (3).md')
+  assert.equal(nextImportedBookPath('Design: A Primer', notes), 'Library/Design- A Primer.md')
+})

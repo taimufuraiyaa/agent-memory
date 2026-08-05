@@ -110,3 +110,17 @@ Acceptance criteria:
 - Ready state foregrounds the book title, metadata, reading body, index, and chat composer.
 - No numbered “Import”, “Book contents”, or “Talk with the book” cards remain.
 - The layout remains usable at desktop, tablet, and mobile widths, including keyboard focus and reduced-motion behavior.
+
+### R10 — Imported-book note lifecycle
+
+Every successfully prepared book shall create a corresponding notebook note that the reader can open, edit, and remove through the existing Notes lifecycle.
+
+Acceptance criteria:
+
+- A note is created only after the book import and structure load succeed.
+- The note title matches the reader-confirmed book title and its path is placed under `Library/` without colliding with an active note.
+- The note body contains human-readable import metadata and a short explanation of the book relationship; internal work, edition, and asset identifiers are retained as note properties for traceability.
+- The explorer refreshes immediately after note creation without forcing the reader out of the Library reading room.
+- The ready Library header exposes an “Open note” action.
+- Opening the imported note uses the standard Notes editor, where Trash performs recoverable removal and the existing Trash section permits restore or permanent deletion.
+- If note creation fails after book import, the book remains ready and the UI reports the note-specific failure without relabeling the import as failed.

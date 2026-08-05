@@ -38238,7 +38238,7 @@ const bookLanguageOptions = [
   { value: "th", label: "ไทย" },
   { value: "id", label: "Bahasa Indonesia" }
 ];
-function LibraryWorkspace({ workspace }) {
+function LibraryWorkspace({ workspace, onBookImported, onOpenBookNote }) {
   var _a2;
   const fileInputRef = reactExports.useRef(null);
   const [libraryKind, setLibraryKind] = reactExports.useState("personal");
@@ -38250,6 +38250,7 @@ function LibraryWorkspace({ workspace }) {
   const [sourceFile, setSourceFile] = reactExports.useState(null);
   const [sourceFormat, setSourceFormat] = reactExports.useState("markdown");
   const [job, setJob] = reactExports.useState(null);
+  const [importedNote, setImportedNote] = reactExports.useState(null);
   const [nodes, setNodes] = reactExports.useState([]);
   const [indexStatus, setIndexStatus] = reactExports.useState("idle");
   const [question2, setQuestion] = reactExports.useState("");
@@ -38271,6 +38272,7 @@ function LibraryWorkspace({ workspace }) {
     setSourceFile(null);
     setSourceFormat("markdown");
     setJob(null);
+    setImportedNote(null);
     setNodes([]);
     setIndexStatus("idle");
     setQuestion("");
@@ -38327,11 +38329,28 @@ function LibraryWorkspace({ workspace }) {
       setEvidence([]);
       setQueried(false);
       setIndexStatus("structuring");
+      let importedNodes = [];
       if ((_a3 = imported.result) == null ? void 0 : _a3.edition_id) {
         const structure = await getLibraryStructure({ workspace, edition_id: imported.result.edition_id });
-        setNodes([...structure.nodes].sort((left, right) => left.ordinal - right.ordinal));
+        importedNodes = [...structure.nodes].sort((left, right) => left.ordinal - right.ordinal);
+        setNodes(importedNodes);
       }
       setIndexStatus("ready");
+      if (imported.result) {
+        try {
+          const createdNote = await onBookImported({
+            title: title.trim(),
+            editionLabel: editionLabel.trim(),
+            language,
+            sourceName: (sourceFile == null ? void 0 : sourceFile.name) ?? "Pasted manuscript",
+            result: imported.result,
+            nodeCount: importedNodes.length
+          });
+          setImportedNote(createdNote);
+        } catch (noteReason) {
+          setError(`Book imported, but its note could not be created: ${messageOf$1(noteReason)}`);
+        }
+      }
     } catch (reason) {
       setIndexStatus("failed");
       setError(messageOf$1(reason));
@@ -38517,8 +38536,10 @@ function LibraryWorkspace({ workspace }) {
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "libraryBookActions", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "libraryReadyStatus", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("i", {}),
-            " Ready to ask"
+            " ",
+            importedNote ? "Note created" : "Ready to ask"
           ] }),
+          importedNote ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => onOpenBookNote(importedNote.id), children: "Open note" }) : null,
           /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: resetBook, children: "Import another" })
         ] })
       ] }),
@@ -38784,6 +38805,28 @@ function NotebookWorkspace({
       setError(messageOf(reason));
     }
   }, [notes, openNote, refreshNotes, workspace]);
+  const createImportedBookNote = reactExports.useCallback(async (book) => {
+    const response = await createNote({
+      workspace,
+      path: nextImportedBookPath(book.title, notes),
+      title: book.title,
+      body: importedBookNoteBody(book),
+      properties: {
+        source: "library import",
+        library_work_id: book.result.work_id,
+        library_edition_id: book.result.edition_id,
+        library_asset_id: book.result.asset_id,
+        library_format: book.result.format,
+        library_language: book.language
+      }
+    });
+    await refreshNotes();
+    return response.note;
+  }, [notes, refreshNotes, workspace]);
+  const openImportedBookNote = reactExports.useCallback((noteID) => {
+    void openNote(noteID);
+    setDestination("notes");
+  }, [openNote]);
   const saveActiveNote = reactExports.useCallback(async () => {
     const note2 = activeNoteRef.current;
     if (!note2 || saveState === "saving" || removingNoteIDsRef.current.has(note2.id)) return;
@@ -39159,7 +39202,7 @@ ${formatEvidenceLinks(askEvidence)}
           editorMode !== "edit" ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "notebookPreview", "aria-label": "Markdown preview", children: /* @__PURE__ */ jsxRuntimeExports.jsx(MarkdownView, { markdown: activeNote.body, clamp: false, theme }) }) : null
         ] })
       ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx(NotebookWelcome, { onCreate: () => void createNewNote(), onAsk: () => setDestination("ask") }) : null,
-      destination === "library" ? /* @__PURE__ */ jsxRuntimeExports.jsx(LibraryWorkspace, { workspace }) : null,
+      destination === "library" ? /* @__PURE__ */ jsxRuntimeExports.jsx(LibraryWorkspace, { workspace, onBookImported: createImportedBookNote, onOpenBookNote: openImportedBookNote }) : null,
       destination === "search" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "notebookUtilityPage", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "eyebrow", children: "Knowledge search" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { children: "Find a note or memory" }),
@@ -39478,6 +39521,32 @@ function nextUntitledTitle(notes) {
     index += 1;
   }
   return index === 1 ? "Untitled" : `Untitled ${index}`;
+}
+function nextImportedBookPath(title, notes) {
+  const safeTitle = title.replace(/[\\/:*?"<>|]/g, "-").replace(/\s+/g, " ").trim() || "Imported book";
+  const activePaths = new Set(notes.map((note2) => note2.path.toLowerCase()));
+  let suffix = 1;
+  while (true) {
+    const label = suffix === 1 ? safeTitle : `${safeTitle} (${suffix})`;
+    const path = `Library/${label}.md`;
+    if (!activePaths.has(path.toLowerCase())) return path;
+    suffix += 1;
+  }
+}
+function importedBookNoteBody(book) {
+  return `# ${book.title}
+
+Imported into the Library reading room from **${book.sourceName}**.
+
+## Book details
+
+- Edition: ${book.editionLabel}
+- Language: ${book.language}
+- Format: ${book.result.format.toUpperCase()}
+- Indexed: ${book.nodeCount} sections · ${book.result.passage_count ?? "—"} passages
+
+Open **Library** to browse the contents and ask grounded questions about this book.
+`;
 }
 function noteTitleFromBody(body, fallback) {
   const firstLine = body.split(/\r?\n/, 1)[0].trim();

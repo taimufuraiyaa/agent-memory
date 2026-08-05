@@ -55,3 +55,12 @@
 - [x] Present grounded evidence as a conversation inside the reading body and progressively disclose interpretation and memory review.
 - [x] Add responsive reading-room styling with a right-side desktop index and a stacked narrow-screen layout.
 - [x] Synchronize embedded assets and verify dashboard tests, bundle syntax, asset tests, and the production binary.
+
+## Task L8 — Create a removable note for each imported book
+
+- [x] Add failing dashboard coverage for the post-import note callback, `Library/` path allocation, explorer refresh, Open note action, and standard Trash reuse.
+- [x] Add a typed successful-import callback from `LibraryWorkspace` to `NotebookWorkspace`.
+- [x] Create a readable note with traceability properties after import and structure loading succeed.
+- [x] Refresh the explorer and let the reader open the generated note without automatically leaving Library.
+- [x] Preserve the ready book state when secondary note creation fails and report a note-specific error.
+- [x] Synchronize embedded assets and verify dashboard tests, typecheck, asset tests, and the production binary.

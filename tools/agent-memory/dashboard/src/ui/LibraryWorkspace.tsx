@@ -6,16 +6,29 @@ import {
   reviewLibraryMemory,
   type BookMemoryProposal,
   type LibraryImportJob,
+  type LibraryImportResult,
   type LibraryPassageResult,
   type LibraryStructuralNode,
+  type NoteDocument,
 } from '../lib/api'
 
 type LibraryKind = 'personal' | 'organization'
 type BookFileFormat = 'pdf' | 'epub' | 'markdown' | 'text'
 type IndexStatus = 'idle' | 'reading' | 'structuring' | 'ready' | 'failed'
 
+export type ImportedBookNoteInput = {
+  title: string
+  editionLabel: string
+  language: string
+  sourceName: string
+  result: LibraryImportResult
+  nodeCount: number
+}
+
 type LibraryWorkspaceProps = {
   workspace: string
+  onBookImported: (book: ImportedBookNoteInput) => Promise<NoteDocument>
+  onOpenBookNote: (noteID: string) => void
 }
 
 const bookLanguageOptions = [
@@ -36,7 +49,7 @@ const bookLanguageOptions = [
   { value: 'id', label: 'Bahasa Indonesia' },
 ]
 
-export function LibraryWorkspace({ workspace }: LibraryWorkspaceProps) {
+export function LibraryWorkspace({ workspace, onBookImported, onOpenBookNote }: LibraryWorkspaceProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [libraryKind, setLibraryKind] = useState<LibraryKind>('personal')
   const [organizationID, setOrganizationID] = useState('')
@@ -47,6 +60,7 @@ export function LibraryWorkspace({ workspace }: LibraryWorkspaceProps) {
   const [sourceFile, setSourceFile] = useState<File | null>(null)
   const [sourceFormat, setSourceFormat] = useState<BookFileFormat>('markdown')
   const [job, setJob] = useState<LibraryImportJob | null>(null)
+  const [importedNote, setImportedNote] = useState<NoteDocument | null>(null)
   const [nodes, setNodes] = useState<LibraryStructuralNode[]>([])
   const [indexStatus, setIndexStatus] = useState<IndexStatus>('idle')
   const [question, setQuestion] = useState('')
@@ -70,6 +84,7 @@ export function LibraryWorkspace({ workspace }: LibraryWorkspaceProps) {
     setSourceFile(null)
     setSourceFormat('markdown')
     setJob(null)
+    setImportedNote(null)
     setNodes([])
     setIndexStatus('idle')
     setQuestion('')
@@ -130,11 +145,28 @@ export function LibraryWorkspace({ workspace }: LibraryWorkspaceProps) {
       setEvidence([])
       setQueried(false)
       setIndexStatus('structuring')
+      let importedNodes: LibraryStructuralNode[] = []
       if (imported.result?.edition_id) {
         const structure = await getLibraryStructure({ workspace, edition_id: imported.result.edition_id })
-        setNodes([...structure.nodes].sort((left, right) => left.ordinal - right.ordinal))
+        importedNodes = [...structure.nodes].sort((left, right) => left.ordinal - right.ordinal)
+        setNodes(importedNodes)
       }
       setIndexStatus('ready')
+      if (imported.result) {
+        try {
+          const createdNote = await onBookImported({
+            title: title.trim(),
+            editionLabel: editionLabel.trim(),
+            language,
+            sourceName: sourceFile?.name ?? 'Pasted manuscript',
+            result: imported.result,
+            nodeCount: importedNodes.length,
+          })
+          setImportedNote(createdNote)
+        } catch (noteReason) {
+          setError(`Book imported, but its note could not be created: ${messageOf(noteReason)}`)
+        }
+      }
     } catch (reason) {
       setIndexStatus('failed')
       setError(messageOf(reason))
@@ -277,7 +309,7 @@ export function LibraryWorkspace({ workspace }: LibraryWorkspaceProps) {
         <section className="libraryReadingRoom">
           <header className="libraryBookHeader">
             <div><p className="eyebrow">Now reading</p><h1>{title}</h1><p>{editionLabel} · {languageLabel(language)} · {job.result.format.toUpperCase()}</p></div>
-            <div className="libraryBookActions"><span className="libraryReadyStatus"><i /> Ready to ask</span><button type="button" onClick={resetBook}>Import another</button></div>
+            <div className="libraryBookActions"><span className="libraryReadyStatus"><i /> {importedNote ? 'Note created' : 'Ready to ask'}</span>{importedNote ? <button type="button" onClick={() => onOpenBookNote(importedNote.id)}>Open note</button> : null}<button type="button" onClick={resetBook}>Import another</button></div>
           </header>
 
           <div className="libraryReaderGrid">

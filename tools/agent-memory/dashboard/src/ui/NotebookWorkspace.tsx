@@ -19,7 +19,7 @@ import {
   type ProjectListItem,
 } from '../lib/api'
 import { MarkdownView } from './MarkdownView'
-import { LibraryWorkspace } from './LibraryWorkspace'
+import { LibraryWorkspace, type ImportedBookNoteInput } from './LibraryWorkspace'
 import './notebook.css'
 
 type Destination = 'notes' | 'library' | 'search' | 'ask' | 'activity'
@@ -170,6 +170,30 @@ export function NotebookWorkspace({
       setError(messageOf(reason))
     }
   }, [notes, openNote, refreshNotes, workspace])
+
+  const createImportedBookNote = useCallback(async (book: ImportedBookNoteInput) => {
+    const response = await createNote({
+      workspace,
+      path: nextImportedBookPath(book.title, notes),
+      title: book.title,
+      body: importedBookNoteBody(book),
+      properties: {
+        source: 'library import',
+        library_work_id: book.result.work_id,
+        library_edition_id: book.result.edition_id,
+        library_asset_id: book.result.asset_id,
+        library_format: book.result.format,
+        library_language: book.language,
+      },
+    })
+    await refreshNotes()
+    return response.note
+  }, [notes, refreshNotes, workspace])
+
+  const openImportedBookNote = useCallback((noteID: string) => {
+    void openNote(noteID)
+    setDestination('notes')
+  }, [openNote])
 
   const saveActiveNote = useCallback(async () => {
     const note = activeNoteRef.current
@@ -563,7 +587,7 @@ export function NotebookWorkspace({
           ) : <NotebookWelcome onCreate={() => void createNewNote()} onAsk={() => setDestination('ask')} />
         ) : null}
 
-        {destination === 'library' ? <LibraryWorkspace workspace={workspace} /> : null}
+        {destination === 'library' ? <LibraryWorkspace workspace={workspace} onBookImported={createImportedBookNote} onOpenBookNote={openImportedBookNote} /> : null}
 
         {destination === 'search' ? (
           <section className="notebookUtilityPage">
@@ -814,6 +838,22 @@ function nextUntitledTitle(notes: NoteDocument[]) {
     index += 1
   }
   return index === 1 ? 'Untitled' : `Untitled ${index}`
+}
+
+function nextImportedBookPath(title: string, notes: NoteDocument[]) {
+  const safeTitle = title.replace(/[\\/:*?"<>|]/g, '-').replace(/\s+/g, ' ').trim() || 'Imported book'
+  const activePaths = new Set(notes.map((note) => note.path.toLowerCase()))
+  let suffix = 1
+  while (true) {
+    const label = suffix === 1 ? safeTitle : `${safeTitle} (${suffix})`
+    const path = `Library/${label}.md`
+    if (!activePaths.has(path.toLowerCase())) return path
+    suffix += 1
+  }
+}
+
+function importedBookNoteBody(book: ImportedBookNoteInput) {
+  return `# ${book.title}\n\nImported into the Library reading room from **${book.sourceName}**.\n\n## Book details\n\n- Edition: ${book.editionLabel}\n- Language: ${book.language}\n- Format: ${book.result.format.toUpperCase()}\n- Indexed: ${book.nodeCount} sections · ${book.result.passage_count ?? '—'} passages\n\nOpen **Library** to browse the contents and ask grounded questions about this book.\n`
 }
 
 function noteTitleFromBody(body: string, fallback: string) {
