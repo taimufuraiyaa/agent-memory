@@ -39,6 +39,22 @@ Extend the existing Living Knowledge Library import workflow so a reader can upl
 - Indexed contents and retrieved evidence continue to display format-specific source locators.
 - No uploaded source is copied into durable memory without the existing proposal and review workflow.
 
+### R6 - System-managed library identity
+
+- The local dashboard does not display or request reader IDs or library IDs.
+- When those IDs are omitted, the server derives stable opaque IDs from the workspace and library scope.
+- The same workspace and personal scope reuse the same generated reader and library IDs across import, structure, query, and memory-review requests.
+- Organization libraries continue to require an organization ID, and their generated library identity is stable for that workspace and organization.
+- Existing clients may continue to send explicit reader and library IDs without behavior changes.
+
+### R7 - Language selection
+
+- The dashboard presents book language as a dropdown instead of an unrestricted text field.
+- Options use stable BCP 47-style language tags and human-readable names, including native-script labels where useful.
+- English remains the default.
+- The selected tag is sent unchanged with both file uploads and pasted-text imports.
+- Book content remains Unicode/UTF-8 regardless of the selected language; selection records language metadata and does not transcode source text.
+
 ## Commands
 
 - Backend tests: `go test ./internal/ingestion ./internal/api -run 'TestBookImport|TestLibraryImport'`
@@ -58,6 +74,8 @@ Extend the existing Living Knowledge Library import workflow so a reader can upl
 - A real native-text PDF and a valid EPUB can be uploaded through the HTTP endpoint and queried as indexed passages.
 - The dashboard sends PDF/EPUB files as multipart data and shows their format.
 - Existing Markdown workflow, repository tests, and embedded dashboard release checks pass.
+- A dashboard user can complete the import, retrieval, and review flow without seeing or entering reader or library IDs.
+- A dashboard user can choose a supported book language from a dropdown and import non-Latin Unicode content without text conversion.
 
 ## Deferred
 

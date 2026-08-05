@@ -7134,10 +7134,10 @@ function importLibraryBook(input) {
   if ("source_file" in input) {
     const form = new FormData();
     form.append("workspace", input.workspace);
-    form.append("library_id", input.library_id);
+    if (input.library_id) form.append("library_id", input.library_id);
     form.append("library_kind", input.library_kind ?? "personal");
     if (input.organization_id) form.append("organization_id", input.organization_id);
-    form.append("principal_id", input.principal_id);
+    if (input.principal_id) form.append("principal_id", input.principal_id);
     form.append("title", input.title);
     form.append("edition_label", input.edition_label);
     form.append("language", input.language);
@@ -7148,7 +7148,8 @@ function importLibraryBook(input) {
   return api("/api/v1/library/imports", { method: "POST", body: JSON.stringify(input) });
 }
 function getLibraryStructure(input) {
-  const qs = new URLSearchParams(input);
+  const qs = new URLSearchParams({ workspace: input.workspace, edition_id: input.edition_id });
+  if (input.principal_id) qs.set("principal_id", input.principal_id);
   return api(`/api/v1/library/structure?${qs.toString()}`, { method: "GET" });
 }
 function queryLibrary(input) {
@@ -35969,7 +35970,7 @@ const wikiSuggestionPresets = [
   { label: "diagrams", query: "architecture diagram mermaid flow" },
   { label: "failures", query: "recent failures regressions incidents" }
 ];
-function formatScore(value, digits = 3) {
+function formatScore$1(value, digits = 3) {
   if (typeof value !== "number" || Number.isNaN(value)) return "n/a";
   return value.toFixed(digits);
 }
@@ -37295,7 +37296,7 @@ function WikiMemoryFragment({
             typeof semanticSimilarity === "number" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: `memPill relevancePill relevancePill${toTitle(semanticRelevance.tone)}`, children: [
               semanticRelevance.label,
               " ",
-              formatScore(semanticSimilarity, 2)
+              formatScore$1(semanticSimilarity, 2)
             ] }) : null,
             weak ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "memPill wikiQuietBadge", children: "weak" }) : null,
             memory.superseded_by ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "memPill relevancePill relevancePillLow", style: { background: "#3b1c1c", border: "1px solid #7d2a2a", color: "#ff8585" }, title: `Superseded by memory ${memory.superseded_by}`, children: "Superseded" }) : null,
@@ -38220,16 +38221,26 @@ function SkillsPanel({
     ] })
   ] });
 }
-const principalStorageKey = "agent-memory:library-principal";
-const libraryStorageKey = "agent-memory:library-id";
-function savedPreference(key, fallback) {
-  if (typeof window === "undefined") return fallback;
-  return window.localStorage.getItem(key) || fallback;
-}
+const bookLanguageOptions = [
+  { value: "en", label: "English" },
+  { value: "vi", label: "Tiếng Việt" },
+  { value: "zh-Hans", label: "中文（简体）" },
+  { value: "zh-Hant", label: "中文（繁體）" },
+  { value: "ja", label: "日本語" },
+  { value: "ko", label: "한국어" },
+  { value: "es", label: "Español" },
+  { value: "fr", label: "Français" },
+  { value: "de", label: "Deutsch" },
+  { value: "pt", label: "Português" },
+  { value: "ru", label: "Русский" },
+  { value: "ar", label: "العربية" },
+  { value: "hi", label: "हिन्दी" },
+  { value: "th", label: "ไทย" },
+  { value: "id", label: "Bahasa Indonesia" }
+];
 function LibraryWorkspace({ workspace }) {
-  var _a2, _b2;
-  const [principalID, setPrincipalID] = reactExports.useState(() => savedPreference(principalStorageKey, "local-reader"));
-  const [libraryID, setLibraryID] = reactExports.useState(() => savedPreference(libraryStorageKey, "personal-library"));
+  var _a2;
+  const fileInputRef = reactExports.useRef(null);
   const [libraryKind, setLibraryKind] = reactExports.useState("personal");
   const [organizationID, setOrganizationID] = reactExports.useState("");
   const [title, setTitle] = reactExports.useState("");
@@ -38240,8 +38251,9 @@ function LibraryWorkspace({ workspace }) {
   const [sourceFormat, setSourceFormat] = reactExports.useState("markdown");
   const [job, setJob] = reactExports.useState(null);
   const [nodes, setNodes] = reactExports.useState([]);
-  const [rememberedStatement, setRememberedStatement] = reactExports.useState("");
+  const [indexStatus, setIndexStatus] = reactExports.useState("idle");
   const [question2, setQuestion] = reactExports.useState("");
+  const [lastQuestion, setLastQuestion] = reactExports.useState("");
   const [interpretation, setInterpretation] = reactExports.useState("");
   const [evidence, setEvidence] = reactExports.useState([]);
   const [proposal, setProposal] = reactExports.useState(null);
@@ -38249,41 +38261,62 @@ function LibraryWorkspace({ workspace }) {
   const [busy, setBusy] = reactExports.useState("");
   const [error, setError] = reactExports.useState("");
   reactExports.useEffect(() => {
-    setJob(null);
+    resetBook();
+  }, [workspace]);
+  function resetBook() {
+    setTitle("");
+    setEditionLabel("Imported edition");
+    setLanguage("en");
+    setSource("");
     setSourceFile(null);
+    setSourceFormat("markdown");
+    setJob(null);
     setNodes([]);
+    setIndexStatus("idle");
+    setQuestion("");
+    setLastQuestion("");
+    setInterpretation("");
     setEvidence([]);
     setProposal(null);
     setQueried(false);
     setError("");
-  }, [workspace]);
-  function persistScope() {
-    window.localStorage.setItem(principalStorageKey, principalID.trim());
-    window.localStorage.setItem(libraryStorageKey, libraryID.trim());
   }
   function validateScope() {
     if (!workspace) return "Select a project workspace first.";
-    if (!principalID.trim() || !libraryID.trim()) return "Reader ID and library ID are required.";
     if (libraryKind === "organization" && !organizationID.trim()) return "Organization ID is required for an organization library.";
     return "";
+  }
+  function selectBook(file) {
+    const format2 = bookFormatForFile(file.name);
+    if (!format2) {
+      setError("Unsupported file. Choose PDF, EPUB, Markdown, or plain text.");
+      return;
+    }
+    setSourceFile(file);
+    setSourceFormat(format2);
+    setTitle(file.name.replace(/\.(pdf|epub|md|markdown|txt)$/i, ""));
+    setError("");
+    if (format2 === "markdown" || format2 === "text") {
+      void file.text().then(setSource).catch((reason) => setError(messageOf$1(reason)));
+    } else {
+      setSource("");
+    }
   }
   async function importBook() {
     var _a3;
     const scopeError = validateScope();
     if (scopeError || !title.trim() || !editionLabel.trim() || !language.trim() || !sourceFile && !source.trim()) {
-      setError(scopeError || "Title, edition, language, and a complete source file or pasted text are required.");
+      setError(scopeError || "Check the title, edition, language, and selected book before continuing.");
       return;
     }
     setBusy("import");
+    setIndexStatus("reading");
     setError("");
     try {
-      persistScope();
       const metadata = {
         workspace,
-        library_id: libraryID.trim(),
         library_kind: libraryKind,
         organization_id: libraryKind === "organization" ? organizationID.trim() : void 0,
-        principal_id: principalID.trim(),
         title: title.trim(),
         edition_label: editionLabel.trim(),
         language: language.trim()
@@ -38293,15 +38326,14 @@ function LibraryWorkspace({ workspace }) {
       setProposal(null);
       setEvidence([]);
       setQueried(false);
+      setIndexStatus("structuring");
       if ((_a3 = imported.result) == null ? void 0 : _a3.edition_id) {
-        const structure = await getLibraryStructure({
-          workspace,
-          principal_id: principalID.trim(),
-          edition_id: imported.result.edition_id
-        });
+        const structure = await getLibraryStructure({ workspace, edition_id: imported.result.edition_id });
         setNodes([...structure.nodes].sort((left, right) => left.ordinal - right.ordinal));
       }
+      setIndexStatus("ready");
     } catch (reason) {
+      setIndexStatus("failed");
       setError(messageOf$1(reason));
     } finally {
       setBusy("");
@@ -38309,31 +38341,52 @@ function LibraryWorkspace({ workspace }) {
   }
   async function askBook() {
     const scopeError = validateScope();
-    const prompt = [rememberedStatement.trim(), question2.trim()].filter(Boolean).join("\n\n");
+    const prompt = question2.trim();
     if (scopeError || !prompt) {
-      setError(scopeError || "Write a remembered statement, a question, or both.");
+      setError(scopeError || "Write a question for this book.");
       return;
     }
     setBusy("query");
     setError("");
+    setLastQuestion(prompt);
+    setQuestion("");
     try {
-      persistScope();
       const response = await queryLibrary({
         workspace,
-        principal_id: principalID.trim(),
         organization_ids: libraryKind === "organization" ? [organizationID.trim()] : void 0,
         question: prompt,
-        limit: 8,
-        propose_memory: Boolean(interpretation.trim()),
-        memory_content: interpretation.trim() || void 0
+        limit: 8
       });
       setEvidence(response.results ?? []);
-      setProposal(response.proposal ?? null);
+      setProposal(null);
       setQueried(true);
     } catch (reason) {
       setEvidence([]);
-      setProposal(null);
       setQueried(true);
+      setError(messageOf$1(reason));
+    } finally {
+      setBusy("");
+    }
+  }
+  async function suggestMemory() {
+    if (!lastQuestion || !interpretation.trim()) {
+      setError("Write your interpretation before suggesting a memory.");
+      return;
+    }
+    setBusy("memory");
+    setError("");
+    try {
+      const response = await queryLibrary({
+        workspace,
+        organization_ids: libraryKind === "organization" ? [organizationID.trim()] : void 0,
+        question: lastQuestion,
+        limit: 8,
+        propose_memory: true,
+        memory_content: interpretation.trim()
+      });
+      setEvidence(response.results ?? evidence);
+      setProposal(response.proposal ?? null);
+    } catch (reason) {
       setError(messageOf$1(reason));
     } finally {
       setBusy("");
@@ -38344,57 +38397,67 @@ function LibraryWorkspace({ workspace }) {
     setBusy("review");
     setError("");
     try {
-      const reviewed = await reviewLibraryMemory({
-        workspace,
-        proposal_id: proposal.id,
-        principal_id: principalID.trim(),
-        decision
-      });
-      setProposal(reviewed);
+      setProposal(await reviewLibraryMemory({ workspace, proposal_id: proposal.id, decision }));
     } catch (reason) {
       setError(messageOf$1(reason));
     } finally {
       setBusy("");
     }
   }
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "libraryWorkspace", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("header", { className: "libraryHero", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "eyebrow", children: "Living knowledge library" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { children: "Read the source. Keep the lineage." }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Import the complete book for retrieval, then retain only cited quotes, summaries, and your reviewed interpretations." })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "libraryCard", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "libraryCardHeader", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "1" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { children: "Import a whole book" })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("small", { children: "PDF · EPUB · Markdown · plain text" })
+  const hasSelectedSource = Boolean(sourceFile || source.trim());
+  const isIndexing = busy === "import";
+  const isReady = Boolean(job == null ? void 0 : job.result) && indexStatus === "ready";
+  const backgroundIndexStatus = indexStatus === "structuring" ? "Building the book index" : "Reading and indexing your book";
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: `libraryWorkspace ${isReady ? "isReading" : ""}`, children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("input", { ref: fileInputRef, className: "libraryHiddenFile", type: "file", accept: ".pdf,.epub,.md,.markdown,.txt,application/pdf,application/epub+zip,text/markdown,text/plain", onChange: (event) => {
+      var _a3;
+      const file = (_a3 = event.target.files) == null ? void 0 : _a3[0];
+      if (file) selectBook(file);
+    } }),
+    !hasSelectedSource && !job ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "libraryEmptyState", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "libraryMonogram", "aria-hidden": "true", children: "Aa" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "eyebrow", children: "Your reading room" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { children: "Bring a book. Ask better questions." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Import a complete book and agent-memory will make its chapters and cited passages available for conversation." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "primaryNotebookButton libraryImportButton", type: "button", onClick: () => {
+        var _a3;
+        return (_a3 = fileInputRef.current) == null ? void 0 : _a3.click();
+      }, children: "Import a book" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("small", { children: "PDF · EPUB · Markdown · plain text" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "libraryPasteOption", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: "Paste Markdown or plain text" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("textarea", { value: source, onChange: (event) => {
+          setSource(event.target.value);
+          setSourceFile(null);
+          setSourceFormat("markdown");
+          if (!title) setTitle("Untitled book");
+        }, placeholder: "# Chapter 1\\n\\nPaste the complete book here…" })
+      ] })
+    ] }) : null,
+    hasSelectedSource && !job && !isIndexing ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "libraryImportSheet", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("header", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "libraryBackButton", type: "button", onClick: resetBook, children: "← Library" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "eyebrow", children: "Review before importing" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { children: "Make sure this book looks right." })
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "libraryScopeGrid", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [
-          "Reader ID",
-          /* @__PURE__ */ jsxRuntimeExports.jsx("input", { value: principalID, onChange: (event) => setPrincipalID(event.target.value) })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [
-          "Library ID",
-          /* @__PURE__ */ jsxRuntimeExports.jsx("input", { value: libraryID, onChange: (event) => setLibraryID(event.target.value) })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [
-          "Library type",
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("select", { value: libraryKind, onChange: (event) => setLibraryKind(event.target.value), children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "personal", children: "Personal" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "organization", children: "Organization" })
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "librarySelectedBook", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "libraryBookGlyph", "aria-hidden": "true", children: sourceFormat === "markdown" ? "MD" : sourceFormat.toUpperCase() }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: (sourceFile == null ? void 0 : sourceFile.name) ?? "Pasted manuscript" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+            sourceFormat.toUpperCase(),
+            " · ",
+            sourceFile ? formatBytes(sourceFile.size) : `${source.length.toLocaleString()} characters`
           ] })
         ] }),
-        libraryKind === "organization" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [
-          "Organization ID",
-          /* @__PURE__ */ jsxRuntimeExports.jsx("input", { value: organizationID, onChange: (event) => setOrganizationID(event.target.value) })
-        ] }) : null
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => {
+          var _a3;
+          return (_a3 = fileInputRef.current) == null ? void 0 : _a3.click();
+        }, children: "Replace" })
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "libraryScopeGrid", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "libraryMetadataGrid", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [
-          "Title",
+          "Book title",
           /* @__PURE__ */ jsxRuntimeExports.jsx("input", { value: title, onChange: (event) => setTitle(event.target.value), placeholder: "Book title" })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [
@@ -38403,156 +38466,165 @@ function LibraryWorkspace({ workspace }) {
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [
           "Language",
-          /* @__PURE__ */ jsxRuntimeExports.jsx("input", { value: language, onChange: (event) => setLanguage(event.target.value) })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("select", { value: language, onChange: (event) => setLanguage(event.target.value), children: bookLanguageOptions.map((option) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: option.value, children: option.label }, option.value)) })
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "libraryFile", children: [
-          "Source file",
-          /* @__PURE__ */ jsxRuntimeExports.jsx("input", { type: "file", accept: ".pdf,.epub,.md,.markdown,.txt,application/pdf,application/epub+zip,text/markdown,text/plain", onChange: (event) => {
-            var _a3;
-            const file = (_a3 = event.target.files) == null ? void 0 : _a3[0];
-            if (!file) return;
-            const format2 = bookFormatForFile(file.name);
-            if (!format2) {
-              setError("Unsupported file. Choose PDF, EPUB, Markdown, or plain text.");
-              return;
-            }
-            setSourceFile(file);
-            setSourceFormat(format2);
-            setError("");
-            if (!title.trim()) setTitle(file.name.replace(/\.(pdf|epub|md|markdown|txt)$/i, ""));
-            if (format2 === "markdown" || format2 === "text") {
-              void file.text().then(setSource).catch((reason) => setError(messageOf$1(reason)));
-            } else {
-              setSource("");
-            }
-          } })
-        ] })
-      ] }),
-      sourceFile ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "notebookHint", children: [
-        "Selected: ",
-        sourceFile.name,
-        " · ",
-        sourceFormat.toUpperCase(),
-        " · ",
-        formatBytes(sourceFile.size),
-        ". PDF and EPUB stay binary until the server extracts citable structure."
-      ] }) : null,
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [
-        "Paste Markdown or plain text",
-        /* @__PURE__ */ jsxRuntimeExports.jsx("textarea", { className: "librarySource", value: source, onChange: (event) => {
-          setSource(event.target.value);
-          setSourceFile(null);
-          setSourceFormat("markdown");
-        }, placeholder: "# Chapter 1\\n\\nPaste the complete Markdown or plain-text book here…" })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "primaryNotebookButton", type: "button", onClick: () => void importBook(), disabled: busy !== "", children: busy === "import" ? "Reading and indexing…" : "Import and index book" })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "libraryCard", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "libraryCardHeader", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "2" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { children: "Book contents and index" })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("small", { children: ((_a2 = job == null ? void 0 : job.result) == null ? void 0 : _a2.existing) ? "Existing edition reused" : job ? "New edition indexed" : "Waiting for import" })
-      ] }),
-      (job == null ? void 0 : job.result) ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "libraryFacts", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(Fact, { label: "Work", value: job.result.work_id }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(Fact, { label: "Edition", value: job.result.edition_id }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(Fact, { label: "Source asset", value: job.result.asset_id }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(Fact, { label: "Format", value: job.result.format.toUpperCase() }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(Fact, { label: "Contents", value: `${job.result.node_count} nodes · ${job.result.passage_count ?? "—"} passages` })
-      ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "notebookHint", children: "The agent reads hierarchically: source → structure → passages → sections → complete work." }),
-      nodes.length ? /* @__PURE__ */ jsxRuntimeExports.jsx("ol", { className: "libraryContents", children: nodes.map((node2) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: node2.ordinal + 1 }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: node2.title }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("small", { children: [
-            node2.kind,
-            " · offsets ",
-            node2.start_offset ?? 0,
-            "–",
-            node2.end_offset ?? 0
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [
+          "Library",
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("select", { value: libraryKind, onChange: (event) => setLibraryKind(event.target.value), children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "personal", children: "Personal library" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "organization", children: "Organization library" })
           ] })
-        ] })
-      ] }, node2.id)) }) : null,
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "libraryPlanes", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "Source" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Policy-controlled original" })
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "Index" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Rebuildable passages and locators" })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "Memory" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Reviewed knowledge with lineage" })
+        libraryKind === "organization" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [
+          "Organization ID",
+          /* @__PURE__ */ jsxRuntimeExports.jsx("input", { value: organizationID, onChange: (event) => setOrganizationID(event.target.value) })
+        ] }) : null
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("footer", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Indexing happens in the background. The original source stays separate from any memory you choose to keep." }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "primaryNotebookButton", type: "button", onClick: () => void importBook(), children: "Start reading" })
+      ] })
+    ] }) : null,
+    isIndexing ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "libraryIndexingState", "aria-live": "polite", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "libraryIndexingBook", "aria-hidden": "true", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", {}),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", {}),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", {})
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "libraryStatusDot" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "eyebrow", children: "Working in the background" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { children: backgroundIndexStatus }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [
+          title,
+          " will open here as soon as its chapters and citable passages are ready."
         ] })
       ] })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "libraryCard", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "libraryCardHeader", children: [
+    ] }) : null,
+    isReady && (job == null ? void 0 : job.result) ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "libraryReadingRoom", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("header", { className: "libraryBookHeader", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "3" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { children: "Talk with the book" })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "eyebrow", children: "Now reading" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { children: title }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [
+            editionLabel,
+            " · ",
+            languageLabel(language),
+            " · ",
+            job.result.format.toUpperCase()
+          ] })
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("small", { children: "Evidence before interpretation" })
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "libraryBookActions", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "libraryReadyStatus", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("i", {}),
+            " Ready to ask"
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: resetBook, children: "Import another" })
+        ] })
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [
-        "Remembered quote or statement",
-        /* @__PURE__ */ jsxRuntimeExports.jsx("textarea", { value: rememberedStatement, onChange: (event) => setRememberedStatement(event.target.value), placeholder: "“All roads lead to Rome.”" })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [
-        "Your question",
-        /* @__PURE__ */ jsxRuntimeExports.jsx("textarea", { value: question2, onChange: (event) => setQuestion(event.target.value), placeholder: "Does this mean that regardless of the university, the Earth still revolves around the Sun?" })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [
-        "Reader interpretation ",
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "optionalLabel", children: "optional · creates a suggested memory" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("textarea", { value: interpretation, onChange: (event) => setInterpretation(event.target.value), placeholder: "Write what this means to you. It will stay attributed to you/the agent, not to the author." })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "primaryNotebookButton", type: "button", onClick: () => void askBook(), disabled: busy !== "", children: busy === "query" ? "Finding evidence…" : "Ask across imported books" }),
-      queried ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "libraryEvidence", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: "Grounded evidence" }),
-        evidence.length ? evidence.map((result) => /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sourceBadge human", children: "Source evidence" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "libraryReaderGrid", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("main", { className: "libraryBookBody", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "libraryConversation", "aria-live": "polite", children: [
+            !queried ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "libraryReaderWelcome", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { "aria-hidden": "true", children: "“" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { children: "What do you want to understand?" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Ask about an argument, a chapter, or a quote you remember. Answers stay attached to passages from this book." })
+            ] }) : null,
+            lastQuestion ? /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "libraryMessage reader", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("small", { children: "You" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: lastQuestion })
+            ] }) : null,
+            queried ? /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "libraryMessage book", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("header", { children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "libraryBookAvatar", children: "Aa" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: title }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("small", { children: "Grounded passages" })
+                ] })
+              ] }),
+              evidence.length ? evidence.map((result) => /* @__PURE__ */ jsxRuntimeExports.jsxs("blockquote", { children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: result.passage.text }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("footer", { children: [
+                  result.passage.locator.display,
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+                    "Relevance ",
+                    formatScore(result.score)
+                  ] })
+                ] })
+              ] }, result.passage.id)) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "libraryEmpty", children: "I couldn’t find a passage in this book that supports an answer. Try asking with different words or name a chapter." })
+            ] }) : null,
+            queried && evidence.length ? /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "libraryInsight", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: "Keep your interpretation as memory" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [
+                "Your interpretation",
+                /* @__PURE__ */ jsxRuntimeExports.jsx("textarea", { value: interpretation, onChange: (event) => setInterpretation(event.target.value), placeholder: "What does this mean to you?" })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => void suggestMemory(), disabled: busy !== "", children: busy === "memory" ? "Preparing…" : "Suggest memory" })
+            ] }) : null,
+            proposal ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "libraryProposal", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sourceBadge agent", children: "Suggested memory" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: proposal.status })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: proposal.content }),
+              (_a2 = proposal.citations) == null ? void 0 : _a2.map((citation) => /* @__PURE__ */ jsxRuntimeExports.jsx("small", { children: citation.locator.display }, citation.id)),
+              proposal.status === "suggested" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "primaryNotebookButton", type: "button", onClick: () => void reviewProposal("accept"), disabled: busy !== "", children: "Accept" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => void reviewProposal("reject"), disabled: busy !== "", children: "Reject" })
+              ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "libraryReviewStatus", children: [
+                "Review complete · ",
+                proposal.status
+              ] })
+            ] }) : null
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("form", { className: "libraryChatComposer", onSubmit: (event) => {
+            event.preventDefault();
+            void askBook();
+          }, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("textarea", { value: question2, onChange: (event) => setQuestion(event.target.value), placeholder: "Ask this book anything…", "aria-label": "Ask this book", onKeyDown: (event) => {
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                void askBook();
+              }
+            } }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "submit", disabled: busy !== "" || !question2.trim(), "aria-label": "Send question", children: "↑" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("small", { children: "Enter to send · Shift + Enter for a new line" })
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("aside", { className: "libraryBookIndex", "aria-label": "Book contents", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("header", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Contents" }),
             /* @__PURE__ */ jsxRuntimeExports.jsxs("small", { children: [
-              "score ",
-              result.score
+              nodes.length,
+              " sections"
             ] })
           ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: result.passage.text }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("footer", { children: [
-            result.passage.locator.display,
-            " · ",
-            result.passage.structural_node_id
+          nodes.length ? /* @__PURE__ */ jsxRuntimeExports.jsx("ol", { children: nodes.map((node2) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: String(node2.ordinal + 1).padStart(2, "0") }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: node2.title }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("small", { children: friendlyNodeKind(node2.kind) })
+            ] })
+          ] }) }, node2.id)) }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "The book has no visible chapter structure yet." }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "libraryTechnicalDetails", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: "Book details" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(Fact, { label: "Work", value: job.result.work_id }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(Fact, { label: "Edition", value: job.result.edition_id }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(Fact, { label: "Source", value: job.result.asset_id }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(Fact, { label: "Indexed", value: `${job.result.node_count} sections · ${job.result.passage_count ?? "—"} passages` })
           ] })
-        ] }, result.passage.id)) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "libraryEmpty", children: "No authorized source evidence supports this question yet. The agent will not invent an answer." })
-      ] }) : null,
-      proposal ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "libraryProposal", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sourceBadge agent", children: "Agent interpretation" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: proposal.status })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: "Suggested memory" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: proposal.content }),
-        (_b2 = proposal.citations) == null ? void 0 : _b2.map((citation) => /* @__PURE__ */ jsxRuntimeExports.jsxs("small", { children: [
-          citation.id,
-          " · ",
-          citation.locator.display
-        ] }, citation.id)),
-        proposal.status === "suggested" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "primaryNotebookButton", type: "button", onClick: () => void reviewProposal("accept"), disabled: busy !== "", children: "Accept memory" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => void reviewProposal("reject"), disabled: busy !== "", children: "Reject" })
-        ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "libraryReviewStatus", children: [
-          "Review complete · ",
-          proposal.status,
-          proposal.memory_id ? ` · memory ${proposal.memory_id}` : ""
         ] })
-      ] }) : null
-    ] }),
-    error ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "notebookError", role: "alert", children: error }) : null
+      ] })
+    ] }) : null,
+    indexStatus === "failed" && hasSelectedSource ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "libraryImportError", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "We couldn’t prepare this book." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: error }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "primaryNotebookButton", type: "button", onClick: () => void importBook(), children: "Try again" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: resetBook, children: "Choose another book" })
+      ] })
+    ] }) : null,
+    error && indexStatus !== "failed" ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "notebookError libraryError", role: "alert", children: error }) : null
   ] });
 }
 function Fact({ label, value }) {
@@ -38575,6 +38647,16 @@ function formatBytes(bytes) {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
+}
+function formatScore(score) {
+  return Number.isFinite(score) ? score.toFixed(2) : "—";
+}
+function friendlyNodeKind(kind) {
+  return kind.replace(/[_-]+/g, " ").replace(/^./, (letter) => letter.toUpperCase());
+}
+function languageLabel(value) {
+  var _a2;
+  return ((_a2 = bookLanguageOptions.find((option) => option.value === value)) == null ? void 0 : _a2.label) ?? value;
 }
 const emptyProperties = {};
 function startsAboveBreakpoint(maxWidth) {
@@ -38613,6 +38695,7 @@ function NotebookWorkspace({
   const [paletteOpen, setPaletteOpen] = reactExports.useState(false);
   const editorRef = reactExports.useRef(null);
   const activeNoteRef = reactExports.useRef(null);
+  const removingNoteIDsRef = reactExports.useRef(/* @__PURE__ */ new Set());
   const refreshNotes = reactExports.useCallback(async () => {
     if (!workspace) return;
     const response = await listNotes({ workspace });
@@ -38703,7 +38786,7 @@ function NotebookWorkspace({
   }, [notes, openNote, refreshNotes, workspace]);
   const saveActiveNote = reactExports.useCallback(async () => {
     const note2 = activeNoteRef.current;
-    if (!note2 || saveState === "saving") return;
+    if (!note2 || saveState === "saving" || removingNoteIDsRef.current.has(note2.id)) return;
     const title = noteTitleFromBody(note2.body, note2.title);
     setSaveState("saving");
     try {
@@ -38792,9 +38875,10 @@ function NotebookWorkspace({
   }
   function closeTab(noteID) {
     setOpenTabs((current) => {
+      var _a3;
       const index = current.findIndex((note2) => note2.id === noteID);
       const next2 = current.filter((note2) => note2.id !== noteID);
-      if ((activeNote == null ? void 0 : activeNote.id) === noteID) {
+      if (((_a3 = activeNoteRef.current) == null ? void 0 : _a3.id) === noteID) {
         const fallback = next2[Math.max(0, index - 1)] ?? null;
         setActiveNote(fallback);
         activeNoteRef.current = fallback;
@@ -38803,15 +38887,19 @@ function NotebookWorkspace({
       return next2;
     });
   }
-  async function moveToTrash() {
-    if (!activeNote || !window.confirm(`Move “${activeNote.title}” to trash?`)) return;
+  async function moveToTrash(note2) {
+    var _a3;
+    if (!window.confirm(`Move “${note2.title}” to trash?`)) return;
+    removingNoteIDsRef.current.add(note2.id);
     try {
-      await trashNote({ workspace, note_id: activeNote.id });
-      closeTab(activeNote.id);
-      setActiveNote(null);
+      await trashNote({ workspace, note_id: note2.id });
+      if (((_a3 = activeNoteRef.current) == null ? void 0 : _a3.id) === note2.id) setSaveState("idle");
+      closeTab(note2.id);
       await refreshNotes();
     } catch (reason) {
       setError(messageOf(reason));
+    } finally {
+      removingNoteIDsRef.current.delete(note2.id);
     }
   }
   async function restoreFromTrash(note2) {
@@ -38973,7 +39061,8 @@ ${formatEvidenceLinks(askEvidence)}
   const outline = reactExports.useMemo(() => parseOutline((activeNote == null ? void 0 : activeNote.body) ?? ""), [activeNote == null ? void 0 : activeNote.body]);
   const outgoingLinks = reactExports.useMemo(() => parseInternalLinks((activeNote == null ? void 0 : activeNote.body) ?? ""), [activeNote == null ? void 0 : activeNote.body]);
   const statusText = noteStatusText(activeNote, saveState);
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: `notebookShell ${explorerOpen ? "railExpanded" : "railCollapsed"}`, children: [
+  const contextVisible = contextOpen && destination === "notes";
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: `notebookShell ${explorerOpen ? "railExpanded" : "railCollapsed"} ${contextVisible ? "contextVisible" : "contextHidden"}`, children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("aside", { className: "notebookRail", "aria-label": "Primary navigation", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "notebookBrand", type: "button", onClick: () => setDestination("notes"), "aria-label": "Agent Memory notebook", children: "am" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(RailButton, { label: "Notes", active: destination === "notes", onClick: () => setDestination("notes"), icon: "notes" }),
@@ -39004,12 +39093,15 @@ ${formatEvidenceLinks(askEvidence)}
             /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "⌄" }),
             group.folder
           ] }) : null,
-          group.notes.map((note2) => /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: (activeNote == null ? void 0 : activeNote.id) === note2.id ? "noteTreeItem active" : "noteTreeItem", onClick: () => void openNote(note2.id), children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "noteTreeIcon", children: "◇" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: note2.title }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("small", { children: note2.path })
-            ] })
+          group.notes.map((note2) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: (activeNote == null ? void 0 : activeNote.id) === note2.id ? "noteTreeRow active" : "noteTreeRow", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "noteTreeItem", onClick: () => void openNote(note2.id), children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "noteTreeIcon", children: "◇" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: note2.title }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("small", { children: note2.path })
+              ] })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "noteTreeRemove", onClick: () => void moveToTrash(note2), "aria-label": `Remove ${note2.title}`, title: `Move ${note2.title} to trash`, children: /* @__PURE__ */ jsxRuntimeExports.jsx("svg", { viewBox: "0 0 24 24", "aria-hidden": "true", children: /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M4 7h16M9 7V4h6v3m-8 0 1 13h8l1-13M10 11v5m4-5v5" }) }) })
           ] }, note2.id))
         ] }, group.folder)),
         filteredNotes.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "notebookHint", children: "Create your first note. It will become available to both you and your agents." }) : null
@@ -39036,7 +39128,7 @@ ${formatEvidenceLinks(askEvidence)}
           /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => closeTab(note2.id), "aria-label": `Close ${note2.title}`, children: "×" })
         ] }, note2.id)) }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "notebookIconButton", onClick: () => setPaletteOpen(true), "aria-label": "Open command palette", children: "⌘" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "notebookIconButton", onClick: () => setContextOpen((open) => !open), "aria-label": "Toggle context panel", children: "◫" })
+        destination === "notes" ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "notebookIconButton", onClick: () => setContextOpen((open) => !open), "aria-label": "Toggle context panel", children: "◫" }) : null
       ] }),
       destination === "notes" ? activeNote ? /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "notebookDocument", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("header", { className: "noteHeader", children: [
@@ -39047,7 +39139,7 @@ ${formatEvidenceLinks(askEvidence)}
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "noteHeaderActions", children: [
             activeNote.index_state === "failed" ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "noteStatus error", onClick: () => void retryIndex(), children: "Index failed · Retry" }) : /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `noteStatus ${saveState}`, children: statusText }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "editorModeSwitcher", "aria-label": "Editor mode", children: ["edit", "preview", "split"].map((mode) => /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: editorMode === mode ? "active" : "", onClick: () => setEditorMode(mode), children: mode }, mode)) }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "dangerTextButton", onClick: () => void moveToTrash(), children: "Trash" })
+            /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "dangerTextButton", onClick: () => void moveToTrash(activeNote), children: "Trash" })
           ] })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `notebookEditor mode-${editorMode}`, children: [
@@ -39161,7 +39253,7 @@ ${formatEvidenceLinks(askEvidence)}
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: activeNote ? `${activeNote.revision} revisions · ${statusText}` : `${notes.length} notes` })
       ] })
     ] }),
-    contextOpen && destination === "notes" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("aside", { className: "notebookContext", children: [
+    contextVisible ? /* @__PURE__ */ jsxRuntimeExports.jsxs("aside", { className: "notebookContext", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "contextTabs", role: "tablist", "aria-label": "Note context", children: ["ask", "backlinks", "outline", "properties", "history"].map((tab) => /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: contextTab === tab ? "active" : "", onClick: () => setContextTab(tab), children: capitalize(tab) }, tab)) }),
       contextTab === "ask" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "contextBody", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { children: "Ask about this note" }),
@@ -40492,7 +40584,7 @@ function App() {
             typeof selectedSemanticSimilarity === "number" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: `memPill relevancePill relevancePill${toTitle(selectedSemanticRelevance.tone)}`, children: [
               selectedSemanticRelevance.label,
               " semantic ",
-              formatScore(selectedSemanticSimilarity, 2)
+              formatScore$1(selectedSemanticSimilarity, 2)
             ] }) : null,
             selectedMemory.superseded_by ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "memPill relevancePill relevancePillLow", style: { background: "#3b1c1c", border: "1px solid #7d2a2a", color: "#ff8585" }, children: "Superseded" }) : null,
             ((_a2 = selectedMemory.relations) == null ? void 0 : _a2.some((r2) => r2.type === "supersedes")) ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "memPill relevancePill relevancePillHigh", style: { background: "#1c3b24", border: "1px solid #2a7d43", color: "#85ff9d" }, children: "Correction" }) : null
@@ -40524,7 +40616,7 @@ function App() {
             /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memMetaGrid", children: [
               typeof selectedSemanticSimilarity === "number" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memMeta memMetaSemantic", children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memMetaLabel", children: "Semantic Similarity" }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memMetaValue memMetaPrimaryValue", children: formatScore(selectedSemanticSimilarity, 3) })
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memMetaValue memMetaPrimaryValue", children: formatScore$1(selectedSemanticSimilarity, 3) })
               ] }) : null,
               typeof selectedSemanticSimilarity === "number" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memMeta", children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memMetaLabel", children: "Relevance" }),
@@ -40544,7 +40636,7 @@ function App() {
               ] }),
               typeof selectedMemory.score === "number" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memMeta", children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memMetaLabel", children: "Blended Score" }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memMetaValue", children: formatScore(selectedMemory.score, 3) })
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memMetaValue", children: formatScore$1(selectedMemory.score, 3) })
               ] }) : null,
               typeof selectedMemory.salience_score === "number" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "memMeta", children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memMetaLabel", children: "Salience" }),
@@ -40641,7 +40733,7 @@ function App() {
                 typeof getSemanticSimilarity(memory) === "number" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: `memPill relevancePill relevancePill${toTitle(getSemanticRelevance(getSemanticSimilarity(memory)).tone)}`, children: [
                   getSemanticRelevance(getSemanticSimilarity(memory)).label,
                   " ",
-                  formatScore(getSemanticSimilarity(memory), 2)
+                  formatScore$1(getSemanticSimilarity(memory), 2)
                 ] }) : null
               ] }),
               /* @__PURE__ */ jsxRuntimeExports.jsx(MarkdownView, { markdown: memory.content, clamp: false, theme }),

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   getLibraryStructure,
   importLibraryBook,
@@ -12,22 +12,32 @@ import {
 
 type LibraryKind = 'personal' | 'organization'
 type BookFileFormat = 'pdf' | 'epub' | 'markdown' | 'text'
+type IndexStatus = 'idle' | 'reading' | 'structuring' | 'ready' | 'failed'
 
 type LibraryWorkspaceProps = {
   workspace: string
 }
 
-const principalStorageKey = 'agent-memory:library-principal'
-const libraryStorageKey = 'agent-memory:library-id'
-
-function savedPreference(key: string, fallback: string) {
-  if (typeof window === 'undefined') return fallback
-  return window.localStorage.getItem(key) || fallback
-}
+const bookLanguageOptions = [
+  { value: 'en', label: 'English' },
+  { value: 'vi', label: 'Tiếng Việt' },
+  { value: 'zh-Hans', label: '中文（简体）' },
+  { value: 'zh-Hant', label: '中文（繁體）' },
+  { value: 'ja', label: '日本語' },
+  { value: 'ko', label: '한국어' },
+  { value: 'es', label: 'Español' },
+  { value: 'fr', label: 'Français' },
+  { value: 'de', label: 'Deutsch' },
+  { value: 'pt', label: 'Português' },
+  { value: 'ru', label: 'Русский' },
+  { value: 'ar', label: 'العربية' },
+  { value: 'hi', label: 'हिन्दी' },
+  { value: 'th', label: 'ไทย' },
+  { value: 'id', label: 'Bahasa Indonesia' },
+]
 
 export function LibraryWorkspace({ workspace }: LibraryWorkspaceProps) {
-  const [principalID, setPrincipalID] = useState(() => savedPreference(principalStorageKey, 'local-reader'))
-  const [libraryID, setLibraryID] = useState(() => savedPreference(libraryStorageKey, 'personal-library'))
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const [libraryKind, setLibraryKind] = useState<LibraryKind>('personal')
   const [organizationID, setOrganizationID] = useState('')
   const [title, setTitle] = useState('')
@@ -38,53 +48,76 @@ export function LibraryWorkspace({ workspace }: LibraryWorkspaceProps) {
   const [sourceFormat, setSourceFormat] = useState<BookFileFormat>('markdown')
   const [job, setJob] = useState<LibraryImportJob | null>(null)
   const [nodes, setNodes] = useState<LibraryStructuralNode[]>([])
-  const [rememberedStatement, setRememberedStatement] = useState('')
+  const [indexStatus, setIndexStatus] = useState<IndexStatus>('idle')
   const [question, setQuestion] = useState('')
+  const [lastQuestion, setLastQuestion] = useState('')
   const [interpretation, setInterpretation] = useState('')
   const [evidence, setEvidence] = useState<LibraryPassageResult[]>([])
   const [proposal, setProposal] = useState<BookMemoryProposal | null>(null)
   const [queried, setQueried] = useState(false)
-  const [busy, setBusy] = useState<'import' | 'query' | 'review' | ''>('')
+  const [busy, setBusy] = useState<'import' | 'query' | 'review' | 'memory' | ''>('')
   const [error, setError] = useState('')
 
   useEffect(() => {
-    setJob(null)
+    resetBook()
+  }, [workspace])
+
+  function resetBook() {
+    setTitle('')
+    setEditionLabel('Imported edition')
+    setLanguage('en')
+    setSource('')
     setSourceFile(null)
+    setSourceFormat('markdown')
+    setJob(null)
     setNodes([])
+    setIndexStatus('idle')
+    setQuestion('')
+    setLastQuestion('')
+    setInterpretation('')
     setEvidence([])
     setProposal(null)
     setQueried(false)
     setError('')
-  }, [workspace])
-
-  function persistScope() {
-    window.localStorage.setItem(principalStorageKey, principalID.trim())
-    window.localStorage.setItem(libraryStorageKey, libraryID.trim())
   }
 
   function validateScope() {
     if (!workspace) return 'Select a project workspace first.'
-    if (!principalID.trim() || !libraryID.trim()) return 'Reader ID and library ID are required.'
     if (libraryKind === 'organization' && !organizationID.trim()) return 'Organization ID is required for an organization library.'
     return ''
+  }
+
+  function selectBook(file: File) {
+    const format = bookFormatForFile(file.name)
+    if (!format) {
+      setError('Unsupported file. Choose PDF, EPUB, Markdown, or plain text.')
+      return
+    }
+    setSourceFile(file)
+    setSourceFormat(format)
+    setTitle(file.name.replace(/\.(pdf|epub|md|markdown|txt)$/i, ''))
+    setError('')
+    if (format === 'markdown' || format === 'text') {
+      void file.text().then(setSource).catch((reason: unknown) => setError(messageOf(reason)))
+    } else {
+      setSource('')
+    }
   }
 
   async function importBook() {
     const scopeError = validateScope()
     if (scopeError || !title.trim() || !editionLabel.trim() || !language.trim() || (!sourceFile && !source.trim())) {
-      setError(scopeError || 'Title, edition, language, and a complete source file or pasted text are required.')
+      setError(scopeError || 'Check the title, edition, language, and selected book before continuing.')
       return
     }
     setBusy('import')
+    setIndexStatus('reading')
     setError('')
     try {
-      persistScope()
       const metadata = {
         workspace,
-        library_id: libraryID.trim(),
         library_kind: libraryKind,
         organization_id: libraryKind === 'organization' ? organizationID.trim() : undefined,
-        principal_id: principalID.trim(),
         title: title.trim(),
         edition_label: editionLabel.trim(),
         language: language.trim(),
@@ -96,15 +129,14 @@ export function LibraryWorkspace({ workspace }: LibraryWorkspaceProps) {
       setProposal(null)
       setEvidence([])
       setQueried(false)
+      setIndexStatus('structuring')
       if (imported.result?.edition_id) {
-        const structure = await getLibraryStructure({
-          workspace,
-          principal_id: principalID.trim(),
-          edition_id: imported.result.edition_id,
-        })
+        const structure = await getLibraryStructure({ workspace, edition_id: imported.result.edition_id })
         setNodes([...structure.nodes].sort((left, right) => left.ordinal - right.ordinal))
       }
+      setIndexStatus('ready')
     } catch (reason) {
+      setIndexStatus('failed')
       setError(messageOf(reason))
     } finally {
       setBusy('')
@@ -113,31 +145,53 @@ export function LibraryWorkspace({ workspace }: LibraryWorkspaceProps) {
 
   async function askBook() {
     const scopeError = validateScope()
-    const prompt = [rememberedStatement.trim(), question.trim()].filter(Boolean).join('\n\n')
+    const prompt = question.trim()
     if (scopeError || !prompt) {
-      setError(scopeError || 'Write a remembered statement, a question, or both.')
+      setError(scopeError || 'Write a question for this book.')
       return
     }
     setBusy('query')
     setError('')
+    setLastQuestion(prompt)
+    setQuestion('')
     try {
-      persistScope()
       const response = await queryLibrary({
         workspace,
-        principal_id: principalID.trim(),
         organization_ids: libraryKind === 'organization' ? [organizationID.trim()] : undefined,
         question: prompt,
         limit: 8,
-        propose_memory: Boolean(interpretation.trim()),
-        memory_content: interpretation.trim() || undefined,
       })
       setEvidence(response.results ?? [])
-      setProposal(response.proposal ?? null)
+      setProposal(null)
       setQueried(true)
     } catch (reason) {
       setEvidence([])
-      setProposal(null)
       setQueried(true)
+      setError(messageOf(reason))
+    } finally {
+      setBusy('')
+    }
+  }
+
+  async function suggestMemory() {
+    if (!lastQuestion || !interpretation.trim()) {
+      setError('Write your interpretation before suggesting a memory.')
+      return
+    }
+    setBusy('memory')
+    setError('')
+    try {
+      const response = await queryLibrary({
+        workspace,
+        organization_ids: libraryKind === 'organization' ? [organizationID.trim()] : undefined,
+        question: lastQuestion,
+        limit: 8,
+        propose_memory: true,
+        memory_content: interpretation.trim(),
+      })
+      setEvidence(response.results ?? evidence)
+      setProposal(response.proposal ?? null)
+    } catch (reason) {
       setError(messageOf(reason))
     } finally {
       setBusy('')
@@ -149,13 +203,7 @@ export function LibraryWorkspace({ workspace }: LibraryWorkspaceProps) {
     setBusy('review')
     setError('')
     try {
-      const reviewed = await reviewLibraryMemory({
-        workspace,
-        proposal_id: proposal.id,
-        principal_id: principalID.trim(),
-        decision,
-      })
-      setProposal(reviewed)
+      setProposal(await reviewLibraryMemory({ workspace, proposal_id: proposal.id, decision }))
     } catch (reason) {
       setError(messageOf(reason))
     } finally {
@@ -163,74 +211,108 @@ export function LibraryWorkspace({ workspace }: LibraryWorkspaceProps) {
     }
   }
 
+  const hasSelectedSource = Boolean(sourceFile || source.trim())
+  const isIndexing = busy === 'import'
+  const isReady = Boolean(job?.result) && indexStatus === 'ready'
+  const backgroundIndexStatus = indexStatus === 'structuring' ? 'Building the book index' : 'Reading and indexing your book'
+
   return (
-    <section className="libraryWorkspace">
-      <header className="libraryHero">
-        <p className="eyebrow">Living knowledge library</p>
-        <h1>Read the source. Keep the lineage.</h1>
-        <p>Import the complete book for retrieval, then retain only cited quotes, summaries, and your reviewed interpretations.</p>
-      </header>
+    <section className={`libraryWorkspace ${isReady ? 'isReading' : ''}`}>
+      <input ref={fileInputRef} className="libraryHiddenFile" type="file" accept=".pdf,.epub,.md,.markdown,.txt,application/pdf,application/epub+zip,text/markdown,text/plain" onChange={(event) => {
+        const file = event.target.files?.[0]
+        if (file) selectBook(file)
+      }} />
 
-      <section className="libraryCard">
-        <div className="libraryCardHeader"><div><span>1</span><h2>Import a whole book</h2></div><small>PDF · EPUB · Markdown · plain text</small></div>
-        <div className="libraryScopeGrid">
-          <label>Reader ID<input value={principalID} onChange={(event) => setPrincipalID(event.target.value)} /></label>
-          <label>Library ID<input value={libraryID} onChange={(event) => setLibraryID(event.target.value)} /></label>
-          <label>Library type<select value={libraryKind} onChange={(event) => setLibraryKind(event.target.value as LibraryKind)}><option value="personal">Personal</option><option value="organization">Organization</option></select></label>
-          {libraryKind === 'organization' ? <label>Organization ID<input value={organizationID} onChange={(event) => setOrganizationID(event.target.value)} /></label> : null}
-        </div>
-        <div className="libraryScopeGrid">
-          <label>Title<input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Book title" /></label>
-          <label>Edition<input value={editionLabel} onChange={(event) => setEditionLabel(event.target.value)} /></label>
-          <label>Language<input value={language} onChange={(event) => setLanguage(event.target.value)} /></label>
-          <label className="libraryFile">Source file<input type="file" accept=".pdf,.epub,.md,.markdown,.txt,application/pdf,application/epub+zip,text/markdown,text/plain" onChange={(event) => {
-            const file = event.target.files?.[0]
-            if (!file) return
-            const format = bookFormatForFile(file.name)
-            if (!format) {
-              setError('Unsupported file. Choose PDF, EPUB, Markdown, or plain text.')
-              return
-            }
-            setSourceFile(file)
-            setSourceFormat(format)
-            setError('')
-            if (!title.trim()) setTitle(file.name.replace(/\.(pdf|epub|md|markdown|txt)$/i, ''))
-            if (format === 'markdown' || format === 'text') {
-              void file.text().then(setSource).catch((reason: unknown) => setError(messageOf(reason)))
-            } else {
-              setSource('')
-            }
-          }} /></label>
-        </div>
-        {sourceFile ? <p className="notebookHint">Selected: {sourceFile.name} · {sourceFormat.toUpperCase()} · {formatBytes(sourceFile.size)}. PDF and EPUB stay binary until the server extracts citable structure.</p> : null}
-        <label>Paste Markdown or plain text<textarea className="librarySource" value={source} onChange={(event) => {
-          setSource(event.target.value)
-          setSourceFile(null)
-          setSourceFormat('markdown')
-        }} placeholder="# Chapter 1\n\nPaste the complete Markdown or plain-text book here…" /></label>
-        <button className="primaryNotebookButton" type="button" onClick={() => void importBook()} disabled={busy !== ''}>{busy === 'import' ? 'Reading and indexing…' : 'Import and index book'}</button>
-      </section>
+      {!hasSelectedSource && !job ? (
+        <section className="libraryEmptyState">
+          <span className="libraryMonogram" aria-hidden="true">Aa</span>
+          <p className="eyebrow">Your reading room</p>
+          <h1>Bring a book. Ask better questions.</h1>
+          <p>Import a complete book and agent-memory will make its chapters and cited passages available for conversation.</p>
+          <button className="primaryNotebookButton libraryImportButton" type="button" onClick={() => fileInputRef.current?.click()}>Import a book</button>
+          <small>PDF · EPUB · Markdown · plain text</small>
+          <details className="libraryPasteOption">
+            <summary>Paste Markdown or plain text</summary>
+            <textarea value={source} onChange={(event) => {
+              setSource(event.target.value)
+              setSourceFile(null)
+              setSourceFormat('markdown')
+              if (!title) setTitle('Untitled book')
+            }} placeholder="# Chapter 1\n\nPaste the complete book here…" />
+          </details>
+        </section>
+      ) : null}
 
-      <section className="libraryCard">
-        <div className="libraryCardHeader"><div><span>2</span><h2>Book contents and index</h2></div><small>{job?.result?.existing ? 'Existing edition reused' : job ? 'New edition indexed' : 'Waiting for import'}</small></div>
-        {job?.result ? <div className="libraryFacts"><Fact label="Work" value={job.result.work_id} /><Fact label="Edition" value={job.result.edition_id} /><Fact label="Source asset" value={job.result.asset_id} /><Fact label="Format" value={job.result.format.toUpperCase()} /><Fact label="Contents" value={`${job.result.node_count} nodes · ${job.result.passage_count ?? '—'} passages`} /></div> : <p className="notebookHint">The agent reads hierarchically: source → structure → passages → sections → complete work.</p>}
-        {nodes.length ? <ol className="libraryContents">{nodes.map((node) => <li key={node.id}><span>{node.ordinal + 1}</span><div><strong>{node.title}</strong><small>{node.kind} · offsets {node.start_offset ?? 0}–{node.end_offset ?? 0}</small></div></li>)}</ol> : null}
-        <div className="libraryPlanes"><div><strong>Source</strong><span>Policy-controlled original</span></div><div><strong>Index</strong><span>Rebuildable passages and locators</span></div><div><strong>Memory</strong><span>Reviewed knowledge with lineage</span></div></div>
-      </section>
+      {hasSelectedSource && !job && !isIndexing ? (
+        <section className="libraryImportSheet">
+          <header>
+            <button className="libraryBackButton" type="button" onClick={resetBook}>← Library</button>
+            <p className="eyebrow">Review before importing</p>
+            <h1>Make sure this book looks right.</h1>
+          </header>
+          <div className="librarySelectedBook">
+            <div className="libraryBookGlyph" aria-hidden="true">{sourceFormat === 'markdown' ? 'MD' : sourceFormat.toUpperCase()}</div>
+            <div><strong>{sourceFile?.name ?? 'Pasted manuscript'}</strong><span>{sourceFormat.toUpperCase()} · {sourceFile ? formatBytes(sourceFile.size) : `${source.length.toLocaleString()} characters`}</span></div>
+            <button type="button" onClick={() => fileInputRef.current?.click()}>Replace</button>
+          </div>
+          <div className="libraryMetadataGrid">
+            <label>Book title<input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Book title" /></label>
+            <label>Edition<input value={editionLabel} onChange={(event) => setEditionLabel(event.target.value)} /></label>
+            <label>Language<select value={language} onChange={(event) => setLanguage(event.target.value)}>{bookLanguageOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+            <label>Library<select value={libraryKind} onChange={(event) => setLibraryKind(event.target.value as LibraryKind)}><option value="personal">Personal library</option><option value="organization">Organization library</option></select></label>
+            {libraryKind === 'organization' ? <label>Organization ID<input value={organizationID} onChange={(event) => setOrganizationID(event.target.value)} /></label> : null}
+          </div>
+          <footer><p>Indexing happens in the background. The original source stays separate from any memory you choose to keep.</p><button className="primaryNotebookButton" type="button" onClick={() => void importBook()}>Start reading</button></footer>
+        </section>
+      ) : null}
 
-      <section className="libraryCard">
-        <div className="libraryCardHeader"><div><span>3</span><h2>Talk with the book</h2></div><small>Evidence before interpretation</small></div>
-        <label>Remembered quote or statement<textarea value={rememberedStatement} onChange={(event) => setRememberedStatement(event.target.value)} placeholder={'“All roads lead to Rome.”'} /></label>
-        <label>Your question<textarea value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="Does this mean that regardless of the university, the Earth still revolves around the Sun?" /></label>
-        <label>Reader interpretation <span className="optionalLabel">optional · creates a suggested memory</span><textarea value={interpretation} onChange={(event) => setInterpretation(event.target.value)} placeholder="Write what this means to you. It will stay attributed to you/the agent, not to the author." /></label>
-        <button className="primaryNotebookButton" type="button" onClick={() => void askBook()} disabled={busy !== ''}>{busy === 'query' ? 'Finding evidence…' : 'Ask across imported books'}</button>
+      {isIndexing ? (
+        <section className="libraryIndexingState" aria-live="polite">
+          <div className="libraryIndexingBook" aria-hidden="true"><span /><span /><span /></div>
+          <div><span className="libraryStatusDot" /><p className="eyebrow">Working in the background</p><h1>{backgroundIndexStatus}</h1><p>{title} will open here as soon as its chapters and citable passages are ready.</p></div>
+        </section>
+      ) : null}
 
-        {queried ? <div className="libraryEvidence"><h3>Grounded evidence</h3>{evidence.length ? evidence.map((result) => <article key={result.passage.id}><div><span className="sourceBadge human">Source evidence</span><small>score {result.score}</small></div><p>{result.passage.text}</p><footer>{result.passage.locator.display} · {result.passage.structural_node_id}</footer></article>) : <p className="libraryEmpty">No authorized source evidence supports this question yet. The agent will not invent an answer.</p>}</div> : null}
+      {isReady && job?.result ? (
+        <section className="libraryReadingRoom">
+          <header className="libraryBookHeader">
+            <div><p className="eyebrow">Now reading</p><h1>{title}</h1><p>{editionLabel} · {languageLabel(language)} · {job.result.format.toUpperCase()}</p></div>
+            <div className="libraryBookActions"><span className="libraryReadyStatus"><i /> Ready to ask</span><button type="button" onClick={resetBook}>Import another</button></div>
+          </header>
 
-        {proposal ? <div className="libraryProposal"><div><span className="sourceBadge agent">Agent interpretation</span><strong>{proposal.status}</strong></div><h3>Suggested memory</h3><p>{proposal.content}</p>{proposal.citations?.map((citation) => <small key={citation.id}>{citation.id} · {citation.locator.display}</small>)}{proposal.status === 'suggested' ? <div><button className="primaryNotebookButton" type="button" onClick={() => void reviewProposal('accept')} disabled={busy !== ''}>Accept memory</button><button type="button" onClick={() => void reviewProposal('reject')} disabled={busy !== ''}>Reject</button></div> : <p className="libraryReviewStatus">Review complete · {proposal.status}{proposal.memory_id ? ` · memory ${proposal.memory_id}` : ''}</p>}</div> : null}
-      </section>
+          <div className="libraryReaderGrid">
+            <main className="libraryBookBody">
+              <section className="libraryConversation" aria-live="polite">
+                {!queried ? <div className="libraryReaderWelcome"><span aria-hidden="true">“</span><h2>What do you want to understand?</h2><p>Ask about an argument, a chapter, or a quote you remember. Answers stay attached to passages from this book.</p></div> : null}
+                {lastQuestion ? <article className="libraryMessage reader"><small>You</small><p>{lastQuestion}</p></article> : null}
+                {queried ? <article className="libraryMessage book"><header><span className="libraryBookAvatar">Aa</span><div><strong>{title}</strong><small>Grounded passages</small></div></header>{evidence.length ? evidence.map((result) => <blockquote key={result.passage.id}><p>{result.passage.text}</p><footer>{result.passage.locator.display}<span>Relevance {formatScore(result.score)}</span></footer></blockquote>) : <p className="libraryEmpty">I couldn’t find a passage in this book that supports an answer. Try asking with different words or name a chapter.</p>}</article> : null}
+                {queried && evidence.length ? <details className="libraryInsight"><summary>Keep your interpretation as memory</summary><label>Your interpretation<textarea value={interpretation} onChange={(event) => setInterpretation(event.target.value)} placeholder="What does this mean to you?" /></label><button type="button" onClick={() => void suggestMemory()} disabled={busy !== ''}>{busy === 'memory' ? 'Preparing…' : 'Suggest memory'}</button></details> : null}
+                {proposal ? <div className="libraryProposal"><div><span className="sourceBadge agent">Suggested memory</span><strong>{proposal.status}</strong></div><p>{proposal.content}</p>{proposal.citations?.map((citation) => <small key={citation.id}>{citation.locator.display}</small>)}{proposal.status === 'suggested' ? <div><button className="primaryNotebookButton" type="button" onClick={() => void reviewProposal('accept')} disabled={busy !== ''}>Accept</button><button type="button" onClick={() => void reviewProposal('reject')} disabled={busy !== ''}>Reject</button></div> : <p className="libraryReviewStatus">Review complete · {proposal.status}</p>}</div> : null}
+              </section>
 
-      {error ? <div className="notebookError" role="alert">{error}</div> : null}
+              <form className="libraryChatComposer" onSubmit={(event) => { event.preventDefault(); void askBook() }}>
+                <textarea value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="Ask this book anything…" aria-label="Ask this book" onKeyDown={(event) => {
+                  if (event.key === 'Enter' && !event.shiftKey) {
+                    event.preventDefault()
+                    void askBook()
+                  }
+                }} />
+                <button type="submit" disabled={busy !== '' || !question.trim()} aria-label="Send question">↑</button>
+                <small>Enter to send · Shift + Enter for a new line</small>
+              </form>
+            </main>
+
+            <aside className="libraryBookIndex" aria-label="Book contents">
+              <header><span>Contents</span><small>{nodes.length} sections</small></header>
+              {nodes.length ? <ol>{nodes.map((node) => <li key={node.id}><button type="button"><span>{String(node.ordinal + 1).padStart(2, '0')}</span><div><strong>{node.title}</strong><small>{friendlyNodeKind(node.kind)}</small></div></button></li>)}</ol> : <p>The book has no visible chapter structure yet.</p>}
+              <details className="libraryTechnicalDetails"><summary>Book details</summary><Fact label="Work" value={job.result.work_id} /><Fact label="Edition" value={job.result.edition_id} /><Fact label="Source" value={job.result.asset_id} /><Fact label="Indexed" value={`${job.result.node_count} sections · ${job.result.passage_count ?? '—'} passages`} /></details>
+            </aside>
+          </div>
+        </section>
+      ) : null}
+
+      {indexStatus === 'failed' && hasSelectedSource ? <section className="libraryImportError"><strong>We couldn’t prepare this book.</strong><p>{error}</p><div><button className="primaryNotebookButton" type="button" onClick={() => void importBook()}>Try again</button><button type="button" onClick={resetBook}>Choose another book</button></div></section> : null}
+      {error && indexStatus !== 'failed' ? <div className="notebookError libraryError" role="alert">{error}</div> : null}
     </section>
   )
 }
@@ -255,4 +337,16 @@ function formatBytes(bytes: number) {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`
   return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`
+}
+
+function formatScore(score: number) {
+  return Number.isFinite(score) ? score.toFixed(2) : '—'
+}
+
+function friendlyNodeKind(kind: string) {
+  return kind.replace(/[_-]+/g, ' ').replace(/^./, (letter) => letter.toUpperCase())
+}
+
+function languageLabel(value: string) {
+  return bookLanguageOptions.find((option) => option.value === value)?.label ?? value
 }

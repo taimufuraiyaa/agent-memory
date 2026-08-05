@@ -76,6 +76,7 @@ export function NotebookWorkspace({
   const [paletteOpen, setPaletteOpen] = useState(false)
   const editorRef = useRef<HTMLTextAreaElement>(null)
   const activeNoteRef = useRef<NoteDocument | null>(null)
+  const removingNoteIDsRef = useRef(new Set<string>())
 
   const refreshNotes = useCallback(async () => {
     if (!workspace) return
@@ -172,7 +173,7 @@ export function NotebookWorkspace({
 
   const saveActiveNote = useCallback(async () => {
     const note = activeNoteRef.current
-    if (!note || saveState === 'saving') return
+    if (!note || saveState === 'saving' || removingNoteIDsRef.current.has(note.id)) return
     const title = noteTitleFromBody(note.body, note.title)
     setSaveState('saving')
     try {
@@ -264,7 +265,7 @@ export function NotebookWorkspace({
     setOpenTabs((current) => {
       const index = current.findIndex((note) => note.id === noteID)
       const next = current.filter((note) => note.id !== noteID)
-      if (activeNote?.id === noteID) {
+      if (activeNoteRef.current?.id === noteID) {
         const fallback = next[Math.max(0, index - 1)] ?? null
         setActiveNote(fallback)
         activeNoteRef.current = fallback
@@ -274,15 +275,18 @@ export function NotebookWorkspace({
     })
   }
 
-  async function moveToTrash() {
-    if (!activeNote || !window.confirm(`Move “${activeNote.title}” to trash?`)) return
+  async function moveToTrash(note: NoteDocument) {
+    if (!window.confirm(`Move “${note.title}” to trash?`)) return
+    removingNoteIDsRef.current.add(note.id)
     try {
-      await trashNote({ workspace, note_id: activeNote.id })
-      closeTab(activeNote.id)
-      setActiveNote(null)
+      await trashNote({ workspace, note_id: note.id })
+      if (activeNoteRef.current?.id === note.id) setSaveState('idle')
+      closeTab(note.id)
       await refreshNotes()
     } catch (reason) {
       setError(messageOf(reason))
+    } finally {
+      removingNoteIDsRef.current.delete(note.id)
     }
   }
 
@@ -438,9 +442,10 @@ export function NotebookWorkspace({
   const outline = useMemo(() => parseOutline(activeNote?.body ?? ''), [activeNote?.body])
   const outgoingLinks = useMemo(() => parseInternalLinks(activeNote?.body ?? ''), [activeNote?.body])
   const statusText = noteStatusText(activeNote, saveState)
+  const contextVisible = contextOpen && destination === 'notes'
 
   return (
-    <section className={`notebookShell ${explorerOpen ? 'railExpanded' : 'railCollapsed'}`}>
+    <section className={`notebookShell ${explorerOpen ? 'railExpanded' : 'railCollapsed'} ${contextVisible ? 'contextVisible' : 'contextHidden'}`}>
       <aside className="notebookRail" aria-label="Primary navigation">
         <button className="notebookBrand" type="button" onClick={() => setDestination('notes')} aria-label="Agent Memory notebook">am</button>
         <RailButton label="Notes" active={destination === 'notes'} onClick={() => setDestination('notes')} icon="notes" />
@@ -471,10 +476,15 @@ export function NotebookWorkspace({
               <section key={group.folder} className="noteFolder">
                 {group.folder ? <div className="noteFolderLabel"><span>⌄</span>{group.folder}</div> : null}
                 {group.notes.map((note) => (
-                  <button key={note.id} type="button" className={activeNote?.id === note.id ? 'noteTreeItem active' : 'noteTreeItem'} onClick={() => void openNote(note.id)}>
-                    <span className="noteTreeIcon">◇</span>
-                    <span><strong>{note.title}</strong><small>{note.path}</small></span>
-                  </button>
+                  <div key={note.id} className={activeNote?.id === note.id ? 'noteTreeRow active' : 'noteTreeRow'}>
+                    <button type="button" className="noteTreeItem" onClick={() => void openNote(note.id)}>
+                      <span className="noteTreeIcon">◇</span>
+                      <span><strong>{note.title}</strong><small>{note.path}</small></span>
+                    </button>
+                    <button type="button" className="noteTreeRemove" onClick={() => void moveToTrash(note)} aria-label={`Remove ${note.title}`} title={`Move ${note.title} to trash`}>
+                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3m-8 0 1 13h8l1-13M10 11v5m4-5v5" /></svg>
+                    </button>
+                  </div>
                 ))}
               </section>
             ))}
@@ -507,7 +517,7 @@ export function NotebookWorkspace({
             ))}
           </div>
           <button type="button" className="notebookIconButton" onClick={() => setPaletteOpen(true)} aria-label="Open command palette">⌘</button>
-          <button type="button" className="notebookIconButton" onClick={() => setContextOpen((open) => !open)} aria-label="Toggle context panel">◫</button>
+          {destination === 'notes' ? <button type="button" className="notebookIconButton" onClick={() => setContextOpen((open) => !open)} aria-label="Toggle context panel">◫</button> : null}
         </header>
 
         {destination === 'notes' ? (
@@ -527,7 +537,7 @@ export function NotebookWorkspace({
                       <button key={mode} type="button" className={editorMode === mode ? 'active' : ''} onClick={() => setEditorMode(mode)}>{mode}</button>
                     ))}
                   </div>
-                  <button type="button" className="dangerTextButton" onClick={() => void moveToTrash()}>Trash</button>
+                  <button type="button" className="dangerTextButton" onClick={() => void moveToTrash(activeNote)}>Trash</button>
                 </div>
               </header>
               <div className={`notebookEditor mode-${editorMode}`}>
@@ -641,7 +651,7 @@ export function NotebookWorkspace({
         </footer>
       </main>
 
-      {contextOpen && destination === 'notes' ? (
+      {contextVisible ? (
         <aside className="notebookContext">
           <div className="contextTabs" role="tablist" aria-label="Note context">
             {(['ask', 'backlinks', 'outline', 'properties', 'history'] as ContextTab[]).map((tab) => (

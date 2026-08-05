@@ -24,6 +24,100 @@ func TestLibraryImportIsDisabledByDefault(t *testing.T) {
 	}
 }
 
+func TestGeneratedLibraryIdentityIsStableAndScoped(t *testing.T) {
+	personal := LibraryImportRequest{Workspace: "books"}
+	applyLibraryImportIdentity(&personal)
+	if personal.PrincipalID == "" || personal.LibraryID == "" {
+		t.Fatalf("expected generated personal identity, got %+v", personal)
+	}
+
+	again := LibraryImportRequest{Workspace: "books", LibraryKind: "personal"}
+	applyLibraryImportIdentity(&again)
+	if personal.PrincipalID != again.PrincipalID || personal.LibraryID != again.LibraryID {
+		t.Fatalf("generated identity is not stable: first=%+v again=%+v", personal, again)
+	}
+
+	organization := LibraryImportRequest{Workspace: "books", LibraryKind: "organization", OrganizationID: "org-1"}
+	applyLibraryImportIdentity(&organization)
+	if organization.PrincipalID != personal.PrincipalID {
+		t.Fatalf("reader identity changed with library kind: personal=%q organization=%q", personal.PrincipalID, organization.PrincipalID)
+	}
+	if organization.LibraryID == personal.LibraryID {
+		t.Fatalf("organization and personal libraries share identity %q", organization.LibraryID)
+	}
+
+	otherOrganization := LibraryImportRequest{Workspace: "books", LibraryKind: "organization", OrganizationID: "org-2"}
+	applyLibraryImportIdentity(&otherOrganization)
+	if otherOrganization.LibraryID == organization.LibraryID {
+		t.Fatalf("organization library identity ignored organization scope: %q", organization.LibraryID)
+	}
+}
+
+func TestGeneratedLibraryIdentityPreservesExplicitClientValues(t *testing.T) {
+	req := LibraryImportRequest{
+		Workspace:   "books",
+		LibraryID:   "client-library",
+		PrincipalID: "client-reader",
+	}
+	applyLibraryImportIdentity(&req)
+	if req.PrincipalID != "client-reader" || req.LibraryID != "client-library" {
+		t.Fatalf("explicit client identity was replaced: %+v", req)
+	}
+}
+
+func TestEffectiveLibraryPrincipalUsesGeneratedWorkspaceIdentity(t *testing.T) {
+	generated := effectiveLibraryPrincipalID("books", "")
+	if generated == "" || generated != effectiveLibraryPrincipalID("books", "") {
+		t.Fatalf("generated reader identity is empty or unstable: %q", generated)
+	}
+	if generated == effectiveLibraryPrincipalID("other-books", "") {
+		t.Fatalf("generated reader identity is not workspace scoped: %q", generated)
+	}
+	if got := effectiveLibraryPrincipalID("books", "client-reader"); got != "client-reader" {
+		t.Fatalf("explicit reader identity changed to %q", got)
+	}
+}
+
+func TestLibraryFlowDerivesOmittedReaderAndLibraryIDs(t *testing.T) {
+	t.Setenv("AGENT_MEMORY_LIBRARY_ENABLED", "true")
+	modelDir := filepath.Join(t.TempDir(), "model")
+	if err := os.MkdirAll(modelDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	provider, err := embeddings.NewLocalProvider(modelDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mux := NewMux(&Service{Workspace: "generated-books", BaseDir: t.TempDir(), EmbeddingProvider: provider})
+
+	imported := libraryMuxRequest(t, mux, http.MethodPost, "/api/v1/library/imports", map[string]any{
+		"workspace": "generated-books", "title": "Generated Scope", "edition_label": "First", "language": "en",
+		"markdown": "# Identity\nGenerated scope remains stable across the complete flow.",
+	}, http.StatusAccepted)
+	result := imported["result"].(map[string]any)
+	editionID := result["edition_id"].(string)
+
+	structure := libraryMuxRequest(t, mux, http.MethodGet, "/api/v1/library/structure?workspace=generated-books&edition_id="+editionID, nil, http.StatusOK)
+	if len(structure["nodes"].([]any)) != 1 {
+		t.Fatalf("generated reader could not access imported structure: %+v", structure)
+	}
+
+	queried := libraryMuxRequest(t, mux, http.MethodPost, "/api/v1/library/query", map[string]any{
+		"workspace": "generated-books", "question": "stable complete flow", "propose_memory": true,
+	}, http.StatusOK)
+	if len(queried["results"].([]any)) != 1 {
+		t.Fatalf("generated reader could not query imported source: %+v", queried)
+	}
+	proposal := queried["proposal"].(map[string]any)
+
+	reviewed := libraryMuxRequest(t, mux, http.MethodPost, "/api/v1/library/memory-review", map[string]any{
+		"workspace": "generated-books", "proposal_id": proposal["id"], "decision": "accept",
+	}, http.StatusOK)
+	if reviewed["status"] != "accepted" {
+		t.Fatalf("generated reader could not review proposal: %+v", reviewed)
+	}
+}
+
 func TestLibraryImportQueryMemoryReview(t *testing.T) {
 	t.Setenv("AGENT_MEMORY_LIBRARY_ENABLED", "true")
 	modelDir := filepath.Join(t.TempDir(), "model")
@@ -159,6 +253,31 @@ func TestLibraryImportRejectsUnsupportedAndOversizedMultipart(t *testing.T) {
 type libraryResponse struct {
 	Code int
 	Data map[string]any
+}
+
+func libraryMuxRequest(t *testing.T, handler http.Handler, method, path string, body any, status int) map[string]any {
+	t.Helper()
+	var payload []byte
+	if body != nil {
+		payload, _ = json.Marshal(body)
+	}
+	request := httptest.NewRequest(method, path, bytes.NewReader(payload))
+	if body != nil {
+		request.Header.Set("content-type", "application/json")
+	}
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	var value struct {
+		Data  map[string]any `json:"data"`
+		Error any            `json:"error"`
+	}
+	if err := json.NewDecoder(recorder.Body).Decode(&value); err != nil {
+		t.Fatal(err)
+	}
+	if recorder.Code != status {
+		t.Fatalf("%s %s: got %d data=%+v error=%+v", method, path, recorder.Code, value.Data, value.Error)
+	}
+	return value.Data
 }
 
 func libraryPost(t *testing.T, url string, body any, status int) map[string]any {

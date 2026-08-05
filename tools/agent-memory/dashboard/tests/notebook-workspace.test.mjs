@@ -48,13 +48,13 @@ test('library is a notebook destination backed by the complete study API flow', 
 })
 
 test('library workspace separates whole-book indexing source evidence and interpretation review', () => {
-  assert.match(librarySource, /Import a whole book/)
+  assert.match(librarySource, /Import a book/)
   assert.match(librarySource, /accept="\.pdf,\.epub,\.md,\.markdown,\.txt/)
-  assert.match(librarySource, /Book contents and index/)
-  assert.match(librarySource, /Grounded evidence/)
-  assert.match(librarySource, /Reader interpretation/)
-  assert.match(librarySource, /No authorized source evidence supports this question yet/)
-  assert.match(librarySource, /Accept memory/)
+  assert.match(librarySource, /aria-label="Book contents"/)
+  assert.match(librarySource, /Grounded passages/)
+  assert.match(librarySource, /Your interpretation/)
+  assert.match(librarySource, /I couldn’t find a passage in this book that supports an answer/)
+  assert.match(librarySource, />Accept<\/button>/)
   assert.match(librarySource, /Reject/)
   assert.doesNotMatch(librarySource, /Users\/time/)
 })
@@ -86,6 +86,15 @@ test('new note naming reserves stored paths after a note title changes', () => {
   ]), 'Untitled 2')
 })
 
+test('notes can be moved to recoverable trash from the explorer', () => {
+  assert.match(notebookSource, /async function moveToTrash\(note: NoteDocument\)/)
+  assert.match(notebookSource, /window\.confirm\(`Move “\$\{note\.title\}” to trash\?`\)/)
+  assert.match(notebookSource, /await trashNote\(\{ workspace, note_id: note\.id \}\)/)
+  assert.match(notebookSource, /if \(activeNoteRef\.current\?\.id === note\.id\)/)
+  assert.match(notebookSource, /aria-label=\{`Remove \$\{note\.title\}`\}/)
+  assert.match(stylesSource, /\.noteTreeRemove:focus-visible/)
+})
+
 test('the first Markdown line is the note title', () => {
   const source = /function noteTitleFromBody\(body: string, fallback: string\) \{([\s\S]*?)\n\}/.exec(notebookSource)
   assert.ok(source, 'noteTitleFromBody source should exist')
@@ -115,7 +124,7 @@ test('notebook layout has responsive explorer and context behavior', () => {
 })
 
 test('sidebar destinations use icons when collapsed and add names below icons when expanded', () => {
-  assert.match(notebookSource, /className=\{`notebookShell \$\{explorerOpen \? 'railExpanded' : 'railCollapsed'\}`\}/)
+  assert.match(notebookSource, /explorerOpen \? 'railExpanded' : 'railCollapsed'/)
   assert.match(notebookSource, /function RailIcon\(/)
   assert.match(notebookSource, /<RailIcon name=\{icon\} \/>/)
   assert.match(notebookSource, /<span className="railLabel">\{label\}<\/span>/)
@@ -123,4 +132,25 @@ test('sidebar destinations use icons when collapsed and add names below icons wh
   assert.match(stylesSource, /\.railLabel\s*\{[^}]*display:\s*none;/s)
   assert.match(stylesSource, /\.railExpanded \.railLabel\s*\{[^}]*display:\s*block;/s)
   assert.match(stylesSource, /\.railButton svg\s*\{[^}]*width:\s*20px;/s)
+})
+
+test('notebook grid reserves tracks only for mounted panels and widens the Library canvas', () => {
+  assert.match(notebookSource, /const contextVisible = contextOpen && destination === 'notes'/)
+  assert.match(notebookSource, /contextVisible \? 'contextVisible' : 'contextHidden'/)
+  assert.match(notebookSource, /destination === 'notes' \? <button[^\n]*Toggle context panel/)
+  assert.match(notebookSource, /\{contextVisible \? \(/)
+
+  assert.match(stylesSource, /\.notebookShell\.contextVisible/)
+  assert.match(stylesSource, /\.notebookShell\.railExpanded\.contextVisible/)
+  assert.match(stylesSource, /--library-content-width: 1180px/)
+  assert.match(stylesSource, /width: min\(100%, var\(--library-content-width\)\)/)
+  assert.doesNotMatch(stylesSource, /\.libraryCard \{\s*max-width: 960px/)
+})
+
+test('Library reading room keeps the index right-aligned and chat composer anchored', () => {
+  assert.match(stylesSource, /\.libraryReaderGrid\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) minmax\(220px, 290px\);/s)
+  assert.match(stylesSource, /\.libraryBookIndex\s*\{[^}]*grid-column:\s*2;/s)
+  assert.match(stylesSource, /\.libraryChatComposer\s*\{[^}]*position:\s*sticky;[^}]*bottom:\s*0;/s)
+  assert.match(stylesSource, /@media \(max-width: 900px\)[\s\S]*\.libraryReaderGrid\s*\{[^}]*grid-template-columns:\s*1fr;/s)
+  assert.match(stylesSource, /prefers-reduced-motion/)
 })

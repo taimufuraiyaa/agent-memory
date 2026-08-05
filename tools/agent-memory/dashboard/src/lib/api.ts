@@ -43,10 +43,10 @@ export type NoteLink = {
 
 export type LibraryImportRequest = {
   workspace: string
-  library_id: string
+  library_id?: string
   library_kind?: 'personal' | 'organization'
   organization_id?: string
-  principal_id: string
+  principal_id?: string
   title: string
   edition_label: string
   language: string
@@ -133,7 +133,7 @@ export type BookMemoryProposal = {
 
 export type LibraryQueryRequest = {
   workspace: string
-  principal_id: string
+  principal_id?: string
   organization_ids?: string[]
   question: string
   limit?: number
@@ -702,10 +702,10 @@ export function importLibraryBook(input: LibraryImportRequest | LibraryFileImpor
   if ('source_file' in input) {
     const form = new FormData()
     form.append('workspace', input.workspace)
-    form.append('library_id', input.library_id)
+    if (input.library_id) form.append('library_id', input.library_id)
     form.append('library_kind', input.library_kind ?? 'personal')
     if (input.organization_id) form.append('organization_id', input.organization_id)
-    form.append('principal_id', input.principal_id)
+    if (input.principal_id) form.append('principal_id', input.principal_id)
     form.append('title', input.title)
     form.append('edition_label', input.edition_label)
     form.append('language', input.language)
@@ -716,8 +716,9 @@ export function importLibraryBook(input: LibraryImportRequest | LibraryFileImpor
   return api('/api/v1/library/imports', { method: 'POST', body: JSON.stringify(input) })
 }
 
-export function getLibraryStructure(input: { workspace: string; principal_id: string; edition_id: string }): Promise<{ edition_id: string; nodes: LibraryStructuralNode[] }> {
-  const qs = new URLSearchParams(input)
+export function getLibraryStructure(input: { workspace: string; principal_id?: string; edition_id: string }): Promise<{ edition_id: string; nodes: LibraryStructuralNode[] }> {
+  const qs = new URLSearchParams({ workspace: input.workspace, edition_id: input.edition_id })
+  if (input.principal_id) qs.set('principal_id', input.principal_id)
   return api(`/api/v1/library/structure?${qs.toString()}`, { method: 'GET' })
 }
 
@@ -725,7 +726,7 @@ export function queryLibrary(input: LibraryQueryRequest): Promise<{ results: Lib
   return api('/api/v1/library/query', { method: 'POST', body: JSON.stringify(input) })
 }
 
-export function reviewLibraryMemory(input: { workspace: string; proposal_id: string; principal_id: string; decision: 'accept' | 'reject' }): Promise<BookMemoryProposal> {
+export function reviewLibraryMemory(input: { workspace: string; proposal_id: string; principal_id?: string; decision: 'accept' | 'reject' }): Promise<BookMemoryProposal> {
   return api('/api/v1/library/memory-review', { method: 'POST', body: JSON.stringify(input) })
 }
 

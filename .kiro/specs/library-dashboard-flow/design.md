@@ -8,12 +8,14 @@ Add a Library destination to the notebook shell and implement the book workflow 
 
 ```mermaid
 flowchart TD
-    Open["Open Library destination"] --> Scope["Set reader and library scope"]
-    Scope --> Import["Select or paste complete source"]
-    Import --> Job["Create ingestion job"]
-    Job --> Index["Build identity, contents, passages, and indexes"]
-    Index --> Structure["Display edition contents and import facts"]
-    Structure --> Conversation["Write remembered quote, statement, or question"]
+    Open["Open Library destination"] --> Empty["See a calm empty reading room"]
+    Empty --> Select["Choose a supported book file"]
+    Select --> Prepare["Review and edit book metadata"]
+    Prepare --> Import["Confirm import"]
+    Import --> Background["Index in the background"]
+    Background --> Ready["Open the book reading workspace"]
+    Ready --> Browse["Browse content and the right-side index"]
+    Browse --> Conversation["Ask through the bottom composer"]
     Conversation --> Retrieve["Retrieve authorized source passages"]
     Retrieve --> Evidence["Display attributed evidence and locators"]
     Evidence --> Interpret["Reader writes an interpretation"]
@@ -31,7 +33,7 @@ This separation avoids growing the already large notebook component with book-sp
 
 ## 4. State and identity
 
-The current workspace is selected by the existing project picker. Reader principal, library ID, library kind, and organization ID are user-entered client preferences. They are stored in browser local storage under application-specific keys and never inferred from a filesystem path or OS username.
+The current workspace is selected by the existing project picker. The server derives stable reader and library IDs when the dashboard omits them. Library kind remains dashboard state, and organization ID is collected only for organization scope. No reader or library identifiers are stored in browser local storage or inferred from a filesystem path or OS username.
 
 The current edition and import summary are session state. Because the backend does not yet expose library or edition listing endpoints, a reload does not attempt to reconstruct a complete catalog. Adding catalog listing is a follow-up contract, not a reason to fabricate client-side authority.
 
@@ -48,19 +50,23 @@ The common API response decoder continues to handle errors and non-JSON response
 
 ## 6. Conversation and epistemic labeling
 
-The query endpoint currently returns authorized passages and an optional memory proposal; it does not run a hosted language model. The UI therefore calls its output “grounded evidence,” never a generated author explanation. The reader's question or analogy is labeled reader input. Retrieved passages are labeled source evidence. Editable proposed content is labeled interpretation and remains suggested until explicit review.
+The query endpoint currently returns authorized passages and an optional memory proposal; it does not run a hosted language model. The chat transcript therefore presents the reader prompt followed by grounded excerpts, never a fabricated author explanation. Retrieved passages are labeled source evidence. Editable proposed content is labeled interpretation and remains suggested until explicit review.
+
+The composer is structurally anchored beneath the reading viewport so it behaves like a familiar chat input rather than a form section. The transcript scrolls inside the reading body while the composer remains reachable. Submission uses a single free-form prompt; optional interpretation and memory review are progressive disclosures after evidence exists.
 
 This preserves the key invariant: an analogy such as “all roads lead to Rome” applied to astronomy remains the reader's interpretation unless a cited book passage supports a separately attributed author claim.
 
 ## 7. Import and indexing representation
 
-Import is presented as a pipeline rather than a single upload event. The completed job shows stable work/edition/asset identities and counts. The structure panel shows ordered nodes. Supporting copy explains the three storage planes:
+Import begins as a single file action. Selection opens an inline preparation sheet containing customer-recognizable metadata. The user may correct the inferred title, choose edition and language, and then confirm. The source is not submitted before confirmation.
+
+After confirmation, ingestion and structure loading are represented by a compact background status in the Library header. The status progresses through reading, indexing, and ready language, but the page never becomes a numbered wizard. The completed job's internal identities and counts move into a secondary details disclosure. Supporting copy may still explain the three storage planes:
 
 - original source under policy control
 - passages and indexes as rebuildable retrieval data
 - accepted summaries, quotes, and interpretations as durable memory
 
-The UI shall not claim support for browser binary PDF or EPUB upload through the Markdown endpoint. Those adapters exist in the backend ingestion layer, but require format-aware transport endpoints before being exposed here.
+The existing multipart transport supports binary PDF and EPUB while JSON transport preserves pasted Markdown compatibility. The redesigned primary flow uses file selection; pasted text remains an unobtrusive secondary option for compatibility.
 
 ## 8. Failure modes
 
@@ -94,3 +100,31 @@ The Library destination uses the already default-enabled backend feature with it
 The existing explorer-open state also controls the width and presentation of the primary navigation rail. With the explorer closed, the rail stays compact and exposes icon-only destination buttons; accessible names and native hover titles preserve meaning for assistive technology and pointer users. With the explorer open, the rail widens and places each destination name below the same icon, keeping the navigation order and click targets unchanged.
 
 Inline SVG icons are preferred over letter abbreviations because they remain recognizable across locales without adding a runtime icon dependency or remote asset. The mobile bottom navigation remains icon-only so labels do not overflow narrow screens. Reduced-motion behavior continues to disable rail transitions. The main risks are horizontal space loss and breakpoint drift; a single rail-width variable is used by the desktop grid, explorer overlay offset, and context overlay calculation to keep those contracts aligned.
+
+## 14. Adaptive canvas tracks
+
+The desktop notebook grid is composed from mounted regions rather than a fixed four-column template. The rail is always present. Explorer and context tracks are added only when their corresponding panels render; this prevents an unoccupied context track from appearing as a right-side gap on Library, Search, Ask, and Activity.
+
+Below the context breakpoint, context remains an overlay and never consumes a grid track. Below the explorer breakpoint, explorer also remains an overlay. The mobile bottom-navigation layout continues to override every desktop track variant.
+
+Library uses a centered responsive content track with a wide but bounded measure. Cards fill that track, while long-form explanatory copy retains its readable character measure. This makes large screens useful without stretching text or controls to the viewport edges.
+
+Keeping a fixed context column for every destination was rejected because it produces empty space where no context component exists. Making Library entirely edge-to-edge was rejected because form controls and evidence passages become difficult to scan on ultrawide displays.
+
+## 15. Customer reading-room composition
+
+The ready Library uses a three-region composition inside one bounded surface: a book header across the top, a long-form reading and conversation body on the left, and a table of contents on the right. The chat composer spans the reading column at the bottom and stays visible without covering excerpts. This creates a single place to read, navigate, and ask instead of three disconnected workflow cards.
+
+The empty state is intentionally sparse: title, short explanation, supported formats, and one import button. Selecting a file replaces it with an inline metadata preparation surface. The indexing state reuses the book shell with skeleton-like content and a compact live status, reducing layout shift when the ready state arrives.
+
+The content body initially uses the grounded passages returned by conversation as its real readable material because the current structure endpoint returns hierarchy but not full node bodies. Before the first query, it shows a composed invitation to ask about the book and may surface structural chapter titles. It shall not invent quotations or random excerpts that are absent from the API response.
+
+On wide screens the index remains on the right with independent overflow. At tablet widths it becomes a collapsible horizontal or stacked region above the body. On mobile it stacks below the book header while the composer remains above the notebook bottom navigation. Focus order follows header, reading body, index, then composer; visual placement must not create a contradictory keyboard order.
+
+Alternatives considered: a full-screen import wizard was rejected because it exposes implementation sequence and delays access to the reading room. Three vertical cards were rejected because they imply required linear completion and separate chat from its evidence. A floating chat bubble was rejected because it hides the primary action and reduces room for cited answers. A permanent metadata sidebar was rejected because metadata matters during preparation but becomes secondary while reading.
+
+Failure modes include unsupported files, failed metadata confirmation, import errors, structure-loading errors after successful import, no returned evidence, and rejected memory proposals. Each failure remains local to its surface, preserves user input, and allows retry without clearing the selected book. If structure loading fails after import, the reading shell remains open with a recoverable index error rather than discarding the imported result.
+
+Performance remains bounded by rendering at most the current structure response and eight retrieved passages. The index receives its own overflow container to avoid increasing the full page height. No virtualization is introduced until catalog or structure sizes demonstrate a need. The redesign adds no dependencies or remote assets.
+
+Rollout reuses the existing Library destination and API endpoints, so no storage migration or feature-flag expansion is required. Source and embedded bundles must remain synchronized. Rollback consists of reverting the Library component and styles; imported books and accepted memories remain intact because their contracts and persistence are unchanged.

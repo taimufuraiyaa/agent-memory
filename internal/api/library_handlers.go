@@ -53,8 +53,13 @@ func libraryImportHandler(svc *Service) http.HandlerFunc {
 			writeErr(w, status, "bad_request", err.Error())
 			return
 		}
-		if strings.TrimSpace(req.Workspace) == "" || strings.TrimSpace(req.LibraryID) == "" || strings.TrimSpace(req.PrincipalID) == "" {
-			writeErr(w, http.StatusBadRequest, "validation", "workspace, library_id, and principal_id are required")
+		applyLibraryImportIdentity(&req)
+		if strings.TrimSpace(req.Workspace) == "" {
+			writeErr(w, http.StatusBadRequest, "validation", "workspace is required")
+			return
+		}
+		if req.LibraryKind == string(library.LibraryOrganization) && strings.TrimSpace(req.OrganizationID) == "" {
+			writeErr(w, http.StatusBadRequest, "validation", "organization_id is required for an organization library")
 			return
 		}
 		assets, err := svc.resolve(r.Context(), req.Workspace)
@@ -235,12 +240,13 @@ func libraryStructureHandler(svc *Service) http.HandlerFunc {
 			writeErr(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
 			return
 		}
-		assets, err := svc.resolve(r.Context(), r.URL.Query().Get("workspace"))
+		workspace := r.URL.Query().Get("workspace")
+		assets, err := svc.resolve(r.Context(), workspace)
 		if err != nil {
 			writeErr(w, 500, "runtime", err.Error())
 			return
 		}
-		scope := libraryScope(r.URL.Query().Get("principal_id"), nil)
+		scope := libraryScope(effectiveLibraryPrincipalID(workspace, r.URL.Query().Get("principal_id")), nil)
 		editionID := r.URL.Query().Get("edition_id")
 		if _, err = library.NewAuthorizedRepository(assets.Store).GetEdition(r.Context(), scope, editionID); err != nil {
 			writeErr(w, http.StatusNotFound, "not_found", "edition not found")
@@ -269,6 +275,7 @@ func libraryQueryHandler(svc *Service) http.HandlerFunc {
 			writeErr(w, 400, "bad_request", err.Error())
 			return
 		}
+		req.PrincipalID = effectiveLibraryPrincipalID(req.Workspace, req.PrincipalID)
 		assets, err := svc.resolve(r.Context(), req.Workspace)
 		if err != nil {
 			writeErr(w, 500, "runtime", err.Error())
@@ -320,6 +327,7 @@ func libraryMemoryReviewHandler(svc *Service) http.HandlerFunc {
 			writeErr(w, 400, "bad_request", err.Error())
 			return
 		}
+		req.PrincipalID = effectiveLibraryPrincipalID(req.Workspace, req.PrincipalID)
 		assets, err := svc.resolve(r.Context(), req.Workspace)
 		if err != nil {
 			writeErr(w, 500, "runtime", err.Error())
@@ -346,6 +354,28 @@ func libraryMemoryReviewHandler(svc *Service) http.HandlerFunc {
 
 func libraryScope(principalID string, organizations []string) core.AuthorizationScope {
 	return core.AuthorizationScope{Principal: core.Principal{ID: principalID, Kind: core.PrincipalUser}, OrganizationIDs: organizations, Capabilities: []core.Capability{core.CapabilityReadSource, core.CapabilitySearchSource, core.CapabilityQuoteSource, core.CapabilityProposeKnowledge, core.CapabilityApproveKnowledge}, PolicyVersion: "v1"}
+}
+
+func applyLibraryImportIdentity(req *LibraryImportRequest) {
+	if strings.TrimSpace(req.LibraryKind) == "" {
+		req.LibraryKind = string(library.LibraryPersonal)
+	}
+	req.PrincipalID = effectiveLibraryPrincipalID(req.Workspace, req.PrincipalID)
+	if strings.TrimSpace(req.LibraryID) != "" {
+		return
+	}
+	if req.LibraryKind == string(library.LibraryOrganization) {
+		req.LibraryID = libraryID("library", req.Workspace, string(library.LibraryOrganization), req.OrganizationID)
+		return
+	}
+	req.LibraryID = libraryID("library", req.Workspace, string(library.LibraryPersonal), req.PrincipalID)
+}
+
+func effectiveLibraryPrincipalID(workspace, principalID string) string {
+	if strings.TrimSpace(principalID) != "" {
+		return principalID
+	}
+	return libraryID("reader", workspace)
 }
 
 func libraryID(prefix string, values ...string) string {

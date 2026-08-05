@@ -34,3 +34,16 @@
 - [x] Smoke-test the production embedded dashboard.
 - [x] Run repository-wide tests, race checks for touched packages, vet, portability, and diff checks.
 - [x] Record durable knowledge and finish with a scoped commit that preserves pre-existing work.
+
+## Task M6 - System-managed reader and library identity
+
+- [x] Add failing backend tests for stable generated personal and organization identities while preserving explicit IDs.
+- [x] Derive omitted identities consistently across import, structure, query, and memory review.
+- [x] Add failing dashboard contract tests, remove reader/library fields, and omit their request parameters.
+- [x] Verify focused backend tests, dashboard tests, typecheck, and the embedded production build.
+
+## Task M7 - Unicode language selector
+
+- [x] Add a failing dashboard contract test for a language dropdown with English default and representative Latin, CJK, RTL, and Indic options.
+- [x] Replace free-text language entry with a BCP 47-tagged selector while preserving the existing import payload.
+- [x] Synchronize embedded dashboard assets and verify dashboard tests, bundle syntax, and the production Go build.

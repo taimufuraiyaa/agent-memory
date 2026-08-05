@@ -39,3 +39,19 @@
 - [x] Replace letter abbreviations with recognizable, accessible destination icons.
 - [x] Bind the rail's expanded presentation to the existing explorer-open state.
 - [ ] Verify dashboard tests, typecheck, production build, and embedded assets.
+
+## Task L6 — Remove phantom notebook tracks and widen Library
+
+- [x] Add failing structural coverage for mounted-panel grid classes, Notes-only context controls, and the responsive Library content track.
+- [x] Make explorer and context grid tracks conditional without changing tablet or mobile overlays.
+- [x] Center and widen the Library content track so wide screens do not show a dead right-side strip.
+- [x] Synchronize embedded assets and verify dashboard tests, CSS/bundle checks, and the production binary.
+
+## Task L7 — Replace the Library pipeline with a reading room
+
+- [x] Add failing structural coverage for the import-first empty state, editable preparation surface, background indexing state, book reader, right-side index, and bottom chat composer.
+- [x] Replace the numbered workflow cards with explicit empty, preparing, indexing, ready, and error presentations.
+- [x] Keep file selection separate from confirmation and preserve supported formats, editable title, edition, language, and scope.
+- [x] Present grounded evidence as a conversation inside the reading body and progressively disclose interpretation and memory review.
+- [x] Add responsive reading-room styling with a right-side desktop index and a stacked narrow-screen layout.
+- [x] Synchronize embedded assets and verify dashboard tests, bundle syntax, asset tests, and the production binary.
