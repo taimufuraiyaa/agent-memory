@@ -1,0 +1,4 @@
+interface:
+  display_name: "Verify External Evidence Index"
+  short_description: "Validate signed P0-P12 evidence safely"
+  default_prompt: "Use $verify-external-evidence-index to assess the signed P0-P12 evidence package without treating local fixtures as release proof."

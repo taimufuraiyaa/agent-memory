@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Agent Memory · Private Sources</title>
+  <link rel="stylesheet" href="/dashboard/styles.css">
+</head>
+<body data-service-mode="hosted">
+  <a class="skip" href="#sources">Skip to sources</a>
+  <header class="masthead">
+    <div><span class="eyebrow">Agent Memory / Hosted Private Vault</span><h1>Your sources, under your control.</h1></div>
+    <p>Track validation, private processing, and search readiness without exposing source contents.</p>
+  </header>
+  <main>
+    <section class="connect" aria-labelledby="connect-title">
+      <div><span class="section-number">01</span><h2 id="connect-title">Connect this browser session</h2><p>Development credentials stay in memory and disappear when this page closes.</p></div>
+      <form id="connection-form">
+        <label>Access token<input id="access-token" name="access-token" type="password" autocomplete="off" required></label>
+        <label>Tenant ID<input id="tenant-id" name="tenant-id" autocomplete="off" required></label>
+        <label>Workspace ID <span>(optional)</span><input id="workspace-id" name="workspace-id" autocomplete="off"></label>
+        <button type="submit">Load private sources</button>
+      </form>
+    </section>
+    <section class="states" aria-label="Source state legend">
+      <span>Uploading</span><span>Validating</span><span>Processing</span><span>Indexing</span>
+      <span>Ready</span><span>Failed</span><span>Disabled</span><span>Deleting</span>
+    </section>
+    <section id="sources" class="source-section" aria-labelledby="sources-title">
+      <div class="section-heading"><div><span class="section-number">02</span><h2 id="sources-title">Source custody</h2></div><button id="refresh" class="secondary" type="button" disabled>Refresh</button></div>
+      <p id="status" class="status" role="status" aria-live="polite">Connect to view source progress.</p>
+      <div id="source-list" class="source-list"></div>
+    </section>
+    <section class="conversation" aria-labelledby="conversation-title">
+      <div><span class="section-number">03</span><h2 id="conversation-title">Ask your ready sources</h2><p>Answers remain citation-first. Generated synthesis is optional and never replaces the evidence.</p></div>
+      <form id="query-form" class="stacked-form">
+        <label>Question<textarea id="source-query" rows="4" maxlength="4000" required></textarea></label>
+        <label class="inline-choice"><input id="generate-answer" type="checkbox"> Add generated synthesis when available</label>
+        <button id="query-button" type="submit" disabled>Retrieve cited evidence</button>
+      </form>
+      <p id="query-status" class="status" role="status" aria-live="polite">Connect and wait for at least one ready source.</p>
+      <div id="query-results" class="evidence-list"></div>
+    </section>
+    <section id="memory-review" class="memory-review" aria-labelledby="memory-review-title" hidden>
+      <div><span class="section-number">04</span><h2 id="memory-review-title">Review a derived memory</h2><p>Write your interpretation. Source text cannot be silently copied into durable memory.</p></div>
+      <form id="proposal-form" class="stacked-form">
+        <label>Your interpretation<textarea id="proposal-content" rows="5" maxlength="2000" required></textarea></label>
+        <label>Memory type<select id="proposal-type"><option value="semantic">Semantic</option><option value="procedural">Procedural</option><option value="episodic">Episodic</option><option value="outcome">Outcome</option></select></label>
+        <button type="submit">Create review proposal</button>
+      </form>
+      <div id="proposal-review" class="proposal-review" hidden>
+        <label>Edit before review<textarea id="proposal-edit" rows="5" maxlength="2000"></textarea></label>
+        <div class="review-actions"><button id="save-proposal" class="secondary" type="button">Save edit</button><button id="accept-proposal" type="button">Accept into memory</button><button id="reject-proposal" class="danger-button" type="button">Reject</button></div>
+        <p id="proposal-status" class="status" role="status" aria-live="polite"></p>
+      </div>
+    </section>
+    <section id="privacy" class="conversation" aria-labelledby="privacy-title">
+      <div class="section-heading"><div><span class="section-number">05</span><h2 id="privacy-title">Privacy &amp; retention</h2><p>See what remains, what expires, and the difference between immediate access revocation and verified physical purge.</p></div><button id="refresh-privacy" class="secondary" type="button" disabled>Refresh privacy status</button></div>
+      <p id="privacy-status" class="status" role="status" aria-live="polite">Connect to inspect privacy controls.</p>
+      <div id="privacy-content" class="detail-grid"></div>
+    </section>
+    <section id="billing" class="conversation" aria-labelledby="billing-title">
+      <div class="section-heading"><div><span class="section-number">06</span><h2 id="billing-title">Plan &amp; usage</h2><p>Usage is reconciled from authoritative systems and may arrive with a short delay.</p></div><button id="refresh-billing" class="secondary" type="button" disabled>Refresh usage</button></div>
+      <p id="billing-status" class="status" role="status" aria-live="polite">Connect to view plan and usage.</p>
+      <div id="billing-content" class="detail-grid"></div>
+      <div class="review-actions"><button id="upgrade-plan" type="button" disabled>Request Individual plan</button><button id="cancel-plan" class="danger-button" type="button" disabled>Cancel paid plan</button></div>
+    </section>
+    <aside id="details" class="details" aria-labelledby="details-title" hidden>
+      <button id="close-details" class="close" type="button" aria-label="Close source details">×</button>
+      <span class="eyebrow">Source record</span><h2 id="details-title">Details</h2><div id="details-content"></div>
+    </aside>
+  </main>
+  <template id="source-template">
+    <article class="source-card"><div class="source-top"><div><span class="format"></span><h3></h3></div><span class="state-badge"></span></div>
+      <div class="progress-track"><span></span></div><p class="progress-copy"></p><div class="failure" hidden></div>
+      <div class="source-actions"><button class="details-button secondary" type="button">View custody record</button><button class="retry-button" type="button" hidden>Retry processing</button><button class="delete-button danger-button" type="button">Delete source</button></div>
+    </article>
+  </template>
+  <script type="module" src="/dashboard/app.js"></script>
+</body>
+</html>

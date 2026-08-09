@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -11,6 +12,8 @@ import (
 
 	"github.com/taimufuraiyaa/agent-memory/internal/api"
 	"github.com/taimufuraiyaa/agent-memory/internal/engine"
+	"github.com/taimufuraiyaa/agent-memory/internal/portable"
+	exportservice "github.com/taimufuraiyaa/agent-memory/internal/saas/export"
 	"github.com/taimufuraiyaa/agent-memory/internal/storage/sqlite"
 )
 
@@ -113,9 +116,11 @@ func newExportCommand() *cobra.Command {
 	var flags commonFlags
 	var format string
 	var outFile string
+	var selectedSources []string
+	var passphraseStdin bool
 	cmd := &cobra.Command{
 		Use:   "export",
-		Short: "Export workspace memories to json, markdown, or csv",
+		Short: "Export workspace data to json, markdown, csv, or encrypted portable format",
 		Long: `Export all workspace memories to a file for backup, analysis, or migration.
 
 	Export formats:
@@ -150,8 +155,52 @@ func newExportCommand() *cobra.Command {
 				return err
 			}
 			format = strings.ToLower(strings.TrimSpace(format))
-			if format != "json" && format != "markdown" && format != "csv" {
-				return errors.New("invalid export format: json|markdown|csv")
+			if format != "json" && format != "markdown" && format != "csv" && format != "portable" {
+				return errors.New("invalid export format: json|markdown|csv|portable")
+			}
+			if format == "portable" {
+				if cfg.apiURL != "" {
+					return errors.New("portable export is local-only; use the hosted export API for hosted data")
+				}
+				if strings.TrimSpace(outFile) == "" {
+					return errors.New("portable export requires --out")
+				}
+				if !passphraseStdin {
+					return errors.New("portable export requires --passphrase-stdin")
+				}
+				sources, err := parsePortableSourceSelections(selectedSources)
+				if err != nil {
+					return err
+				}
+				passphraseBytes, err := io.ReadAll(io.LimitReader(cmd.InOrStdin(), 1025))
+				if err != nil {
+					return fmt.Errorf("read portable passphrase: %w", err)
+				}
+				if len(passphraseBytes) > 1024 {
+					return errors.New("portable passphrase exceeds 1024 bytes")
+				}
+				passphrase := strings.TrimSpace(string(passphraseBytes))
+				store, err := openStore(ctx, cfg)
+				if err != nil {
+					return err
+				}
+				defer func() { _ = store.Close() }()
+				bundle, err := portable.BuildLocal(ctx, store, portable.Selection{Workspace: cfg.workspace, SourceFiles: sources})
+				if err != nil {
+					return err
+				}
+				plain, err := json.Marshal(bundle)
+				if err != nil {
+					return err
+				}
+				sealed, err := exportservice.EncryptPortable(passphrase, plain)
+				if err != nil {
+					return err
+				}
+				if err := writePrivateFile(outFile, sealed); err != nil {
+					return err
+				}
+				return writeSuccessEnvelope(cmd.OutOrStdout(), "export", map[string]any{"file": outFile, "format": format, "memories": len(bundle.Memories), "notes": len(bundle.Notes), "sources": len(bundle.Sources), "source_bytes_included": bundle.SourceBytesIncluded})
 			}
 			var payload any
 			if cfg.apiURL != "" {
@@ -208,9 +257,43 @@ func newExportCommand() *cobra.Command {
 		},
 	}
 	addCommonFlags(cmd, &flags)
-	cmd.Flags().StringVar(&format, "export-format", "json", "Export format: json|markdown|csv")
+	cmd.Flags().StringVar(&format, "export-format", "json", "Export format: json|markdown|csv|portable")
 	cmd.Flags().StringVar(&outFile, "out", "", "Output file path (optional)")
+	cmd.Flags().StringArrayVar(&selectedSources, "include-source", nil, "Portable-only explicit source selection: source-asset-id=/path/to/original (repeatable)")
+	cmd.Flags().BoolVar(&passphraseStdin, "passphrase-stdin", false, "Read the portable bundle passphrase from stdin")
 	return cmd
+}
+
+func parsePortableSourceSelections(values []string) (map[string]string, error) {
+	result := make(map[string]string, len(values))
+	for _, value := range values {
+		id, path, ok := strings.Cut(value, "=")
+		id, path = strings.TrimSpace(id), strings.TrimSpace(path)
+		if !ok || id == "" || path == "" {
+			return nil, fmt.Errorf("invalid --include-source %q; expected source-asset-id=/path/to/original", value)
+		}
+		if _, duplicate := result[id]; duplicate {
+			return nil, fmt.Errorf("source %q was selected more than once", id)
+		}
+		result[id] = path
+	}
+	return result, nil
+}
+
+func writePrivateFile(path string, body []byte) error {
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
+	if err != nil {
+		return err
+	}
+	if err := file.Chmod(0o600); err != nil {
+		_ = file.Close()
+		return err
+	}
+	if _, err := file.Write(body); err != nil {
+		_ = file.Close()
+		return err
+	}
+	return file.Close()
 }
 
 func newImportCommand() *cobra.Command {

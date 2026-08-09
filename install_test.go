@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -19,32 +20,25 @@ func TestRepositoryDoesNotContainDeveloperSpecificHomePath(t *testing.T) {
 		t.Fatalf("get repository root: %v", err)
 	}
 
-	err = filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
+	output, err := exec.Command("git", "ls-files", "--cached", "--others", "--exclude-standard", "-z").Output()
+	if err != nil {
+		t.Fatalf("list repository files: %v", err)
+	}
+	for _, name := range bytes.Split(output, []byte{0}) {
+		if len(name) == 0 {
+			continue
 		}
-		if entry.IsDir() && (entry.Name() == ".git" || entry.Name() == "node_modules") {
-			return filepath.SkipDir
-		}
-		if entry.IsDir() || !entry.Type().IsRegular() {
-			return nil
-		}
-
+		path := filepath.Join(root, filepath.FromSlash(string(name)))
 		contents, readErr := os.ReadFile(path)
 		if readErr != nil {
-			return readErr
+			if os.IsNotExist(readErr) {
+				continue
+			}
+			t.Fatalf("read repository file %s: %v", name, readErr)
 		}
 		if bytes.Contains(contents, []byte(forbiddenPath)) {
-			relativePath, relErr := filepath.Rel(root, path)
-			if relErr != nil {
-				relativePath = path
-			}
-			t.Errorf("developer-specific home path found in %s", relativePath)
+			t.Errorf("developer-specific home path found in %s", name)
 		}
-		return nil
-	})
-	if err != nil {
-		t.Fatalf("scan repository: %v", err)
 	}
 }
 

@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["./chunk-dagre-BM42HDAG.js","./chunk-graph.js","./chunk-layout.js","./chunk-cose-bilkent-S5V4N54A.js","./chunk-cytoscape.esm.js","./chunk-c4Diagram-AAUBKEIU.js","./chunk-chunk-ND2GUHAM.js","./chunk-flowDiagram-I6XJVG4X.js","./chunk-chunk-FMBD7UC4.js","./chunk-chunk-55IACEB6.js","./chunk-chunk-2J33WTMH.js","./chunk-channel.js","./chunk-erDiagram-TEJ5UH35.js","./chunk-gitGraphDiagram-PVQCEYII.js","./chunk-chunk-4BX2VUAB.js","./chunk-chunk-QZHKN3VN.js","./chunk-wardley-L42UT6IY.js","./chunk-ganttDiagram-6RSMTGT7.js","./chunk-linear.js","./chunk-init.js","./chunk-defaultLocale.js","./chunk-infoDiagram-5YYISTIA.js","./chunk-pieDiagram-4H26LBE5.js","./chunk-arc.js","./chunk-ordinal.js","./chunk-quadrantDiagram-W4KKPZXB.js","./chunk-xychartDiagram-2RQKCTM6.js","./chunk-requirementDiagram-4Y6WPE33.js","./chunk-sequenceDiagram-3UESZ5HK.js","./chunk-classDiagram-4FO5ZUOK.js","./chunk-chunk-727SXJPM.js","./chunk-classDiagram-v2-Q7XG4LA2.js","./chunk-stateDiagram-AJRCARHV.js","./chunk-chunk-AQP2D5EJ.js","./chunk-stateDiagram-v2-BHNVJYJU.js","./chunk-journeyDiagram-JHISSGLW.js","./chunk-timeline-definition-PNZ67QCA.js","./chunk-mindmap-definition-RKZ34NQL.js","./chunk-kanban-definition-UN3LZRKU.js","./chunk-sankeyDiagram-5OEKKPKP.js","./chunk-diagram-LMA3HP47.js","./chunk-diagram-2AECGRRQ.js","./chunk-blockDiagram-GPEHLZMM.js","./chunk-diagram-5GNKFQAL.js","./chunk-architectureDiagram-3BPJPVTR.js","./chunk-diagram-KO2AKTUF.js","./chunk-diagram-OG6HWLK6.js","./chunk-wardleyDiagram-YWT4CUSO.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["./chunk-dagre-VZM6K2ZE.js","./chunk-chunk-RYQCIY6F.js","./chunk-graph.js","./chunk-map.js","./chunk-layout.js","./chunk-swimlanes-SLNWSIFB.js","./chunk-cose-bilkent-JH36ORCC.js","./chunk-cytoscape.esm.js","./chunk-c4Diagram-5PPSVZJV.js","./chunk-chunk-2GRJ4B5K.js","./chunk-flowDiagram-UKHOOZJN.js","./chunk-chunk-5VM5RSS4.js","./chunk-chunk-XXDRQBXY.js","./chunk-chunk-KBJHAD2P.js","./chunk-channel.js","./chunk-swimlanesDiagram-ULZ7WXOC.js","./chunk-erDiagram-JOGREHBK.js","./chunk-gitGraphDiagram-DS77QQ5N.js","./chunk-chunk-2Q5K7J3B.js","./chunk-chunk-JWPE2WC7.js","./chunk-cynefin-VYW2F7L2.js","./chunk-ganttDiagram-PKOTCBZU.js","./chunk-linear.js","./chunk-init.js","./chunk-defaultLocale.js","./chunk-infoDiagram-6WML65LV.js","./chunk-pieDiagram-7S7Q4E2Y.js","./chunk-arc.js","./chunk-ordinal.js","./chunk-quadrantDiagram-CIZ2JOQS.js","./chunk-xychartDiagram-ELKLHX3M.js","./chunk-requirementDiagram-LRYGKXZP.js","./chunk-sequenceDiagram-SI44F4Z6.js","./chunk-classDiagram-JCYQIIEL.js","./chunk-chunk-GF5L2VYU.js","./chunk-classDiagram-v2-OCEON4UE.js","./chunk-stateDiagram-OKZ733FA.js","./chunk-chunk-5RXB4S5H.js","./chunk-stateDiagram-v2-UEYNNEHI.js","./chunk-journeyDiagram-NVQOT4AX.js","./chunk-timeline-definition-Z64GVDOM.js","./chunk-mindmap-definition-FAOFIHXS.js","./chunk-kanban-definition-27J2QSJJ.js","./chunk-sankeyDiagram-W5VNT64P.js","./chunk-diagram-LBJQPF4R.js","./chunk-diagram-UB23O5K3.js","./chunk-blockDiagram-VBNYF7ZC.js","./chunk-diagram-7IWD3JNH.js","./chunk-architectureDiagram-T3A2C74G.js","./chunk-diagram-B4RE2ZJO.js","./chunk-diagram-Q27KOJAE.js","./chunk-wardleyDiagram-T6FBY63Y.js","./chunk-cynefinDiagram-MW4NZA55.js","./chunk-railroadDiagram-AXF67PYL.js","./chunk-chunk-6Q2QTUOP.js","./chunk-ebnfDiagram-BXEA7PRR.js","./chunk-abnfDiagram-N423BO3Z.js","./chunk-pegDiagram-VL7TDLO6.js"])))=>i.map(i=>d[i]);
 var __defProp = Object.defineProperty;
 var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
 var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
@@ -1745,14 +1745,14 @@ function requireReactDom_production_min() {
   function fd(a2, b2, c2, d2) {
     if (dd) {
       var e2 = Yc(a2, b2, c2, d2);
-      if (null === e2) hd(a2, b2, d2, id33, c2), Sc(a2, d2);
+      if (null === e2) hd(a2, b2, d2, id39, c2), Sc(a2, d2);
       else if (Uc(e2, a2, b2, c2, d2)) d2.stopPropagation();
       else if (Sc(a2, d2), b2 & 4 && -1 < Rc.indexOf(a2)) {
         for (; null !== e2; ) {
           var f2 = Cb(e2);
           null !== f2 && Ec(f2);
           f2 = Yc(a2, b2, c2, d2);
-          null === f2 && hd(a2, b2, d2, id33, c2);
+          null === f2 && hd(a2, b2, d2, id39, c2);
           if (f2 === e2) break;
           e2 = f2;
         }
@@ -1760,9 +1760,9 @@ function requireReactDom_production_min() {
       } else hd(a2, b2, d2, null, c2);
     }
   }
-  var id33 = null;
+  var id39 = null;
   function Yc(a2, b2, c2, d2) {
-    id33 = null;
+    id39 = null;
     a2 = xb(d2);
     a2 = Wc(a2);
     if (null !== a2) if (b2 = Vb(a2), null === b2) a2 = null;
@@ -1774,7 +1774,7 @@ function requireReactDom_production_min() {
       if (b2.stateNode.current.memoizedState.isDehydrated) return 3 === b2.tag ? b2.stateNode.containerInfo : null;
       a2 = null;
     } else b2 !== a2 && (a2 = null);
-    id33 = a2;
+    id39 = a2;
     return null;
   }
   function jd(a2) {
@@ -7095,6 +7095,26 @@ async function api(path, init2) {
 function listProjects() {
   return api("/api/v1/projects/list", { method: "GET" });
 }
+function listClientProfiles() {
+  return api("/api/v1/client-profiles", { method: "GET" });
+}
+function createClientProfile(input) {
+  return api("/api/v1/client-profiles", { method: "POST", body: JSON.stringify(input) });
+}
+function updateClientProfile(input) {
+  const { id: id39, ...body } = input;
+  return api(`/api/v1/client-profiles/${encodeURIComponent(id39)}`, { method: "PUT", body: JSON.stringify(body) });
+}
+function deleteClientProfile(input) {
+  const query = new URLSearchParams({ expected_revision: String(input.expected_revision) });
+  return api(`/api/v1/client-profiles/${encodeURIComponent(input.id)}?${query.toString()}`, { method: "DELETE" });
+}
+function getDeploymentProfile() {
+  return api("/api/v1/deployment-profile", { method: "GET" });
+}
+function updateDeploymentProfile(input) {
+  return api("/api/v1/deployment-profile", { method: "PUT", body: JSON.stringify(input) });
+}
 function listNotes(input) {
   const qs = new URLSearchParams({ workspace: input.workspace });
   qs.set("include_deleted", "true");
@@ -7142,10 +7162,17 @@ function importLibraryBook(input) {
     form.append("edition_label", input.edition_label);
     form.append("language", input.language);
     form.append("format", input.format);
+    form.append("rights_basis", input.rights_basis);
     form.append("source", input.source_file);
     return api("/api/v1/library/imports", { method: "POST", body: form });
   }
   return api("/api/v1/library/imports", { method: "POST", body: JSON.stringify(input) });
+}
+function getRightsAttestationStatus() {
+  return api("/api/v1/rights-attestation/status", { method: "GET" });
+}
+function acceptRightsAttestation(input) {
+  return api("/api/v1/rights-attestation/accept", { method: "POST", body: JSON.stringify(input) });
 }
 function getLibraryStructure(input) {
   const qs = new URLSearchParams({ workspace: input.workspace, edition_id: input.edition_id });
@@ -7337,6 +7364,12 @@ const __vitePreload = function preload(baseModule, deps, importerUrl) {
     }
     return baseModule().catch(handlePreloadError);
   });
+};
+var __defProp2 = Object.defineProperty;
+var __name = (target, value) => __defProp2(target, "name", { value, configurable: true });
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp2(target, name, { get: all[name], enumerable: true });
 };
 var dayjs_min$1 = { exports: {} };
 var dayjs_min = dayjs_min$1.exports;
@@ -7623,12 +7656,6 @@ function requireDayjs_min() {
 }
 var dayjs_minExports = requireDayjs_min();
 const dayjs2 = /* @__PURE__ */ getDefaultExportFromCjs(dayjs_minExports);
-var __defProp2 = Object.defineProperty;
-var __name = (target, value) => __defProp2(target, "name", { value, configurable: true });
-var __export = (target, all) => {
-  for (var name in all)
-    __defProp2(target, name, { get: all[name], enumerable: true });
-};
 var LEVELS = {
   trace: 0,
   debug: 1,
@@ -9863,45 +9890,8 @@ function createDOMPurify() {
   return DOMPurify;
 }
 var purify = createDOMPurify();
-var frontMatterRegex = /^-{3}\s*[\n\r](.*?)[\n\r]-{3}\s*[\n\r]+/s;
-var directiveRegex = /%{2}{\s*(?:(\w+)\s*:|(\w+))\s*(?:(\w+)|((?:(?!}%{2}).|\r?\n)*))?\s*(?:}%{2})?/gi;
-var anyCommentRegex = /\s*%%.*\n/gm;
-var UnknownDiagramError = (_a = class extends Error {
-  constructor(message) {
-    super(message);
-    this.name = "UnknownDiagramError";
-  }
-}, __name(_a, "UnknownDiagramError"), _a);
-var detectors = {};
-var detectType$1 = /* @__PURE__ */ __name(function(text2, config2) {
-  text2 = text2.replace(frontMatterRegex, "").replace(directiveRegex, "").replace(anyCommentRegex, "\n");
-  for (const [key, { detector: detector33 }] of Object.entries(detectors)) {
-    const diagram2 = detector33(text2, config2);
-    if (diagram2) {
-      return key;
-    }
-  }
-  throw new UnknownDiagramError(
-    `No diagram type detected matching given configuration for text: ${text2}`
-  );
-}, "detectType");
-var registerLazyLoadedDiagrams = /* @__PURE__ */ __name((...diagrams2) => {
-  for (const { id: id33, detector: detector33, loader: loader33 } of diagrams2) {
-    addDetector(id33, detector33, loader33);
-  }
-}, "registerLazyLoadedDiagrams");
-var addDetector = /* @__PURE__ */ __name((key, detector33, loader33) => {
-  if (detectors[key]) {
-    log.warn(`Detector with key ${key} already exists. Overwriting.`);
-  }
-  detectors[key] = { detector: detector33, loader: loader33 };
-  log.debug(`Detector with key ${key} added${loader33 ? " with loader" : ""}`);
-}, "addDetector");
-var getDiagramLoader = /* @__PURE__ */ __name((key) => {
-  return detectors[key].loader;
-}, "getDiagramLoader");
-var assignWithDepth = /* @__PURE__ */ __name((dst, src, { depth = 2, clobber = false } = {}) => {
-  const config2 = { depth, clobber };
+var assignWithDepth = /* @__PURE__ */ __name((dst, src, { depth = 2 } = {}) => {
+  const config2 = { depth };
   if (Array.isArray(src) && !Array.isArray(dst)) {
     src.forEach((s2) => assignWithDepth(dst, s2, config2));
     return dst;
@@ -9913,22 +9903,45 @@ var assignWithDepth = /* @__PURE__ */ __name((dst, src, { depth = 2, clobber = f
     });
     return dst;
   }
-  if (dst === void 0 || depth <= 0) {
+  if (dst === void 0 || dst === null || depth <= 0) {
     if (dst !== void 0 && dst !== null && typeof dst === "object" && typeof src === "object") {
       return Object.assign(dst, src);
     } else {
       return src;
     }
   }
-  if (src !== void 0 && typeof dst === "object" && typeof src === "object") {
-    Object.keys(src).forEach((key) => {
-      if (typeof src[key] === "object" && src[key] !== null && (dst[key] === void 0 || typeof dst[key] === "object")) {
-        if (dst[key] === void 0) {
-          dst[key] = Array.isArray(src[key]) ? [] : {};
+  if (src !== void 0 && src !== null && typeof dst === "object" && typeof src === "object") {
+    const dstWithKeys = dst;
+    Object.entries(src).forEach(([key, srcValue]) => {
+      if (typeof srcValue === "object") {
+        if (srcValue === null) {
+          return;
         }
-        dst[key] = assignWithDepth(dst[key], src[key], { depth: depth - 1, clobber });
-      } else if (clobber || typeof dst[key] !== "object" && typeof src[key] !== "object") {
-        dst[key] = src[key];
+        if (!Object.hasOwn(dst, key)) {
+          Object.defineProperty(dst, key, {
+            value: void 0,
+            writable: true,
+            enumerable: true,
+            configurable: true
+          });
+        }
+        if (dstWithKeys[key] === void 0) {
+          dstWithKeys[key] = Array.isArray(srcValue) ? [] : {};
+        }
+        if (typeof dstWithKeys[key] === "object") {
+          dstWithKeys[key] = assignWithDepth(dstWithKeys[key], srcValue, { depth: depth - 1 });
+        }
+      } else if (typeof dstWithKeys[key] !== "object") {
+        if (Object.hasOwn(dst, key)) {
+          dstWithKeys[key] = srcValue;
+        } else {
+          Object.defineProperty(dst, key, {
+            value: srcValue,
+            writable: true,
+            enumerable: true,
+            configurable: true
+          });
+        }
       }
     });
   }
@@ -9938,7 +9951,7 @@ var assignWithDepth_default = assignWithDepth;
 var oldAttributeBackgroundColorOdd = "#ffffff";
 var oldAttributeBackgroundColorEven = "#f2f2f2";
 var mkBorder = /* @__PURE__ */ __name((col, darkMode) => darkMode ? adjust(col, { s: -40, l: 10 }) : adjust(col, { s: -40, l: -10 }), "mkBorder");
-var Theme = (_b = class {
+var Theme = (_a = class {
   constructor() {
     this.background = "#f4f4f4";
     this.primaryColor = "#fff4dd";
@@ -9953,7 +9966,7 @@ var Theme = (_b = class {
     this.dropShadow = "drop-shadow( 1px 2px 2px rgba(185,185,185,1))";
   }
   updateColors() {
-    var _a2, _b2, _c2, _d2, _e3, _f2, _g2, _h2, _i2, _j2, _k2, _l2, _m2, _n2, _o2, _p2, _q2, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A, _B, _C, _D, _E, _F, _G, _H;
+    var _a2, _b2, _c2, _d2, _e3, _f2, _g2, _h2, _i2, _j2, _k2, _l2, _m2, _n2, _o2, _p2, _q2, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A, _B, _C, _D, _E, _F, _G, _H, _I, _J, _K, _L, _M, _N, _O, _P, _Q, _R, _S, _T, _U, _V, _W;
     this.primaryTextColor = this.primaryTextColor || (this.darkMode ? "#eee" : "#333");
     this.secondaryColor = this.secondaryColor || adjust(this.primaryColor, { h: -120 });
     this.tertiaryColor = this.tertiaryColor || adjust(this.primaryColor, { h: 180, l: 5 });
@@ -9991,6 +10004,7 @@ var Theme = (_b = class {
     this.activationBorderColor = this.activationBorderColor || darken(this.secondaryColor, 10);
     this.activationBkgColor = this.activationBkgColor || this.secondaryColor;
     this.sequenceNumberColor = this.sequenceNumberColor || invert(this.lineColor);
+    this.rectBkgColor = this.rectBkgColor || this.tertiaryColor;
     this.sectionBkgColor = this.sectionBkgColor || this.tertiaryColor;
     this.altSectionBkgColor = this.altSectionBkgColor || "white";
     this.sectionBkgColor = this.sectionBkgColor || this.secondaryColor;
@@ -10120,32 +10134,49 @@ var Theme = (_b = class {
     this.venn8 = this.venn8 ?? adjust(this.secondaryColor, { h: 120, l: -30 });
     this.vennTitleTextColor = this.vennTitleTextColor ?? this.titleColor;
     this.vennSetTextColor = this.vennSetTextColor ?? this.textColor;
+    this.cynefin = {
+      domainFontSize: ((_a2 = this.cynefin) == null ? void 0 : _a2.domainFontSize) || 16,
+      itemFontSize: ((_b2 = this.cynefin) == null ? void 0 : _b2.itemFontSize) || 12,
+      boundaryColor: ((_c2 = this.cynefin) == null ? void 0 : _c2.boundaryColor) || this.lineColor,
+      boundaryWidth: ((_d2 = this.cynefin) == null ? void 0 : _d2.boundaryWidth) || 2,
+      cliffColor: ((_e3 = this.cynefin) == null ? void 0 : _e3.cliffColor) || "#8B0000",
+      cliffWidth: ((_f2 = this.cynefin) == null ? void 0 : _f2.cliffWidth) || 4,
+      arrowColor: ((_g2 = this.cynefin) == null ? void 0 : _g2.arrowColor) || this.lineColor,
+      arrowWidth: ((_h2 = this.cynefin) == null ? void 0 : _h2.arrowWidth) || 2,
+      complexBg: ((_i2 = this.cynefin) == null ? void 0 : _i2.complexBg) || "#E8F5E9",
+      complicatedBg: ((_j2 = this.cynefin) == null ? void 0 : _j2.complicatedBg) || "#E3F2FD",
+      chaoticBg: ((_k2 = this.cynefin) == null ? void 0 : _k2.chaoticBg) || "#FBE9E7",
+      clearBg: ((_l2 = this.cynefin) == null ? void 0 : _l2.clearBg) || "#FFF8E1",
+      confusionBg: ((_m2 = this.cynefin) == null ? void 0 : _m2.confusionBg) || "#F3E5F5",
+      textColor: ((_n2 = this.cynefin) == null ? void 0 : _n2.textColor) || this.textColor,
+      labelColor: ((_o2 = this.cynefin) == null ? void 0 : _o2.labelColor) || this.primaryTextColor
+    };
     this.radar = {
-      axisColor: ((_a2 = this.radar) == null ? void 0 : _a2.axisColor) || this.lineColor,
-      axisStrokeWidth: ((_b2 = this.radar) == null ? void 0 : _b2.axisStrokeWidth) || 2,
-      axisLabelFontSize: ((_c2 = this.radar) == null ? void 0 : _c2.axisLabelFontSize) || 12,
-      curveOpacity: ((_d2 = this.radar) == null ? void 0 : _d2.curveOpacity) || 0.5,
-      curveStrokeWidth: ((_e3 = this.radar) == null ? void 0 : _e3.curveStrokeWidth) || 2,
-      graticuleColor: ((_f2 = this.radar) == null ? void 0 : _f2.graticuleColor) || "#DEDEDE",
-      graticuleStrokeWidth: ((_g2 = this.radar) == null ? void 0 : _g2.graticuleStrokeWidth) || 1,
-      graticuleOpacity: ((_h2 = this.radar) == null ? void 0 : _h2.graticuleOpacity) || 0.3,
-      legendBoxSize: ((_i2 = this.radar) == null ? void 0 : _i2.legendBoxSize) || 12,
-      legendFontSize: ((_j2 = this.radar) == null ? void 0 : _j2.legendFontSize) || 12
+      axisColor: ((_p2 = this.radar) == null ? void 0 : _p2.axisColor) || this.lineColor,
+      axisStrokeWidth: ((_q2 = this.radar) == null ? void 0 : _q2.axisStrokeWidth) || 2,
+      axisLabelFontSize: ((_r = this.radar) == null ? void 0 : _r.axisLabelFontSize) || 12,
+      curveOpacity: ((_s = this.radar) == null ? void 0 : _s.curveOpacity) || 0.5,
+      curveStrokeWidth: ((_t = this.radar) == null ? void 0 : _t.curveStrokeWidth) || 2,
+      graticuleColor: ((_u = this.radar) == null ? void 0 : _u.graticuleColor) || "#DEDEDE",
+      graticuleStrokeWidth: ((_v = this.radar) == null ? void 0 : _v.graticuleStrokeWidth) || 1,
+      graticuleOpacity: ((_w = this.radar) == null ? void 0 : _w.graticuleOpacity) || 0.3,
+      legendBoxSize: ((_x = this.radar) == null ? void 0 : _x.legendBoxSize) || 12,
+      legendFontSize: ((_y = this.radar) == null ? void 0 : _y.legendFontSize) || 12
     };
     this.wardleyEvolutionColor = this.wardleyEvolutionColor || "#dc3545";
     this.wardley = {
-      backgroundColor: ((_k2 = this.wardley) == null ? void 0 : _k2.backgroundColor) || this.background,
-      axisColor: ((_l2 = this.wardley) == null ? void 0 : _l2.axisColor) || this.lineColor,
-      axisTextColor: ((_m2 = this.wardley) == null ? void 0 : _m2.axisTextColor) || this.primaryTextColor,
-      gridColor: ((_n2 = this.wardley) == null ? void 0 : _n2.gridColor) || this.gridColor,
-      componentFill: ((_o2 = this.wardley) == null ? void 0 : _o2.componentFill) || this.background,
-      componentStroke: ((_p2 = this.wardley) == null ? void 0 : _p2.componentStroke) || this.lineColor,
-      componentLabelColor: ((_q2 = this.wardley) == null ? void 0 : _q2.componentLabelColor) || this.primaryTextColor,
-      linkStroke: ((_r = this.wardley) == null ? void 0 : _r.linkStroke) || this.lineColor,
-      evolutionStroke: ((_s = this.wardley) == null ? void 0 : _s.evolutionStroke) || this.wardleyEvolutionColor,
-      annotationStroke: ((_t = this.wardley) == null ? void 0 : _t.annotationStroke) || this.lineColor,
-      annotationTextColor: ((_u = this.wardley) == null ? void 0 : _u.annotationTextColor) || this.primaryTextColor,
-      annotationFill: ((_v = this.wardley) == null ? void 0 : _v.annotationFill) || this.background
+      backgroundColor: ((_z = this.wardley) == null ? void 0 : _z.backgroundColor) || this.background,
+      axisColor: ((_A = this.wardley) == null ? void 0 : _A.axisColor) || this.lineColor,
+      axisTextColor: ((_B = this.wardley) == null ? void 0 : _B.axisTextColor) || this.primaryTextColor,
+      gridColor: ((_C = this.wardley) == null ? void 0 : _C.gridColor) || this.gridColor,
+      componentFill: ((_D = this.wardley) == null ? void 0 : _D.componentFill) || this.background,
+      componentStroke: ((_E = this.wardley) == null ? void 0 : _E.componentStroke) || this.lineColor,
+      componentLabelColor: ((_F = this.wardley) == null ? void 0 : _F.componentLabelColor) || this.primaryTextColor,
+      linkStroke: ((_G = this.wardley) == null ? void 0 : _G.linkStroke) || this.lineColor,
+      evolutionStroke: ((_H = this.wardley) == null ? void 0 : _H.evolutionStroke) || this.wardleyEvolutionColor,
+      annotationStroke: ((_I = this.wardley) == null ? void 0 : _I.annotationStroke) || this.lineColor,
+      annotationTextColor: ((_J = this.wardley) == null ? void 0 : _J.annotationTextColor) || this.primaryTextColor,
+      annotationFill: ((_K = this.wardley) == null ? void 0 : _K.annotationFill) || this.background
     };
     this.archEdgeColor = this.archEdgeColor || "#777";
     this.archEdgeArrowColor = this.archEdgeArrowColor || "#777";
@@ -10168,18 +10199,18 @@ var Theme = (_b = class {
     this.quadrantExternalBorderStrokeFill = this.quadrantExternalBorderStrokeFill || this.primaryBorderColor;
     this.quadrantTitleFill = this.quadrantTitleFill || this.primaryTextColor;
     this.xyChart = {
-      backgroundColor: ((_w = this.xyChart) == null ? void 0 : _w.backgroundColor) || this.background,
-      titleColor: ((_x = this.xyChart) == null ? void 0 : _x.titleColor) || this.primaryTextColor,
-      dataLabelColor: ((_y = this.xyChart) == null ? void 0 : _y.dataLabelColor) || this.primaryTextColor,
-      xAxisTitleColor: ((_z = this.xyChart) == null ? void 0 : _z.xAxisTitleColor) || this.primaryTextColor,
-      xAxisLabelColor: ((_A = this.xyChart) == null ? void 0 : _A.xAxisLabelColor) || this.primaryTextColor,
-      xAxisTickColor: ((_B = this.xyChart) == null ? void 0 : _B.xAxisTickColor) || this.primaryTextColor,
-      xAxisLineColor: ((_C = this.xyChart) == null ? void 0 : _C.xAxisLineColor) || this.primaryTextColor,
-      yAxisTitleColor: ((_D = this.xyChart) == null ? void 0 : _D.yAxisTitleColor) || this.primaryTextColor,
-      yAxisLabelColor: ((_E = this.xyChart) == null ? void 0 : _E.yAxisLabelColor) || this.primaryTextColor,
-      yAxisTickColor: ((_F = this.xyChart) == null ? void 0 : _F.yAxisTickColor) || this.primaryTextColor,
-      yAxisLineColor: ((_G = this.xyChart) == null ? void 0 : _G.yAxisLineColor) || this.primaryTextColor,
-      plotColorPalette: ((_H = this.xyChart) == null ? void 0 : _H.plotColorPalette) || "#FFF4DD,#FFD8B1,#FFA07A,#ECEFF1,#D6DBDF,#C3E0A8,#FFB6A4,#FFD74D,#738FA7,#FFFFF0"
+      backgroundColor: ((_L = this.xyChart) == null ? void 0 : _L.backgroundColor) || this.background,
+      titleColor: ((_M = this.xyChart) == null ? void 0 : _M.titleColor) || this.primaryTextColor,
+      dataLabelColor: ((_N = this.xyChart) == null ? void 0 : _N.dataLabelColor) || this.primaryTextColor,
+      xAxisTitleColor: ((_O = this.xyChart) == null ? void 0 : _O.xAxisTitleColor) || this.primaryTextColor,
+      xAxisLabelColor: ((_P = this.xyChart) == null ? void 0 : _P.xAxisLabelColor) || this.primaryTextColor,
+      xAxisTickColor: ((_Q = this.xyChart) == null ? void 0 : _Q.xAxisTickColor) || this.primaryTextColor,
+      xAxisLineColor: ((_R = this.xyChart) == null ? void 0 : _R.xAxisLineColor) || this.primaryTextColor,
+      yAxisTitleColor: ((_S = this.xyChart) == null ? void 0 : _S.yAxisTitleColor) || this.primaryTextColor,
+      yAxisLabelColor: ((_T = this.xyChart) == null ? void 0 : _T.yAxisLabelColor) || this.primaryTextColor,
+      yAxisTickColor: ((_U = this.xyChart) == null ? void 0 : _U.yAxisTickColor) || this.primaryTextColor,
+      yAxisLineColor: ((_V = this.xyChart) == null ? void 0 : _V.yAxisLineColor) || this.primaryTextColor,
+      plotColorPalette: ((_W = this.xyChart) == null ? void 0 : _W.plotColorPalette) || "#FFF4DD,#FFD8B1,#FFA07A,#ECEFF1,#D6DBDF,#C3E0A8,#FFB6A4,#FFD74D,#738FA7,#FFFFF0"
     };
     this.requirementBackground = this.requirementBackground || this.primaryColor;
     this.requirementBorderColor = this.requirementBorderColor || this.primaryBorderColor;
@@ -10272,13 +10303,13 @@ var Theme = (_b = class {
       this[k2] = overrides[k2];
     });
   }
-}, __name(_b, "Theme"), _b);
+}, __name(_a, "Theme"), _a);
 var getThemeVariables = /* @__PURE__ */ __name((userOverrides) => {
   const theme = new Theme();
   theme.calculate(userOverrides);
   return theme;
 }, "getThemeVariables");
-var Theme2 = (_c = class {
+var Theme2 = (_b = class {
   constructor() {
     this.background = "#333";
     this.primaryColor = "#1f2020";
@@ -10371,7 +10402,7 @@ var Theme2 = (_c = class {
     this.fontWeight = this.fontWeight || "normal";
   }
   updateColors() {
-    var _a2, _b2, _c2, _d2, _e3, _f2, _g2, _h2, _i2, _j2, _k2, _l2, _m2, _n2, _o2, _p2, _q2, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A, _B, _C, _D, _E, _F, _G, _H;
+    var _a2, _b2, _c2, _d2, _e3, _f2, _g2, _h2, _i2, _j2, _k2, _l2, _m2, _n2, _o2, _p2, _q2, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A, _B, _C, _D, _E, _F, _G, _H, _I, _J, _K, _L, _M, _N, _O, _P, _Q, _R, _S, _T, _U, _V, _W;
     this.secondBkg = lighten(this.mainBkg, 16);
     this.lineColor = this.mainContrastColor;
     this.arrowheadColor = this.mainContrastColor;
@@ -10396,6 +10427,7 @@ var Theme2 = (_c = class {
     this.noteTextColor = this.secondaryTextColor;
     this.activationBorderColor = this.border1;
     this.activationBkgColor = this.secondBkg;
+    this.rectBkgColor = this.rectBkgColor || this.tertiaryColor;
     this.altSectionBkgColor = this.background;
     this.taskBkgColor = lighten(this.mainBkg, 23);
     this.taskTextColor = this.darkTextColor;
@@ -10484,6 +10516,23 @@ var Theme2 = (_c = class {
     }
     this.vennTitleTextColor = this.vennTitleTextColor ?? this.titleColor;
     this.vennSetTextColor = this.vennSetTextColor ?? this.textColor;
+    this.cynefin = {
+      domainFontSize: ((_a2 = this.cynefin) == null ? void 0 : _a2.domainFontSize) || 16,
+      itemFontSize: ((_b2 = this.cynefin) == null ? void 0 : _b2.itemFontSize) || 12,
+      boundaryColor: ((_c2 = this.cynefin) == null ? void 0 : _c2.boundaryColor) || this.lineColor,
+      boundaryWidth: ((_d2 = this.cynefin) == null ? void 0 : _d2.boundaryWidth) || 2,
+      cliffColor: ((_e3 = this.cynefin) == null ? void 0 : _e3.cliffColor) || "#FF6B6B",
+      cliffWidth: ((_f2 = this.cynefin) == null ? void 0 : _f2.cliffWidth) || 4,
+      arrowColor: ((_g2 = this.cynefin) == null ? void 0 : _g2.arrowColor) || this.lineColor,
+      arrowWidth: ((_h2 = this.cynefin) == null ? void 0 : _h2.arrowWidth) || 2,
+      complexBg: ((_i2 = this.cynefin) == null ? void 0 : _i2.complexBg) || "#1B5E20",
+      complicatedBg: ((_j2 = this.cynefin) == null ? void 0 : _j2.complicatedBg) || "#0D47A1",
+      chaoticBg: ((_k2 = this.cynefin) == null ? void 0 : _k2.chaoticBg) || "#BF360C",
+      clearBg: ((_l2 = this.cynefin) == null ? void 0 : _l2.clearBg) || "#F57F17",
+      confusionBg: ((_m2 = this.cynefin) == null ? void 0 : _m2.confusionBg) || "#4A148C",
+      textColor: ((_n2 = this.cynefin) == null ? void 0 : _n2.textColor) || this.textColor,
+      labelColor: ((_o2 = this.cynefin) == null ? void 0 : _o2.labelColor) || this.primaryTextColor
+    };
     this.quadrant1Fill = this.quadrant1Fill || this.primaryColor;
     this.quadrant2Fill = this.quadrant2Fill || adjust(this.primaryColor, { r: 5, g: 5, b: 5 });
     this.quadrant3Fill = this.quadrant3Fill || adjust(this.primaryColor, { r: 10, g: 10, b: 10 });
@@ -10500,18 +10549,18 @@ var Theme2 = (_c = class {
     this.quadrantExternalBorderStrokeFill = this.quadrantExternalBorderStrokeFill || this.primaryBorderColor;
     this.quadrantTitleFill = this.quadrantTitleFill || this.primaryTextColor;
     this.xyChart = {
-      backgroundColor: ((_a2 = this.xyChart) == null ? void 0 : _a2.backgroundColor) || this.background,
-      titleColor: ((_b2 = this.xyChart) == null ? void 0 : _b2.titleColor) || this.primaryTextColor,
-      dataLabelColor: ((_c2 = this.xyChart) == null ? void 0 : _c2.dataLabelColor) || this.primaryTextColor,
-      xAxisTitleColor: ((_d2 = this.xyChart) == null ? void 0 : _d2.xAxisTitleColor) || this.primaryTextColor,
-      xAxisLabelColor: ((_e3 = this.xyChart) == null ? void 0 : _e3.xAxisLabelColor) || this.primaryTextColor,
-      xAxisTickColor: ((_f2 = this.xyChart) == null ? void 0 : _f2.xAxisTickColor) || this.primaryTextColor,
-      xAxisLineColor: ((_g2 = this.xyChart) == null ? void 0 : _g2.xAxisLineColor) || this.primaryTextColor,
-      yAxisTitleColor: ((_h2 = this.xyChart) == null ? void 0 : _h2.yAxisTitleColor) || this.primaryTextColor,
-      yAxisLabelColor: ((_i2 = this.xyChart) == null ? void 0 : _i2.yAxisLabelColor) || this.primaryTextColor,
-      yAxisTickColor: ((_j2 = this.xyChart) == null ? void 0 : _j2.yAxisTickColor) || this.primaryTextColor,
-      yAxisLineColor: ((_k2 = this.xyChart) == null ? void 0 : _k2.yAxisLineColor) || this.primaryTextColor,
-      plotColorPalette: ((_l2 = this.xyChart) == null ? void 0 : _l2.plotColorPalette) || "#3498db,#2ecc71,#e74c3c,#f1c40f,#bdc3c7,#ffffff,#34495e,#9b59b6,#1abc9c,#e67e22"
+      backgroundColor: ((_p2 = this.xyChart) == null ? void 0 : _p2.backgroundColor) || this.background,
+      titleColor: ((_q2 = this.xyChart) == null ? void 0 : _q2.titleColor) || this.primaryTextColor,
+      dataLabelColor: ((_r = this.xyChart) == null ? void 0 : _r.dataLabelColor) || this.primaryTextColor,
+      xAxisTitleColor: ((_s = this.xyChart) == null ? void 0 : _s.xAxisTitleColor) || this.primaryTextColor,
+      xAxisLabelColor: ((_t = this.xyChart) == null ? void 0 : _t.xAxisLabelColor) || this.primaryTextColor,
+      xAxisTickColor: ((_u = this.xyChart) == null ? void 0 : _u.xAxisTickColor) || this.primaryTextColor,
+      xAxisLineColor: ((_v = this.xyChart) == null ? void 0 : _v.xAxisLineColor) || this.primaryTextColor,
+      yAxisTitleColor: ((_w = this.xyChart) == null ? void 0 : _w.yAxisTitleColor) || this.primaryTextColor,
+      yAxisLabelColor: ((_x = this.xyChart) == null ? void 0 : _x.yAxisLabelColor) || this.primaryTextColor,
+      yAxisTickColor: ((_y = this.xyChart) == null ? void 0 : _y.yAxisTickColor) || this.primaryTextColor,
+      yAxisLineColor: ((_z = this.xyChart) == null ? void 0 : _z.yAxisLineColor) || this.primaryTextColor,
+      plotColorPalette: ((_A = this.xyChart) == null ? void 0 : _A.plotColorPalette) || "#3498db,#2ecc71,#e74c3c,#f1c40f,#bdc3c7,#ffffff,#34495e,#9b59b6,#1abc9c,#e67e22"
     };
     this.packet = {
       startByteColor: this.primaryTextColor,
@@ -10522,31 +10571,31 @@ var Theme2 = (_c = class {
       blockFillColor: this.background
     };
     this.radar = {
-      axisColor: ((_m2 = this.radar) == null ? void 0 : _m2.axisColor) || this.lineColor,
-      axisStrokeWidth: ((_n2 = this.radar) == null ? void 0 : _n2.axisStrokeWidth) || 2,
-      axisLabelFontSize: ((_o2 = this.radar) == null ? void 0 : _o2.axisLabelFontSize) || 12,
-      curveOpacity: ((_p2 = this.radar) == null ? void 0 : _p2.curveOpacity) || 0.5,
-      curveStrokeWidth: ((_q2 = this.radar) == null ? void 0 : _q2.curveStrokeWidth) || 2,
-      graticuleColor: ((_r = this.radar) == null ? void 0 : _r.graticuleColor) || "#DEDEDE",
-      graticuleStrokeWidth: ((_s = this.radar) == null ? void 0 : _s.graticuleStrokeWidth) || 1,
-      graticuleOpacity: ((_t = this.radar) == null ? void 0 : _t.graticuleOpacity) || 0.3,
-      legendBoxSize: ((_u = this.radar) == null ? void 0 : _u.legendBoxSize) || 12,
-      legendFontSize: ((_v = this.radar) == null ? void 0 : _v.legendFontSize) || 12
+      axisColor: ((_B = this.radar) == null ? void 0 : _B.axisColor) || this.lineColor,
+      axisStrokeWidth: ((_C = this.radar) == null ? void 0 : _C.axisStrokeWidth) || 2,
+      axisLabelFontSize: ((_D = this.radar) == null ? void 0 : _D.axisLabelFontSize) || 12,
+      curveOpacity: ((_E = this.radar) == null ? void 0 : _E.curveOpacity) || 0.5,
+      curveStrokeWidth: ((_F = this.radar) == null ? void 0 : _F.curveStrokeWidth) || 2,
+      graticuleColor: ((_G = this.radar) == null ? void 0 : _G.graticuleColor) || "#DEDEDE",
+      graticuleStrokeWidth: ((_H = this.radar) == null ? void 0 : _H.graticuleStrokeWidth) || 1,
+      graticuleOpacity: ((_I = this.radar) == null ? void 0 : _I.graticuleOpacity) || 0.3,
+      legendBoxSize: ((_J = this.radar) == null ? void 0 : _J.legendBoxSize) || 12,
+      legendFontSize: ((_K = this.radar) == null ? void 0 : _K.legendFontSize) || 12
     };
     this.wardleyEvolutionColor = this.wardleyEvolutionColor || "#ff6b6b";
     this.wardley = {
-      backgroundColor: ((_w = this.wardley) == null ? void 0 : _w.backgroundColor) || this.background,
-      axisColor: ((_x = this.wardley) == null ? void 0 : _x.axisColor) || this.lineColor,
-      axisTextColor: ((_y = this.wardley) == null ? void 0 : _y.axisTextColor) || this.primaryTextColor,
-      gridColor: ((_z = this.wardley) == null ? void 0 : _z.gridColor) || this.gridColor,
-      componentFill: ((_A = this.wardley) == null ? void 0 : _A.componentFill) || this.mainBkg,
-      componentStroke: ((_B = this.wardley) == null ? void 0 : _B.componentStroke) || this.lineColor,
-      componentLabelColor: ((_C = this.wardley) == null ? void 0 : _C.componentLabelColor) || this.primaryTextColor,
-      linkStroke: ((_D = this.wardley) == null ? void 0 : _D.linkStroke) || this.lineColor,
-      evolutionStroke: ((_E = this.wardley) == null ? void 0 : _E.evolutionStroke) || this.wardleyEvolutionColor,
-      annotationStroke: ((_F = this.wardley) == null ? void 0 : _F.annotationStroke) || this.lineColor,
-      annotationTextColor: ((_G = this.wardley) == null ? void 0 : _G.annotationTextColor) || this.primaryTextColor,
-      annotationFill: ((_H = this.wardley) == null ? void 0 : _H.annotationFill) || this.mainBkg
+      backgroundColor: ((_L = this.wardley) == null ? void 0 : _L.backgroundColor) || this.background,
+      axisColor: ((_M = this.wardley) == null ? void 0 : _M.axisColor) || this.lineColor,
+      axisTextColor: ((_N = this.wardley) == null ? void 0 : _N.axisTextColor) || this.primaryTextColor,
+      gridColor: ((_O = this.wardley) == null ? void 0 : _O.gridColor) || this.gridColor,
+      componentFill: ((_P = this.wardley) == null ? void 0 : _P.componentFill) || this.mainBkg,
+      componentStroke: ((_Q = this.wardley) == null ? void 0 : _Q.componentStroke) || this.lineColor,
+      componentLabelColor: ((_R = this.wardley) == null ? void 0 : _R.componentLabelColor) || this.primaryTextColor,
+      linkStroke: ((_S = this.wardley) == null ? void 0 : _S.linkStroke) || this.lineColor,
+      evolutionStroke: ((_T = this.wardley) == null ? void 0 : _T.evolutionStroke) || this.wardleyEvolutionColor,
+      annotationStroke: ((_U = this.wardley) == null ? void 0 : _U.annotationStroke) || this.lineColor,
+      annotationTextColor: ((_V = this.wardley) == null ? void 0 : _V.annotationTextColor) || this.primaryTextColor,
+      annotationFill: ((_W = this.wardley) == null ? void 0 : _W.annotationFill) || this.mainBkg
     };
     this.classText = this.primaryTextColor;
     this.requirementBackground = this.requirementBackground || this.primaryColor;
@@ -10619,13 +10668,13 @@ var Theme2 = (_c = class {
       this[k2] = overrides[k2];
     });
   }
-}, __name(_c, "Theme"), _c);
+}, __name(_b, "Theme"), _b);
 var getThemeVariables2 = /* @__PURE__ */ __name((userOverrides) => {
   const theme = new Theme2();
   theme.calculate(userOverrides);
   return theme;
 }, "getThemeVariables");
-var Theme3 = (_d = class {
+var Theme3 = (_c = class {
   constructor() {
     this.background = "#f4f4f4";
     this.primaryColor = "#ECECFF";
@@ -10739,7 +10788,7 @@ var Theme3 = (_d = class {
     this.updateColors();
   }
   updateColors() {
-    var _a2, _b2, _c2, _d2, _e3, _f2, _g2, _h2, _i2, _j2, _k2, _l2, _m2, _n2, _o2, _p2, _q2, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A, _B, _C, _D, _E, _F, _G, _H;
+    var _a2, _b2, _c2, _d2, _e3, _f2, _g2, _h2, _i2, _j2, _k2, _l2, _m2, _n2, _o2, _p2, _q2, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A, _B, _C, _D, _E, _F, _G, _H, _I, _J, _K, _L, _M, _N, _O, _P, _Q, _R, _S, _T, _U, _V, _W;
     this.cScale0 = this.cScale0 || this.primaryColor;
     this.cScale1 = this.cScale1 || this.secondaryColor;
     this.cScale2 = this.cScale2 || this.tertiaryColor;
@@ -10791,6 +10840,7 @@ var Theme3 = (_d = class {
     this.noteBorderColor = this.border2;
     this.noteTextColor = this.actorTextColor;
     this.actorLineColor = this.actorBorder;
+    this.rectBkgColor = this.rectBkgColor || this.tertiaryColor;
     this.taskTextColor = this.taskTextLightColor;
     this.taskTextOutsideColor = this.taskTextDarkColor;
     this.archEdgeColor = this.lineColor;
@@ -10853,6 +10903,23 @@ var Theme3 = (_d = class {
     this.venn8 = this.venn8 ?? adjust(this.secondaryColor, { h: 120, l: -30 });
     this.vennTitleTextColor = this.vennTitleTextColor ?? this.titleColor;
     this.vennSetTextColor = this.vennSetTextColor ?? this.textColor;
+    this.cynefin = {
+      domainFontSize: ((_a2 = this.cynefin) == null ? void 0 : _a2.domainFontSize) || 16,
+      itemFontSize: ((_b2 = this.cynefin) == null ? void 0 : _b2.itemFontSize) || 12,
+      boundaryColor: ((_c2 = this.cynefin) == null ? void 0 : _c2.boundaryColor) || this.lineColor,
+      boundaryWidth: ((_d2 = this.cynefin) == null ? void 0 : _d2.boundaryWidth) || 2,
+      cliffColor: ((_e3 = this.cynefin) == null ? void 0 : _e3.cliffColor) || "#8B0000",
+      cliffWidth: ((_f2 = this.cynefin) == null ? void 0 : _f2.cliffWidth) || 4,
+      arrowColor: ((_g2 = this.cynefin) == null ? void 0 : _g2.arrowColor) || this.lineColor,
+      arrowWidth: ((_h2 = this.cynefin) == null ? void 0 : _h2.arrowWidth) || 2,
+      complexBg: ((_i2 = this.cynefin) == null ? void 0 : _i2.complexBg) || "#E8F5E9",
+      complicatedBg: ((_j2 = this.cynefin) == null ? void 0 : _j2.complicatedBg) || "#E3F2FD",
+      chaoticBg: ((_k2 = this.cynefin) == null ? void 0 : _k2.chaoticBg) || "#FBE9E7",
+      clearBg: ((_l2 = this.cynefin) == null ? void 0 : _l2.clearBg) || "#FFF8E1",
+      confusionBg: ((_m2 = this.cynefin) == null ? void 0 : _m2.confusionBg) || "#F3E5F5",
+      textColor: ((_n2 = this.cynefin) == null ? void 0 : _n2.textColor) || this.textColor,
+      labelColor: ((_o2 = this.cynefin) == null ? void 0 : _o2.labelColor) || this.primaryTextColor
+    };
     this.quadrant1Fill = this.quadrant1Fill || this.primaryColor;
     this.quadrant2Fill = this.quadrant2Fill || adjust(this.primaryColor, { r: 5, g: 5, b: 5 });
     this.quadrant3Fill = this.quadrant3Fill || adjust(this.primaryColor, { r: 10, g: 10, b: 10 });
@@ -10869,45 +10936,45 @@ var Theme3 = (_d = class {
     this.quadrantExternalBorderStrokeFill = this.quadrantExternalBorderStrokeFill || this.primaryBorderColor;
     this.quadrantTitleFill = this.quadrantTitleFill || this.primaryTextColor;
     this.radar = {
-      axisColor: ((_a2 = this.radar) == null ? void 0 : _a2.axisColor) || this.lineColor,
-      axisStrokeWidth: ((_b2 = this.radar) == null ? void 0 : _b2.axisStrokeWidth) || 2,
-      axisLabelFontSize: ((_c2 = this.radar) == null ? void 0 : _c2.axisLabelFontSize) || 12,
-      curveOpacity: ((_d2 = this.radar) == null ? void 0 : _d2.curveOpacity) || 0.5,
-      curveStrokeWidth: ((_e3 = this.radar) == null ? void 0 : _e3.curveStrokeWidth) || 2,
-      graticuleColor: ((_f2 = this.radar) == null ? void 0 : _f2.graticuleColor) || "#DEDEDE",
-      graticuleStrokeWidth: ((_g2 = this.radar) == null ? void 0 : _g2.graticuleStrokeWidth) || 1,
-      graticuleOpacity: ((_h2 = this.radar) == null ? void 0 : _h2.graticuleOpacity) || 0.3,
-      legendBoxSize: ((_i2 = this.radar) == null ? void 0 : _i2.legendBoxSize) || 12,
-      legendFontSize: ((_j2 = this.radar) == null ? void 0 : _j2.legendFontSize) || 12
+      axisColor: ((_p2 = this.radar) == null ? void 0 : _p2.axisColor) || this.lineColor,
+      axisStrokeWidth: ((_q2 = this.radar) == null ? void 0 : _q2.axisStrokeWidth) || 2,
+      axisLabelFontSize: ((_r = this.radar) == null ? void 0 : _r.axisLabelFontSize) || 12,
+      curveOpacity: ((_s = this.radar) == null ? void 0 : _s.curveOpacity) || 0.5,
+      curveStrokeWidth: ((_t = this.radar) == null ? void 0 : _t.curveStrokeWidth) || 2,
+      graticuleColor: ((_u = this.radar) == null ? void 0 : _u.graticuleColor) || "#DEDEDE",
+      graticuleStrokeWidth: ((_v = this.radar) == null ? void 0 : _v.graticuleStrokeWidth) || 1,
+      graticuleOpacity: ((_w = this.radar) == null ? void 0 : _w.graticuleOpacity) || 0.3,
+      legendBoxSize: ((_x = this.radar) == null ? void 0 : _x.legendBoxSize) || 12,
+      legendFontSize: ((_y = this.radar) == null ? void 0 : _y.legendFontSize) || 12
     };
     this.wardleyEvolutionColor = this.wardleyEvolutionColor || "#dc3545";
     this.wardley = {
-      backgroundColor: ((_k2 = this.wardley) == null ? void 0 : _k2.backgroundColor) || this.background,
-      axisColor: ((_l2 = this.wardley) == null ? void 0 : _l2.axisColor) || this.lineColor,
-      axisTextColor: ((_m2 = this.wardley) == null ? void 0 : _m2.axisTextColor) || this.primaryTextColor,
-      gridColor: ((_n2 = this.wardley) == null ? void 0 : _n2.gridColor) || this.gridColor,
-      componentFill: ((_o2 = this.wardley) == null ? void 0 : _o2.componentFill) || this.background,
-      componentStroke: ((_p2 = this.wardley) == null ? void 0 : _p2.componentStroke) || this.lineColor,
-      componentLabelColor: ((_q2 = this.wardley) == null ? void 0 : _q2.componentLabelColor) || this.primaryTextColor,
-      linkStroke: ((_r = this.wardley) == null ? void 0 : _r.linkStroke) || this.lineColor,
-      evolutionStroke: ((_s = this.wardley) == null ? void 0 : _s.evolutionStroke) || this.wardleyEvolutionColor,
-      annotationStroke: ((_t = this.wardley) == null ? void 0 : _t.annotationStroke) || this.lineColor,
-      annotationTextColor: ((_u = this.wardley) == null ? void 0 : _u.annotationTextColor) || this.primaryTextColor,
-      annotationFill: ((_v = this.wardley) == null ? void 0 : _v.annotationFill) || this.background
+      backgroundColor: ((_z = this.wardley) == null ? void 0 : _z.backgroundColor) || this.background,
+      axisColor: ((_A = this.wardley) == null ? void 0 : _A.axisColor) || this.lineColor,
+      axisTextColor: ((_B = this.wardley) == null ? void 0 : _B.axisTextColor) || this.primaryTextColor,
+      gridColor: ((_C = this.wardley) == null ? void 0 : _C.gridColor) || this.gridColor,
+      componentFill: ((_D = this.wardley) == null ? void 0 : _D.componentFill) || this.background,
+      componentStroke: ((_E = this.wardley) == null ? void 0 : _E.componentStroke) || this.lineColor,
+      componentLabelColor: ((_F = this.wardley) == null ? void 0 : _F.componentLabelColor) || this.primaryTextColor,
+      linkStroke: ((_G = this.wardley) == null ? void 0 : _G.linkStroke) || this.lineColor,
+      evolutionStroke: ((_H = this.wardley) == null ? void 0 : _H.evolutionStroke) || this.wardleyEvolutionColor,
+      annotationStroke: ((_I = this.wardley) == null ? void 0 : _I.annotationStroke) || this.lineColor,
+      annotationTextColor: ((_J = this.wardley) == null ? void 0 : _J.annotationTextColor) || this.primaryTextColor,
+      annotationFill: ((_K = this.wardley) == null ? void 0 : _K.annotationFill) || this.background
     };
     this.xyChart = {
-      backgroundColor: ((_w = this.xyChart) == null ? void 0 : _w.backgroundColor) || this.background,
-      titleColor: ((_x = this.xyChart) == null ? void 0 : _x.titleColor) || this.primaryTextColor,
-      dataLabelColor: ((_y = this.xyChart) == null ? void 0 : _y.dataLabelColor) || this.primaryTextColor,
-      xAxisTitleColor: ((_z = this.xyChart) == null ? void 0 : _z.xAxisTitleColor) || this.primaryTextColor,
-      xAxisLabelColor: ((_A = this.xyChart) == null ? void 0 : _A.xAxisLabelColor) || this.primaryTextColor,
-      xAxisTickColor: ((_B = this.xyChart) == null ? void 0 : _B.xAxisTickColor) || this.primaryTextColor,
-      xAxisLineColor: ((_C = this.xyChart) == null ? void 0 : _C.xAxisLineColor) || this.primaryTextColor,
-      yAxisTitleColor: ((_D = this.xyChart) == null ? void 0 : _D.yAxisTitleColor) || this.primaryTextColor,
-      yAxisLabelColor: ((_E = this.xyChart) == null ? void 0 : _E.yAxisLabelColor) || this.primaryTextColor,
-      yAxisTickColor: ((_F = this.xyChart) == null ? void 0 : _F.yAxisTickColor) || this.primaryTextColor,
-      yAxisLineColor: ((_G = this.xyChart) == null ? void 0 : _G.yAxisLineColor) || this.primaryTextColor,
-      plotColorPalette: ((_H = this.xyChart) == null ? void 0 : _H.plotColorPalette) || "#ECECFF,#8493A6,#FFC3A0,#DCDDE1,#B8E994,#D1A36F,#C3CDE6,#FFB6C1,#496078,#F8F3E3"
+      backgroundColor: ((_L = this.xyChart) == null ? void 0 : _L.backgroundColor) || this.background,
+      titleColor: ((_M = this.xyChart) == null ? void 0 : _M.titleColor) || this.primaryTextColor,
+      dataLabelColor: ((_N = this.xyChart) == null ? void 0 : _N.dataLabelColor) || this.primaryTextColor,
+      xAxisTitleColor: ((_O = this.xyChart) == null ? void 0 : _O.xAxisTitleColor) || this.primaryTextColor,
+      xAxisLabelColor: ((_P = this.xyChart) == null ? void 0 : _P.xAxisLabelColor) || this.primaryTextColor,
+      xAxisTickColor: ((_Q = this.xyChart) == null ? void 0 : _Q.xAxisTickColor) || this.primaryTextColor,
+      xAxisLineColor: ((_R = this.xyChart) == null ? void 0 : _R.xAxisLineColor) || this.primaryTextColor,
+      yAxisTitleColor: ((_S = this.xyChart) == null ? void 0 : _S.yAxisTitleColor) || this.primaryTextColor,
+      yAxisLabelColor: ((_T = this.xyChart) == null ? void 0 : _T.yAxisLabelColor) || this.primaryTextColor,
+      yAxisTickColor: ((_U = this.xyChart) == null ? void 0 : _U.yAxisTickColor) || this.primaryTextColor,
+      yAxisLineColor: ((_V = this.xyChart) == null ? void 0 : _V.yAxisLineColor) || this.primaryTextColor,
+      plotColorPalette: ((_W = this.xyChart) == null ? void 0 : _W.plotColorPalette) || "#ECECFF,#8493A6,#FFC3A0,#DCDDE1,#B8E994,#D1A36F,#C3CDE6,#FFB6C1,#496078,#F8F3E3"
     };
     this.requirementBackground = this.requirementBackground || this.primaryColor;
     this.requirementBorderColor = this.requirementBorderColor || this.primaryBorderColor;
@@ -11002,13 +11069,13 @@ var Theme3 = (_d = class {
       this[k2] = overrides[k2];
     });
   }
-}, __name(_d, "Theme"), _d);
+}, __name(_c, "Theme"), _c);
 var getThemeVariables3 = /* @__PURE__ */ __name((userOverrides) => {
   const theme = new Theme3();
   theme.calculate(userOverrides);
   return theme;
 }, "getThemeVariables");
-var Theme4 = (_e2 = class {
+var Theme4 = (_d = class {
   constructor() {
     this.background = "#f4f4f4";
     this.primaryColor = "#cde498";
@@ -11095,7 +11162,7 @@ var Theme4 = (_e2 = class {
     this.dropShadow = "drop-shadow( 1px 2px 2px rgba(185,185,185,0.5))";
   }
   updateColors() {
-    var _a2, _b2, _c2, _d2, _e3, _f2, _g2, _h2, _i2, _j2, _k2, _l2, _m2, _n2, _o2, _p2, _q2, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A, _B, _C, _D, _E, _F, _G, _H;
+    var _a2, _b2, _c2, _d2, _e3, _f2, _g2, _h2, _i2, _j2, _k2, _l2, _m2, _n2, _o2, _p2, _q2, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A, _B, _C, _D, _E, _F, _G, _H, _I, _J, _K, _L, _M, _N, _O, _P, _Q, _R, _S, _T, _U, _V, _W;
     this.actorBorder = darken(this.mainBkg, 20);
     this.actorBkg = this.mainBkg;
     this.labelBoxBkgColor = this.actorBkg;
@@ -11104,6 +11171,7 @@ var Theme4 = (_e2 = class {
     this.noteBorderColor = this.border2;
     this.noteTextColor = this.actorTextColor;
     this.actorLineColor = this.actorBorder;
+    this.rectBkgColor = this.rectBkgColor || this.tertiaryColor;
     this.cScale0 = this.cScale0 || this.primaryColor;
     this.cScale1 = this.cScale1 || this.secondaryColor;
     this.cScale2 = this.cScale2 || this.tertiaryColor;
@@ -11203,6 +11271,23 @@ var Theme4 = (_e2 = class {
     this.venn8 = this.venn8 ?? adjust(this.secondaryColor, { h: 120, l: -30 });
     this.vennTitleTextColor = this.vennTitleTextColor ?? this.titleColor;
     this.vennSetTextColor = this.vennSetTextColor ?? this.textColor;
+    this.cynefin = {
+      domainFontSize: ((_a2 = this.cynefin) == null ? void 0 : _a2.domainFontSize) || 16,
+      itemFontSize: ((_b2 = this.cynefin) == null ? void 0 : _b2.itemFontSize) || 12,
+      boundaryColor: ((_c2 = this.cynefin) == null ? void 0 : _c2.boundaryColor) || this.lineColor,
+      boundaryWidth: ((_d2 = this.cynefin) == null ? void 0 : _d2.boundaryWidth) || 2,
+      cliffColor: ((_e3 = this.cynefin) == null ? void 0 : _e3.cliffColor) || "#8B4513",
+      cliffWidth: ((_f2 = this.cynefin) == null ? void 0 : _f2.cliffWidth) || 4,
+      arrowColor: ((_g2 = this.cynefin) == null ? void 0 : _g2.arrowColor) || this.lineColor,
+      arrowWidth: ((_h2 = this.cynefin) == null ? void 0 : _h2.arrowWidth) || 2,
+      complexBg: ((_i2 = this.cynefin) == null ? void 0 : _i2.complexBg) || "#C8E6C9",
+      complicatedBg: ((_j2 = this.cynefin) == null ? void 0 : _j2.complicatedBg) || "#DCEDC8",
+      chaoticBg: ((_k2 = this.cynefin) == null ? void 0 : _k2.chaoticBg) || "#FFE0B2",
+      clearBg: ((_l2 = this.cynefin) == null ? void 0 : _l2.clearBg) || "#FFF9C4",
+      confusionBg: ((_m2 = this.cynefin) == null ? void 0 : _m2.confusionBg) || "#D7CCC8",
+      textColor: ((_n2 = this.cynefin) == null ? void 0 : _n2.textColor) || this.textColor,
+      labelColor: ((_o2 = this.cynefin) == null ? void 0 : _o2.labelColor) || this.primaryTextColor
+    };
     this.quadrant1Fill = this.quadrant1Fill || this.primaryColor;
     this.quadrant2Fill = this.quadrant2Fill || adjust(this.primaryColor, { r: 5, g: 5, b: 5 });
     this.quadrant3Fill = this.quadrant3Fill || adjust(this.primaryColor, { r: 10, g: 10, b: 10 });
@@ -11227,45 +11312,45 @@ var Theme4 = (_e2 = class {
       blockFillColor: this.mainBkg
     };
     this.radar = {
-      axisColor: ((_a2 = this.radar) == null ? void 0 : _a2.axisColor) || this.lineColor,
-      axisStrokeWidth: ((_b2 = this.radar) == null ? void 0 : _b2.axisStrokeWidth) || 2,
-      axisLabelFontSize: ((_c2 = this.radar) == null ? void 0 : _c2.axisLabelFontSize) || 12,
-      curveOpacity: ((_d2 = this.radar) == null ? void 0 : _d2.curveOpacity) || 0.5,
-      curveStrokeWidth: ((_e3 = this.radar) == null ? void 0 : _e3.curveStrokeWidth) || 2,
-      graticuleColor: ((_f2 = this.radar) == null ? void 0 : _f2.graticuleColor) || "#DEDEDE",
-      graticuleStrokeWidth: ((_g2 = this.radar) == null ? void 0 : _g2.graticuleStrokeWidth) || 1,
-      graticuleOpacity: ((_h2 = this.radar) == null ? void 0 : _h2.graticuleOpacity) || 0.3,
-      legendBoxSize: ((_i2 = this.radar) == null ? void 0 : _i2.legendBoxSize) || 12,
-      legendFontSize: ((_j2 = this.radar) == null ? void 0 : _j2.legendFontSize) || 12
+      axisColor: ((_p2 = this.radar) == null ? void 0 : _p2.axisColor) || this.lineColor,
+      axisStrokeWidth: ((_q2 = this.radar) == null ? void 0 : _q2.axisStrokeWidth) || 2,
+      axisLabelFontSize: ((_r = this.radar) == null ? void 0 : _r.axisLabelFontSize) || 12,
+      curveOpacity: ((_s = this.radar) == null ? void 0 : _s.curveOpacity) || 0.5,
+      curveStrokeWidth: ((_t = this.radar) == null ? void 0 : _t.curveStrokeWidth) || 2,
+      graticuleColor: ((_u = this.radar) == null ? void 0 : _u.graticuleColor) || "#DEDEDE",
+      graticuleStrokeWidth: ((_v = this.radar) == null ? void 0 : _v.graticuleStrokeWidth) || 1,
+      graticuleOpacity: ((_w = this.radar) == null ? void 0 : _w.graticuleOpacity) || 0.3,
+      legendBoxSize: ((_x = this.radar) == null ? void 0 : _x.legendBoxSize) || 12,
+      legendFontSize: ((_y = this.radar) == null ? void 0 : _y.legendFontSize) || 12
     };
     this.wardleyEvolutionColor = this.wardleyEvolutionColor || "#dc3545";
     this.wardley = {
-      backgroundColor: ((_k2 = this.wardley) == null ? void 0 : _k2.backgroundColor) || this.background,
-      axisColor: ((_l2 = this.wardley) == null ? void 0 : _l2.axisColor) || this.lineColor,
-      axisTextColor: ((_m2 = this.wardley) == null ? void 0 : _m2.axisTextColor) || this.primaryTextColor,
-      gridColor: ((_n2 = this.wardley) == null ? void 0 : _n2.gridColor) || this.gridColor,
-      componentFill: ((_o2 = this.wardley) == null ? void 0 : _o2.componentFill) || this.background,
-      componentStroke: ((_p2 = this.wardley) == null ? void 0 : _p2.componentStroke) || this.lineColor,
-      componentLabelColor: ((_q2 = this.wardley) == null ? void 0 : _q2.componentLabelColor) || this.primaryTextColor,
-      linkStroke: ((_r = this.wardley) == null ? void 0 : _r.linkStroke) || this.lineColor,
-      evolutionStroke: ((_s = this.wardley) == null ? void 0 : _s.evolutionStroke) || this.wardleyEvolutionColor,
-      annotationStroke: ((_t = this.wardley) == null ? void 0 : _t.annotationStroke) || this.lineColor,
-      annotationTextColor: ((_u = this.wardley) == null ? void 0 : _u.annotationTextColor) || this.primaryTextColor,
-      annotationFill: ((_v = this.wardley) == null ? void 0 : _v.annotationFill) || this.background
+      backgroundColor: ((_z = this.wardley) == null ? void 0 : _z.backgroundColor) || this.background,
+      axisColor: ((_A = this.wardley) == null ? void 0 : _A.axisColor) || this.lineColor,
+      axisTextColor: ((_B = this.wardley) == null ? void 0 : _B.axisTextColor) || this.primaryTextColor,
+      gridColor: ((_C = this.wardley) == null ? void 0 : _C.gridColor) || this.gridColor,
+      componentFill: ((_D = this.wardley) == null ? void 0 : _D.componentFill) || this.background,
+      componentStroke: ((_E = this.wardley) == null ? void 0 : _E.componentStroke) || this.lineColor,
+      componentLabelColor: ((_F = this.wardley) == null ? void 0 : _F.componentLabelColor) || this.primaryTextColor,
+      linkStroke: ((_G = this.wardley) == null ? void 0 : _G.linkStroke) || this.lineColor,
+      evolutionStroke: ((_H = this.wardley) == null ? void 0 : _H.evolutionStroke) || this.wardleyEvolutionColor,
+      annotationStroke: ((_I = this.wardley) == null ? void 0 : _I.annotationStroke) || this.lineColor,
+      annotationTextColor: ((_J = this.wardley) == null ? void 0 : _J.annotationTextColor) || this.primaryTextColor,
+      annotationFill: ((_K = this.wardley) == null ? void 0 : _K.annotationFill) || this.background
     };
     this.xyChart = {
-      backgroundColor: ((_w = this.xyChart) == null ? void 0 : _w.backgroundColor) || this.background,
-      titleColor: ((_x = this.xyChart) == null ? void 0 : _x.titleColor) || this.primaryTextColor,
-      dataLabelColor: ((_y = this.xyChart) == null ? void 0 : _y.dataLabelColor) || this.primaryTextColor,
-      xAxisTitleColor: ((_z = this.xyChart) == null ? void 0 : _z.xAxisTitleColor) || this.primaryTextColor,
-      xAxisLabelColor: ((_A = this.xyChart) == null ? void 0 : _A.xAxisLabelColor) || this.primaryTextColor,
-      xAxisTickColor: ((_B = this.xyChart) == null ? void 0 : _B.xAxisTickColor) || this.primaryTextColor,
-      xAxisLineColor: ((_C = this.xyChart) == null ? void 0 : _C.xAxisLineColor) || this.primaryTextColor,
-      yAxisTitleColor: ((_D = this.xyChart) == null ? void 0 : _D.yAxisTitleColor) || this.primaryTextColor,
-      yAxisLabelColor: ((_E = this.xyChart) == null ? void 0 : _E.yAxisLabelColor) || this.primaryTextColor,
-      yAxisTickColor: ((_F = this.xyChart) == null ? void 0 : _F.yAxisTickColor) || this.primaryTextColor,
-      yAxisLineColor: ((_G = this.xyChart) == null ? void 0 : _G.yAxisLineColor) || this.primaryTextColor,
-      plotColorPalette: ((_H = this.xyChart) == null ? void 0 : _H.plotColorPalette) || "#CDE498,#FF6B6B,#A0D2DB,#D7BDE2,#F0F0F0,#FFC3A0,#7FD8BE,#FF9A8B,#FAF3E0,#FFF176"
+      backgroundColor: ((_L = this.xyChart) == null ? void 0 : _L.backgroundColor) || this.background,
+      titleColor: ((_M = this.xyChart) == null ? void 0 : _M.titleColor) || this.primaryTextColor,
+      dataLabelColor: ((_N = this.xyChart) == null ? void 0 : _N.dataLabelColor) || this.primaryTextColor,
+      xAxisTitleColor: ((_O = this.xyChart) == null ? void 0 : _O.xAxisTitleColor) || this.primaryTextColor,
+      xAxisLabelColor: ((_P = this.xyChart) == null ? void 0 : _P.xAxisLabelColor) || this.primaryTextColor,
+      xAxisTickColor: ((_Q = this.xyChart) == null ? void 0 : _Q.xAxisTickColor) || this.primaryTextColor,
+      xAxisLineColor: ((_R = this.xyChart) == null ? void 0 : _R.xAxisLineColor) || this.primaryTextColor,
+      yAxisTitleColor: ((_S = this.xyChart) == null ? void 0 : _S.yAxisTitleColor) || this.primaryTextColor,
+      yAxisLabelColor: ((_T = this.xyChart) == null ? void 0 : _T.yAxisLabelColor) || this.primaryTextColor,
+      yAxisTickColor: ((_U = this.xyChart) == null ? void 0 : _U.yAxisTickColor) || this.primaryTextColor,
+      yAxisLineColor: ((_V = this.xyChart) == null ? void 0 : _V.yAxisLineColor) || this.primaryTextColor,
+      plotColorPalette: ((_W = this.xyChart) == null ? void 0 : _W.plotColorPalette) || "#CDE498,#FF6B6B,#A0D2DB,#D7BDE2,#F0F0F0,#FFC3A0,#7FD8BE,#FF9A8B,#FAF3E0,#FFF176"
     };
     this.requirementBackground = this.requirementBackground || this.primaryColor;
     this.requirementBorderColor = this.requirementBorderColor || this.primaryBorderColor;
@@ -11355,13 +11440,13 @@ var Theme4 = (_e2 = class {
       this[k2] = overrides[k2];
     });
   }
-}, __name(_e2, "Theme"), _e2);
+}, __name(_d, "Theme"), _d);
 var getThemeVariables4 = /* @__PURE__ */ __name((userOverrides) => {
   const theme = new Theme4();
   theme.calculate(userOverrides);
   return theme;
 }, "getThemeVariables");
-var Theme5 = (_f = class {
+var Theme5 = (_e2 = class {
   constructor() {
     this.primaryColor = "#eee";
     this.contrast = "#707070";
@@ -11454,13 +11539,14 @@ var Theme5 = (_f = class {
     this.dropShadow = "drop-shadow( 1px 2px 2px rgba(185,185,185,1))";
   }
   updateColors() {
-    var _a2, _b2, _c2, _d2, _e3, _f2, _g2, _h2, _i2, _j2, _k2, _l2, _m2, _n2, _o2, _p2, _q2, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A, _B, _C, _D, _E, _F, _G, _H;
+    var _a2, _b2, _c2, _d2, _e3, _f2, _g2, _h2, _i2, _j2, _k2, _l2, _m2, _n2, _o2, _p2, _q2, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A, _B, _C, _D, _E, _F, _G, _H, _I, _J, _K, _L, _M, _N, _O, _P, _Q, _R, _S, _T, _U, _V, _W;
     this.secondBkg = lighten(this.contrast, 55);
     this.border2 = this.contrast;
     this.actorBorder = lighten(this.border1, 23);
     this.actorBkg = this.mainBkg;
     this.actorTextColor = this.text;
     this.actorLineColor = this.actorBorder;
+    this.rectBkgColor = this.rectBkgColor || this.tertiaryColor;
     this.signalColor = this.text;
     this.signalTextColor = this.text;
     this.labelBoxBkgColor = this.actorBkg;
@@ -11568,6 +11654,23 @@ var Theme5 = (_f = class {
     }
     this.vennTitleTextColor = this.vennTitleTextColor ?? this.titleColor;
     this.vennSetTextColor = this.vennSetTextColor ?? this.textColor;
+    this.cynefin = {
+      domainFontSize: ((_a2 = this.cynefin) == null ? void 0 : _a2.domainFontSize) || 16,
+      itemFontSize: ((_b2 = this.cynefin) == null ? void 0 : _b2.itemFontSize) || 12,
+      boundaryColor: ((_c2 = this.cynefin) == null ? void 0 : _c2.boundaryColor) || this.lineColor,
+      boundaryWidth: ((_d2 = this.cynefin) == null ? void 0 : _d2.boundaryWidth) || 2,
+      cliffColor: ((_e3 = this.cynefin) == null ? void 0 : _e3.cliffColor) || "#8B0000",
+      cliffWidth: ((_f2 = this.cynefin) == null ? void 0 : _f2.cliffWidth) || 4,
+      arrowColor: ((_g2 = this.cynefin) == null ? void 0 : _g2.arrowColor) || this.lineColor,
+      arrowWidth: ((_h2 = this.cynefin) == null ? void 0 : _h2.arrowWidth) || 2,
+      complexBg: ((_i2 = this.cynefin) == null ? void 0 : _i2.complexBg) || "#E8F5E9",
+      complicatedBg: ((_j2 = this.cynefin) == null ? void 0 : _j2.complicatedBg) || "#E3F2FD",
+      chaoticBg: ((_k2 = this.cynefin) == null ? void 0 : _k2.chaoticBg) || "#FBE9E7",
+      clearBg: ((_l2 = this.cynefin) == null ? void 0 : _l2.clearBg) || "#FFF8E1",
+      confusionBg: ((_m2 = this.cynefin) == null ? void 0 : _m2.confusionBg) || "#F3E5F5",
+      textColor: ((_n2 = this.cynefin) == null ? void 0 : _n2.textColor) || this.textColor,
+      labelColor: ((_o2 = this.cynefin) == null ? void 0 : _o2.labelColor) || this.primaryTextColor
+    };
     this.quadrant1Fill = this.quadrant1Fill || this.primaryColor;
     this.quadrant2Fill = this.quadrant2Fill || adjust(this.primaryColor, { r: 5, g: 5, b: 5 });
     this.quadrant3Fill = this.quadrant3Fill || adjust(this.primaryColor, { r: 10, g: 10, b: 10 });
@@ -11584,45 +11687,45 @@ var Theme5 = (_f = class {
     this.quadrantExternalBorderStrokeFill = this.quadrantExternalBorderStrokeFill || this.primaryBorderColor;
     this.quadrantTitleFill = this.quadrantTitleFill || this.primaryTextColor;
     this.xyChart = {
-      backgroundColor: ((_a2 = this.xyChart) == null ? void 0 : _a2.backgroundColor) || this.background,
-      titleColor: ((_b2 = this.xyChart) == null ? void 0 : _b2.titleColor) || this.primaryTextColor,
-      dataLabelColor: ((_c2 = this.xyChart) == null ? void 0 : _c2.dataLabelColor) || this.primaryTextColor,
-      xAxisTitleColor: ((_d2 = this.xyChart) == null ? void 0 : _d2.xAxisTitleColor) || this.primaryTextColor,
-      xAxisLabelColor: ((_e3 = this.xyChart) == null ? void 0 : _e3.xAxisLabelColor) || this.primaryTextColor,
-      xAxisTickColor: ((_f2 = this.xyChart) == null ? void 0 : _f2.xAxisTickColor) || this.primaryTextColor,
-      xAxisLineColor: ((_g2 = this.xyChart) == null ? void 0 : _g2.xAxisLineColor) || this.primaryTextColor,
-      yAxisTitleColor: ((_h2 = this.xyChart) == null ? void 0 : _h2.yAxisTitleColor) || this.primaryTextColor,
-      yAxisLabelColor: ((_i2 = this.xyChart) == null ? void 0 : _i2.yAxisLabelColor) || this.primaryTextColor,
-      yAxisTickColor: ((_j2 = this.xyChart) == null ? void 0 : _j2.yAxisTickColor) || this.primaryTextColor,
-      yAxisLineColor: ((_k2 = this.xyChart) == null ? void 0 : _k2.yAxisLineColor) || this.primaryTextColor,
-      plotColorPalette: ((_l2 = this.xyChart) == null ? void 0 : _l2.plotColorPalette) || "#EEE,#6BB8E4,#8ACB88,#C7ACD6,#E8DCC2,#FFB2A8,#FFF380,#7E8D91,#FFD8B1,#FAF3E0"
+      backgroundColor: ((_p2 = this.xyChart) == null ? void 0 : _p2.backgroundColor) || this.background,
+      titleColor: ((_q2 = this.xyChart) == null ? void 0 : _q2.titleColor) || this.primaryTextColor,
+      dataLabelColor: ((_r = this.xyChart) == null ? void 0 : _r.dataLabelColor) || this.primaryTextColor,
+      xAxisTitleColor: ((_s = this.xyChart) == null ? void 0 : _s.xAxisTitleColor) || this.primaryTextColor,
+      xAxisLabelColor: ((_t = this.xyChart) == null ? void 0 : _t.xAxisLabelColor) || this.primaryTextColor,
+      xAxisTickColor: ((_u = this.xyChart) == null ? void 0 : _u.xAxisTickColor) || this.primaryTextColor,
+      xAxisLineColor: ((_v = this.xyChart) == null ? void 0 : _v.xAxisLineColor) || this.primaryTextColor,
+      yAxisTitleColor: ((_w = this.xyChart) == null ? void 0 : _w.yAxisTitleColor) || this.primaryTextColor,
+      yAxisLabelColor: ((_x = this.xyChart) == null ? void 0 : _x.yAxisLabelColor) || this.primaryTextColor,
+      yAxisTickColor: ((_y = this.xyChart) == null ? void 0 : _y.yAxisTickColor) || this.primaryTextColor,
+      yAxisLineColor: ((_z = this.xyChart) == null ? void 0 : _z.yAxisLineColor) || this.primaryTextColor,
+      plotColorPalette: ((_A = this.xyChart) == null ? void 0 : _A.plotColorPalette) || "#EEE,#6BB8E4,#8ACB88,#C7ACD6,#E8DCC2,#FFB2A8,#FFF380,#7E8D91,#FFD8B1,#FAF3E0"
     };
     this.radar = {
-      axisColor: ((_m2 = this.radar) == null ? void 0 : _m2.axisColor) || this.lineColor,
-      axisStrokeWidth: ((_n2 = this.radar) == null ? void 0 : _n2.axisStrokeWidth) || 2,
-      axisLabelFontSize: ((_o2 = this.radar) == null ? void 0 : _o2.axisLabelFontSize) || 12,
-      curveOpacity: ((_p2 = this.radar) == null ? void 0 : _p2.curveOpacity) || 0.5,
-      curveStrokeWidth: ((_q2 = this.radar) == null ? void 0 : _q2.curveStrokeWidth) || 2,
-      graticuleColor: ((_r = this.radar) == null ? void 0 : _r.graticuleColor) || "#DEDEDE",
-      graticuleStrokeWidth: ((_s = this.radar) == null ? void 0 : _s.graticuleStrokeWidth) || 1,
-      graticuleOpacity: ((_t = this.radar) == null ? void 0 : _t.graticuleOpacity) || 0.3,
-      legendBoxSize: ((_u = this.radar) == null ? void 0 : _u.legendBoxSize) || 12,
-      legendFontSize: ((_v = this.radar) == null ? void 0 : _v.legendFontSize) || 12
+      axisColor: ((_B = this.radar) == null ? void 0 : _B.axisColor) || this.lineColor,
+      axisStrokeWidth: ((_C = this.radar) == null ? void 0 : _C.axisStrokeWidth) || 2,
+      axisLabelFontSize: ((_D = this.radar) == null ? void 0 : _D.axisLabelFontSize) || 12,
+      curveOpacity: ((_E = this.radar) == null ? void 0 : _E.curveOpacity) || 0.5,
+      curveStrokeWidth: ((_F = this.radar) == null ? void 0 : _F.curveStrokeWidth) || 2,
+      graticuleColor: ((_G = this.radar) == null ? void 0 : _G.graticuleColor) || "#DEDEDE",
+      graticuleStrokeWidth: ((_H = this.radar) == null ? void 0 : _H.graticuleStrokeWidth) || 1,
+      graticuleOpacity: ((_I = this.radar) == null ? void 0 : _I.graticuleOpacity) || 0.3,
+      legendBoxSize: ((_J = this.radar) == null ? void 0 : _J.legendBoxSize) || 12,
+      legendFontSize: ((_K = this.radar) == null ? void 0 : _K.legendFontSize) || 12
     };
     this.wardleyEvolutionColor = this.wardleyEvolutionColor || "#dc3545";
     this.wardley = {
-      backgroundColor: ((_w = this.wardley) == null ? void 0 : _w.backgroundColor) || this.background,
-      axisColor: ((_x = this.wardley) == null ? void 0 : _x.axisColor) || this.lineColor,
-      axisTextColor: ((_y = this.wardley) == null ? void 0 : _y.axisTextColor) || this.primaryTextColor,
-      gridColor: ((_z = this.wardley) == null ? void 0 : _z.gridColor) || this.gridColor,
-      componentFill: ((_A = this.wardley) == null ? void 0 : _A.componentFill) || this.background,
-      componentStroke: ((_B = this.wardley) == null ? void 0 : _B.componentStroke) || this.lineColor,
-      componentLabelColor: ((_C = this.wardley) == null ? void 0 : _C.componentLabelColor) || this.primaryTextColor,
-      linkStroke: ((_D = this.wardley) == null ? void 0 : _D.linkStroke) || this.lineColor,
-      evolutionStroke: ((_E = this.wardley) == null ? void 0 : _E.evolutionStroke) || this.wardleyEvolutionColor,
-      annotationStroke: ((_F = this.wardley) == null ? void 0 : _F.annotationStroke) || this.lineColor,
-      annotationTextColor: ((_G = this.wardley) == null ? void 0 : _G.annotationTextColor) || this.primaryTextColor,
-      annotationFill: ((_H = this.wardley) == null ? void 0 : _H.annotationFill) || this.background
+      backgroundColor: ((_L = this.wardley) == null ? void 0 : _L.backgroundColor) || this.background,
+      axisColor: ((_M = this.wardley) == null ? void 0 : _M.axisColor) || this.lineColor,
+      axisTextColor: ((_N = this.wardley) == null ? void 0 : _N.axisTextColor) || this.primaryTextColor,
+      gridColor: ((_O = this.wardley) == null ? void 0 : _O.gridColor) || this.gridColor,
+      componentFill: ((_P = this.wardley) == null ? void 0 : _P.componentFill) || this.background,
+      componentStroke: ((_Q = this.wardley) == null ? void 0 : _Q.componentStroke) || this.lineColor,
+      componentLabelColor: ((_R = this.wardley) == null ? void 0 : _R.componentLabelColor) || this.primaryTextColor,
+      linkStroke: ((_S = this.wardley) == null ? void 0 : _S.linkStroke) || this.lineColor,
+      evolutionStroke: ((_T = this.wardley) == null ? void 0 : _T.evolutionStroke) || this.wardleyEvolutionColor,
+      annotationStroke: ((_U = this.wardley) == null ? void 0 : _U.annotationStroke) || this.lineColor,
+      annotationTextColor: ((_V = this.wardley) == null ? void 0 : _V.annotationTextColor) || this.primaryTextColor,
+      annotationFill: ((_W = this.wardley) == null ? void 0 : _W.annotationFill) || this.background
     };
     this.requirementBackground = this.requirementBackground || this.primaryColor;
     this.requirementBorderColor = this.requirementBorderColor || this.primaryBorderColor;
@@ -11694,13 +11797,13 @@ var Theme5 = (_f = class {
       this[k2] = overrides[k2];
     });
   }
-}, __name(_f, "Theme"), _f);
+}, __name(_e2, "Theme"), _e2);
 var getThemeVariables5 = /* @__PURE__ */ __name((userOverrides) => {
   const theme = new Theme5();
   theme.calculate(userOverrides);
   return theme;
 }, "getThemeVariables");
-var Theme6 = (_g = class {
+var Theme6 = (_f = class {
   constructor() {
     this.background = "#ffffff";
     this.primaryColor = "#cccccc";
@@ -11767,6 +11870,7 @@ var Theme6 = (_g = class {
     this.activationBorderColor = this.activationBorderColor || darken(this.secondaryColor, 10);
     this.activationBkgColor = this.activationBkgColor || this.secondaryColor;
     this.sequenceNumberColor = this.sequenceNumberColor || invert(this.lineColor);
+    this.rectBkgColor = this.rectBkgColor || this.tertiaryColor;
     const primaryColor = "#ECECFE";
     const secondaryColor = "#E9E9F1";
     const tertiaryColor = adjust(primaryColor, { h: 180, l: 5 });
@@ -11987,13 +12091,13 @@ var Theme6 = (_g = class {
       this[k2] = overrides[k2];
     });
   }
-}, __name(_g, "Theme"), _g);
+}, __name(_f, "Theme"), _f);
 var getThemeVariables6 = /* @__PURE__ */ __name((userOverrides) => {
   const theme = new Theme6();
   theme.calculate(userOverrides);
   return theme;
 }, "getThemeVariables");
-var Theme7 = (_h = class {
+var Theme7 = (_g = class {
   constructor() {
     this.background = "#333";
     this.primaryColor = "#1f2020";
@@ -12075,6 +12179,7 @@ var Theme7 = (_h = class {
     this.activationBorderColor = this.activationBorderColor || darken(this.secondaryColor, 10);
     this.activationBkgColor = this.activationBkgColor || this.secondaryColor;
     this.sequenceNumberColor = this.sequenceNumberColor || invert(this.lineColor);
+    this.rectBkgColor = this.rectBkgColor || this.tertiaryColor;
     this.sectionBkgColor = this.sectionBkgColor || this.tertiaryColor;
     this.altSectionBkgColor = this.altSectionBkgColor || "white";
     this.sectionBkgColor = this.sectionBkgColor || this.secondaryColor;
@@ -12293,13 +12398,13 @@ var Theme7 = (_h = class {
       this[k2] = overrides[k2];
     });
   }
-}, __name(_h, "Theme"), _h);
+}, __name(_g, "Theme"), _g);
 var getThemeVariables7 = /* @__PURE__ */ __name((userOverrides) => {
   const theme = new Theme7();
   theme.calculate(userOverrides);
   return theme;
 }, "getThemeVariables");
-var Theme8 = (_i = class {
+var Theme8 = (_h = class {
   constructor() {
     this.background = "#ffffff";
     this.primaryColor = "#cccccc";
@@ -12371,6 +12476,7 @@ var Theme8 = (_i = class {
     this.activationBorderColor = this.activationBorderColor || darken(this.secondaryColor, 10);
     this.activationBkgColor = this.activationBkgColor || this.secondaryColor;
     this.sequenceNumberColor = this.sequenceNumberColor || invert(this.lineColor);
+    this.rectBkgColor = this.rectBkgColor || this.tertiaryColor;
     const primaryColor = "#ECECFE";
     const secondaryColor = "#E9E9F1";
     const tertiaryColor = adjust(primaryColor, { h: 180, l: 5 });
@@ -12589,13 +12695,13 @@ var Theme8 = (_i = class {
       this[k2] = overrides[k2];
     });
   }
-}, __name(_i, "Theme"), _i);
+}, __name(_h, "Theme"), _h);
 var getThemeVariables8 = /* @__PURE__ */ __name((userOverrides) => {
   const theme = new Theme8();
   theme.calculate(userOverrides);
   return theme;
 }, "getThemeVariables");
-var Theme9 = (_j = class {
+var Theme9 = (_i = class {
   constructor() {
     this.background = "#333";
     this.primaryColor = "#1f2020";
@@ -12686,6 +12792,7 @@ var Theme9 = (_j = class {
     this.activationBorderColor = this.activationBorderColor || darken(this.secondaryColor, 10);
     this.activationBkgColor = this.activationBkgColor || this.secondaryColor;
     this.sequenceNumberColor = this.sequenceNumberColor || invert(this.lineColor);
+    this.rectBkgColor = this.rectBkgColor || this.tertiaryColor;
     this.sectionBkgColor = this.sectionBkgColor || this.tertiaryColor;
     this.altSectionBkgColor = this.altSectionBkgColor || "white";
     this.sectionBkgColor = this.sectionBkgColor || this.secondaryColor;
@@ -12911,13 +13018,13 @@ var Theme9 = (_j = class {
       this[k2] = overrides[k2];
     });
   }
-}, __name(_j, "Theme"), _j);
+}, __name(_i, "Theme"), _i);
 var getThemeVariables9 = /* @__PURE__ */ __name((userOverrides) => {
   const theme = new Theme9();
   theme.calculate(userOverrides);
   return theme;
 }, "getThemeVariables");
-var Theme10 = (_k = class {
+var Theme10 = (_j = class {
   constructor() {
     this.background = "#ffffff";
     this.primaryColor = "#cccccc";
@@ -13039,6 +13146,7 @@ var Theme10 = (_k = class {
     this.activationBorderColor = this.activationBorderColor || darken(this.secondaryColor, 10);
     this.activationBkgColor = this.activationBkgColor || this.secondaryColor;
     this.sequenceNumberColor = this.sequenceNumberColor || invert(this.lineColor);
+    this.rectBkgColor = this.rectBkgColor || this.tertiaryColor;
     const primaryColor = "#ECECFE";
     const secondaryColor = "#E9E9F1";
     const tertiaryColor = adjust(primaryColor, { h: 180, l: 5 });
@@ -13253,13 +13361,13 @@ var Theme10 = (_k = class {
       this[k2] = overrides[k2];
     });
   }
-}, __name(_k, "Theme"), _k);
+}, __name(_j, "Theme"), _j);
 var getThemeVariables10 = /* @__PURE__ */ __name((userOverrides) => {
   const theme = new Theme10();
   theme.calculate(userOverrides);
   return theme;
 }, "getThemeVariables");
-var Theme11 = (_l = class {
+var Theme11 = (_k = class {
   constructor() {
     this.background = "#333";
     this.primaryColor = "#1f2020";
@@ -13377,6 +13485,7 @@ var Theme11 = (_l = class {
     this.activationBorderColor = this.activationBorderColor || darken(this.secondaryColor, 10);
     this.activationBkgColor = this.activationBkgColor || this.secondaryColor;
     this.sequenceNumberColor = this.sequenceNumberColor || invert(this.lineColor);
+    this.rectBkgColor = this.rectBkgColor || this.tertiaryColor;
     this.rootLabelColor = "#FFFFFF";
     this.sectionBkgColor = this.sectionBkgColor || this.tertiaryColor;
     this.altSectionBkgColor = this.altSectionBkgColor || "white";
@@ -13589,7 +13698,7 @@ var Theme11 = (_l = class {
       this[k2] = overrides[k2];
     });
   }
-}, __name(_l, "Theme"), _l);
+}, __name(_k, "Theme"), _k);
 var getThemeVariables11 = /* @__PURE__ */ __name((userOverrides) => {
   const theme = new Theme11();
   theme.calculate(userOverrides);
@@ -13647,6 +13756,13 @@ var config_schema_default = {
     "defaultRenderer": "dagre-wrapper",
     "wrappingWidth": 200,
     "inheritDir": false
+  },
+  "swimlane": {
+    "useMaxWidth": true,
+    "lineHops": "arc",
+    "ignoreCrossLaneEdges": true,
+    "optimizeRanksByCrossings": true,
+    "automaticLaneOrdering": false
   },
   "sequence": {
     "useMaxWidth": true,
@@ -13791,7 +13907,10 @@ var config_schema_default = {
   },
   "pie": {
     "useMaxWidth": true,
-    "textPosition": 0.75
+    "textPosition": 0.75,
+    "donutHole": 0,
+    "legendPosition": "right",
+    "highlightSlice": ""
   },
   "quadrantChart": {
     "useMaxWidth": true,
@@ -13835,7 +13954,8 @@ var config_schema_default = {
       "tickLength": 5,
       "tickWidth": 2,
       "showAxisLine": true,
-      "axisLineWidth": 2
+      "axisLineWidth": 2,
+      "labelRotation": 0
     },
     "yAxis": {
       "$ref": "#/$defs/XYChartAxisConfig",
@@ -13849,7 +13969,8 @@ var config_schema_default = {
       "tickLength": 5,
       "tickWidth": 2,
       "showAxisLine": true,
-      "axisLineWidth": 2
+      "axisLineWidth": 2,
+      "labelRotation": 0
     },
     "chartOrientation": "vertical",
     "plotReservedSpacePercent": 50
@@ -14093,7 +14214,11 @@ var config_schema_default = {
     "rowIndent": 10,
     "paddingX": 5,
     "paddingY": 5,
-    "lineThickness": 1
+    "lineThickness": 1,
+    "showIcons": false,
+    "defaultIconPack": "",
+    "filenameIcons": {},
+    "extensionIcons": {}
   },
   "architecture": {
     "useMaxWidth": true,
@@ -14104,7 +14229,8 @@ var config_schema_default = {
     "nodeSeparation": 75,
     "idealEdgeLengthMultiplier": 1.5,
     "edgeElasticity": 0.45,
-    "numIter": 2500
+    "numIter": 2500,
+    "seed": 1
   },
   "eventmodeling": {
     "useMaxWidth": true,
@@ -14129,6 +14255,15 @@ var config_schema_default = {
     "height": 450,
     "padding": 8,
     "useDebugLayout": false
+  },
+  "cynefin": {
+    "useMaxWidth": true,
+    "width": 800,
+    "height": 600,
+    "padding": 40,
+    "showDomainDescriptions": true,
+    "boundaryAmplitude": 8,
+    "seed": 0
   },
   "theme": "default",
   "look": "classic",
@@ -14394,6 +14529,26 @@ var config = {
   radar: {
     ...config_schema_default.radar
   },
+  railroad: {
+    ...config_schema_default.railroad,
+    // Railroad colors and typography derive from the active theme unless explicitly overridden.
+    fontSize: void 0,
+    fontFamily: void 0,
+    terminalFill: void 0,
+    terminalStroke: void 0,
+    terminalTextColor: void 0,
+    nonTerminalFill: void 0,
+    nonTerminalStroke: void 0,
+    nonTerminalTextColor: void 0,
+    lineColor: void 0,
+    markerFill: void 0,
+    commentFill: void 0,
+    commentStroke: void 0,
+    commentTextColor: void 0,
+    specialFill: void 0,
+    specialStroke: void 0,
+    ruleNameColor: void 0
+  },
   ishikawa: {
     ...config_schema_default.ishikawa
   },
@@ -14416,6 +14571,9 @@ var config = {
   },
   venn: {
     ...config_schema_default.venn
+  },
+  cynefin: {
+    ...config_schema_default.cynefin
   }
 };
 var keyify = /* @__PURE__ */ __name((obj, prefix = "") => Object.keys(obj).reduce((res, el) => {
@@ -14428,6 +14586,22 @@ var keyify = /* @__PURE__ */ __name((obj, prefix = "") => Object.keys(obj).reduc
 }, []), "keyify");
 var configKeys = new Set(keyify(config, ""));
 var defaultConfig_default = config;
+var DICTIONARY_CONFIG_PATTERNS = {
+  // CSS colors (sankey)
+  nodeColors: /^#[\da-f]{3,8}$|^rgb\([\d\s%,.]+\)$|^hsl\([\d\s%,.]+\)$|^[a-z]+$/i,
+  // iconify icon references (treeView filenameIcons/extensionIcons)
+  filenameIcons: /^[\w-]+(?::[\w-]+)?$/,
+  extensionIcons: /^[\w-]+(?::[\w-]+)?$/
+};
+var sanitizeDictionaryConfig = /* @__PURE__ */ __name((dict, valuePattern) => {
+  for (const key of Object.keys(dict)) {
+    const value = dict[key];
+    if (key.startsWith("__") || key.includes("proto") || key.includes("constr") || typeof value !== "string" || !valuePattern.test(value)) {
+      log.debug("sanitize deleting dictionary entry:", key, value);
+      delete dict[key];
+    }
+  }
+}, "sanitizeDictionaryConfig");
 var sanitizeDirective = /* @__PURE__ */ __name((args) => {
   log.debug("sanitizeDirective called with", args);
   if (typeof args !== "object" || args == null) {
@@ -14445,14 +14619,9 @@ var sanitizeDirective = /* @__PURE__ */ __name((args) => {
       continue;
     }
     if (typeof args[key] === "object") {
-      if (key === "nodeColors") {
-        const colorPattern = /^#[\da-f]{3,8}$|^rgb\([\d\s%,.]+\)$|^hsl\([\d\s%,.]+\)$|^[a-z]+$/i;
-        for (const colorKey of Object.keys(args[key])) {
-          if (typeof args[key][colorKey] !== "string" || !colorPattern.test(args[key][colorKey])) {
-            log.debug("sanitize deleting invalid color:", colorKey, args[key][colorKey]);
-            delete args[key][colorKey];
-          }
-        }
+      const valuePattern = DICTIONARY_CONFIG_PATTERNS[key];
+      if (valuePattern) {
+        sanitizeDictionaryConfig(args[key], valuePattern);
       } else {
         log.debug("sanitizing object", key);
         sanitizeDirective(args[key]);
@@ -14544,8 +14713,7 @@ var getSiteConfig = /* @__PURE__ */ __name(() => {
   return assignWithDepth_default({}, siteConfig);
 }, "getSiteConfig");
 var setConfig = /* @__PURE__ */ __name((conf) => {
-  checkConfig(conf);
-  assignWithDepth_default(currentConfig, conf);
+  updateCurrentConfig(currentConfig, [conf]);
   return getConfig();
 }, "setConfig");
 var getConfig = /* @__PURE__ */ __name(() => {
@@ -14628,6 +14796,43 @@ var getEffectiveHtmlLabels = /* @__PURE__ */ __name((config2) => {
   }
   return evaluate(config2.htmlLabels ?? ((_b2 = config2.flowchart) == null ? void 0 : _b2.htmlLabels) ?? true);
 }, "getEffectiveHtmlLabels");
+var frontMatterRegex = /^([^\S\n\r]*)-{3}\s*[\n\r](.*?)[\n\r]\1-{3}\s*[\n\r]+/s;
+var directiveRegex = /%{2}{\s*(?:(\w+)\s*:|(\w+))\s*(?:(\w+)|((?:(?!}%{2}).|\r?\n)*))?\s*(?:}%{2})?/gi;
+var anyCommentRegex = /\s*%%.*\n/gm;
+var UnknownDiagramError = (_l = class extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "UnknownDiagramError";
+  }
+}, __name(_l, "UnknownDiagramError"), _l);
+var detectors = {};
+var detectType$1 = /* @__PURE__ */ __name(function(text2, config2) {
+  text2 = text2.replace(frontMatterRegex, "").replace(directiveRegex, "").replace(anyCommentRegex, "\n");
+  for (const [key, { detector: detector39 }] of Object.entries(detectors)) {
+    const diagram2 = detector39(text2, config2);
+    if (diagram2) {
+      return key;
+    }
+  }
+  throw new UnknownDiagramError(
+    `No diagram type detected matching given configuration for text: ${text2}`
+  );
+}, "detectType");
+var registerLazyLoadedDiagrams = /* @__PURE__ */ __name((...diagrams2) => {
+  for (const { id: id39, detector: detector39, loader: loader39 } of diagrams2) {
+    addDetector(id39, detector39, loader39);
+  }
+}, "registerLazyLoadedDiagrams");
+var addDetector = /* @__PURE__ */ __name((key, detector39, loader39) => {
+  if (detectors[key]) {
+    log.warn(`Detector with key ${key} already exists. Overwriting.`);
+  }
+  detectors[key] = { detector: detector39, loader: loader39 };
+  log.debug(`Detector with key ${key} added${loader39 ? " with loader" : ""}`);
+}, "addDetector");
+var getDiagramLoader = /* @__PURE__ */ __name((key) => {
+  return detectors[key].loader;
+}, "getDiagramLoader");
 var lineBreakRegex = /<br\s*\/?>/gi;
 var getRows = /* @__PURE__ */ __name((s2) => {
   if (!s2) {
@@ -14784,7 +14989,7 @@ var processSet = /* @__PURE__ */ __name((input) => {
   return chars.join("");
 }, "processSet");
 var isMathMLSupported = /* @__PURE__ */ __name(() => window.MathMLElement !== void 0, "isMathMLSupported");
-var katexRegex = /\$\$(.*)\$\$/g;
+var katexRegex = /\$\$(.*?)\$\$/g;
 var hasKatex = /* @__PURE__ */ __name((text2) => {
   var _a2;
   return (((_a2 = text2.match(katexRegex)) == null ? void 0 : _a2.length) ?? 0) > 0;
@@ -14890,7 +15095,7 @@ var getStyles = /* @__PURE__ */ __name((type2, userStyles, options, svgId) => {
   } else {
     log.warn(`No theme found for ${type2}`);
   }
-  return ` & {
+  return `& {
     font-family: ${options.fontFamily};
     font-size: ${options.fontSize};
     fill: ${options.textColor}
@@ -14971,6 +15176,9 @@ var getStyles = /* @__PURE__ */ __name((type2, userStyles, options, svgId) => {
   [data-look="neo"].node rect, [data-look="neo"].cluster rect, [data-look="neo"].node polygon {
     stroke: ${options.useGradient ? "url(" + svgId + "-gradient)" : options.nodeBorder};
     filter: ${options.dropShadow ? options.dropShadow.replace("url(#drop-shadow)", `url(${svgId}-drop-shadow)`) : "none"};
+  }
+  [data-look="neo"].swimlane.cluster rect {
+    filter: none;
   }
 
 
@@ -15058,16 +15266,16 @@ var getCommonDb = /* @__PURE__ */ __name(() => {
   return commonDb_exports;
 }, "getCommonDb");
 var diagrams = {};
-var registerDiagram = /* @__PURE__ */ __name((id33, diagram2, detector33) => {
+var registerDiagram = /* @__PURE__ */ __name((id39, diagram2, detector39) => {
   var _a2;
-  if (diagrams[id33]) {
-    log2.warn(`Diagram with id ${id33} already registered. Overwriting.`);
+  if (diagrams[id39]) {
+    log2.warn(`Diagram with id ${id39} already registered. Overwriting.`);
   }
-  diagrams[id33] = diagram2;
-  if (detector33) {
-    addDetector(id33, detector33);
+  diagrams[id39] = diagram2;
+  if (detector39) {
+    addDetector(id39, detector39);
   }
-  addStylesForDiagram(id33, diagram2.styles);
+  addStylesForDiagram(id39, diagram2.styles);
   (_a2 = diagram2.injectUtils) == null ? void 0 : _a2.call(
     diagram2,
     log2,
@@ -16469,11 +16677,11 @@ var STARTED = 3;
 var RUNNING = 4;
 var ENDING = 5;
 var ENDED = 6;
-function schedule(node2, name, id33, index, group, timing) {
+function schedule(node2, name, id39, index, group, timing) {
   var schedules = node2.__transition;
   if (!schedules) node2.__transition = {};
-  else if (id33 in schedules) return;
-  create(node2, id33, {
+  else if (id39 in schedules) return;
+  create(node2, id39, {
     name,
     index,
     // For context during callback.
@@ -16489,24 +16697,24 @@ function schedule(node2, name, id33, index, group, timing) {
     state: CREATED
   });
 }
-function init$1(node2, id33) {
-  var schedule2 = get(node2, id33);
+function init$1(node2, id39) {
+  var schedule2 = get(node2, id39);
   if (schedule2.state > CREATED) throw new Error("too late; already scheduled");
   return schedule2;
 }
-function set$1(node2, id33) {
-  var schedule2 = get(node2, id33);
+function set$1(node2, id39) {
+  var schedule2 = get(node2, id39);
   if (schedule2.state > STARTED) throw new Error("too late; already running");
   return schedule2;
 }
-function get(node2, id33) {
+function get(node2, id39) {
   var schedule2 = node2.__transition;
-  if (!schedule2 || !(schedule2 = schedule2[id33])) throw new Error("transition not found");
+  if (!schedule2 || !(schedule2 = schedule2[id39])) throw new Error("transition not found");
   return schedule2;
 }
-function create(node2, id33, self2) {
+function create(node2, id39, self2) {
   var schedules = node2.__transition, tween;
-  schedules[id33] = self2;
+  schedules[id39] = self2;
   self2.timer = timer(schedule2, 0, self2.time);
   function schedule2(elapsed) {
     self2.state = SCHEDULED;
@@ -16525,7 +16733,7 @@ function create(node2, id33, self2) {
         o2.timer.stop();
         o2.on.call("interrupt", node2, node2.__data__, o2.index, o2.group);
         delete schedules[i2];
-      } else if (+i2 < id33) {
+      } else if (+i2 < id39) {
         o2.state = ENDED;
         o2.timer.stop();
         o2.on.call("cancel", node2, node2.__data__, o2.index, o2.group);
@@ -16564,7 +16772,7 @@ function create(node2, id33, self2) {
   function stop() {
     self2.state = ENDED;
     self2.timer.stop();
-    delete schedules[id33];
+    delete schedules[id39];
     for (var i2 in schedules) return;
     delete node2.__transition;
   }
@@ -16591,10 +16799,10 @@ function selection_interrupt(name) {
     interrupt(this, name);
   });
 }
-function tweenRemove(id33, name) {
+function tweenRemove(id39, name) {
   var tween0, tween1;
   return function() {
-    var schedule2 = set$1(this, id33), tween = schedule2.tween;
+    var schedule2 = set$1(this, id39), tween = schedule2.tween;
     if (tween !== tween0) {
       tween1 = tween0 = tween;
       for (var i2 = 0, n2 = tween1.length; i2 < n2; ++i2) {
@@ -16608,11 +16816,11 @@ function tweenRemove(id33, name) {
     schedule2.tween = tween1;
   };
 }
-function tweenFunction(id33, name, value) {
+function tweenFunction(id39, name, value) {
   var tween0, tween1;
   if (typeof value !== "function") throw new Error();
   return function() {
-    var schedule2 = set$1(this, id33), tween = schedule2.tween;
+    var schedule2 = set$1(this, id39), tween = schedule2.tween;
     if (tween !== tween0) {
       tween1 = (tween0 = tween).slice();
       for (var t2 = { name, value }, i2 = 0, n2 = tween1.length; i2 < n2; ++i2) {
@@ -16627,10 +16835,10 @@ function tweenFunction(id33, name, value) {
   };
 }
 function transition_tween(name, value) {
-  var id33 = this._id;
+  var id39 = this._id;
   name += "";
   if (arguments.length < 2) {
-    var tween = get(this.node(), id33).tween;
+    var tween = get(this.node(), id39).tween;
     for (var i2 = 0, n2 = tween.length, t2; i2 < n2; ++i2) {
       if ((t2 = tween[i2]).name === name) {
         return t2.value;
@@ -16638,16 +16846,16 @@ function transition_tween(name, value) {
     }
     return null;
   }
-  return this.each((value == null ? tweenRemove : tweenFunction)(id33, name, value));
+  return this.each((value == null ? tweenRemove : tweenFunction)(id39, name, value));
 }
 function tweenValue(transition, name, value) {
-  var id33 = transition._id;
+  var id39 = transition._id;
   transition.each(function() {
-    var schedule2 = set$1(this, id33);
+    var schedule2 = set$1(this, id39);
     (schedule2.value || (schedule2.value = {}))[name] = value.apply(this, arguments);
   });
   return function(node2) {
-    return get(node2, id33).value[name];
+    return get(node2, id39).value[name];
   };
 }
 function interpolate(a2, b2) {
@@ -16740,49 +16948,49 @@ function transition_attrTween(name, value) {
   var fullname = namespace(name);
   return this.tween(key, (fullname.local ? attrTweenNS : attrTween)(fullname, value));
 }
-function delayFunction(id33, value) {
+function delayFunction(id39, value) {
   return function() {
-    init$1(this, id33).delay = +value.apply(this, arguments);
+    init$1(this, id39).delay = +value.apply(this, arguments);
   };
 }
-function delayConstant(id33, value) {
+function delayConstant(id39, value) {
   return value = +value, function() {
-    init$1(this, id33).delay = value;
+    init$1(this, id39).delay = value;
   };
 }
 function transition_delay(value) {
-  var id33 = this._id;
-  return arguments.length ? this.each((typeof value === "function" ? delayFunction : delayConstant)(id33, value)) : get(this.node(), id33).delay;
+  var id39 = this._id;
+  return arguments.length ? this.each((typeof value === "function" ? delayFunction : delayConstant)(id39, value)) : get(this.node(), id39).delay;
 }
-function durationFunction(id33, value) {
+function durationFunction(id39, value) {
   return function() {
-    set$1(this, id33).duration = +value.apply(this, arguments);
+    set$1(this, id39).duration = +value.apply(this, arguments);
   };
 }
-function durationConstant(id33, value) {
+function durationConstant(id39, value) {
   return value = +value, function() {
-    set$1(this, id33).duration = value;
+    set$1(this, id39).duration = value;
   };
 }
 function transition_duration(value) {
-  var id33 = this._id;
-  return arguments.length ? this.each((typeof value === "function" ? durationFunction : durationConstant)(id33, value)) : get(this.node(), id33).duration;
+  var id39 = this._id;
+  return arguments.length ? this.each((typeof value === "function" ? durationFunction : durationConstant)(id39, value)) : get(this.node(), id39).duration;
 }
-function easeConstant(id33, value) {
+function easeConstant(id39, value) {
   if (typeof value !== "function") throw new Error();
   return function() {
-    set$1(this, id33).ease = value;
+    set$1(this, id39).ease = value;
   };
 }
 function transition_ease(value) {
-  var id33 = this._id;
-  return arguments.length ? this.each(easeConstant(id33, value)) : get(this.node(), id33).ease;
+  var id39 = this._id;
+  return arguments.length ? this.each(easeConstant(id39, value)) : get(this.node(), id39).ease;
 }
-function easeVarying(id33, value) {
+function easeVarying(id39, value) {
   return function() {
     var v2 = value.apply(this, arguments);
     if (typeof v2 !== "function") throw new Error();
-    set$1(this, id33).ease = v2;
+    set$1(this, id39).ease = v2;
   };
 }
 function transition_easeVarying(value) {
@@ -16821,22 +17029,22 @@ function start(name) {
     return !t2 || t2 === "start";
   });
 }
-function onFunction(id33, name, listener) {
+function onFunction(id39, name, listener) {
   var on0, on1, sit = start(name) ? init$1 : set$1;
   return function() {
-    var schedule2 = sit(this, id33), on = schedule2.on;
+    var schedule2 = sit(this, id39), on = schedule2.on;
     if (on !== on0) (on1 = (on0 = on).copy()).on(name, listener);
     schedule2.on = on1;
   };
 }
 function transition_on(name, listener) {
-  var id33 = this._id;
-  return arguments.length < 2 ? get(this.node(), id33).on.on(name) : this.each(onFunction(id33, name, listener));
+  var id39 = this._id;
+  return arguments.length < 2 ? get(this.node(), id39).on.on(name) : this.each(onFunction(id39, name, listener));
 }
-function removeFunction(id33) {
+function removeFunction(id39) {
   return function() {
     var parent = this.parentNode;
-    for (var i2 in this.__transition) if (+i2 !== id33) return;
+    for (var i2 in this.__transition) if (+i2 !== id39) return;
     if (parent) parent.removeChild(this);
   };
 }
@@ -16844,28 +17052,28 @@ function transition_remove() {
   return this.on("end.remove", removeFunction(this._id));
 }
 function transition_select(select2) {
-  var name = this._name, id33 = this._id;
+  var name = this._name, id39 = this._id;
   if (typeof select2 !== "function") select2 = selector(select2);
   for (var groups = this._groups, m2 = groups.length, subgroups = new Array(m2), j2 = 0; j2 < m2; ++j2) {
     for (var group = groups[j2], n2 = group.length, subgroup = subgroups[j2] = new Array(n2), node2, subnode, i2 = 0; i2 < n2; ++i2) {
       if ((node2 = group[i2]) && (subnode = select2.call(node2, node2.__data__, i2, group))) {
         if ("__data__" in node2) subnode.__data__ = node2.__data__;
         subgroup[i2] = subnode;
-        schedule(subgroup[i2], name, id33, i2, subgroup, get(node2, id33));
+        schedule(subgroup[i2], name, id39, i2, subgroup, get(node2, id39));
       }
     }
   }
-  return new Transition(subgroups, this._parents, name, id33);
+  return new Transition(subgroups, this._parents, name, id39);
 }
 function transition_selectAll(select2) {
-  var name = this._name, id33 = this._id;
+  var name = this._name, id39 = this._id;
   if (typeof select2 !== "function") select2 = selectorAll(select2);
   for (var groups = this._groups, m2 = groups.length, subgroups = [], parents = [], j2 = 0; j2 < m2; ++j2) {
     for (var group = groups[j2], n2 = group.length, node2, i2 = 0; i2 < n2; ++i2) {
       if (node2 = group[i2]) {
-        for (var children2 = select2.call(node2, node2.__data__, i2, group), child, inherit2 = get(node2, id33), k2 = 0, l4 = children2.length; k2 < l4; ++k2) {
+        for (var children2 = select2.call(node2, node2.__data__, i2, group), child, inherit2 = get(node2, id39), k2 = 0, l4 = children2.length; k2 < l4; ++k2) {
           if (child = children2[k2]) {
-            schedule(child, name, id33, k2, children2, inherit2);
+            schedule(child, name, id39, k2, children2, inherit2);
           }
         }
         subgroups.push(children2);
@@ -16873,7 +17081,7 @@ function transition_selectAll(select2) {
       }
     }
   }
-  return new Transition(subgroups, parents, name, id33);
+  return new Transition(subgroups, parents, name, id39);
 }
 var Selection = selection.prototype.constructor;
 function transition_selection() {
@@ -16906,10 +17114,10 @@ function styleFunction(name, interpolate2, value) {
     return string0 === string1 ? null : string0 === string00 && string1 === string10 ? interpolate0 : (string10 = string1, interpolate0 = interpolate2(string00 = string0, value1));
   };
 }
-function styleMaybeRemove(id33, name) {
+function styleMaybeRemove(id39, name) {
   var on0, on1, listener0, key = "style." + name, event = "end." + key, remove2;
   return function() {
-    var schedule2 = set$1(this, id33), on = schedule2.on, listener = schedule2.value[key] == null ? remove2 || (remove2 = styleRemove(name)) : void 0;
+    var schedule2 = set$1(this, id39), on = schedule2.on, listener = schedule2.value[key] == null ? remove2 || (remove2 = styleRemove(name)) : void 0;
     if (on !== on0 || listener0 !== listener) (on1 = (on0 = on).copy()).on(event, listener0 = listener);
     schedule2.on = on1;
   };
@@ -16994,13 +17202,13 @@ function transition_transition() {
   return new Transition(groups, this._parents, name, id1);
 }
 function transition_end() {
-  var on0, on1, that = this, id33 = that._id, size = that.size();
+  var on0, on1, that = this, id39 = that._id, size = that.size();
   return new Promise(function(resolve, reject) {
     var cancel = { value: reject }, end = { value: function() {
       if (--size === 0) resolve();
     } };
     that.each(function() {
-      var schedule2 = set$1(this, id33), on = schedule2.on;
+      var schedule2 = set$1(this, id39), on = schedule2.on;
       if (on !== on0) {
         on1 = (on0 = on).copy();
         on1._.cancel.push(cancel);
@@ -17013,11 +17221,11 @@ function transition_end() {
   });
 }
 var id$1 = 0;
-function Transition(groups, parents, name, id33) {
+function Transition(groups, parents, name, id39) {
   this._groups = groups;
   this._parents = parents;
   this._name = name;
-  this._id = id33;
+  this._id = id39;
 }
 function newId() {
   return ++id$1;
@@ -17065,30 +17273,30 @@ var defaultTiming = {
   duration: 250,
   ease: cubicInOut
 };
-function inherit(node2, id33) {
+function inherit(node2, id39) {
   var timing;
-  while (!(timing = node2.__transition) || !(timing = timing[id33])) {
+  while (!(timing = node2.__transition) || !(timing = timing[id39])) {
     if (!(node2 = node2.parentNode)) {
-      throw new Error(`transition ${id33} not found`);
+      throw new Error(`transition ${id39} not found`);
     }
   }
   return timing;
 }
 function selection_transition(name) {
-  var id33, timing;
+  var id39, timing;
   if (name instanceof Transition) {
-    id33 = name._id, name = name._name;
+    id39 = name._id, name = name._name;
   } else {
-    id33 = newId(), (timing = defaultTiming).time = now(), name = name == null ? null : name + "";
+    id39 = newId(), (timing = defaultTiming).time = now(), name = name == null ? null : name + "";
   }
   for (var groups = this._groups, m2 = groups.length, j2 = 0; j2 < m2; ++j2) {
     for (var group = groups[j2], n2 = group.length, node2, i2 = 0; i2 < n2; ++i2) {
       if (node2 = group[i2]) {
-        schedule(node2, name, id33, i2, group, timing || inherit(node2, id33));
+        schedule(node2, name, id39, i2, group, timing || inherit(node2, id39));
       }
     }
   }
-  return new Transition(groups, this._parents, name, id33);
+  return new Transition(groups, this._parents, name, id39);
 }
 selection.prototype.interrupt = selection_interrupt;
 selection.prototype.transition = selection_transition;
@@ -18193,16 +18401,16 @@ Transform.prototype = {
   }
 };
 Transform.prototype;
-var selectSvgElement = /* @__PURE__ */ __name((id33) => {
+var selectSvgElement = /* @__PURE__ */ __name((id39) => {
   var _a2;
   const { securityLevel } = getConfig2();
   let root2 = select("body");
   if (securityLevel === "sandbox") {
-    const sandboxElement = select(`#i${id33}`);
+    const sandboxElement = select(`#i${id39}`);
     const doc = ((_a2 = sandboxElement.node()) == null ? void 0 : _a2.contentDocument) ?? document;
     root2 = select(doc.body);
   }
-  const svg2 = root2.select(`#${id33}`);
+  const svg2 = root2.select(`#${id39}`);
   return svg2;
 }, "selectSvgElement");
 function isNothing(subject) {
@@ -20900,125 +21108,102 @@ var load = loader$1.load;
 js-yaml/dist/js-yaml.mjs:
   (*! js-yaml 4.1.1 https://github.com/nodeca/js-yaml @license MIT *)
 */
-var computeLabelTransform = /* @__PURE__ */ __name((bbox, useHtmlLabels) => {
-  if (useHtmlLabels) {
-    return "translate(" + -bbox.width / 2 + ", " + -bbox.height / 2 + ")";
-  }
-  const x2 = bbox.x ?? 0;
-  const y3 = bbox.y ?? 0;
-  return "translate(" + -(x2 + bbox.width / 2) + ", " + -(y3 + bbox.height / 2) + ")";
-}, "computeLabelTransform");
-var markerOffsets = {
-  aggregation: 17.25,
-  extension: 17.25,
-  composition: 17.25,
-  dependency: 6,
-  lollipop: 13.5,
-  arrow_point: 4,
-  arrow_barb: 0,
-  arrow_barb_neo: 5.5
-  //arrow_cross: 24,
-};
-var markerOffsets2 = {
-  arrow_point: 4,
-  arrow_cross: 12.5,
-  arrow_circle: 12.5
-};
-function calculateDeltaAndAngle$1(point1, point2) {
-  if (point1 === void 0 || point2 === void 0) {
-    return { angle: 0, deltaX: 0, deltaY: 0 };
-  }
-  point1 = pointTransformer(point1);
-  point2 = pointTransformer(point2);
-  const [x1, y1] = [point1.x, point1.y];
-  const [x2, y22] = [point2.x, point2.y];
-  const deltaX = x2 - x1;
-  const deltaY = y22 - y1;
-  return { angle: Math.atan(deltaY / deltaX), deltaX, deltaY };
-}
-__name(calculateDeltaAndAngle$1, "calculateDeltaAndAngle");
-var pointTransformer = /* @__PURE__ */ __name((data) => {
-  if (Array.isArray(data)) {
-    return { x: data[0], y: data[1] };
-  }
-  return data;
-}, "pointTransformer");
-var getLineFunctionsWithOffset = /* @__PURE__ */ __name((edge) => {
+var solidStateFill = /* @__PURE__ */ __name((color2) => {
+  const { handDrawnSeed } = getConfig2();
   return {
-    x: /* @__PURE__ */ __name(function(d2, i2, data) {
-      let offset = 0;
-      const DIRECTION = pointTransformer(data[0]).x < pointTransformer(data[data.length - 1]).x ? "left" : "right";
-      if (i2 === 0 && Object.hasOwn(markerOffsets, edge.arrowTypeStart)) {
-        const { angle, deltaX } = calculateDeltaAndAngle$1(data[0], data[1]);
-        offset = markerOffsets[edge.arrowTypeStart] * Math.cos(angle) * (deltaX >= 0 ? 1 : -1);
-      } else if (i2 === data.length - 1 && Object.hasOwn(markerOffsets, edge.arrowTypeEnd)) {
-        const { angle, deltaX } = calculateDeltaAndAngle$1(
-          data[data.length - 1],
-          data[data.length - 2]
-        );
-        offset = markerOffsets[edge.arrowTypeEnd] * Math.cos(angle) * (deltaX >= 0 ? 1 : -1);
-      }
-      const differenceToEnd = Math.abs(
-        pointTransformer(d2).x - pointTransformer(data[data.length - 1]).x
-      );
-      const differenceInYEnd = Math.abs(
-        pointTransformer(d2).y - pointTransformer(data[data.length - 1]).y
-      );
-      const differenceToStart = Math.abs(pointTransformer(d2).x - pointTransformer(data[0]).x);
-      const differenceInYStart = Math.abs(pointTransformer(d2).y - pointTransformer(data[0]).y);
-      const startMarkerHeight = markerOffsets[edge.arrowTypeStart];
-      const endMarkerHeight = markerOffsets[edge.arrowTypeEnd];
-      const extraRoom = 1;
-      if (differenceToEnd < endMarkerHeight && differenceToEnd > 0 && differenceInYEnd < endMarkerHeight) {
-        let adjustment = endMarkerHeight + extraRoom - differenceToEnd;
-        adjustment *= DIRECTION === "right" ? -1 : 1;
-        offset -= adjustment;
-      }
-      if (differenceToStart < startMarkerHeight && differenceToStart > 0 && differenceInYStart < startMarkerHeight) {
-        let adjustment = startMarkerHeight + extraRoom - differenceToStart;
-        adjustment *= DIRECTION === "right" ? -1 : 1;
-        offset += adjustment;
-      }
-      return pointTransformer(d2).x + offset;
-    }, "x"),
-    y: /* @__PURE__ */ __name(function(d2, i2, data) {
-      let offset = 0;
-      const DIRECTION = pointTransformer(data[0]).y < pointTransformer(data[data.length - 1]).y ? "down" : "up";
-      if (i2 === 0 && Object.hasOwn(markerOffsets, edge.arrowTypeStart)) {
-        const { angle, deltaY } = calculateDeltaAndAngle$1(data[0], data[1]);
-        offset = markerOffsets[edge.arrowTypeStart] * Math.abs(Math.sin(angle)) * (deltaY >= 0 ? 1 : -1);
-      } else if (i2 === data.length - 1 && Object.hasOwn(markerOffsets, edge.arrowTypeEnd)) {
-        const { angle, deltaY } = calculateDeltaAndAngle$1(
-          data[data.length - 1],
-          data[data.length - 2]
-        );
-        offset = markerOffsets[edge.arrowTypeEnd] * Math.abs(Math.sin(angle)) * (deltaY >= 0 ? 1 : -1);
-      }
-      const differenceToEnd = Math.abs(
-        pointTransformer(d2).y - pointTransformer(data[data.length - 1]).y
-      );
-      const differenceInXEnd = Math.abs(
-        pointTransformer(d2).x - pointTransformer(data[data.length - 1]).x
-      );
-      const differenceToStart = Math.abs(pointTransformer(d2).y - pointTransformer(data[0]).y);
-      const differenceInXStart = Math.abs(pointTransformer(d2).x - pointTransformer(data[0]).x);
-      const startMarkerHeight = markerOffsets[edge.arrowTypeStart];
-      const endMarkerHeight = markerOffsets[edge.arrowTypeEnd];
-      const extraRoom = 1;
-      if (differenceToEnd < endMarkerHeight && differenceToEnd > 0 && differenceInXEnd < endMarkerHeight) {
-        let adjustment = endMarkerHeight + extraRoom - differenceToEnd;
-        adjustment *= DIRECTION === "up" ? -1 : 1;
-        offset -= adjustment;
-      }
-      if (differenceToStart < startMarkerHeight && differenceToStart > 0 && differenceInXStart < startMarkerHeight) {
-        let adjustment = startMarkerHeight + extraRoom - differenceToStart;
-        adjustment *= DIRECTION === "up" ? -1 : 1;
-        offset += adjustment;
-      }
-      return pointTransformer(d2).y + offset;
-    }, "y")
+    fill: color2,
+    hachureAngle: 120,
+    // angle of hachure,
+    hachureGap: 4,
+    fillWeight: 2,
+    roughness: 0.7,
+    stroke: color2,
+    seed: handDrawnSeed
   };
-}, "getLineFunctionsWithOffset");
+}, "solidStateFill");
+var compileStyles = /* @__PURE__ */ __name((node2) => {
+  const stylesMap = styles2Map([
+    ...node2.cssCompiledStyles || [],
+    ...node2.cssStyles || [],
+    ...node2.labelStyle || []
+  ]);
+  return { stylesMap, stylesArray: [...stylesMap] };
+}, "compileStyles");
+var styles2Map = /* @__PURE__ */ __name((styles) => {
+  const styleMap = /* @__PURE__ */ new Map();
+  styles.forEach((style) => {
+    const [key, value] = style.split(":");
+    styleMap.set(key.trim(), value == null ? void 0 : value.trim());
+  });
+  return styleMap;
+}, "styles2Map");
+var isLabelStyle = /* @__PURE__ */ __name((key) => {
+  return key === "color" || key === "font-size" || key === "font-family" || key === "font-weight" || key === "font-style" || key === "text-decoration" || key === "text-align" || key === "text-transform" || key === "line-height" || key === "letter-spacing" || key === "word-spacing" || key === "text-shadow" || key === "text-overflow" || key === "white-space" || key === "word-wrap" || key === "word-break" || key === "overflow-wrap" || key === "hyphens";
+}, "isLabelStyle");
+var styles2String = /* @__PURE__ */ __name((node2) => {
+  const { stylesArray } = compileStyles(node2);
+  const labelStyles = [];
+  const nodeStyles = [];
+  const borderStyles = [];
+  const backgroundStyles = [];
+  stylesArray.forEach((style) => {
+    const key = style[0];
+    if (isLabelStyle(key)) {
+      labelStyles.push(style.join(":") + " !important");
+    } else {
+      nodeStyles.push(style.join(":") + " !important");
+      if (key.includes("stroke")) {
+        borderStyles.push(style.join(":") + " !important");
+      }
+      if (key === "fill") {
+        backgroundStyles.push(style.join(":") + " !important");
+      }
+    }
+  });
+  return {
+    labelStyles: labelStyles.join(";"),
+    nodeStyles: nodeStyles.join(";"),
+    stylesArray,
+    borderStyles,
+    backgroundStyles
+  };
+}, "styles2String");
+var userNodeOverrides = /* @__PURE__ */ __name((node2, options) => {
+  var _a2;
+  const { themeVariables, handDrawnSeed } = getConfig2();
+  const { nodeBorder, mainBkg } = themeVariables;
+  const { stylesMap } = compileStyles(node2);
+  const result = Object.assign(
+    {
+      roughness: 0.7,
+      fill: stylesMap.get("fill") || mainBkg,
+      fillStyle: "hachure",
+      // solid fill
+      fillWeight: 4,
+      hachureGap: 5.2,
+      stroke: stylesMap.get("stroke") || nodeBorder,
+      seed: handDrawnSeed,
+      strokeWidth: ((_a2 = stylesMap.get("stroke-width")) == null ? void 0 : _a2.replace("px", "")) || 1.3,
+      fillLineDash: [0, 0],
+      strokeLineDash: getStrokeDashArray(stylesMap.get("stroke-dasharray"))
+    },
+    options
+  );
+  return result;
+}, "userNodeOverrides");
+var getStrokeDashArray = /* @__PURE__ */ __name((strokeDasharrayStyle) => {
+  if (!strokeDasharrayStyle) {
+    return [0, 0];
+  }
+  const dashArray = strokeDasharrayStyle.trim().split(/\s+/).map(Number);
+  if (dashArray.length === 1) {
+    const val = isNaN(dashArray[0]) ? 0 : dashArray[0];
+    return [val, val];
+  }
+  const first = isNaN(dashArray[0]) ? 0 : dashArray[0];
+  const second = isNaN(dashArray[1]) ? 0 : dashArray[1];
+  return [first, second];
+}, "getStrokeDashArray");
 var dist = {};
 var constants = {};
 var hasRequiredConstants;
@@ -22079,9 +22264,9 @@ var getEdgeId = /* @__PURE__ */ __name((from2, to, {
   counter = 0,
   prefix,
   suffix
-}, id33) => {
-  if (id33) {
-    return id33;
+}, id39) => {
+  if (id39) {
+    return id39;
   }
   return `${prefix ? `${prefix}_` : ""}${from2}_${to}_${counter}${suffix ? `_${suffix}` : ""}`;
 }, "getEdgeId");
@@ -22149,102 +22334,6 @@ async function configureLabelImages(container, labelText) {
   );
 }
 __name(configureLabelImages, "configureLabelImages");
-var solidStateFill = /* @__PURE__ */ __name((color2) => {
-  const { handDrawnSeed } = getConfig2();
-  return {
-    fill: color2,
-    hachureAngle: 120,
-    // angle of hachure,
-    hachureGap: 4,
-    fillWeight: 2,
-    roughness: 0.7,
-    stroke: color2,
-    seed: handDrawnSeed
-  };
-}, "solidStateFill");
-var compileStyles = /* @__PURE__ */ __name((node2) => {
-  const stylesMap = styles2Map([
-    ...node2.cssCompiledStyles || [],
-    ...node2.cssStyles || [],
-    ...node2.labelStyle || []
-  ]);
-  return { stylesMap, stylesArray: [...stylesMap] };
-}, "compileStyles");
-var styles2Map = /* @__PURE__ */ __name((styles) => {
-  const styleMap = /* @__PURE__ */ new Map();
-  styles.forEach((style) => {
-    const [key, value] = style.split(":");
-    styleMap.set(key.trim(), value == null ? void 0 : value.trim());
-  });
-  return styleMap;
-}, "styles2Map");
-var isLabelStyle = /* @__PURE__ */ __name((key) => {
-  return key === "color" || key === "font-size" || key === "font-family" || key === "font-weight" || key === "font-style" || key === "text-decoration" || key === "text-align" || key === "text-transform" || key === "line-height" || key === "letter-spacing" || key === "word-spacing" || key === "text-shadow" || key === "text-overflow" || key === "white-space" || key === "word-wrap" || key === "word-break" || key === "overflow-wrap" || key === "hyphens";
-}, "isLabelStyle");
-var styles2String = /* @__PURE__ */ __name((node2) => {
-  const { stylesArray } = compileStyles(node2);
-  const labelStyles = [];
-  const nodeStyles = [];
-  const borderStyles = [];
-  const backgroundStyles = [];
-  stylesArray.forEach((style) => {
-    const key = style[0];
-    if (isLabelStyle(key)) {
-      labelStyles.push(style.join(":") + " !important");
-    } else {
-      nodeStyles.push(style.join(":") + " !important");
-      if (key.includes("stroke")) {
-        borderStyles.push(style.join(":") + " !important");
-      }
-      if (key === "fill") {
-        backgroundStyles.push(style.join(":") + " !important");
-      }
-    }
-  });
-  return {
-    labelStyles: labelStyles.join(";"),
-    nodeStyles: nodeStyles.join(";"),
-    stylesArray,
-    borderStyles,
-    backgroundStyles
-  };
-}, "styles2String");
-var userNodeOverrides = /* @__PURE__ */ __name((node2, options) => {
-  var _a2;
-  const { themeVariables, handDrawnSeed } = getConfig2();
-  const { nodeBorder, mainBkg } = themeVariables;
-  const { stylesMap } = compileStyles(node2);
-  const result = Object.assign(
-    {
-      roughness: 0.7,
-      fill: stylesMap.get("fill") || mainBkg,
-      fillStyle: "hachure",
-      // solid fill
-      fillWeight: 4,
-      hachureGap: 5.2,
-      stroke: stylesMap.get("stroke") || nodeBorder,
-      seed: handDrawnSeed,
-      strokeWidth: ((_a2 = stylesMap.get("stroke-width")) == null ? void 0 : _a2.replace("px", "")) || 1.3,
-      fillLineDash: [0, 0],
-      strokeLineDash: getStrokeDashArray(stylesMap.get("stroke-dasharray"))
-    },
-    options
-  );
-  return result;
-}, "userNodeOverrides");
-var getStrokeDashArray = /* @__PURE__ */ __name((strokeDasharrayStyle) => {
-  if (!strokeDasharrayStyle) {
-    return [0, 0];
-  }
-  const dashArray = strokeDasharrayStyle.trim().split(/\s+/).map(Number);
-  if (dashArray.length === 1) {
-    const val = isNaN(dashArray[0]) ? 0 : dashArray[0];
-    return [val, val];
-  }
-  const first = isNaN(dashArray[0]) ? 0 : dashArray[0];
-  const second = isNaN(dashArray[1]) ? 0 : dashArray[1];
-  return [first, second];
-}, "getStrokeDashArray");
 const defaultIconDimensions = Object.freeze({
   left: 0,
   top: 0,
@@ -22507,11 +22596,11 @@ function iconToSVG(icon2, customisations) {
 }
 const regex = /\sid="(\S+)"/g;
 const counters = /* @__PURE__ */ new Map();
-function nextID(id33) {
-  id33 = id33.replace(/[0-9]+$/, "") || "a";
-  const count = counters.get(id33) || 0;
-  counters.set(id33, count + 1);
-  return count ? `${id33}${count}` : id33;
+function nextID(id39) {
+  id39 = id39.replace(/[0-9]+$/, "") || "a";
+  const count = counters.get(id39) || 0;
+  counters.set(id39, count + 1);
+  return count ? `${id39}${count}` : id39;
 }
 function replaceIDs(body) {
   const ids = [];
@@ -22519,9 +22608,9 @@ function replaceIDs(body) {
   while (match = regex.exec(body)) ids.push(match[1]);
   if (!ids.length) return body;
   const suffix = "suffix" + (Math.random() * 16777216 | Date.now()).toString(16);
-  ids.forEach((id33) => {
-    const newID = nextID(id33);
-    const escapedID = id33.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  ids.forEach((id39) => {
+    const newID = nextID(id39);
+    const escapedID = id39.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     body = body.replace(new RegExp('([#;"])(' + escapedID + ')([")]|\\.[a-z])', "g"), "$1" + newID + suffix + "$3");
   });
   body = body.replace(new RegExp(suffix, "g"), "");
@@ -22532,6 +22621,84 @@ function iconToHTML(body, attributes) {
   for (const attr in attributes) renderAttribsHTML += " " + attr + '="' + attributes[attr] + '"';
   return '<svg xmlns="http://www.w3.org/2000/svg"' + renderAttribsHTML + ">" + body + "</svg>";
 }
+var unknownIcon = {
+  body: '<g><rect width="80" height="80" style="fill: #087ebf; stroke-width: 0px;"/><text transform="translate(21.16 64.67)" style="fill: #fff; font-family: ArialMT, Arial; font-size: 67.75px;"><tspan x="0" y="0">?</tspan></text></g>',
+  height: 80,
+  width: 80
+};
+var iconsStore = /* @__PURE__ */ new Map();
+var loaderStore = /* @__PURE__ */ new Map();
+var registerIconPacks = /* @__PURE__ */ __name((iconLoaders) => {
+  for (const iconLoader of iconLoaders) {
+    if (!iconLoader.name) {
+      throw new Error(
+        'Invalid icon loader. Must have a "name" property with non-empty string value.'
+      );
+    }
+    log.debug("Registering icon pack:", iconLoader.name);
+    if ("loader" in iconLoader) {
+      loaderStore.set(iconLoader.name, iconLoader.loader);
+    } else if ("icons" in iconLoader) {
+      iconsStore.set(iconLoader.name, iconLoader.icons);
+    } else {
+      log.error("Invalid icon loader:", iconLoader);
+      throw new Error('Invalid icon loader. Must have either "icons" or "loader" property.');
+    }
+  }
+}, "registerIconPacks");
+var getRegisteredIconData = /* @__PURE__ */ __name(async (iconName, fallbackPrefix) => {
+  const data = stringToIcon(iconName, true, fallbackPrefix !== void 0);
+  if (!data) {
+    throw new Error(`Invalid icon name: ${iconName}`);
+  }
+  const prefix = data.prefix || fallbackPrefix;
+  if (!prefix) {
+    throw new Error(`Icon name must contain a prefix: ${iconName}`);
+  }
+  let icons = iconsStore.get(prefix);
+  if (!icons) {
+    const loader39 = loaderStore.get(prefix);
+    if (!loader39) {
+      throw new Error(`Icon set not found: ${data.prefix}`);
+    }
+    try {
+      const loaded = await loader39();
+      icons = { ...loaded, prefix };
+      iconsStore.set(prefix, icons);
+    } catch (e2) {
+      log.error(e2);
+      throw new Error(`Failed to load icon set: ${data.prefix}`);
+    }
+  }
+  const iconData = getIconData(icons, data.name);
+  if (!iconData) {
+    throw new Error(`Icon not found: ${iconName}`);
+  }
+  return iconData;
+}, "getRegisteredIconData");
+var isIconAvailable = /* @__PURE__ */ __name(async (iconName) => {
+  try {
+    await getRegisteredIconData(iconName);
+    return true;
+  } catch {
+    return false;
+  }
+}, "isIconAvailable");
+var getIconSVG = /* @__PURE__ */ __name(async (iconName, customisations, extraAttributes) => {
+  let iconData;
+  try {
+    iconData = await getRegisteredIconData(iconName, customisations == null ? void 0 : customisations.fallbackPrefix);
+  } catch (e2) {
+    log.error(e2);
+    iconData = unknownIcon;
+  }
+  const renderData = iconToSVG(iconData, customisations);
+  const svg2 = iconToHTML(replaceIDs(renderData.body), {
+    ...renderData.attributes,
+    ...extraAttributes
+  });
+  return sanitizeText(svg2, getConfig());
+}, "getIconSVG");
 function L$1() {
   return { async: false, breaks: false, extensions: null, gfm: true, hooks: null, pedantic: false, renderer: null, silent: false, tokenizer: null, walkTokens: null };
 }
@@ -23672,84 +23839,6 @@ function dedent(templ) {
   });
   return string;
 }
-var unknownIcon = {
-  body: '<g><rect width="80" height="80" style="fill: #087ebf; stroke-width: 0px;"/><text transform="translate(21.16 64.67)" style="fill: #fff; font-family: ArialMT, Arial; font-size: 67.75px;"><tspan x="0" y="0">?</tspan></text></g>',
-  height: 80,
-  width: 80
-};
-var iconsStore = /* @__PURE__ */ new Map();
-var loaderStore = /* @__PURE__ */ new Map();
-var registerIconPacks = /* @__PURE__ */ __name((iconLoaders) => {
-  for (const iconLoader of iconLoaders) {
-    if (!iconLoader.name) {
-      throw new Error(
-        'Invalid icon loader. Must have a "name" property with non-empty string value.'
-      );
-    }
-    log.debug("Registering icon pack:", iconLoader.name);
-    if ("loader" in iconLoader) {
-      loaderStore.set(iconLoader.name, iconLoader.loader);
-    } else if ("icons" in iconLoader) {
-      iconsStore.set(iconLoader.name, iconLoader.icons);
-    } else {
-      log.error("Invalid icon loader:", iconLoader);
-      throw new Error('Invalid icon loader. Must have either "icons" or "loader" property.');
-    }
-  }
-}, "registerIconPacks");
-var getRegisteredIconData = /* @__PURE__ */ __name(async (iconName, fallbackPrefix) => {
-  const data = stringToIcon(iconName, true, fallbackPrefix !== void 0);
-  if (!data) {
-    throw new Error(`Invalid icon name: ${iconName}`);
-  }
-  const prefix = data.prefix || fallbackPrefix;
-  if (!prefix) {
-    throw new Error(`Icon name must contain a prefix: ${iconName}`);
-  }
-  let icons = iconsStore.get(prefix);
-  if (!icons) {
-    const loader33 = loaderStore.get(prefix);
-    if (!loader33) {
-      throw new Error(`Icon set not found: ${data.prefix}`);
-    }
-    try {
-      const loaded = await loader33();
-      icons = { ...loaded, prefix };
-      iconsStore.set(prefix, icons);
-    } catch (e2) {
-      log.error(e2);
-      throw new Error(`Failed to load icon set: ${data.prefix}`);
-    }
-  }
-  const iconData = getIconData(icons, data.name);
-  if (!iconData) {
-    throw new Error(`Icon not found: ${iconName}`);
-  }
-  return iconData;
-}, "getRegisteredIconData");
-var isIconAvailable = /* @__PURE__ */ __name(async (iconName) => {
-  try {
-    await getRegisteredIconData(iconName);
-    return true;
-  } catch {
-    return false;
-  }
-}, "isIconAvailable");
-var getIconSVG = /* @__PURE__ */ __name(async (iconName, customisations, extraAttributes) => {
-  let iconData;
-  try {
-    iconData = await getRegisteredIconData(iconName, customisations == null ? void 0 : customisations.fallbackPrefix);
-  } catch (e2) {
-    log.error(e2);
-    iconData = unknownIcon;
-  }
-  const renderData = iconToSVG(iconData, customisations);
-  const svg2 = iconToHTML(replaceIDs(renderData.body), {
-    ...renderData.attributes,
-    ...extraAttributes
-  });
-  return sanitizeText(svg2, getConfig());
-}, "getIconSVG");
 function preprocessMarkdown(markdown, { markdownAutoWrap }) {
   const withoutBR = markdown.replace(/<br\/>/g, "\n");
   const withoutMultipleNewlines = withoutBR.replace(/\n{2,}/g, "\n");
@@ -25402,6 +25491,136 @@ var createRoundedRectPathD = /* @__PURE__ */ __name((x2, y3, totalWidth, totalHe
   "Z"
   // Close the path
 ].join(" "), "createRoundedRectPathD");
+var swimlane = /* @__PURE__ */ __name(async (parent, node2) => {
+  const siteConfig2 = getConfig2();
+  const { themeVariables, handDrawnSeed } = siteConfig2;
+  const { clusterBkg, clusterBorder } = themeVariables;
+  const laneStroke = clusterBorder;
+  const { labelStyles, nodeStyles, borderStyles, backgroundStyles } = styles2String(node2);
+  const shapeSvg = parent.insert("g").attr("class", "cluster swimlane " + (node2.cssClasses || "")).attr("id", node2.id).attr("data-id", node2.id).attr("data-et", "cluster").attr("data-look", node2.look);
+  const useHtmlLabels = evaluate(siteConfig2.flowchart.htmlLabels);
+  const isLR = node2.direction === "LR";
+  const labelEl = shapeSvg.insert("g").attr("class", "cluster-label swimlane-label");
+  const text2 = await createText(labelEl, node2.label, {
+    style: node2.labelStyle,
+    useHtmlLabels,
+    isNode: true,
+    width: node2.width
+  });
+  let bbox = text2.getBBox();
+  if (useHtmlLabels) {
+    const div = text2.children[0];
+    const dv = select(text2);
+    bbox = div.getBoundingClientRect();
+    dv.attr("width", bbox.width);
+    dv.attr("height", bbox.height);
+  }
+  const padding = node2.padding ?? 0;
+  const width = node2.width <= bbox.width + padding ? bbox.width + padding : node2.width;
+  if (node2.width <= bbox.width + padding) {
+    node2.diff = (width - node2.width) / 2 - padding;
+  } else {
+    node2.diff = -padding;
+  }
+  const height = node2.height;
+  const laneTop = node2.y - height / 2;
+  const laneBottom = node2.y + height / 2;
+  const laneLeft = node2.x - width / 2;
+  const contentTop = node2.swimlaneContentTop !== void 0 ? node2.swimlaneContentTop : laneTop + height / 3;
+  const titlePaddingY = isLR ? 4 : 0;
+  const desiredTitleSize = bbox.height + 2 * titlePaddingY;
+  let titleRect;
+  let bodyRect;
+  if (isLR) {
+    const titleWidth = Math.max(desiredTitleSize, bbox.height + 2 * titlePaddingY);
+    const bodyX = laneLeft + titleWidth;
+    const bodyWidth = Math.max(0, width - titleWidth);
+    if (node2.look === "handDrawn") {
+      const rc = at.svg(shapeSvg);
+      const titleOptions = userNodeOverrides(node2, {
+        roughness: 0.7,
+        fill: clusterBkg,
+        stroke: laneStroke,
+        fillWeight: 3,
+        seed: handDrawnSeed
+      });
+      const bodyOptions = userNodeOverrides(node2, {
+        roughness: 0.7,
+        fill: "none",
+        stroke: laneStroke,
+        seed: handDrawnSeed
+      });
+      const roughTitle = rc.rectangle(laneLeft, laneTop, titleWidth, height, titleOptions);
+      titleRect = shapeSvg.insert(() => roughTitle, ":first-child");
+      const roughBody = rc.rectangle(bodyX, laneTop, bodyWidth, height, bodyOptions);
+      bodyRect = shapeSvg.insert(() => roughBody, ":first-child");
+      titleRect.select("path:nth-child(2)").attr("style", borderStyles.join(";"));
+      titleRect.select("path").attr("style", backgroundStyles.join(";").replace("fill", "stroke"));
+    } else {
+      titleRect = shapeSvg.insert("rect", ":first-child");
+      bodyRect = shapeSvg.insert("rect", ":first-child");
+      titleRect.attr("class", "swimlane-title").attr("style", nodeStyles).attr("x", laneLeft).attr("y", laneTop).attr("width", titleWidth).attr("height", height).attr("fill", clusterBkg).attr("stroke", laneStroke);
+      bodyRect.attr("class", "swimlane-body").attr("style", nodeStyles).attr("x", bodyX).attr("y", laneTop).attr("width", bodyWidth).attr("height", height).attr("fill", "none").attr("stroke", laneStroke);
+    }
+    const labelCenterX = laneLeft + titleWidth / 2;
+    const labelCenterY = node2.y;
+    labelEl.attr(
+      "transform",
+      `translate(${labelCenterX}, ${labelCenterY}) rotate(-90) translate(${-bbox.width / 2}, ${-bbox.height / 2})`
+    );
+  } else {
+    const headerMaxHeight = Math.max(0, contentTop - laneTop);
+    const titleHeight = Math.min(desiredTitleSize, headerMaxHeight);
+    const bodyY = laneTop + titleHeight;
+    const contentHeight = Math.max(0, laneBottom - bodyY);
+    const x2 = node2.x - width / 2;
+    if (node2.look === "handDrawn") {
+      const rc = at.svg(shapeSvg);
+      const titleOptions = userNodeOverrides(node2, {
+        roughness: 0.7,
+        fill: clusterBkg,
+        stroke: laneStroke,
+        fillWeight: 3,
+        seed: handDrawnSeed
+      });
+      const bodyOptions = userNodeOverrides(node2, {
+        roughness: 0.7,
+        fill: "none",
+        stroke: laneStroke,
+        seed: handDrawnSeed
+      });
+      const roughTitle = rc.rectangle(x2, laneTop, width, titleHeight, titleOptions);
+      titleRect = shapeSvg.insert(() => roughTitle, ":first-child");
+      const roughBody = rc.rectangle(x2, bodyY, width, contentHeight, bodyOptions);
+      bodyRect = shapeSvg.insert(() => roughBody, ":first-child");
+      titleRect.select("path:nth-child(2)").attr("style", borderStyles.join(";"));
+      titleRect.select("path").attr("style", backgroundStyles.join(";").replace("fill", "stroke"));
+    } else {
+      titleRect = shapeSvg.insert("rect", ":first-child");
+      bodyRect = shapeSvg.insert("rect", ":first-child");
+      titleRect.attr("class", "swimlane-title").attr("style", nodeStyles).attr("x", x2).attr("y", laneTop).attr("width", width).attr("height", titleHeight).attr("fill", clusterBkg).attr("stroke", laneStroke);
+      bodyRect.attr("class", "swimlane-body").attr("style", nodeStyles).attr("x", x2).attr("y", bodyY).attr("width", width).attr("height", contentHeight).attr("fill", "none").attr("stroke", laneStroke);
+    }
+    const labelX = node2.x - bbox.width / 2;
+    const labelY = laneTop + (titleHeight - bbox.height) / 2;
+    labelEl.attr("transform", `translate(${labelX}, ${labelY})`);
+  }
+  log.trace("Swimlane data ", node2, JSON.stringify(node2));
+  if (labelStyles) {
+    const span = labelEl.select("span");
+    if (span) {
+      span.attr("style", labelStyles);
+    }
+  }
+  node2.offsetX = 0;
+  node2.width = width;
+  node2.height = height;
+  node2.offsetY = bbox.height - padding / 2;
+  node2.intersect = function(point2) {
+    return intersect_rect_default(node2, point2);
+  };
+  return { cluster: shapeSvg, labelBBox: bbox };
+}, "swimlane");
 var rect = /* @__PURE__ */ __name(async (parent, node2) => {
   log.info("Creating subgraph rect for ", node2.id, node2);
   const siteConfig2 = getConfig2();
@@ -25696,7 +25915,8 @@ var shapes = {
   roundedWithTitle,
   noteGroup,
   divider,
-  kanbanSection
+  kanbanSection,
+  swimlane
 };
 var clusterElems = /* @__PURE__ */ new Map();
 var insertCluster = /* @__PURE__ */ __name(async (elem, node2) => {
@@ -30701,21 +30921,140 @@ var positionNode = /* @__PURE__ */ __name((node2) => {
   }
   return diff;
 }, "positionNode");
-var addEdgeMarkers = /* @__PURE__ */ __name((svgPath, edge, url, id33, diagramType, useMargin = false, strokeColor) => {
+var computeLabelTransform = /* @__PURE__ */ __name((bbox, useHtmlLabels) => {
+  if (useHtmlLabels) {
+    return "translate(" + -bbox.width / 2 + ", " + -bbox.height / 2 + ")";
+  }
+  const x2 = bbox.x ?? 0;
+  const y3 = bbox.y ?? 0;
+  return "translate(" + -(x2 + bbox.width / 2) + ", " + -(y3 + bbox.height / 2) + ")";
+}, "computeLabelTransform");
+var markerOffsets = {
+  aggregation: 17.25,
+  extension: 17.25,
+  composition: 17.25,
+  dependency: 6,
+  lollipop: 13.5,
+  arrow_point: 4,
+  arrow_barb: 0,
+  arrow_barb_neo: 5.5
+  //arrow_cross: 24,
+};
+var markerOffsets2 = {
+  arrow_point: 4,
+  arrow_cross: 12.5,
+  arrow_circle: 12.5
+};
+function calculateDeltaAndAngle$1(point1, point2) {
+  if (point1 === void 0 || point2 === void 0) {
+    return { angle: 0, deltaX: 0, deltaY: 0 };
+  }
+  point1 = pointTransformer(point1);
+  point2 = pointTransformer(point2);
+  const [x1, y1] = [point1.x, point1.y];
+  const [x2, y22] = [point2.x, point2.y];
+  const deltaX = x2 - x1;
+  const deltaY = y22 - y1;
+  return { angle: Math.atan(deltaY / deltaX), deltaX, deltaY };
+}
+__name(calculateDeltaAndAngle$1, "calculateDeltaAndAngle");
+var pointTransformer = /* @__PURE__ */ __name((data) => {
+  if (Array.isArray(data)) {
+    return { x: data[0], y: data[1] };
+  }
+  return data;
+}, "pointTransformer");
+var getLineFunctionsWithOffset = /* @__PURE__ */ __name((edge) => {
+  return {
+    x: /* @__PURE__ */ __name(function(d2, i2, data) {
+      let offset = 0;
+      const DIRECTION = pointTransformer(data[0]).x < pointTransformer(data[data.length - 1]).x ? "left" : "right";
+      if (i2 === 0 && Object.hasOwn(markerOffsets, edge.arrowTypeStart)) {
+        const { angle, deltaX } = calculateDeltaAndAngle$1(data[0], data[1]);
+        offset = markerOffsets[edge.arrowTypeStart] * Math.cos(angle) * (deltaX >= 0 ? 1 : -1);
+      } else if (i2 === data.length - 1 && Object.hasOwn(markerOffsets, edge.arrowTypeEnd)) {
+        const { angle, deltaX } = calculateDeltaAndAngle$1(
+          data[data.length - 1],
+          data[data.length - 2]
+        );
+        offset = markerOffsets[edge.arrowTypeEnd] * Math.cos(angle) * (deltaX >= 0 ? 1 : -1);
+      }
+      const differenceToEnd = Math.abs(
+        pointTransformer(d2).x - pointTransformer(data[data.length - 1]).x
+      );
+      const differenceInYEnd = Math.abs(
+        pointTransformer(d2).y - pointTransformer(data[data.length - 1]).y
+      );
+      const differenceToStart = Math.abs(pointTransformer(d2).x - pointTransformer(data[0]).x);
+      const differenceInYStart = Math.abs(pointTransformer(d2).y - pointTransformer(data[0]).y);
+      const startMarkerHeight = markerOffsets[edge.arrowTypeStart];
+      const endMarkerHeight = markerOffsets[edge.arrowTypeEnd];
+      const extraRoom = 1;
+      if (differenceToEnd < endMarkerHeight && differenceToEnd > 0 && differenceInYEnd < endMarkerHeight) {
+        let adjustment = endMarkerHeight + extraRoom - differenceToEnd;
+        adjustment *= DIRECTION === "right" ? -1 : 1;
+        offset -= adjustment;
+      }
+      if (differenceToStart < startMarkerHeight && differenceToStart > 0 && differenceInYStart < startMarkerHeight) {
+        let adjustment = startMarkerHeight + extraRoom - differenceToStart;
+        adjustment *= DIRECTION === "right" ? -1 : 1;
+        offset += adjustment;
+      }
+      return pointTransformer(d2).x + offset;
+    }, "x"),
+    y: /* @__PURE__ */ __name(function(d2, i2, data) {
+      let offset = 0;
+      const DIRECTION = pointTransformer(data[0]).y < pointTransformer(data[data.length - 1]).y ? "down" : "up";
+      if (i2 === 0 && Object.hasOwn(markerOffsets, edge.arrowTypeStart)) {
+        const { angle, deltaY } = calculateDeltaAndAngle$1(data[0], data[1]);
+        offset = markerOffsets[edge.arrowTypeStart] * Math.abs(Math.sin(angle)) * (deltaY >= 0 ? 1 : -1);
+      } else if (i2 === data.length - 1 && Object.hasOwn(markerOffsets, edge.arrowTypeEnd)) {
+        const { angle, deltaY } = calculateDeltaAndAngle$1(
+          data[data.length - 1],
+          data[data.length - 2]
+        );
+        offset = markerOffsets[edge.arrowTypeEnd] * Math.abs(Math.sin(angle)) * (deltaY >= 0 ? 1 : -1);
+      }
+      const differenceToEnd = Math.abs(
+        pointTransformer(d2).y - pointTransformer(data[data.length - 1]).y
+      );
+      const differenceInXEnd = Math.abs(
+        pointTransformer(d2).x - pointTransformer(data[data.length - 1]).x
+      );
+      const differenceToStart = Math.abs(pointTransformer(d2).y - pointTransformer(data[0]).y);
+      const differenceInXStart = Math.abs(pointTransformer(d2).x - pointTransformer(data[0]).x);
+      const startMarkerHeight = markerOffsets[edge.arrowTypeStart];
+      const endMarkerHeight = markerOffsets[edge.arrowTypeEnd];
+      const extraRoom = 1;
+      if (differenceToEnd < endMarkerHeight && differenceToEnd > 0 && differenceInXEnd < endMarkerHeight) {
+        let adjustment = endMarkerHeight + extraRoom - differenceToEnd;
+        adjustment *= DIRECTION === "up" ? -1 : 1;
+        offset -= adjustment;
+      }
+      if (differenceToStart < startMarkerHeight && differenceToStart > 0 && differenceInXStart < startMarkerHeight) {
+        let adjustment = startMarkerHeight + extraRoom - differenceToStart;
+        adjustment *= DIRECTION === "up" ? -1 : 1;
+        offset += adjustment;
+      }
+      return pointTransformer(d2).y + offset;
+    }, "y")
+  };
+}, "getLineFunctionsWithOffset");
+var addEdgeMarkers = /* @__PURE__ */ __name((svgPath, edge, url, id39, diagramType, useMargin = false, strokeColor) => {
   if (edge.arrowTypeStart) {
     addEdgeMarker(
       svgPath,
       "start",
       edge.arrowTypeStart,
       url,
-      id33,
+      id39,
       diagramType,
       useMargin,
       strokeColor
     );
   }
   if (edge.arrowTypeEnd) {
-    addEdgeMarker(svgPath, "end", edge.arrowTypeEnd, url, id33, diagramType, useMargin, strokeColor);
+    addEdgeMarker(svgPath, "end", edge.arrowTypeEnd, url, id39, diagramType, useMargin, strokeColor);
   }
 }, "addEdgeMarkers");
 var arrowTypesMap = {
@@ -30747,7 +31086,7 @@ var arrowTypesWithMarginSupport = [
   "dependency",
   "barb"
 ];
-var addEdgeMarker = /* @__PURE__ */ __name((svgPath, position2, arrowType, url, id33, diagramType, useMargin = false, strokeColor) => {
+var addEdgeMarker = /* @__PURE__ */ __name((svgPath, position2, arrowType, url, id39, diagramType, useMargin = false, strokeColor) => {
   var _a2;
   const arrowTypeInfo = arrowTypesMap[arrowType];
   const marginSupport = arrowTypeInfo && arrowTypesWithMarginSupport.includes(arrowTypeInfo.type);
@@ -30758,7 +31097,7 @@ var addEdgeMarker = /* @__PURE__ */ __name((svgPath, position2, arrowType, url, 
   const endMarkerType = arrowTypeInfo.type;
   const suffix = position2 === "start" ? "Start" : "End";
   const offset = useMargin && marginSupport ? "-margin" : "";
-  const originalMarkerId = `${id33}_${diagramType}-${endMarkerType}${suffix}${offset}`;
+  const originalMarkerId = `${id39}_${diagramType}-${endMarkerType}${suffix}${offset}`;
   if (strokeColor && strokeColor.trim() !== "") {
     const colorId = strokeColor.replace(/[^\dA-Za-z]/g, "_");
     const coloredMarkerId = `${originalMarkerId}_${colorId}`;
@@ -31037,6 +31376,25 @@ var positionEdgeLabel = /* @__PURE__ */ __name((edge, paths) => {
     el.attr("transform", `translate(${x2}, ${y3})`);
   }
 }, "positionEdgeLabel");
+var orthogonalizeToLabelClippedPoints = /* @__PURE__ */ __name((edge, points) => {
+  var _a2;
+  if (!(edge == null ? void 0 : edge.isLabelEdge) || !((_a2 = edge == null ? void 0 : edge.id) == null ? void 0 : _a2.endsWith("-to-label")) || !Array.isArray(points)) {
+    return points;
+  }
+  if (points.length !== 2) {
+    return points;
+  }
+  const [start2, end] = points;
+  const dx = Math.abs(end.x - start2.x);
+  const dy = Math.abs(end.y - start2.y);
+  if (dx < 1e-3 || dy < 1e-3) {
+    return points;
+  }
+  if (dy >= dx) {
+    return [start2, { x: start2.x, y: end.y }, end];
+  }
+  return [start2, { x: end.x, y: start2.y }, end];
+}, "orthogonalizeToLabelClippedPoints");
 var outsideNode = /* @__PURE__ */ __name((node2, point2) => {
   const x2 = node2.x;
   const y3 = node2.y;
@@ -31222,7 +31580,7 @@ var insertEdge = /* @__PURE__ */ __name(function(elem, edge, clusterDb, diagramT
       `insertEdge: missing diagramId for edge "${edge.id}" — edge IDs require a diagram prefix for uniqueness`
     );
   }
-  const { handDrawnSeed } = getConfig2();
+  const { handDrawnSeed, layout } = getConfig2();
   let points = edge.points;
   let pointsHasChanged = false;
   const tail = startNode;
@@ -31234,19 +31592,29 @@ var insertEdge = /* @__PURE__ */ __name(function(elem, edge, clusterDb, diagramT
     }
     edgeClassStyles.push(edge.cssCompiledStyles[key]);
   }
-  log.debug("UIO intersect check", edge.points, head.x, tail.x);
-  if (head.intersect && tail.intersect && !skipIntersect) {
+  if (layout === "swimlane") {
+    if (head.intersect && tail.intersect && Array.isArray(points) && points.length >= 2) {
+      if (points.length === 2) {
+        points = [tail.intersect(points[0]), head.intersect(points[1])];
+      } else {
+        const innerPoints = points.slice(1, -1);
+        const firstInner = innerPoints[0];
+        const lastInner = innerPoints[innerPoints.length - 1];
+        const TOLERANCE = 0.5;
+        const lastIsPinned = Math.abs(points[points.length - 1].x - lastInner.x) < TOLERANCE && Math.abs(points[points.length - 1].y - lastInner.y) < TOLERANCE;
+        const newFirst = tail.intersect(firstInner);
+        const newLast = lastIsPinned ? lastInner : head.intersect(lastInner);
+        const lastIsDuplicate = Math.abs(newLast.x - lastInner.x) < TOLERANCE && Math.abs(newLast.y - lastInner.y) < TOLERANCE;
+        const firstIsDuplicate = Math.abs(newFirst.x - firstInner.x) < TOLERANCE && Math.abs(newFirst.y - firstInner.y) < TOLERANCE;
+        const startPoints = firstIsDuplicate ? [] : [newFirst];
+        const endPoints = lastIsDuplicate ? [] : [newLast];
+        points = [...startPoints, ...innerPoints, ...endPoints];
+      }
+    }
+    points = orthogonalizeToLabelClippedPoints(edge, points);
+  } else if (head.intersect && tail.intersect && !skipIntersect) {
     points = points.slice(1, edge.points.length - 1);
     points.unshift(tail.intersect(points[0]));
-    log.debug(
-      "Last point UIO",
-      edge.start,
-      "-->",
-      edge.end,
-      points[points.length - 1],
-      head,
-      head.intersect(points[points.length - 1])
-    );
     points.push(head.intersect(points[points.length - 1]));
   }
   const pointsStr = btoa(JSON.stringify(points));
@@ -31505,132 +31873,132 @@ function applyMarkerOffsetsToPoints(points, edge) {
   return newPoints;
 }
 __name(applyMarkerOffsetsToPoints, "applyMarkerOffsetsToPoints");
-var insertMarkers = /* @__PURE__ */ __name((elem, markerArray, type2, id33) => {
+var insertMarkers = /* @__PURE__ */ __name((elem, markerArray, type2, id39) => {
   markerArray.forEach((markerName) => {
-    markers[markerName](elem, type2, id33);
+    markers[markerName](elem, type2, id39);
   });
 }, "insertMarkers");
-var extension = /* @__PURE__ */ __name((elem, type2, id33) => {
-  log.trace("Making markers for ", id33);
-  elem.append("defs").append("marker").attr("id", id33 + "_" + type2 + "-extensionStart").attr("class", "marker extension " + type2).attr("refX", 18).attr("refY", 7).attr("markerWidth", 20).attr("markerHeight", 28).attr("orient", "auto").attr("markerUnits", "userSpaceOnUse").append("path").attr("d", "M 1,7 L18,13 V 1 Z");
-  elem.append("defs").append("marker").attr("id", id33 + "_" + type2 + "-extensionEnd").attr("class", "marker extension " + type2).attr("refX", 1).attr("refY", 7).attr("markerWidth", 20).attr("markerHeight", 28).attr("orient", "auto").append("path").attr("d", "M 1,1 V 13 L18,7 Z");
-  elem.append("marker").attr("id", id33 + "_" + type2 + "-extensionStart-margin").attr("class", "marker extension " + type2).attr("refX", 18).attr("refY", 7).attr("markerWidth", 20).attr("markerHeight", 28).attr("orient", "auto").attr("markerUnits", "userSpaceOnUse").attr("viewBox", "0 0 20 14").append("polygon").attr("points", "10,7 18,13 18,1").style("stroke-width", 2).style("stroke-dasharray", "0");
-  elem.append("defs").append("marker").attr("id", id33 + "_" + type2 + "-extensionEnd-margin").attr("class", "marker extension " + type2).attr("refX", 9).attr("refY", 7).attr("markerWidth", 20).attr("markerHeight", 28).attr("orient", "auto").attr("markerUnits", "userSpaceOnUse").attr("viewBox", "0 0 20 14").append("polygon").attr("points", "10,1 10,13 18,7").style("stroke-width", 2).style("stroke-dasharray", "0");
+var extension = /* @__PURE__ */ __name((elem, type2, id39) => {
+  log.trace("Making markers for ", id39);
+  elem.append("defs").append("marker").attr("id", id39 + "_" + type2 + "-extensionStart").attr("class", "marker extension " + type2).attr("refX", 18).attr("refY", 7).attr("markerWidth", 20).attr("markerHeight", 28).attr("orient", "auto").attr("markerUnits", "userSpaceOnUse").append("path").attr("d", "M 1,7 L18,13 V 1 Z");
+  elem.append("defs").append("marker").attr("id", id39 + "_" + type2 + "-extensionEnd").attr("class", "marker extension " + type2).attr("refX", 1).attr("refY", 7).attr("markerWidth", 20).attr("markerHeight", 28).attr("orient", "auto").append("path").attr("d", "M 1,1 V 13 L18,7 Z");
+  elem.append("marker").attr("id", id39 + "_" + type2 + "-extensionStart-margin").attr("class", "marker extension " + type2).attr("refX", 18).attr("refY", 7).attr("markerWidth", 20).attr("markerHeight", 28).attr("orient", "auto").attr("markerUnits", "userSpaceOnUse").attr("viewBox", "0 0 20 14").append("polygon").attr("points", "10,7 18,13 18,1").style("stroke-width", 2).style("stroke-dasharray", "0");
+  elem.append("defs").append("marker").attr("id", id39 + "_" + type2 + "-extensionEnd-margin").attr("class", "marker extension " + type2).attr("refX", 9).attr("refY", 7).attr("markerWidth", 20).attr("markerHeight", 28).attr("orient", "auto").attr("markerUnits", "userSpaceOnUse").attr("viewBox", "0 0 20 14").append("polygon").attr("points", "10,1 10,13 18,7").style("stroke-width", 2).style("stroke-dasharray", "0");
 }, "extension");
-var composition = /* @__PURE__ */ __name((elem, type2, id33) => {
-  elem.append("defs").append("marker").attr("id", id33 + "_" + type2 + "-compositionStart").attr("class", "marker composition " + type2).attr("refX", 18).attr("refY", 7).attr("markerWidth", 190).attr("markerHeight", 240).attr("orient", "auto").append("path").attr("d", "M 18,7 L9,13 L1,7 L9,1 Z");
-  elem.append("defs").append("marker").attr("id", id33 + "_" + type2 + "-compositionEnd").attr("class", "marker composition " + type2).attr("refX", 1).attr("refY", 7).attr("markerWidth", 20).attr("markerHeight", 28).attr("orient", "auto").append("path").attr("d", "M 18,7 L9,13 L1,7 L9,1 Z");
-  elem.append("defs").append("marker").attr("id", id33 + "_" + type2 + "-compositionStart-margin").attr("class", "marker composition " + type2).attr("refX", 15).attr("refY", 7).attr("markerWidth", 190).attr("markerHeight", 240).attr("orient", "auto").attr("markerUnits", "userSpaceOnUse").append("path").style("stroke-width", 0).attr("viewBox", "0 0 15 15").attr("d", "M 18,7 L9,13 L1,7 L9,1 Z");
-  elem.append("defs").append("marker").attr("id", id33 + "_" + type2 + "-compositionEnd-margin").attr("class", "marker composition " + type2).attr("refX", 3.5).attr("refY", 7).attr("markerWidth", 20).attr("markerHeight", 28).attr("orient", "auto").attr("markerUnits", "userSpaceOnUse").append("path").style("stroke-width", 0).attr("d", "M 18,7 L9,13 L1,7 L9,1 Z");
+var composition = /* @__PURE__ */ __name((elem, type2, id39) => {
+  elem.append("defs").append("marker").attr("id", id39 + "_" + type2 + "-compositionStart").attr("class", "marker composition " + type2).attr("refX", 18).attr("refY", 7).attr("markerWidth", 190).attr("markerHeight", 240).attr("orient", "auto").append("path").attr("d", "M 18,7 L9,13 L1,7 L9,1 Z");
+  elem.append("defs").append("marker").attr("id", id39 + "_" + type2 + "-compositionEnd").attr("class", "marker composition " + type2).attr("refX", 1).attr("refY", 7).attr("markerWidth", 20).attr("markerHeight", 28).attr("orient", "auto").append("path").attr("d", "M 18,7 L9,13 L1,7 L9,1 Z");
+  elem.append("defs").append("marker").attr("id", id39 + "_" + type2 + "-compositionStart-margin").attr("class", "marker composition " + type2).attr("refX", 15).attr("refY", 7).attr("markerWidth", 190).attr("markerHeight", 240).attr("orient", "auto").attr("markerUnits", "userSpaceOnUse").append("path").style("stroke-width", 0).attr("viewBox", "0 0 15 15").attr("d", "M 18,7 L9,13 L1,7 L9,1 Z");
+  elem.append("defs").append("marker").attr("id", id39 + "_" + type2 + "-compositionEnd-margin").attr("class", "marker composition " + type2).attr("refX", 3.5).attr("refY", 7).attr("markerWidth", 20).attr("markerHeight", 28).attr("orient", "auto").attr("markerUnits", "userSpaceOnUse").append("path").style("stroke-width", 0).attr("d", "M 18,7 L9,13 L1,7 L9,1 Z");
 }, "composition");
-var aggregation = /* @__PURE__ */ __name((elem, type2, id33) => {
-  elem.append("defs").append("marker").attr("id", id33 + "_" + type2 + "-aggregationStart").attr("class", "marker aggregation " + type2).attr("refX", 18).attr("refY", 7).attr("markerWidth", 190).attr("markerHeight", 240).attr("orient", "auto").append("path").attr("d", "M 18,7 L9,13 L1,7 L9,1 Z");
-  elem.append("defs").append("marker").attr("id", id33 + "_" + type2 + "-aggregationEnd").attr("class", "marker aggregation " + type2).attr("refX", 1).attr("refY", 7).attr("markerWidth", 20).attr("markerHeight", 28).attr("orient", "auto").append("path").attr("d", "M 18,7 L9,13 L1,7 L9,1 Z");
-  elem.append("defs").append("marker").attr("id", id33 + "_" + type2 + "-aggregationStart-margin").attr("class", "marker aggregation " + type2).attr("refX", 15).attr("refY", 7).attr("markerWidth", 190).attr("markerHeight", 240).attr("orient", "auto").attr("markerUnits", "userSpaceOnUse").append("path").style("stroke-width", 2).attr("d", "M 18,7 L9,13 L1,7 L9,1 Z");
-  elem.append("defs").append("marker").attr("id", id33 + "_" + type2 + "-aggregationEnd-margin").attr("class", "marker aggregation " + type2).attr("refX", 1).attr("refY", 7).attr("markerWidth", 20).attr("markerHeight", 28).attr("orient", "auto").attr("markerUnits", "userSpaceOnUse").append("path").style("stroke-width", 2).attr("d", "M 18,7 L9,13 L1,7 L9,1 Z");
+var aggregation = /* @__PURE__ */ __name((elem, type2, id39) => {
+  elem.append("defs").append("marker").attr("id", id39 + "_" + type2 + "-aggregationStart").attr("class", "marker aggregation " + type2).attr("refX", 18).attr("refY", 7).attr("markerWidth", 190).attr("markerHeight", 240).attr("orient", "auto").append("path").attr("d", "M 18,7 L9,13 L1,7 L9,1 Z");
+  elem.append("defs").append("marker").attr("id", id39 + "_" + type2 + "-aggregationEnd").attr("class", "marker aggregation " + type2).attr("refX", 1).attr("refY", 7).attr("markerWidth", 20).attr("markerHeight", 28).attr("orient", "auto").append("path").attr("d", "M 18,7 L9,13 L1,7 L9,1 Z");
+  elem.append("defs").append("marker").attr("id", id39 + "_" + type2 + "-aggregationStart-margin").attr("class", "marker aggregation " + type2).attr("refX", 15).attr("refY", 7).attr("markerWidth", 190).attr("markerHeight", 240).attr("orient", "auto").attr("markerUnits", "userSpaceOnUse").append("path").style("stroke-width", 2).attr("d", "M 18,7 L9,13 L1,7 L9,1 Z");
+  elem.append("defs").append("marker").attr("id", id39 + "_" + type2 + "-aggregationEnd-margin").attr("class", "marker aggregation " + type2).attr("refX", 1).attr("refY", 7).attr("markerWidth", 20).attr("markerHeight", 28).attr("orient", "auto").attr("markerUnits", "userSpaceOnUse").append("path").style("stroke-width", 2).attr("d", "M 18,7 L9,13 L1,7 L9,1 Z");
 }, "aggregation");
-var dependency = /* @__PURE__ */ __name((elem, type2, id33) => {
-  elem.append("defs").append("marker").attr("id", id33 + "_" + type2 + "-dependencyStart").attr("class", "marker dependency " + type2).attr("refX", 6).attr("refY", 7).attr("markerWidth", 190).attr("markerHeight", 240).attr("orient", "auto").append("path").attr("d", "M 5,7 L9,13 L1,7 L9,1 Z");
-  elem.append("defs").append("marker").attr("id", id33 + "_" + type2 + "-dependencyEnd").attr("class", "marker dependency " + type2).attr("refX", 13).attr("refY", 7).attr("markerWidth", 20).attr("markerHeight", 28).attr("orient", "auto").append("path").attr("d", "M 18,7 L9,13 L14,7 L9,1 Z");
-  elem.append("defs").append("marker").attr("id", id33 + "_" + type2 + "-dependencyStart-margin").attr("class", "marker dependency " + type2).attr("refX", 4).attr("refY", 7).attr("markerWidth", 190).attr("markerHeight", 240).attr("orient", "auto").attr("markerUnits", "userSpaceOnUse").append("path").style("stroke-width", 0).attr("d", "M 5,7 L9,13 L1,7 L9,1 Z");
-  elem.append("defs").append("marker").attr("id", id33 + "_" + type2 + "-dependencyEnd-margin").attr("class", "marker dependency " + type2).attr("refX", 16).attr("refY", 7).attr("markerWidth", 20).attr("markerHeight", 28).attr("orient", "auto").attr("markerUnits", "userSpaceOnUse").append("path").style("stroke-width", 0).attr("d", "M 18,7 L9,13 L14,7 L9,1 Z");
+var dependency = /* @__PURE__ */ __name((elem, type2, id39) => {
+  elem.append("defs").append("marker").attr("id", id39 + "_" + type2 + "-dependencyStart").attr("class", "marker dependency " + type2).attr("refX", 6).attr("refY", 7).attr("markerWidth", 190).attr("markerHeight", 240).attr("orient", "auto").append("path").attr("d", "M 5,7 L9,13 L1,7 L9,1 Z");
+  elem.append("defs").append("marker").attr("id", id39 + "_" + type2 + "-dependencyEnd").attr("class", "marker dependency " + type2).attr("refX", 13).attr("refY", 7).attr("markerWidth", 20).attr("markerHeight", 28).attr("orient", "auto").append("path").attr("d", "M 18,7 L9,13 L14,7 L9,1 Z");
+  elem.append("defs").append("marker").attr("id", id39 + "_" + type2 + "-dependencyStart-margin").attr("class", "marker dependency " + type2).attr("refX", 4).attr("refY", 7).attr("markerWidth", 190).attr("markerHeight", 240).attr("orient", "auto").attr("markerUnits", "userSpaceOnUse").append("path").style("stroke-width", 0).attr("d", "M 5,7 L9,13 L1,7 L9,1 Z");
+  elem.append("defs").append("marker").attr("id", id39 + "_" + type2 + "-dependencyEnd-margin").attr("class", "marker dependency " + type2).attr("refX", 16).attr("refY", 7).attr("markerWidth", 20).attr("markerHeight", 28).attr("orient", "auto").attr("markerUnits", "userSpaceOnUse").append("path").style("stroke-width", 0).attr("d", "M 18,7 L9,13 L14,7 L9,1 Z");
 }, "dependency");
-var lollipop = /* @__PURE__ */ __name((elem, type2, id33) => {
-  elem.append("defs").append("marker").attr("id", id33 + "_" + type2 + "-lollipopStart").attr("class", "marker lollipop " + type2).attr("refX", 13).attr("refY", 7).attr("markerWidth", 190).attr("markerHeight", 240).attr("orient", "auto").append("circle").attr("fill", "transparent").attr("cx", 7).attr("cy", 7).attr("r", 6);
-  elem.append("defs").append("marker").attr("id", id33 + "_" + type2 + "-lollipopEnd").attr("class", "marker lollipop " + type2).attr("refX", 1).attr("refY", 7).attr("markerWidth", 190).attr("markerHeight", 240).attr("orient", "auto").append("circle").attr("fill", "transparent").attr("cx", 7).attr("cy", 7).attr("r", 6);
-  elem.append("defs").append("marker").attr("id", id33 + "_" + type2 + "-lollipopStart-margin").attr("class", "marker lollipop " + type2).attr("refX", 13).attr("refY", 7).attr("markerWidth", 190).attr("markerHeight", 240).attr("orient", "auto").attr("markerUnits", "userSpaceOnUse").append("circle").attr("fill", "transparent").attr("cx", 7).attr("cy", 7).attr("r", 6).attr("stroke-width", 2);
-  elem.append("defs").append("marker").attr("id", id33 + "_" + type2 + "-lollipopEnd-margin").attr("class", "marker lollipop " + type2).attr("refX", 1).attr("refY", 7).attr("markerWidth", 190).attr("markerHeight", 240).attr("orient", "auto").attr("markerUnits", "userSpaceOnUse").append("circle").attr("fill", "transparent").attr("cx", 7).attr("cy", 7).attr("r", 6).attr("stroke-width", 2);
+var lollipop = /* @__PURE__ */ __name((elem, type2, id39) => {
+  elem.append("defs").append("marker").attr("id", id39 + "_" + type2 + "-lollipopStart").attr("class", "marker lollipop " + type2).attr("refX", 13).attr("refY", 7).attr("markerWidth", 190).attr("markerHeight", 240).attr("orient", "auto").append("circle").attr("fill", "transparent").attr("cx", 7).attr("cy", 7).attr("r", 6);
+  elem.append("defs").append("marker").attr("id", id39 + "_" + type2 + "-lollipopEnd").attr("class", "marker lollipop " + type2).attr("refX", 1).attr("refY", 7).attr("markerWidth", 190).attr("markerHeight", 240).attr("orient", "auto").append("circle").attr("fill", "transparent").attr("cx", 7).attr("cy", 7).attr("r", 6);
+  elem.append("defs").append("marker").attr("id", id39 + "_" + type2 + "-lollipopStart-margin").attr("class", "marker lollipop " + type2).attr("refX", 13).attr("refY", 7).attr("markerWidth", 190).attr("markerHeight", 240).attr("orient", "auto").attr("markerUnits", "userSpaceOnUse").append("circle").attr("fill", "transparent").attr("cx", 7).attr("cy", 7).attr("r", 6).attr("stroke-width", 2);
+  elem.append("defs").append("marker").attr("id", id39 + "_" + type2 + "-lollipopEnd-margin").attr("class", "marker lollipop " + type2).attr("refX", 1).attr("refY", 7).attr("markerWidth", 190).attr("markerHeight", 240).attr("orient", "auto").attr("markerUnits", "userSpaceOnUse").append("circle").attr("fill", "transparent").attr("cx", 7).attr("cy", 7).attr("r", 6).attr("stroke-width", 2);
 }, "lollipop");
-var point = /* @__PURE__ */ __name((elem, type2, id33) => {
-  elem.append("marker").attr("id", id33 + "_" + type2 + "-pointEnd").attr("class", "marker " + type2).attr("viewBox", "0 0 10 10").attr("refX", 5).attr("refY", 5).attr("markerUnits", "userSpaceOnUse").attr("markerWidth", 8).attr("markerHeight", 8).attr("orient", "auto").append("path").attr("d", "M 0 0 L 10 5 L 0 10 z").attr("class", "arrowMarkerPath").style("stroke-width", 1).style("stroke-dasharray", "1,0");
-  elem.append("marker").attr("id", id33 + "_" + type2 + "-pointStart").attr("class", "marker " + type2).attr("viewBox", "0 0 10 10").attr("refX", 4.5).attr("refY", 5).attr("markerUnits", "userSpaceOnUse").attr("markerWidth", 8).attr("markerHeight", 8).attr("orient", "auto").append("path").attr("d", "M 0 5 L 10 10 L 10 0 z").attr("class", "arrowMarkerPath").style("stroke-width", 1).style("stroke-dasharray", "1,0");
-  elem.append("marker").attr("id", id33 + "_" + type2 + "-pointEnd-margin").attr("class", "marker " + type2).attr("viewBox", "0 0 11.5 14").attr("refX", 11.5).attr("refY", 7).attr("markerUnits", "userSpaceOnUse").attr("markerWidth", 10.5).attr("markerHeight", 14).attr("orient", "auto").append("path").attr("d", "M 0 0 L 11.5 7 L 0 14 z").attr("class", "arrowMarkerPath").style("stroke-width", 0).style("stroke-dasharray", "1,0");
-  elem.append("marker").attr("id", id33 + "_" + type2 + "-pointStart-margin").attr("class", "marker " + type2).attr("viewBox", "0 0 11.5 14").attr("refX", 1).attr("refY", 7).attr("markerUnits", "userSpaceOnUse").attr("markerWidth", 11.5).attr("markerHeight", 14).attr("orient", "auto").append("polygon").attr("points", "0,7 11.5,14 11.5,0").attr("class", "arrowMarkerPath").style("stroke-width", 0).style("stroke-dasharray", "1,0");
+var point = /* @__PURE__ */ __name((elem, type2, id39) => {
+  elem.append("marker").attr("id", id39 + "_" + type2 + "-pointEnd").attr("class", "marker " + type2).attr("viewBox", "0 0 10 10").attr("refX", 5).attr("refY", 5).attr("markerUnits", "userSpaceOnUse").attr("markerWidth", 8).attr("markerHeight", 8).attr("orient", "auto").append("path").attr("d", "M 0 0 L 10 5 L 0 10 z").attr("class", "arrowMarkerPath").style("stroke-width", 1).style("stroke-dasharray", "1,0");
+  elem.append("marker").attr("id", id39 + "_" + type2 + "-pointStart").attr("class", "marker " + type2).attr("viewBox", "0 0 10 10").attr("refX", 4.5).attr("refY", 5).attr("markerUnits", "userSpaceOnUse").attr("markerWidth", 8).attr("markerHeight", 8).attr("orient", "auto").append("path").attr("d", "M 0 5 L 10 10 L 10 0 z").attr("class", "arrowMarkerPath").style("stroke-width", 1).style("stroke-dasharray", "1,0");
+  elem.append("marker").attr("id", id39 + "_" + type2 + "-pointEnd-margin").attr("class", "marker " + type2).attr("viewBox", "0 0 11.5 14").attr("refX", 11.5).attr("refY", 7).attr("markerUnits", "userSpaceOnUse").attr("markerWidth", 10.5).attr("markerHeight", 14).attr("orient", "auto").append("path").attr("d", "M 0 0 L 11.5 7 L 0 14 z").attr("class", "arrowMarkerPath").style("stroke-width", 0).style("stroke-dasharray", "1,0");
+  elem.append("marker").attr("id", id39 + "_" + type2 + "-pointStart-margin").attr("class", "marker " + type2).attr("viewBox", "0 0 11.5 14").attr("refX", 1).attr("refY", 7).attr("markerUnits", "userSpaceOnUse").attr("markerWidth", 11.5).attr("markerHeight", 14).attr("orient", "auto").append("polygon").attr("points", "0,7 11.5,14 11.5,0").attr("class", "arrowMarkerPath").style("stroke-width", 0).style("stroke-dasharray", "1,0");
 }, "point");
-var circle = /* @__PURE__ */ __name((elem, type2, id33) => {
-  elem.append("marker").attr("id", id33 + "_" + type2 + "-circleEnd").attr("class", "marker " + type2).attr("viewBox", "0 0 10 10").attr("refX", 11).attr("refY", 5).attr("markerUnits", "userSpaceOnUse").attr("markerWidth", 11).attr("markerHeight", 11).attr("orient", "auto").append("circle").attr("cx", "5").attr("cy", "5").attr("r", "5").attr("class", "arrowMarkerPath").style("stroke-width", 1).style("stroke-dasharray", "1,0");
-  elem.append("marker").attr("id", id33 + "_" + type2 + "-circleStart").attr("class", "marker " + type2).attr("viewBox", "0 0 10 10").attr("refX", -1).attr("refY", 5).attr("markerUnits", "userSpaceOnUse").attr("markerWidth", 11).attr("markerHeight", 11).attr("orient", "auto").append("circle").attr("cx", "5").attr("cy", "5").attr("r", "5").attr("class", "arrowMarkerPath").style("stroke-width", 1).style("stroke-dasharray", "1,0");
-  elem.append("marker").attr("id", id33 + "_" + type2 + "-circleEnd-margin").attr("class", "marker " + type2).attr("viewBox", "0 0 10 10").attr("refY", 5).attr("refX", 12.25).attr("markerUnits", "userSpaceOnUse").attr("markerWidth", 14).attr("markerHeight", 14).attr("orient", "auto").append("circle").attr("cx", "5").attr("cy", "5").attr("r", "5").attr("class", "arrowMarkerPath").style("stroke-width", 0).style("stroke-dasharray", "1,0");
-  elem.append("marker").attr("id", id33 + "_" + type2 + "-circleStart-margin").attr("class", "marker " + type2).attr("viewBox", "0 0 10 10").attr("refX", -2).attr("refY", 5).attr("markerUnits", "userSpaceOnUse").attr("markerWidth", 14).attr("markerHeight", 14).attr("orient", "auto").append("circle").attr("cx", "5").attr("cy", "5").attr("r", "5").attr("class", "arrowMarkerPath").style("stroke-width", 0).style("stroke-dasharray", "1,0");
+var circle = /* @__PURE__ */ __name((elem, type2, id39) => {
+  elem.append("marker").attr("id", id39 + "_" + type2 + "-circleEnd").attr("class", "marker " + type2).attr("viewBox", "0 0 10 10").attr("refX", 11).attr("refY", 5).attr("markerUnits", "userSpaceOnUse").attr("markerWidth", 11).attr("markerHeight", 11).attr("orient", "auto").append("circle").attr("cx", "5").attr("cy", "5").attr("r", "5").attr("class", "arrowMarkerPath").style("stroke-width", 1).style("stroke-dasharray", "1,0");
+  elem.append("marker").attr("id", id39 + "_" + type2 + "-circleStart").attr("class", "marker " + type2).attr("viewBox", "0 0 10 10").attr("refX", -1).attr("refY", 5).attr("markerUnits", "userSpaceOnUse").attr("markerWidth", 11).attr("markerHeight", 11).attr("orient", "auto").append("circle").attr("cx", "5").attr("cy", "5").attr("r", "5").attr("class", "arrowMarkerPath").style("stroke-width", 1).style("stroke-dasharray", "1,0");
+  elem.append("marker").attr("id", id39 + "_" + type2 + "-circleEnd-margin").attr("class", "marker " + type2).attr("viewBox", "0 0 10 10").attr("refY", 5).attr("refX", 12.25).attr("markerUnits", "userSpaceOnUse").attr("markerWidth", 14).attr("markerHeight", 14).attr("orient", "auto").append("circle").attr("cx", "5").attr("cy", "5").attr("r", "5").attr("class", "arrowMarkerPath").style("stroke-width", 0).style("stroke-dasharray", "1,0");
+  elem.append("marker").attr("id", id39 + "_" + type2 + "-circleStart-margin").attr("class", "marker " + type2).attr("viewBox", "0 0 10 10").attr("refX", -2).attr("refY", 5).attr("markerUnits", "userSpaceOnUse").attr("markerWidth", 14).attr("markerHeight", 14).attr("orient", "auto").append("circle").attr("cx", "5").attr("cy", "5").attr("r", "5").attr("class", "arrowMarkerPath").style("stroke-width", 0).style("stroke-dasharray", "1,0");
 }, "circle");
-var cross = /* @__PURE__ */ __name((elem, type2, id33) => {
-  elem.append("marker").attr("id", id33 + "_" + type2 + "-crossEnd").attr("class", "marker cross " + type2).attr("viewBox", "0 0 11 11").attr("refX", 12).attr("refY", 5.2).attr("markerUnits", "userSpaceOnUse").attr("markerWidth", 11).attr("markerHeight", 11).attr("orient", "auto").append("path").attr("d", "M 1,1 l 9,9 M 10,1 l -9,9").attr("class", "arrowMarkerPath").style("stroke-width", 2).style("stroke-dasharray", "1,0");
-  elem.append("marker").attr("id", id33 + "_" + type2 + "-crossStart").attr("class", "marker cross " + type2).attr("viewBox", "0 0 11 11").attr("refX", -1).attr("refY", 5.2).attr("markerUnits", "userSpaceOnUse").attr("markerWidth", 11).attr("markerHeight", 11).attr("orient", "auto").append("path").attr("d", "M 1,1 l 9,9 M 10,1 l -9,9").attr("class", "arrowMarkerPath").style("stroke-width", 2).style("stroke-dasharray", "1,0");
-  elem.append("marker").attr("id", id33 + "_" + type2 + "-crossEnd-margin").attr("class", "marker cross " + type2).attr("viewBox", "0 0 15 15").attr("refX", 17.7).attr("refY", 7.5).attr("markerUnits", "userSpaceOnUse").attr("markerWidth", 12).attr("markerHeight", 12).attr("orient", "auto").append("path").attr("d", "M 1,1 L 14,14 M 1,14 L 14,1").attr("class", "arrowMarkerPath").style("stroke-width", 2.5);
-  elem.append("marker").attr("id", id33 + "_" + type2 + "-crossStart-margin").attr("class", "marker cross " + type2).attr("viewBox", "0 0 15 15").attr("refX", -3.5).attr("refY", 7.5).attr("markerUnits", "userSpaceOnUse").attr("markerWidth", 12).attr("markerHeight", 12).attr("orient", "auto").append("path").attr("d", "M 1,1 L 14,14 M 1,14 L 14,1").attr("class", "arrowMarkerPath").style("stroke-width", 2.5).style("stroke-dasharray", "1,0");
+var cross = /* @__PURE__ */ __name((elem, type2, id39) => {
+  elem.append("marker").attr("id", id39 + "_" + type2 + "-crossEnd").attr("class", "marker cross " + type2).attr("viewBox", "0 0 11 11").attr("refX", 12).attr("refY", 5.2).attr("markerUnits", "userSpaceOnUse").attr("markerWidth", 11).attr("markerHeight", 11).attr("orient", "auto").append("path").attr("d", "M 1,1 l 9,9 M 10,1 l -9,9").attr("class", "arrowMarkerPath").style("stroke-width", 2).style("stroke-dasharray", "1,0");
+  elem.append("marker").attr("id", id39 + "_" + type2 + "-crossStart").attr("class", "marker cross " + type2).attr("viewBox", "0 0 11 11").attr("refX", -1).attr("refY", 5.2).attr("markerUnits", "userSpaceOnUse").attr("markerWidth", 11).attr("markerHeight", 11).attr("orient", "auto").append("path").attr("d", "M 1,1 l 9,9 M 10,1 l -9,9").attr("class", "arrowMarkerPath").style("stroke-width", 2).style("stroke-dasharray", "1,0");
+  elem.append("marker").attr("id", id39 + "_" + type2 + "-crossEnd-margin").attr("class", "marker cross " + type2).attr("viewBox", "0 0 15 15").attr("refX", 17.7).attr("refY", 7.5).attr("markerUnits", "userSpaceOnUse").attr("markerWidth", 12).attr("markerHeight", 12).attr("orient", "auto").append("path").attr("d", "M 1,1 L 14,14 M 1,14 L 14,1").attr("class", "arrowMarkerPath").style("stroke-width", 2.5);
+  elem.append("marker").attr("id", id39 + "_" + type2 + "-crossStart-margin").attr("class", "marker cross " + type2).attr("viewBox", "0 0 15 15").attr("refX", -3.5).attr("refY", 7.5).attr("markerUnits", "userSpaceOnUse").attr("markerWidth", 12).attr("markerHeight", 12).attr("orient", "auto").append("path").attr("d", "M 1,1 L 14,14 M 1,14 L 14,1").attr("class", "arrowMarkerPath").style("stroke-width", 2.5).style("stroke-dasharray", "1,0");
 }, "cross");
-var barb = /* @__PURE__ */ __name((elem, type2, id33) => {
-  elem.append("defs").append("marker").attr("id", id33 + "_" + type2 + "-barbEnd").attr("refX", 19).attr("refY", 7).attr("markerWidth", 20).attr("markerHeight", 14).attr("markerUnits", "userSpaceOnUse").attr("orient", "auto").append("path").attr("d", "M 19,7 L9,13 L14,7 L9,1 Z");
+var barb = /* @__PURE__ */ __name((elem, type2, id39) => {
+  elem.append("defs").append("marker").attr("id", id39 + "_" + type2 + "-barbEnd").attr("refX", 19).attr("refY", 7).attr("markerWidth", 20).attr("markerHeight", 14).attr("markerUnits", "userSpaceOnUse").attr("orient", "auto").append("path").attr("d", "M 19,7 L9,13 L14,7 L9,1 Z");
 }, "barb");
-var barbNeo = /* @__PURE__ */ __name((elem, type2, id33) => {
+var barbNeo = /* @__PURE__ */ __name((elem, type2, id39) => {
   const config2 = getConfig();
   const { themeVariables } = config2;
   const { transitionColor } = themeVariables;
-  elem.append("defs").append("marker").attr("id", id33 + "_" + type2 + "-barbEnd").attr("refX", 19).attr("refY", 7).attr("markerWidth", 20).attr("markerHeight", 14).attr("markerUnits", "strokeWidth").attr("orient", "auto").append("path").attr("d", "M 19,7 L11,14 L13,7 L11,0 Z");
-  elem.append("defs").append("marker").attr("id", id33 + "_" + type2 + "-barbEnd-margin").attr("refX", 17).attr("refY", 7).attr("markerWidth", 20).attr("markerHeight", 14).attr("markerUnits", "userSpaceOnUse").attr("orient", "auto").append("path").attr("d", "M 19,7 L11,14 L13,7 L11,0 Z").attr("fill", `${transitionColor}`);
+  elem.append("defs").append("marker").attr("id", id39 + "_" + type2 + "-barbEnd").attr("refX", 19).attr("refY", 7).attr("markerWidth", 20).attr("markerHeight", 14).attr("markerUnits", "strokeWidth").attr("orient", "auto").append("path").attr("d", "M 19,7 L11,14 L13,7 L11,0 Z");
+  elem.append("defs").append("marker").attr("id", id39 + "_" + type2 + "-barbEnd-margin").attr("refX", 17).attr("refY", 7).attr("markerWidth", 20).attr("markerHeight", 14).attr("markerUnits", "userSpaceOnUse").attr("orient", "auto").append("path").attr("d", "M 19,7 L11,14 L13,7 L11,0 Z").attr("fill", `${transitionColor}`);
 }, "barbNeo");
-var only_one = /* @__PURE__ */ __name((elem, type2, id33) => {
-  elem.append("defs").append("marker").attr("id", id33 + "_" + type2 + "-onlyOneStart").attr("class", "marker onlyOne " + type2).attr("refX", 0).attr("refY", 9).attr("markerWidth", 18).attr("markerHeight", 18).attr("orient", "auto").append("path").attr("d", "M9,0 L9,18 M15,0 L15,18");
-  elem.append("defs").append("marker").attr("id", id33 + "_" + type2 + "-onlyOneEnd").attr("class", "marker onlyOne " + type2).attr("refX", 18).attr("refY", 9).attr("markerWidth", 18).attr("markerHeight", 18).attr("orient", "auto").append("path").attr("d", "M3,0 L3,18 M9,0 L9,18");
+var only_one = /* @__PURE__ */ __name((elem, type2, id39) => {
+  elem.append("defs").append("marker").attr("id", id39 + "_" + type2 + "-onlyOneStart").attr("class", "marker onlyOne " + type2).attr("refX", 0).attr("refY", 9).attr("markerWidth", 18).attr("markerHeight", 18).attr("orient", "auto").append("path").attr("d", "M9,0 L9,18 M15,0 L15,18");
+  elem.append("defs").append("marker").attr("id", id39 + "_" + type2 + "-onlyOneEnd").attr("class", "marker onlyOne " + type2).attr("refX", 18).attr("refY", 9).attr("markerWidth", 18).attr("markerHeight", 18).attr("orient", "auto").append("path").attr("d", "M3,0 L3,18 M9,0 L9,18");
 }, "only_one");
-var zero_or_one = /* @__PURE__ */ __name((elem, type2, id33) => {
-  const startMarker = elem.append("defs").append("marker").attr("id", id33 + "_" + type2 + "-zeroOrOneStart").attr("class", "marker zeroOrOne " + type2).attr("refX", 0).attr("refY", 9).attr("markerWidth", 30).attr("markerHeight", 18).attr("orient", "auto");
+var zero_or_one = /* @__PURE__ */ __name((elem, type2, id39) => {
+  const startMarker = elem.append("defs").append("marker").attr("id", id39 + "_" + type2 + "-zeroOrOneStart").attr("class", "marker zeroOrOne " + type2).attr("refX", 0).attr("refY", 9).attr("markerWidth", 30).attr("markerHeight", 18).attr("orient", "auto");
   startMarker.append("circle").attr("fill", "white").attr("cx", 21).attr("cy", 9).attr("r", 6);
   startMarker.append("path").attr("d", "M9,0 L9,18");
-  const endMarker = elem.append("defs").append("marker").attr("id", id33 + "_" + type2 + "-zeroOrOneEnd").attr("class", "marker zeroOrOne " + type2).attr("refX", 30).attr("refY", 9).attr("markerWidth", 30).attr("markerHeight", 18).attr("orient", "auto");
+  const endMarker = elem.append("defs").append("marker").attr("id", id39 + "_" + type2 + "-zeroOrOneEnd").attr("class", "marker zeroOrOne " + type2).attr("refX", 30).attr("refY", 9).attr("markerWidth", 30).attr("markerHeight", 18).attr("orient", "auto");
   endMarker.append("circle").attr("fill", "white").attr("cx", 9).attr("cy", 9).attr("r", 6);
   endMarker.append("path").attr("d", "M21,0 L21,18");
 }, "zero_or_one");
-var one_or_more = /* @__PURE__ */ __name((elem, type2, id33) => {
-  elem.append("defs").append("marker").attr("id", id33 + "_" + type2 + "-oneOrMoreStart").attr("class", "marker oneOrMore " + type2).attr("refX", 18).attr("refY", 18).attr("markerWidth", 45).attr("markerHeight", 36).attr("orient", "auto").append("path").attr("d", "M0,18 Q 18,0 36,18 Q 18,36 0,18 M42,9 L42,27");
-  elem.append("defs").append("marker").attr("id", id33 + "_" + type2 + "-oneOrMoreEnd").attr("class", "marker oneOrMore " + type2).attr("refX", 27).attr("refY", 18).attr("markerWidth", 45).attr("markerHeight", 36).attr("orient", "auto").append("path").attr("d", "M3,9 L3,27 M9,18 Q27,0 45,18 Q27,36 9,18");
+var one_or_more = /* @__PURE__ */ __name((elem, type2, id39) => {
+  elem.append("defs").append("marker").attr("id", id39 + "_" + type2 + "-oneOrMoreStart").attr("class", "marker oneOrMore " + type2).attr("refX", 18).attr("refY", 18).attr("markerWidth", 45).attr("markerHeight", 36).attr("orient", "auto").append("path").attr("d", "M0,18 Q 18,0 36,18 Q 18,36 0,18 M42,9 L42,27");
+  elem.append("defs").append("marker").attr("id", id39 + "_" + type2 + "-oneOrMoreEnd").attr("class", "marker oneOrMore " + type2).attr("refX", 27).attr("refY", 18).attr("markerWidth", 45).attr("markerHeight", 36).attr("orient", "auto").append("path").attr("d", "M3,9 L3,27 M9,18 Q27,0 45,18 Q27,36 9,18");
 }, "one_or_more");
-var zero_or_more = /* @__PURE__ */ __name((elem, type2, id33) => {
-  const startMarker = elem.append("defs").append("marker").attr("id", id33 + "_" + type2 + "-zeroOrMoreStart").attr("class", "marker zeroOrMore " + type2).attr("refX", 18).attr("refY", 18).attr("markerWidth", 57).attr("markerHeight", 36).attr("orient", "auto");
+var zero_or_more = /* @__PURE__ */ __name((elem, type2, id39) => {
+  const startMarker = elem.append("defs").append("marker").attr("id", id39 + "_" + type2 + "-zeroOrMoreStart").attr("class", "marker zeroOrMore " + type2).attr("refX", 18).attr("refY", 18).attr("markerWidth", 57).attr("markerHeight", 36).attr("orient", "auto");
   startMarker.append("circle").attr("fill", "white").attr("cx", 48).attr("cy", 18).attr("r", 6);
   startMarker.append("path").attr("d", "M0,18 Q18,0 36,18 Q18,36 0,18");
-  const endMarker = elem.append("defs").append("marker").attr("id", id33 + "_" + type2 + "-zeroOrMoreEnd").attr("class", "marker zeroOrMore " + type2).attr("refX", 39).attr("refY", 18).attr("markerWidth", 57).attr("markerHeight", 36).attr("orient", "auto");
+  const endMarker = elem.append("defs").append("marker").attr("id", id39 + "_" + type2 + "-zeroOrMoreEnd").attr("class", "marker zeroOrMore " + type2).attr("refX", 39).attr("refY", 18).attr("markerWidth", 57).attr("markerHeight", 36).attr("orient", "auto");
   endMarker.append("circle").attr("fill", "white").attr("cx", 9).attr("cy", 18).attr("r", 6);
   endMarker.append("path").attr("d", "M21,18 Q39,0 57,18 Q39,36 21,18");
 }, "zero_or_more");
-var only_one_neo = /* @__PURE__ */ __name((elem, type2, id33) => {
+var only_one_neo = /* @__PURE__ */ __name((elem, type2, id39) => {
   const config2 = getConfig();
   const { themeVariables } = config2;
   const { strokeWidth } = themeVariables;
-  elem.append("defs").append("marker").attr("id", id33 + "_" + type2 + "-onlyOneStart").attr("class", "marker onlyOne " + type2).attr("refX", 0).attr("refY", 9).attr("markerWidth", 18).attr("markerHeight", 18).attr("orient", "auto").attr("markerUnits", "userSpaceOnUse").append("path").attr("d", "M9,0 L9,18 M15,0 L15,18").attr("stroke-width", `${strokeWidth}`);
-  elem.append("defs").append("marker").attr("id", id33 + "_" + type2 + "-onlyOneEnd").attr("class", "marker onlyOne " + type2).attr("refX", 18).attr("refY", 9).attr("markerWidth", 18).attr("markerHeight", 18).attr("orient", "auto").attr("markerUnits", "userSpaceOnUse").append("path").attr("d", "M3,0 L3,18 M9,0 L9,18").attr("stroke-width", `${strokeWidth}`);
+  elem.append("defs").append("marker").attr("id", id39 + "_" + type2 + "-onlyOneStart").attr("class", "marker onlyOne " + type2).attr("refX", 0).attr("refY", 9).attr("markerWidth", 18).attr("markerHeight", 18).attr("orient", "auto").attr("markerUnits", "userSpaceOnUse").append("path").attr("d", "M9,0 L9,18 M15,0 L15,18").attr("stroke-width", `${strokeWidth}`);
+  elem.append("defs").append("marker").attr("id", id39 + "_" + type2 + "-onlyOneEnd").attr("class", "marker onlyOne " + type2).attr("refX", 18).attr("refY", 9).attr("markerWidth", 18).attr("markerHeight", 18).attr("orient", "auto").attr("markerUnits", "userSpaceOnUse").append("path").attr("d", "M3,0 L3,18 M9,0 L9,18").attr("stroke-width", `${strokeWidth}`);
 }, "only_one_neo");
-var zero_or_one_neo = /* @__PURE__ */ __name((elem, type2, id33) => {
+var zero_or_one_neo = /* @__PURE__ */ __name((elem, type2, id39) => {
   const config2 = getConfig();
   const { themeVariables } = config2;
   const { strokeWidth, mainBkg } = themeVariables;
-  const startMarker = elem.append("defs").append("marker").attr("id", id33 + "_" + type2 + "-zeroOrOneStart").attr("class", "marker zeroOrOne " + type2).attr("refX", 0).attr("refY", 9).attr("markerWidth", 30).attr("markerHeight", 18).attr("orient", "auto").attr("markerUnits", "userSpaceOnUse");
+  const startMarker = elem.append("defs").append("marker").attr("id", id39 + "_" + type2 + "-zeroOrOneStart").attr("class", "marker zeroOrOne " + type2).attr("refX", 0).attr("refY", 9).attr("markerWidth", 30).attr("markerHeight", 18).attr("orient", "auto").attr("markerUnits", "userSpaceOnUse");
   startMarker.append("circle").attr("fill", mainBkg ?? "white").attr("cx", 21).attr("cy", 9).attr("stroke-width", `${strokeWidth}`).attr("r", 6);
   startMarker.append("path").attr("d", "M9,0 L9,18").attr("stroke-width", `${strokeWidth}`);
-  const endMarker = elem.append("defs").append("marker").attr("id", id33 + "_" + type2 + "-zeroOrOneEnd").attr("class", "marker zeroOrOne " + type2).attr("refX", 30).attr("refY", 9).attr("markerWidth", 30).attr("markerHeight", 18).attr("markerUnits", "userSpaceOnUse").attr("orient", "auto");
+  const endMarker = elem.append("defs").append("marker").attr("id", id39 + "_" + type2 + "-zeroOrOneEnd").attr("class", "marker zeroOrOne " + type2).attr("refX", 30).attr("refY", 9).attr("markerWidth", 30).attr("markerHeight", 18).attr("markerUnits", "userSpaceOnUse").attr("orient", "auto");
   endMarker.append("circle").attr("fill", mainBkg ?? "white").attr("cx", 9).attr("cy", 9).attr("stroke-width", `${strokeWidth}`).attr("r", 6);
   endMarker.append("path").attr("d", "M21,0 L21,18").attr("stroke-width", `${strokeWidth}`);
 }, "zero_or_one_neo");
-var one_or_more_neo = /* @__PURE__ */ __name((elem, type2, id33) => {
+var one_or_more_neo = /* @__PURE__ */ __name((elem, type2, id39) => {
   const config2 = getConfig();
   const { themeVariables } = config2;
   const { strokeWidth } = themeVariables;
-  elem.append("defs").append("marker").attr("id", id33 + "_" + type2 + "-oneOrMoreStart").attr("class", "marker oneOrMore " + type2).attr("refX", 18).attr("refY", 18).attr("markerWidth", 45).attr("markerHeight", 36).attr("orient", "auto").attr("markerUnits", "userSpaceOnUse").append("path").attr("d", "M0,18 Q 18,0 36,18 Q 18,36 0,18 M42,9 L42,27").attr("stroke-width", `${strokeWidth}`);
-  elem.append("defs").append("marker").attr("id", id33 + "_" + type2 + "-oneOrMoreEnd").attr("class", "marker oneOrMore " + type2).attr("refX", 27).attr("refY", 18).attr("markerWidth", 45).attr("markerHeight", 36).attr("markerUnits", "userSpaceOnUse").attr("orient", "auto").append("path").attr("d", "M3,9 L3,27 M9,18 Q27,0 45,18 Q27,36 9,18").attr("stroke-width", `${strokeWidth}`);
+  elem.append("defs").append("marker").attr("id", id39 + "_" + type2 + "-oneOrMoreStart").attr("class", "marker oneOrMore " + type2).attr("refX", 18).attr("refY", 18).attr("markerWidth", 45).attr("markerHeight", 36).attr("orient", "auto").attr("markerUnits", "userSpaceOnUse").append("path").attr("d", "M0,18 Q 18,0 36,18 Q 18,36 0,18 M42,9 L42,27").attr("stroke-width", `${strokeWidth}`);
+  elem.append("defs").append("marker").attr("id", id39 + "_" + type2 + "-oneOrMoreEnd").attr("class", "marker oneOrMore " + type2).attr("refX", 27).attr("refY", 18).attr("markerWidth", 45).attr("markerHeight", 36).attr("markerUnits", "userSpaceOnUse").attr("orient", "auto").append("path").attr("d", "M3,9 L3,27 M9,18 Q27,0 45,18 Q27,36 9,18").attr("stroke-width", `${strokeWidth}`);
 }, "one_or_more_neo");
-var zero_or_more_neo = /* @__PURE__ */ __name((elem, type2, id33) => {
+var zero_or_more_neo = /* @__PURE__ */ __name((elem, type2, id39) => {
   const config2 = getConfig();
   const { themeVariables } = config2;
   const { strokeWidth, mainBkg } = themeVariables;
-  const startMarker = elem.append("defs").append("marker").attr("id", id33 + "_" + type2 + "-zeroOrMoreStart").attr("class", "marker zeroOrMore " + type2).attr("refX", 18).attr("refY", 18).attr("markerWidth", 57).attr("markerHeight", 36).attr("markerUnits", "userSpaceOnUse").attr("orient", "auto");
+  const startMarker = elem.append("defs").append("marker").attr("id", id39 + "_" + type2 + "-zeroOrMoreStart").attr("class", "marker zeroOrMore " + type2).attr("refX", 18).attr("refY", 18).attr("markerWidth", 57).attr("markerHeight", 36).attr("markerUnits", "userSpaceOnUse").attr("orient", "auto");
   startMarker.append("circle").attr("fill", mainBkg ?? "white").attr("cx", 45.5).attr("cy", 18).attr("r", 6).attr("stroke-width", `${strokeWidth}`);
   startMarker.append("path").attr("d", "M0,18 Q18,0 36,18 Q18,36 0,18").attr("stroke-width", `${strokeWidth}`);
-  const endMarker = elem.append("defs").append("marker").attr("id", id33 + "_" + type2 + "-zeroOrMoreEnd").attr("class", "marker zeroOrMore " + type2).attr("refX", 39).attr("refY", 18).attr("markerWidth", 57).attr("markerHeight", 36).attr("orient", "auto").attr("markerUnits", "userSpaceOnUse");
+  const endMarker = elem.append("defs").append("marker").attr("id", id39 + "_" + type2 + "-zeroOrMoreEnd").attr("class", "marker zeroOrMore " + type2).attr("refX", 39).attr("refY", 18).attr("markerWidth", 57).attr("markerHeight", 36).attr("orient", "auto").attr("markerUnits", "userSpaceOnUse");
   endMarker.append("circle").attr("fill", mainBkg ?? "white").attr("cx", 11).attr("cy", 18).attr("r", 6).attr("stroke-width", `${strokeWidth}`);
   endMarker.append("path").attr("d", "M21,18 Q39,0 57,18 Q39,36 21,18").attr("stroke-width", `${strokeWidth}`);
 }, "zero_or_more_neo");
-var requirement_arrow = /* @__PURE__ */ __name((elem, type2, id33) => {
-  elem.append("defs").append("marker").attr("id", id33 + "_" + type2 + "-requirement_arrowEnd").attr("refX", 20).attr("refY", 10).attr("markerWidth", 20).attr("markerHeight", 20).attr("orient", "auto").append("path").attr(
+var requirement_arrow = /* @__PURE__ */ __name((elem, type2, id39) => {
+  elem.append("defs").append("marker").attr("id", id39 + "_" + type2 + "-requirement_arrowEnd").attr("refX", 20).attr("refY", 10).attr("markerWidth", 20).attr("markerHeight", 20).attr("orient", "auto").append("path").attr(
     "d",
     `M0,0
       L20,10
@@ -31638,11 +32006,11 @@ var requirement_arrow = /* @__PURE__ */ __name((elem, type2, id33) => {
       L0,20`
   );
 }, "requirement_arrow");
-var requirement_arrow_neo = /* @__PURE__ */ __name((elem, type2, id33) => {
+var requirement_arrow_neo = /* @__PURE__ */ __name((elem, type2, id39) => {
   const config2 = getConfig();
   const { themeVariables } = config2;
   const { strokeWidth } = themeVariables;
-  elem.append("defs").append("marker").attr("id", id33 + "_" + type2 + "-requirement_arrowEnd").attr("refX", 20).attr("refY", 10).attr("markerWidth", 20).attr("markerHeight", 20).attr("orient", "auto").attr("markerUnits", "userSpaceOnUse").attr("stroke-width", `${strokeWidth}`).attr("viewBox", "0 0 25 20").append("path").attr(
+  elem.append("defs").append("marker").attr("id", id39 + "_" + type2 + "-requirement_arrowEnd").attr("refX", 20).attr("refY", 10).attr("markerWidth", 20).attr("markerHeight", 20).attr("orient", "auto").attr("markerUnits", "userSpaceOnUse").attr("stroke-width", `${strokeWidth}`).attr("viewBox", "0 0 25 20").append("path").attr(
     "d",
     `M0,0
       L20,10
@@ -31650,17 +32018,17 @@ var requirement_arrow_neo = /* @__PURE__ */ __name((elem, type2, id33) => {
       L0,20`
   ).attr("stroke-linejoin", "miter");
 }, "requirement_arrow_neo");
-var requirement_contains = /* @__PURE__ */ __name((elem, type2, id33) => {
-  const containsNode = elem.append("defs").append("marker").attr("id", id33 + "_" + type2 + "-requirement_containsStart").attr("refX", 0).attr("refY", 10).attr("markerWidth", 20).attr("markerHeight", 20).attr("orient", "auto").append("g");
+var requirement_contains = /* @__PURE__ */ __name((elem, type2, id39) => {
+  const containsNode = elem.append("defs").append("marker").attr("id", id39 + "_" + type2 + "-requirement_containsStart").attr("refX", 0).attr("refY", 10).attr("markerWidth", 20).attr("markerHeight", 20).attr("orient", "auto").append("g");
   containsNode.append("circle").attr("cx", 10).attr("cy", 10).attr("r", 9).attr("fill", "none");
   containsNode.append("line").attr("x1", 1).attr("x2", 19).attr("y1", 10).attr("y2", 10);
   containsNode.append("line").attr("y1", 1).attr("y2", 19).attr("x1", 10).attr("x2", 10);
 }, "requirement_contains");
-var requirement_contains_neo = /* @__PURE__ */ __name((elem, type2, id33) => {
+var requirement_contains_neo = /* @__PURE__ */ __name((elem, type2, id39) => {
   const config2 = getConfig();
   const { themeVariables } = config2;
   const { strokeWidth } = themeVariables;
-  const containsNode = elem.append("defs").append("marker").attr("id", id33 + "_" + type2 + "-requirement_containsStart").attr("refX", 0).attr("refY", 10).attr("markerWidth", 20).attr("markerHeight", 20).attr("orient", "auto").attr("markerUnits", "userSpaceOnUse").append("g");
+  const containsNode = elem.append("defs").append("marker").attr("id", id39 + "_" + type2 + "-requirement_containsStart").attr("refX", 0).attr("refY", 10).attr("markerWidth", 20).attr("markerHeight", 20).attr("orient", "auto").attr("markerUnits", "userSpaceOnUse").append("g");
   containsNode.append("circle").attr("cx", 10).attr("cy", 10).attr("r", 9).attr("fill", "none");
   containsNode.append("line").attr("x1", 1).attr("x2", 19).attr("y1", 10).attr("y2", 10);
   containsNode.append("line").attr("y1", 1).attr("y2", 19).attr("x1", 10).attr("x2", 10);
@@ -31706,26 +32074,30 @@ var internalHelpers = {
 };
 var layoutAlgorithms = {};
 var registerLayoutLoaders = /* @__PURE__ */ __name((loaders) => {
-  for (const loader33 of loaders) {
-    layoutAlgorithms[loader33.name] = loader33;
+  for (const loader39 of loaders) {
+    layoutAlgorithms[loader39.name] = loader39;
   }
 }, "registerLayoutLoaders");
 var registerDefaultLayoutLoaders = /* @__PURE__ */ __name(() => {
   registerLayoutLoaders([
     {
       name: "dagre",
-      loader: /* @__PURE__ */ __name(async () => await __vitePreload(() => import("./chunk-dagre-BM42HDAG.js"), true ? __vite__mapDeps([0,1,2]) : void 0, import.meta.url), "loader")
+      loader: /* @__PURE__ */ __name(async () => await __vitePreload(() => import("./chunk-dagre-VZM6K2ZE.js"), true ? __vite__mapDeps([0,1,2,3,4]) : void 0, import.meta.url), "loader")
+    },
+    {
+      name: "swimlane",
+      loader: /* @__PURE__ */ __name(async () => await __vitePreload(() => import("./chunk-swimlanes-SLNWSIFB.js"), true ? __vite__mapDeps([5,1,2,3]) : void 0, import.meta.url), "loader")
     },
     ...[
       {
         name: "cose-bilkent",
-        loader: /* @__PURE__ */ __name(async () => await __vitePreload(() => import("./chunk-cose-bilkent-S5V4N54A.js"), true ? __vite__mapDeps([3,4]) : void 0, import.meta.url), "loader")
+        loader: /* @__PURE__ */ __name(async () => await __vitePreload(() => import("./chunk-cose-bilkent-JH36ORCC.js"), true ? __vite__mapDeps([6,7]) : void 0, import.meta.url), "loader")
       }
     ]
   ]);
 }, "registerDefaultLayoutLoaders");
 registerDefaultLayoutLoaders();
-var render$1 = /* @__PURE__ */ __name(async (data4Layout, svg2) => {
+var render$1 = /* @__PURE__ */ __name(async (data4Layout, svg2, positions) => {
   if (!(data4Layout.layoutAlgorithm in layoutAlgorithms)) {
     throw new Error(`Unknown layout algorithm: ${data4Layout.layoutAlgorithm}`);
   }
@@ -31747,9 +32119,15 @@ var render$1 = /* @__PURE__ */ __name(async (data4Layout, svg2) => {
     gradient.append("svg:stop").attr("offset", "0%").attr("stop-color", gradientStart).attr("stop-opacity", 1);
     gradient.append("svg:stop").attr("offset", "100%").attr("stop-color", gradientStop).attr("stop-opacity", 1);
   }
-  return layoutRenderer.render(data4Layout, svg2, internalHelpers, {
-    algorithm: layoutDefinition.algorithm
-  });
+  return layoutRenderer.render(
+    data4Layout,
+    svg2,
+    internalHelpers,
+    {
+      algorithm: layoutDefinition.algorithm
+    },
+    positions
+  );
 }, "render");
 var getRegisteredLayoutAlgorithm = /* @__PURE__ */ __name((algorithm = "", { fallback = "dagre" } = {}) => {
   if (algorithm in layoutAlgorithms) {
@@ -32129,9 +32507,9 @@ var detector = /* @__PURE__ */ __name((txt) => {
 }, "detector");
 var loader = /* @__PURE__ */ __name(async () => {
   const { diagram: diagram2 } = await __vitePreload(async () => {
-    const { diagram: diagram22 } = await import("./chunk-c4Diagram-AAUBKEIU.js");
+    const { diagram: diagram22 } = await import("./chunk-c4Diagram-5PPSVZJV.js");
     return { diagram: diagram22 };
-  }, true ? __vite__mapDeps([5,6]) : void 0, import.meta.url);
+  }, true ? __vite__mapDeps([8,9]) : void 0, import.meta.url);
   return { id, diagram: diagram2 };
 }, "loader");
 var plugin = {
@@ -32150,9 +32528,9 @@ var detector2 = /* @__PURE__ */ __name((txt, config2) => {
 }, "detector");
 var loader2 = /* @__PURE__ */ __name(async () => {
   const { diagram: diagram2 } = await __vitePreload(async () => {
-    const { diagram: diagram22 } = await import("./chunk-flowDiagram-I6XJVG4X.js");
+    const { diagram: diagram22 } = await import("./chunk-flowDiagram-UKHOOZJN.js").then((n2) => n2.f);
     return { diagram: diagram22 };
-  }, true ? __vite__mapDeps([7,8,6,9,10,11]) : void 0, import.meta.url);
+  }, true ? __vite__mapDeps([10,11,12,13,9,14]) : void 0, import.meta.url);
   return { id: id2, diagram: diagram2 };
 }, "loader");
 var plugin2 = {
@@ -32177,9 +32555,9 @@ var detector3 = /* @__PURE__ */ __name((txt, config2) => {
 }, "detector");
 var loader3 = /* @__PURE__ */ __name(async () => {
   const { diagram: diagram2 } = await __vitePreload(async () => {
-    const { diagram: diagram22 } = await import("./chunk-flowDiagram-I6XJVG4X.js");
+    const { diagram: diagram22 } = await import("./chunk-flowDiagram-UKHOOZJN.js").then((n2) => n2.f);
     return { diagram: diagram22 };
-  }, true ? __vite__mapDeps([7,8,6,9,10,11]) : void 0, import.meta.url);
+  }, true ? __vite__mapDeps([10,11,12,13,9,14]) : void 0, import.meta.url);
   return { id: id3, diagram: diagram2 };
 }, "loader");
 var plugin3 = {
@@ -32188,15 +32566,15 @@ var plugin3 = {
   loader: loader3
 };
 var flowDetector_v2_default = plugin3;
-var id4 = "er";
+var id4 = "swimlane";
 var detector4 = /* @__PURE__ */ __name((txt) => {
-  return /^\s*erDiagram/.test(txt);
+  return /^\s*swimlane-beta\b/.test(txt);
 }, "detector");
 var loader4 = /* @__PURE__ */ __name(async () => {
   const { diagram: diagram2 } = await __vitePreload(async () => {
-    const { diagram: diagram22 } = await import("./chunk-erDiagram-TEJ5UH35.js");
+    const { diagram: diagram22 } = await import("./chunk-swimlanesDiagram-ULZ7WXOC.js");
     return { diagram: diagram22 };
-  }, true ? __vite__mapDeps([12,9,10,11]) : void 0, import.meta.url);
+  }, true ? __vite__mapDeps([15,10,11,12,13,9,14]) : void 0, import.meta.url);
   return { id: id4, diagram: diagram2 };
 }, "loader");
 var plugin4 = {
@@ -32204,16 +32582,16 @@ var plugin4 = {
   detector: detector4,
   loader: loader4
 };
-var erDetector_default = plugin4;
-var id5 = "gitGraph";
+var detector_default = plugin4;
+var id5 = "er";
 var detector5 = /* @__PURE__ */ __name((txt) => {
-  return /^\s*gitGraph/.test(txt);
+  return /^\s*erDiagram/.test(txt);
 }, "detector");
 var loader5 = /* @__PURE__ */ __name(async () => {
   const { diagram: diagram2 } = await __vitePreload(async () => {
-    const { diagram: diagram22 } = await import("./chunk-gitGraphDiagram-PVQCEYII.js");
+    const { diagram: diagram22 } = await import("./chunk-erDiagram-JOGREHBK.js");
     return { diagram: diagram22 };
-  }, true ? __vite__mapDeps([13,14,15,16]) : void 0, import.meta.url);
+  }, true ? __vite__mapDeps([16,12,13,14]) : void 0, import.meta.url);
   return { id: id5, diagram: diagram2 };
 }, "loader");
 var plugin5 = {
@@ -32221,14 +32599,14 @@ var plugin5 = {
   detector: detector5,
   loader: loader5
 };
-var gitGraphDetector_default = plugin5;
-var id6 = "gantt";
+var erDetector_default = plugin5;
+var id6 = "gitGraph";
 var detector6 = /* @__PURE__ */ __name((txt) => {
-  return /^\s*gantt/.test(txt);
+  return /^\s*gitGraph/.test(txt);
 }, "detector");
 var loader6 = /* @__PURE__ */ __name(async () => {
   const { diagram: diagram2 } = await __vitePreload(async () => {
-    const { diagram: diagram22 } = await import("./chunk-ganttDiagram-6RSMTGT7.js");
+    const { diagram: diagram22 } = await import("./chunk-gitGraphDiagram-DS77QQ5N.js");
     return { diagram: diagram22 };
   }, true ? __vite__mapDeps([17,18,19,20]) : void 0, import.meta.url);
   return { id: id6, diagram: diagram2 };
@@ -32238,65 +32616,65 @@ var plugin6 = {
   detector: detector6,
   loader: loader6
 };
-var ganttDetector_default = plugin6;
-var id7 = "info";
+var gitGraphDetector_default = plugin6;
+var id7 = "gantt";
 var detector7 = /* @__PURE__ */ __name((txt) => {
-  return /^\s*info/.test(txt);
+  return /^\s*gantt/.test(txt);
 }, "detector");
 var loader7 = /* @__PURE__ */ __name(async () => {
   const { diagram: diagram2 } = await __vitePreload(async () => {
-    const { diagram: diagram22 } = await import("./chunk-infoDiagram-5YYISTIA.js");
+    const { diagram: diagram22 } = await import("./chunk-ganttDiagram-PKOTCBZU.js");
     return { diagram: diagram22 };
-  }, true ? __vite__mapDeps([21,16]) : void 0, import.meta.url);
+  }, true ? __vite__mapDeps([21,22,23,24]) : void 0, import.meta.url);
   return { id: id7, diagram: diagram2 };
 }, "loader");
-var info = {
+var plugin7 = {
   id: id7,
   detector: detector7,
   loader: loader7
 };
-var id8 = "pie";
+var ganttDetector_default = plugin7;
+var id8 = "info";
 var detector8 = /* @__PURE__ */ __name((txt) => {
-  return /^\s*pie/.test(txt);
+  return /^\s*info/.test(txt);
 }, "detector");
 var loader8 = /* @__PURE__ */ __name(async () => {
   const { diagram: diagram2 } = await __vitePreload(async () => {
-    const { diagram: diagram22 } = await import("./chunk-pieDiagram-4H26LBE5.js");
+    const { diagram: diagram22 } = await import("./chunk-infoDiagram-6WML65LV.js");
     return { diagram: diagram22 };
-  }, true ? __vite__mapDeps([22,14,16,23,24,19]) : void 0, import.meta.url);
+  }, true ? __vite__mapDeps([25,20]) : void 0, import.meta.url);
   return { id: id8, diagram: diagram2 };
 }, "loader");
-var pie = {
+var info = {
   id: id8,
   detector: detector8,
   loader: loader8
 };
-var id9 = "quadrantChart";
+var id9 = "pie";
 var detector9 = /* @__PURE__ */ __name((txt) => {
-  return /^\s*quadrantChart/.test(txt);
+  return /^\s*pie/.test(txt);
 }, "detector");
 var loader9 = /* @__PURE__ */ __name(async () => {
   const { diagram: diagram2 } = await __vitePreload(async () => {
-    const { diagram: diagram22 } = await import("./chunk-quadrantDiagram-W4KKPZXB.js");
+    const { diagram: diagram22 } = await import("./chunk-pieDiagram-7S7Q4E2Y.js");
     return { diagram: diagram22 };
-  }, true ? __vite__mapDeps([25,18,19,20]) : void 0, import.meta.url);
+  }, true ? __vite__mapDeps([26,19,20,27,28,23]) : void 0, import.meta.url);
   return { id: id9, diagram: diagram2 };
 }, "loader");
-var plugin7 = {
+var pie = {
   id: id9,
   detector: detector9,
   loader: loader9
 };
-var quadrantDetector_default = plugin7;
-var id10 = "xychart";
+var id10 = "quadrantChart";
 var detector10 = /* @__PURE__ */ __name((txt) => {
-  return /^\s*xychart(-beta)?/.test(txt);
+  return /^\s*quadrantChart/.test(txt);
 }, "detector");
 var loader10 = /* @__PURE__ */ __name(async () => {
   const { diagram: diagram2 } = await __vitePreload(async () => {
-    const { diagram: diagram22 } = await import("./chunk-xychartDiagram-2RQKCTM6.js");
+    const { diagram: diagram22 } = await import("./chunk-quadrantDiagram-CIZ2JOQS.js");
     return { diagram: diagram22 };
-  }, true ? __vite__mapDeps([26,19,24,18,20]) : void 0, import.meta.url);
+  }, true ? __vite__mapDeps([29,22,23,24]) : void 0, import.meta.url);
   return { id: id10, diagram: diagram2 };
 }, "loader");
 var plugin8 = {
@@ -32304,16 +32682,16 @@ var plugin8 = {
   detector: detector10,
   loader: loader10
 };
-var xychartDetector_default = plugin8;
-var id11 = "requirement";
+var quadrantDetector_default = plugin8;
+var id11 = "xychart";
 var detector11 = /* @__PURE__ */ __name((txt) => {
-  return /^\s*requirement(Diagram)?/.test(txt);
+  return /^\s*xychart(-beta)?/.test(txt);
 }, "detector");
 var loader11 = /* @__PURE__ */ __name(async () => {
   const { diagram: diagram2 } = await __vitePreload(async () => {
-    const { diagram: diagram22 } = await import("./chunk-requirementDiagram-4Y6WPE33.js");
+    const { diagram: diagram22 } = await import("./chunk-xychartDiagram-ELKLHX3M.js");
     return { diagram: diagram22 };
-  }, true ? __vite__mapDeps([27,9,10]) : void 0, import.meta.url);
+  }, true ? __vite__mapDeps([30,23,28,22,24]) : void 0, import.meta.url);
   return { id: id11, diagram: diagram2 };
 }, "loader");
 var plugin9 = {
@@ -32321,16 +32699,16 @@ var plugin9 = {
   detector: detector11,
   loader: loader11
 };
-var requirementDetector_default = plugin9;
-var id12 = "sequence";
+var xychartDetector_default = plugin9;
+var id12 = "requirement";
 var detector12 = /* @__PURE__ */ __name((txt) => {
-  return /^\s*sequenceDiagram/.test(txt);
+  return /^\s*requirement(Diagram)?/.test(txt);
 }, "detector");
 var loader12 = /* @__PURE__ */ __name(async () => {
   const { diagram: diagram2 } = await __vitePreload(async () => {
-    const { diagram: diagram22 } = await import("./chunk-sequenceDiagram-3UESZ5HK.js");
+    const { diagram: diagram22 } = await import("./chunk-requirementDiagram-LRYGKXZP.js");
     return { diagram: diagram22 };
-  }, true ? __vite__mapDeps([28,6,15]) : void 0, import.meta.url);
+  }, true ? __vite__mapDeps([31,12,13]) : void 0, import.meta.url);
   return { id: id12, diagram: diagram2 };
 }, "loader");
 var plugin10 = {
@@ -32338,20 +32716,16 @@ var plugin10 = {
   detector: detector12,
   loader: loader12
 };
-var sequenceDetector_default = plugin10;
-var id13 = "class";
-var detector13 = /* @__PURE__ */ __name((txt, config2) => {
-  var _a2;
-  if (((_a2 = config2 == null ? void 0 : config2.class) == null ? void 0 : _a2.defaultRenderer) === "dagre-wrapper") {
-    return false;
-  }
-  return /^\s*classDiagram/.test(txt);
+var requirementDetector_default = plugin10;
+var id13 = "sequence";
+var detector13 = /* @__PURE__ */ __name((txt) => {
+  return /^\s*sequenceDiagram/.test(txt);
 }, "detector");
 var loader13 = /* @__PURE__ */ __name(async () => {
   const { diagram: diagram2 } = await __vitePreload(async () => {
-    const { diagram: diagram22 } = await import("./chunk-classDiagram-4FO5ZUOK.js");
+    const { diagram: diagram22 } = await import("./chunk-sequenceDiagram-SI44F4Z6.js");
     return { diagram: diagram22 };
-  }, true ? __vite__mapDeps([29,30,8,6,9,10]) : void 0, import.meta.url);
+  }, true ? __vite__mapDeps([32,18,9]) : void 0, import.meta.url);
   return { id: id13, diagram: diagram2 };
 }, "loader");
 var plugin11 = {
@@ -32359,20 +32733,20 @@ var plugin11 = {
   detector: detector13,
   loader: loader13
 };
-var classDetector_default = plugin11;
-var id14 = "classDiagram";
+var sequenceDetector_default = plugin11;
+var id14 = "class";
 var detector14 = /* @__PURE__ */ __name((txt, config2) => {
   var _a2;
-  if (/^\s*classDiagram/.test(txt) && ((_a2 = config2 == null ? void 0 : config2.class) == null ? void 0 : _a2.defaultRenderer) === "dagre-wrapper") {
-    return true;
+  if (((_a2 = config2 == null ? void 0 : config2.class) == null ? void 0 : _a2.defaultRenderer) === "dagre-wrapper") {
+    return false;
   }
-  return /^\s*classDiagram-v2/.test(txt);
+  return /^\s*classDiagram/.test(txt);
 }, "detector");
 var loader14 = /* @__PURE__ */ __name(async () => {
   const { diagram: diagram2 } = await __vitePreload(async () => {
-    const { diagram: diagram22 } = await import("./chunk-classDiagram-v2-Q7XG4LA2.js");
+    const { diagram: diagram22 } = await import("./chunk-classDiagram-JCYQIIEL.js");
     return { diagram: diagram22 };
-  }, true ? __vite__mapDeps([31,30,8,6,9,10]) : void 0, import.meta.url);
+  }, true ? __vite__mapDeps([33,34,11,12,13,9]) : void 0, import.meta.url);
   return { id: id14, diagram: diagram2 };
 }, "loader");
 var plugin12 = {
@@ -32380,20 +32754,20 @@ var plugin12 = {
   detector: detector14,
   loader: loader14
 };
-var classDetector_V2_default = plugin12;
-var id15 = "state";
+var classDetector_default = plugin12;
+var id15 = "classDiagram";
 var detector15 = /* @__PURE__ */ __name((txt, config2) => {
   var _a2;
-  if (((_a2 = config2 == null ? void 0 : config2.state) == null ? void 0 : _a2.defaultRenderer) === "dagre-wrapper") {
-    return false;
+  if (/^\s*classDiagram/.test(txt) && ((_a2 = config2 == null ? void 0 : config2.class) == null ? void 0 : _a2.defaultRenderer) === "dagre-wrapper") {
+    return true;
   }
-  return /^\s*stateDiagram/.test(txt);
+  return /^\s*classDiagram-v2/.test(txt);
 }, "detector");
 var loader15 = /* @__PURE__ */ __name(async () => {
   const { diagram: diagram2 } = await __vitePreload(async () => {
-    const { diagram: diagram22 } = await import("./chunk-stateDiagram-AJRCARHV.js");
+    const { diagram: diagram22 } = await import("./chunk-classDiagram-v2-OCEON4UE.js");
     return { diagram: diagram22 };
-  }, true ? __vite__mapDeps([32,33,9,10,1,2]) : void 0, import.meta.url);
+  }, true ? __vite__mapDeps([35,34,11,12,13,9]) : void 0, import.meta.url);
   return { id: id15, diagram: diagram2 };
 }, "loader");
 var plugin13 = {
@@ -32401,9 +32775,30 @@ var plugin13 = {
   detector: detector15,
   loader: loader15
 };
-var stateDetector_default = plugin13;
-var id16 = "stateDiagram";
+var classDetector_V2_default = plugin13;
+var id16 = "state";
 var detector16 = /* @__PURE__ */ __name((txt, config2) => {
+  var _a2;
+  if (((_a2 = config2 == null ? void 0 : config2.state) == null ? void 0 : _a2.defaultRenderer) === "dagre-wrapper") {
+    return false;
+  }
+  return /^\s*stateDiagram/.test(txt);
+}, "detector");
+var loader16 = /* @__PURE__ */ __name(async () => {
+  const { diagram: diagram2 } = await __vitePreload(async () => {
+    const { diagram: diagram22 } = await import("./chunk-stateDiagram-OKZ733FA.js");
+    return { diagram: diagram22 };
+  }, true ? __vite__mapDeps([36,37,12,13,9,2,4,3]) : void 0, import.meta.url);
+  return { id: id16, diagram: diagram2 };
+}, "loader");
+var plugin14 = {
+  id: id16,
+  detector: detector16,
+  loader: loader16
+};
+var stateDetector_default = plugin14;
+var id17 = "stateDiagram";
+var detector17 = /* @__PURE__ */ __name((txt, config2) => {
   var _a2;
   if (/^\s*stateDiagram-v2/.test(txt)) {
     return true;
@@ -32413,28 +32808,11 @@ var detector16 = /* @__PURE__ */ __name((txt, config2) => {
   }
   return false;
 }, "detector");
-var loader16 = /* @__PURE__ */ __name(async () => {
-  const { diagram: diagram2 } = await __vitePreload(async () => {
-    const { diagram: diagram22 } = await import("./chunk-stateDiagram-v2-BHNVJYJU.js");
-    return { diagram: diagram22 };
-  }, true ? __vite__mapDeps([34,33,9,10]) : void 0, import.meta.url);
-  return { id: id16, diagram: diagram2 };
-}, "loader");
-var plugin14 = {
-  id: id16,
-  detector: detector16,
-  loader: loader16
-};
-var stateDetector_V2_default = plugin14;
-var id17 = "journey";
-var detector17 = /* @__PURE__ */ __name((txt) => {
-  return /^\s*journey/.test(txt);
-}, "detector");
 var loader17 = /* @__PURE__ */ __name(async () => {
   const { diagram: diagram2 } = await __vitePreload(async () => {
-    const { diagram: diagram22 } = await import("./chunk-journeyDiagram-JHISSGLW.js");
+    const { diagram: diagram22 } = await import("./chunk-stateDiagram-v2-UEYNNEHI.js");
     return { diagram: diagram22 };
-  }, true ? __vite__mapDeps([35,8,6,23]) : void 0, import.meta.url);
+  }, true ? __vite__mapDeps([38,37,12,13,9]) : void 0, import.meta.url);
   return { id: id17, diagram: diagram2 };
 }, "loader");
 var plugin15 = {
@@ -32442,10 +32820,27 @@ var plugin15 = {
   detector: detector17,
   loader: loader17
 };
-var journeyDetector_default = plugin15;
-var draw = /* @__PURE__ */ __name((_text, id33, version) => {
+var stateDetector_V2_default = plugin15;
+var id18 = "journey";
+var detector18 = /* @__PURE__ */ __name((txt) => {
+  return /^\s*journey/.test(txt);
+}, "detector");
+var loader18 = /* @__PURE__ */ __name(async () => {
+  const { diagram: diagram2 } = await __vitePreload(async () => {
+    const { diagram: diagram22 } = await import("./chunk-journeyDiagram-NVQOT4AX.js");
+    return { diagram: diagram22 };
+  }, true ? __vite__mapDeps([39,11,9,27]) : void 0, import.meta.url);
+  return { id: id18, diagram: diagram2 };
+}, "loader");
+var plugin16 = {
+  id: id18,
+  detector: detector18,
+  loader: loader18
+};
+var journeyDetector_default = plugin16;
+var draw = /* @__PURE__ */ __name((_text, id39, version) => {
   log.debug("rendering svg for syntax error\n");
-  const svg2 = selectSvgElement(id33);
+  const svg2 = selectSvgElement(id39);
   const g2 = svg2.append("g");
   svg2.attr("viewBox", "0 0 2412 512");
   configureSvgSize(svg2, 100, 512, true);
@@ -32488,8 +32883,8 @@ var diagram = {
   }
 };
 var errorDiagram_default = diagram;
-var id18 = "flowchart-elk";
-var detector18 = /* @__PURE__ */ __name((txt, config2 = {}) => {
+var id19 = "flowchart-elk";
+var detector19 = /* @__PURE__ */ __name((txt, config2 = {}) => {
   var _a2;
   if (
     // If diagram explicitly states flowchart-elk
@@ -32501,28 +32896,11 @@ var detector18 = /* @__PURE__ */ __name((txt, config2 = {}) => {
   }
   return false;
 }, "detector");
-var loader18 = /* @__PURE__ */ __name(async () => {
-  const { diagram: diagram2 } = await __vitePreload(async () => {
-    const { diagram: diagram22 } = await import("./chunk-flowDiagram-I6XJVG4X.js");
-    return { diagram: diagram22 };
-  }, true ? __vite__mapDeps([7,8,6,9,10,11]) : void 0, import.meta.url);
-  return { id: id18, diagram: diagram2 };
-}, "loader");
-var plugin16 = {
-  id: id18,
-  detector: detector18,
-  loader: loader18
-};
-var detector_default = plugin16;
-var id19 = "timeline";
-var detector19 = /* @__PURE__ */ __name((txt) => {
-  return /^\s*timeline/.test(txt);
-}, "detector");
 var loader19 = /* @__PURE__ */ __name(async () => {
   const { diagram: diagram2 } = await __vitePreload(async () => {
-    const { diagram: diagram22 } = await import("./chunk-timeline-definition-PNZ67QCA.js");
+    const { diagram: diagram22 } = await import("./chunk-flowDiagram-UKHOOZJN.js").then((n2) => n2.f);
     return { diagram: diagram22 };
-  }, true ? __vite__mapDeps([36,23]) : void 0, import.meta.url);
+  }, true ? __vite__mapDeps([10,11,12,13,9,14]) : void 0, import.meta.url);
   return { id: id19, diagram: diagram2 };
 }, "loader");
 var plugin17 = {
@@ -32531,15 +32909,15 @@ var plugin17 = {
   loader: loader19
 };
 var detector_default2 = plugin17;
-var id20 = "mindmap";
+var id20 = "timeline";
 var detector20 = /* @__PURE__ */ __name((txt) => {
-  return /^\s*mindmap/.test(txt);
+  return /^\s*timeline/.test(txt);
 }, "detector");
 var loader20 = /* @__PURE__ */ __name(async () => {
   const { diagram: diagram2 } = await __vitePreload(async () => {
-    const { diagram: diagram22 } = await import("./chunk-mindmap-definition-RKZ34NQL.js");
+    const { diagram: diagram22 } = await import("./chunk-timeline-definition-Z64GVDOM.js");
     return { diagram: diagram22 };
-  }, true ? __vite__mapDeps([37,9,10]) : void 0, import.meta.url);
+  }, true ? __vite__mapDeps([40,27]) : void 0, import.meta.url);
   return { id: id20, diagram: diagram2 };
 }, "loader");
 var plugin18 = {
@@ -32548,15 +32926,15 @@ var plugin18 = {
   loader: loader20
 };
 var detector_default3 = plugin18;
-var id21 = "kanban";
+var id21 = "mindmap";
 var detector21 = /* @__PURE__ */ __name((txt) => {
-  return /^\s*kanban/.test(txt);
+  return /^\s*mindmap/.test(txt);
 }, "detector");
 var loader21 = /* @__PURE__ */ __name(async () => {
   const { diagram: diagram2 } = await __vitePreload(async () => {
-    const { diagram: diagram22 } = await import("./chunk-kanban-definition-UN3LZRKU.js");
+    const { diagram: diagram22 } = await import("./chunk-mindmap-definition-FAOFIHXS.js");
     return { diagram: diagram22 };
-  }, true ? __vite__mapDeps([38,8]) : void 0, import.meta.url);
+  }, true ? __vite__mapDeps([41,12,13]) : void 0, import.meta.url);
   return { id: id21, diagram: diagram2 };
 }, "loader");
 var plugin19 = {
@@ -32565,15 +32943,15 @@ var plugin19 = {
   loader: loader21
 };
 var detector_default4 = plugin19;
-var id22 = "sankey";
+var id22 = "kanban";
 var detector22 = /* @__PURE__ */ __name((txt) => {
-  return /^\s*sankey(-beta)?/.test(txt);
+  return /^\s*kanban/.test(txt);
 }, "detector");
 var loader22 = /* @__PURE__ */ __name(async () => {
   const { diagram: diagram2 } = await __vitePreload(async () => {
-    const { diagram: diagram22 } = await import("./chunk-sankeyDiagram-5OEKKPKP.js");
+    const { diagram: diagram22 } = await import("./chunk-kanban-definition-27J2QSJJ.js");
     return { diagram: diagram22 };
-  }, true ? __vite__mapDeps([39,24,19]) : void 0, import.meta.url);
+  }, true ? __vite__mapDeps([42,11]) : void 0, import.meta.url);
   return { id: id22, diagram: diagram2 };
 }, "loader");
 var plugin20 = {
@@ -32581,65 +32959,65 @@ var plugin20 = {
   detector: detector22,
   loader: loader22
 };
-var sankeyDetector_default = plugin20;
-var id23 = "packet";
+var detector_default5 = plugin20;
+var id23 = "sankey";
 var detector23 = /* @__PURE__ */ __name((txt) => {
-  return /^\s*packet(-beta)?/.test(txt);
+  return /^\s*sankey(-beta)?/.test(txt);
 }, "detector");
 var loader23 = /* @__PURE__ */ __name(async () => {
   const { diagram: diagram2 } = await __vitePreload(async () => {
-    const { diagram: diagram22 } = await import("./chunk-diagram-LMA3HP47.js");
+    const { diagram: diagram22 } = await import("./chunk-sankeyDiagram-W5VNT64P.js");
     return { diagram: diagram22 };
-  }, true ? __vite__mapDeps([40,14,16]) : void 0, import.meta.url);
+  }, true ? __vite__mapDeps([43,28,23]) : void 0, import.meta.url);
   return { id: id23, diagram: diagram2 };
 }, "loader");
-var packet = {
+var plugin21 = {
   id: id23,
   detector: detector23,
   loader: loader23
 };
-var id24 = "radar";
+var sankeyDetector_default = plugin21;
+var id24 = "packet";
 var detector24 = /* @__PURE__ */ __name((txt) => {
-  return /^\s*radar-beta/.test(txt);
+  return /^\s*packet(-beta)?/.test(txt);
 }, "detector");
 var loader24 = /* @__PURE__ */ __name(async () => {
   const { diagram: diagram2 } = await __vitePreload(async () => {
-    const { diagram: diagram22 } = await import("./chunk-diagram-2AECGRRQ.js");
+    const { diagram: diagram22 } = await import("./chunk-diagram-LBJQPF4R.js");
     return { diagram: diagram22 };
-  }, true ? __vite__mapDeps([41,14,16]) : void 0, import.meta.url);
+  }, true ? __vite__mapDeps([44,19,20]) : void 0, import.meta.url);
   return { id: id24, diagram: diagram2 };
 }, "loader");
-var radar = {
+var packet = {
   id: id24,
   detector: detector24,
   loader: loader24
 };
-var id25 = "block";
+var id25 = "radar";
 var detector25 = /* @__PURE__ */ __name((txt) => {
-  return /^\s*block(-beta)?/.test(txt);
+  return /^\s*radar-beta/.test(txt);
 }, "detector");
 var loader25 = /* @__PURE__ */ __name(async () => {
   const { diagram: diagram2 } = await __vitePreload(async () => {
-    const { diagram: diagram22 } = await import("./chunk-blockDiagram-GPEHLZMM.js");
+    const { diagram: diagram22 } = await import("./chunk-diagram-UB23O5K3.js");
     return { diagram: diagram22 };
-  }, true ? __vite__mapDeps([42,8,1,11]) : void 0, import.meta.url);
+  }, true ? __vite__mapDeps([45,19,20]) : void 0, import.meta.url);
   return { id: id25, diagram: diagram2 };
 }, "loader");
-var plugin21 = {
+var radar = {
   id: id25,
   detector: detector25,
   loader: loader25
 };
-var blockDetector_default = plugin21;
-var id26 = "treeView";
+var id26 = "block";
 var detector26 = /* @__PURE__ */ __name((txt) => {
-  return /^\s*treeView-beta/.test(txt);
+  return /^\s*block(-beta)?/.test(txt);
 }, "detector");
 var loader26 = /* @__PURE__ */ __name(async () => {
   const { diagram: diagram2 } = await __vitePreload(async () => {
-    const { diagram: diagram22 } = await import("./chunk-diagram-5GNKFQAL.js");
+    const { diagram: diagram22 } = await import("./chunk-blockDiagram-VBNYF7ZC.js");
     return { diagram: diagram22 };
-  }, true ? __vite__mapDeps([43,14,15,16]) : void 0, import.meta.url);
+  }, true ? __vite__mapDeps([46,11,2,14]) : void 0, import.meta.url);
   return { id: id26, diagram: diagram2 };
 }, "loader");
 var plugin22 = {
@@ -32647,107 +33025,204 @@ var plugin22 = {
   detector: detector26,
   loader: loader26
 };
-var detector_default5 = plugin22;
-var id27 = "architecture";
+var blockDetector_default = plugin22;
+var id27 = "treeView";
 var detector27 = /* @__PURE__ */ __name((txt) => {
-  return /^\s*architecture/.test(txt);
+  return /^\s*treeView-beta/.test(txt);
 }, "detector");
 var loader27 = /* @__PURE__ */ __name(async () => {
   const { diagram: diagram2 } = await __vitePreload(async () => {
-    const { diagram: diagram22 } = await import("./chunk-architectureDiagram-3BPJPVTR.js");
+    const { diagram: diagram22 } = await import("./chunk-diagram-7IWD3JNH.js");
     return { diagram: diagram22 };
-  }, true ? __vite__mapDeps([44,14,16,4]) : void 0, import.meta.url);
+  }, true ? __vite__mapDeps([47,18,19,20]) : void 0, import.meta.url);
   return { id: id27, diagram: diagram2 };
 }, "loader");
-var architecture = {
+var plugin23 = {
   id: id27,
   detector: detector27,
   loader: loader27
 };
-var architectureDetector_default = architecture;
-var id28 = "eventmodeling";
+var detector_default6 = plugin23;
+var id28 = "architecture";
 var detector28 = /* @__PURE__ */ __name((txt) => {
-  return /^\s*eventmodeling/.test(txt);
+  return /^\s*architecture/.test(txt);
 }, "detector");
 var loader28 = /* @__PURE__ */ __name(async () => {
   const { diagram: diagram2 } = await __vitePreload(async () => {
-    const { diagram: diagram22 } = await import("./chunk-diagram-KO2AKTUF.js");
+    const { diagram: diagram22 } = await import("./chunk-architectureDiagram-T3A2C74G.js");
     return { diagram: diagram22 };
-  }, true ? __vite__mapDeps([45,14,16]) : void 0, import.meta.url);
+  }, true ? __vite__mapDeps([48,19,20,7]) : void 0, import.meta.url);
   return { id: id28, diagram: diagram2 };
 }, "loader");
-var plugin23 = {
+var architecture = {
   id: id28,
   detector: detector28,
   loader: loader28
 };
-var detector_default6 = plugin23;
-var id29 = "ishikawa";
+var architectureDetector_default = architecture;
+var id29 = "eventmodeling";
 var detector29 = /* @__PURE__ */ __name((txt) => {
-  return /^\s*ishikawa(-beta)?\b/i.test(txt);
+  return /^\s*eventmodeling/.test(txt);
 }, "detector");
 var loader29 = /* @__PURE__ */ __name(async () => {
   const { diagram: diagram2 } = await __vitePreload(async () => {
-    const { diagram: diagram22 } = await import("./chunk-ishikawaDiagram-YF4QCWOH.js");
+    const { diagram: diagram22 } = await import("./chunk-diagram-B4RE2ZJO.js");
     return { diagram: diagram22 };
-  }, true ? [] : void 0, import.meta.url);
+  }, true ? __vite__mapDeps([49,19,20]) : void 0, import.meta.url);
   return { id: id29, diagram: diagram2 };
 }, "loader");
-var ishikawa = {
+var plugin24 = {
   id: id29,
   detector: detector29,
   loader: loader29
 };
-var id30 = "venn";
+var detector_default7 = plugin24;
+var id30 = "ishikawa";
 var detector30 = /* @__PURE__ */ __name((txt) => {
-  return /^\s*venn-beta/.test(txt);
+  return /^\s*ishikawa(-beta)?\b/i.test(txt);
 }, "detector");
 var loader30 = /* @__PURE__ */ __name(async () => {
   const { diagram: diagram2 } = await __vitePreload(async () => {
-    const { diagram: diagram22 } = await import("./chunk-vennDiagram-CIIHVFJN.js");
+    const { diagram: diagram22 } = await import("./chunk-ishikawaDiagram-WSZJBQD7.js");
     return { diagram: diagram22 };
   }, true ? [] : void 0, import.meta.url);
   return { id: id30, diagram: diagram2 };
 }, "loader");
-var plugin24 = {
+var ishikawa = {
   id: id30,
   detector: detector30,
   loader: loader30
 };
-var vennDetector_default = plugin24;
-var id31 = "treemap";
+var id31 = "venn";
 var detector31 = /* @__PURE__ */ __name((txt) => {
-  return /^\s*treemap/.test(txt);
+  return /^\s*venn-beta/.test(txt);
 }, "detector");
 var loader31 = /* @__PURE__ */ __name(async () => {
   const { diagram: diagram2 } = await __vitePreload(async () => {
-    const { diagram: diagram22 } = await import("./chunk-diagram-OG6HWLK6.js");
+    const { diagram: diagram22 } = await import("./chunk-vennDiagram-T6HMQDX7.js");
     return { diagram: diagram22 };
-  }, true ? __vite__mapDeps([46,10,14,16,20,24,19]) : void 0, import.meta.url);
+  }, true ? [] : void 0, import.meta.url);
   return { id: id31, diagram: diagram2 };
 }, "loader");
-var treemap = {
+var plugin25 = {
   id: id31,
   detector: detector31,
   loader: loader31
 };
-var id32 = "wardley-beta";
-var detector32 = /* @__PURE__ */ __name((text2) => {
-  return /^\s*wardley-beta/i.test(text2);
+var vennDetector_default = plugin25;
+var id32 = "treemap";
+var detector32 = /* @__PURE__ */ __name((txt) => {
+  return /^\s*treemap/.test(txt);
 }, "detector");
 var loader32 = /* @__PURE__ */ __name(async () => {
   const { diagram: diagram2 } = await __vitePreload(async () => {
-    const { diagram: diagram22 } = await import("./chunk-wardleyDiagram-YWT4CUSO.js");
+    const { diagram: diagram22 } = await import("./chunk-diagram-Q27KOJAE.js");
     return { diagram: diagram22 };
-  }, true ? __vite__mapDeps([47,14,16]) : void 0, import.meta.url);
+  }, true ? __vite__mapDeps([50,19,13,20,24,28,23]) : void 0, import.meta.url);
   return { id: id32, diagram: diagram2 };
 }, "loader");
-var plugin25 = {
+var treemap = {
   id: id32,
   detector: detector32,
   loader: loader32
 };
-var wardleyDetector_default = plugin25;
+var id33 = "wardley";
+var detector33 = /* @__PURE__ */ __name((text2) => {
+  return /^\s*wardley-beta/i.test(text2);
+}, "detector");
+var loader33 = /* @__PURE__ */ __name(async () => {
+  const { diagram: diagram2 } = await __vitePreload(async () => {
+    const { diagram: diagram22 } = await import("./chunk-wardleyDiagram-T6FBY63Y.js");
+    return { diagram: diagram22 };
+  }, true ? __vite__mapDeps([51,19,20]) : void 0, import.meta.url);
+  return { id: id33, diagram: diagram2 };
+}, "loader");
+var plugin26 = {
+  id: id33,
+  detector: detector33,
+  loader: loader33
+};
+var wardleyDetector_default = plugin26;
+var id34 = "cynefin";
+var detector34 = /* @__PURE__ */ __name((txt) => {
+  return /^\s*cynefin-beta(?:[\s:]|$)/.test(txt);
+}, "detector");
+var loader34 = /* @__PURE__ */ __name(async () => {
+  const { diagram: diagram2 } = await __vitePreload(async () => {
+    const { diagram: diagram22 } = await import("./chunk-cynefinDiagram-MW4NZA55.js");
+    return { diagram: diagram22 };
+  }, true ? __vite__mapDeps([52,19,20]) : void 0, import.meta.url);
+  return { id: id34, diagram: diagram2 };
+}, "loader");
+var cynefin = {
+  id: id34,
+  detector: detector34,
+  loader: loader34
+};
+var id35 = "railroad";
+var detector35 = /* @__PURE__ */ __name((txt) => {
+  return /^\s*railroad-beta/i.test(txt);
+}, "detector");
+var loader35 = /* @__PURE__ */ __name(async () => {
+  const { diagram: diagram2 } = await __vitePreload(async () => {
+    const { diagram: diagram22 } = await import("./chunk-railroadDiagram-AXF67PYL.js");
+    return { diagram: diagram22 };
+  }, true ? __vite__mapDeps([53,54,19,20]) : void 0, import.meta.url);
+  return { id: id35, diagram: diagram2 };
+}, "loader");
+var railroad = {
+  id: id35,
+  detector: detector35,
+  loader: loader35
+};
+var id36 = "railroadEbnf";
+var detector36 = /* @__PURE__ */ __name((txt) => {
+  return /^\s*railroad-ebnf-beta/i.test(txt);
+}, "detector");
+var loader36 = /* @__PURE__ */ __name(async () => {
+  const { diagram: diagram2 } = await __vitePreload(async () => {
+    const { diagram: diagram22 } = await import("./chunk-ebnfDiagram-BXEA7PRR.js");
+    return { diagram: diagram22 };
+  }, true ? __vite__mapDeps([55,54,19,20]) : void 0, import.meta.url);
+  return { id: id36, diagram: diagram2 };
+}, "loader");
+var railroadEbnf = {
+  id: id36,
+  detector: detector36,
+  loader: loader36
+};
+var id37 = "railroadAbnf";
+var detector37 = /* @__PURE__ */ __name((txt) => {
+  return /^\s*railroad-abnf-beta/i.test(txt);
+}, "detector");
+var loader37 = /* @__PURE__ */ __name(async () => {
+  const { diagram: diagram2 } = await __vitePreload(async () => {
+    const { diagram: diagram22 } = await import("./chunk-abnfDiagram-N423BO3Z.js");
+    return { diagram: diagram22 };
+  }, true ? __vite__mapDeps([56,54,19,20]) : void 0, import.meta.url);
+  return { id: id37, diagram: diagram2 };
+}, "loader");
+var railroadAbnf = {
+  id: id37,
+  detector: detector37,
+  loader: loader37
+};
+var id38 = "railroadPeg";
+var detector38 = /* @__PURE__ */ __name((txt) => {
+  return /^\s*railroad-peg-beta/i.test(txt);
+}, "detector");
+var loader38 = /* @__PURE__ */ __name(async () => {
+  const { diagram: diagram2 } = await __vitePreload(async () => {
+    const { diagram: diagram22 } = await import("./chunk-pegDiagram-VL7TDLO6.js");
+    return { diagram: diagram22 };
+  }, true ? __vite__mapDeps([57,54,19,20]) : void 0, import.meta.url);
+  return { id: id38, diagram: diagram2 };
+}, "loader");
+var railroadPeg = {
+  id: id38,
+  detector: detector38,
+  loader: loader38
+};
 var hasLoadedDiagrams = false;
 var addDiagrams = /* @__PURE__ */ __name(() => {
   if (hasLoadedDiagrams) {
@@ -32786,11 +33261,11 @@ var addDiagrams = /* @__PURE__ */ __name(() => {
     }
   );
   {
-    registerLazyLoadedDiagrams(detector_default, detector_default3, architectureDetector_default);
+    registerLazyLoadedDiagrams(detector_default2, detector_default4, architectureDetector_default);
   }
   registerLazyLoadedDiagrams(
     c4Detector_default,
-    detector_default4,
+    detector_default5,
     classDetector_V2_default,
     classDetector_default,
     erDetector_default,
@@ -32799,9 +33274,10 @@ var addDiagrams = /* @__PURE__ */ __name(() => {
     pie,
     requirementDetector_default,
     sequenceDetector_default,
+    detector_default,
     flowDetector_v2_default,
     flowDetector_default,
-    detector_default2,
+    detector_default3,
     gitGraphDetector_default,
     stateDetector_V2_default,
     stateDetector_default,
@@ -32811,28 +33287,33 @@ var addDiagrams = /* @__PURE__ */ __name(() => {
     packet,
     xychartDetector_default,
     blockDetector_default,
+    detector_default7,
     detector_default6,
-    detector_default5,
     radar,
     ishikawa,
     treemap,
+    railroad,
+    railroadEbnf,
+    railroadAbnf,
+    railroadPeg,
     vennDetector_default,
-    wardleyDetector_default
+    wardleyDetector_default,
+    cynefin
   );
 }, "addDiagrams");
 var loadRegisteredDiagrams = /* @__PURE__ */ __name(async () => {
   log.debug(`Loading registered diagrams`);
   const results = await Promise.allSettled(
-    Object.entries(detectors).map(async ([key, { detector: detector33, loader: loader33 }]) => {
-      if (!loader33) {
+    Object.entries(detectors).map(async ([key, { detector: detector39, loader: loader39 }]) => {
+      if (!loader39) {
         return;
       }
       try {
         getDiagram(key);
       } catch {
         try {
-          const { diagram: diagram2, id: id33 } = await loader33();
-          registerDiagram(id33, diagram2, detector33);
+          const { diagram: diagram2, id: id39 } = await loader39();
+          registerDiagram(id39, diagram2, detector39);
         } catch (err) {
           log.error(`Failed to load external diagram with key ${key}. Removing from detectors.`);
           delete detectors[key];
@@ -32890,12 +33371,12 @@ var Diagram = (_p = class {
     try {
       getDiagram(type2);
     } catch {
-      const loader33 = getDiagramLoader(type2);
-      if (!loader33) {
+      const loader39 = getDiagramLoader(type2);
+      if (!loader39) {
         throw new UnknownDiagramError(`Diagram ${type2} not found.`);
       }
-      const { id: id33, diagram: diagram2 } = await loader33();
-      registerDiagram(id33, diagram2);
+      const { id: id39, diagram: diagram2 } = await loader39();
+      registerDiagram(id39, diagram2);
     }
     const { db, parser, renderer: renderer2, init: init2 } = getDiagram(type2);
     if (parser.parser) {
@@ -32909,8 +33390,8 @@ var Diagram = (_p = class {
     await parser.parse(text2);
     return new _p(type2, text2, db, parser, renderer2);
   }
-  async render(id33, version) {
-    await this.renderer.draw(this.text, id33, version, this);
+  async render(id39, version) {
+    await this.renderer.draw(this.text, id39, version, this);
   }
   getParser() {
     return this.parser;
@@ -32937,7 +33418,9 @@ function extractFrontMatter(text2) {
       metadata: {}
     };
   }
-  let parsed = load(matches[1], {
+  const indent = matches[1];
+  const yamlBody = indent ? matches[2].split("\n").map((line2) => line2.startsWith(indent) ? line2.slice(indent.length) : line2).join("\n") : matches[2];
+  let parsed = load(yamlBody, {
     // To support config, we need JSON schema.
     // https://www.yaml.org/spec/1.2/spec.html#id2803231
     schema: JSON_SCHEMA
@@ -33111,7 +33594,26 @@ var compileCSS = /* @__PURE__ */ __name((namespace2, css) => {
             return;
           }
           element.props = element.props.map((prop) => {
-            if (!prop.startsWith(namespace2)) {
+            if (prop === namespace2 && Array.isArray(element.children) && element.children.every((child) => {
+              if (child.type !== "decl") {
+                return false;
+              }
+              const allowedProps = /* @__PURE__ */ new Set([
+                "font-family",
+                "font-size",
+                "fill"
+              ]);
+              return allowedProps.has(child.props);
+            })) {
+              return prop;
+            }
+            const alreadyNamespaced = (
+              // If the prop already starts with the namespace followed by a space or >, then it's already namespaced.
+              (prop.startsWith(`${namespace2} `) || prop.startsWith(`${namespace2}>`)) && // Column combinators are not yet widely supported, it's not yet compressed to `${namespace}||`,
+              // so we need to add an extra check for that
+              !prop.startsWith(`${namespace2} ||`)
+            );
+            if (!alreadyNamespaced) {
               return `${namespace2} ${prop}`;
             }
             return prop;
@@ -33170,13 +33672,13 @@ var putIntoIFrame = /* @__PURE__ */ __name((svgCode = "", svgElement) => {
   ${IFRAME_NOT_SUPPORTED_MSG}
 </iframe>`;
 }, "putIntoIFrame");
-var appendDivSvgG = /* @__PURE__ */ __name((parentRoot, id33, enclosingDivId, divStyle, svgXlink) => {
+var appendDivSvgG = /* @__PURE__ */ __name((parentRoot, id39, enclosingDivId, divStyle, svgXlink) => {
   const enclosingDiv = parentRoot.append("div");
   enclosingDiv.attr("id", enclosingDivId);
   if (divStyle) {
     enclosingDiv.attr("style", divStyle);
   }
-  const svgNode2 = enclosingDiv.append("svg").attr("id", id33).attr("width", "100%").attr("xmlns", XMLNS_SVG_STD);
+  const svgNode2 = enclosingDiv.append("svg").attr("id", id39).attr("width", "100%").attr("xmlns", XMLNS_SVG_STD);
   if (svgXlink) {
     svgNode2.attr("xmlns:xlink", svgXlink);
   }
@@ -33187,13 +33689,13 @@ function sandboxedIframe(parentNode, iFrameId) {
   return parentNode.append("iframe").attr("id", iFrameId).attr("style", "width: 100%; height: 100%;").attr("sandbox", "");
 }
 __name(sandboxedIframe, "sandboxedIframe");
-var removeExistingElements = /* @__PURE__ */ __name((doc, id33, divId, iFrameId) => {
+var removeExistingElements = /* @__PURE__ */ __name((doc, id39, divId, iFrameId) => {
   var _a2, _b2, _c2;
-  (_a2 = doc.getElementById(id33)) == null ? void 0 : _a2.remove();
+  (_a2 = doc.getElementById(id39)) == null ? void 0 : _a2.remove();
   (_b2 = doc.getElementById(divId)) == null ? void 0 : _b2.remove();
   (_c2 = doc.getElementById(iFrameId)) == null ? void 0 : _c2.remove();
 }, "removeExistingElements");
-var render = /* @__PURE__ */ __name(async function(id33, text2, svgContainingElement) {
+var render = /* @__PURE__ */ __name(async function(id39, text2, svgContainingElement) {
   var _a2, _b2, _c2, _d2, _e3, _f2;
   addDiagrams();
   const processed = processAndSetConfigs(text2);
@@ -33203,10 +33705,10 @@ var render = /* @__PURE__ */ __name(async function(id33, text2, svgContainingEle
   if (text2.length > ((config2 == null ? void 0 : config2.maxTextSize) ?? MAX_TEXTLENGTH)) {
     text2 = MAX_TEXTLENGTH_EXCEEDED_MSG;
   }
-  const idSelector = `#${id33}`;
-  const iFrameID = "i" + id33;
+  const idSelector = `#${id39}`;
+  const iFrameID = "i" + id39;
   const iFrameID_selector = "#" + iFrameID;
-  const enclosingDivID = "d" + id33;
+  const enclosingDivID = "d" + id39;
   const enclosingDivID_selector = "#" + enclosingDivID;
   const removeTempElements = /* @__PURE__ */ __name(() => {
     const tmpElementSelector = isSandboxed ? iFrameID_selector : enclosingDivID_selector;
@@ -33230,9 +33732,9 @@ var render = /* @__PURE__ */ __name(async function(id33, text2, svgContainingEle
     } else {
       root2 = select(svgContainingElement);
     }
-    appendDivSvgG(root2, id33, enclosingDivID, `font-family: ${fontFamily}`, XMLNS_XLINK_STD);
+    appendDivSvgG(root2, id39, enclosingDivID, `font-family: ${fontFamily}`, XMLNS_XLINK_STD);
   } else {
-    removeExistingElements(document, id33, enclosingDivID, iFrameID);
+    removeExistingElements(document, id39, enclosingDivID, iFrameID);
     if (isSandboxed) {
       const iframe = sandboxedIframe(select(document.body), iFrameID);
       root2 = select(iframe.nodes()[0].contentDocument.body);
@@ -33240,7 +33742,7 @@ var render = /* @__PURE__ */ __name(async function(id33, text2, svgContainingEle
     } else {
       root2 = select("body");
     }
-    appendDivSvgG(root2, id33, enclosingDivID);
+    appendDivSvgG(root2, id39, enclosingDivID);
   }
   let diag;
   let parseEncounteredException;
@@ -33264,12 +33766,12 @@ var render = /* @__PURE__ */ __name(async function(id33, text2, svgContainingEle
   style1.innerHTML = rules;
   svg2.insertBefore(style1, firstChild);
   try {
-    await diag.renderer.draw(text2, id33, "11.15.0", diag);
+    await diag.renderer.draw(text2, id39, "11.16.1", diag);
   } catch (e2) {
     if (config2.suppressErrorRendering) {
       removeTempElements();
     } else {
-      errorRenderer_default.draw(text2, id33, "11.15.0");
+      errorRenderer_default.draw(text2, id39, "11.16.1");
     }
     throw e2;
   }
@@ -33277,7 +33779,7 @@ var render = /* @__PURE__ */ __name(async function(id33, text2, svgContainingEle
   const a11yTitle = (_d2 = (_c2 = diag.db).getAccTitle) == null ? void 0 : _d2.call(_c2);
   const a11yDescr = (_f2 = (_e3 = diag.db).getAccDescription) == null ? void 0 : _f2.call(_e3);
   addA11yInfo(diagramType, svgNode2, a11yTitle, a11yDescr);
-  root2.select(`[id="${id33}"]`).selectAll("foreignobject > *").attr("xmlns", XMLNS_XHTML_STD);
+  root2.select(`[id="${id39}"]`).selectAll("foreignobject > *").attr("xmlns", XMLNS_XHTML_STD);
   let svgCode = root2.select(enclosingDivID_selector).node().innerHTML;
   log.debug("config.arrowMarkerAbsolute", config2.arrowMarkerAbsolute);
   svgCode = cleanUpSvgCode(svgCode, isSandboxed, evaluate(config2.arrowMarkerAbsolute));
@@ -33339,6 +33841,10 @@ var mermaidAPI = Object.freeze({
   getDiagramFromText,
   initialize,
   getConfig,
+  /**
+   * @deprecated This function does nothing. It will be overwritten by the next
+   *             call to {@link render} or {@link parse}.
+   */
   setConfig,
   getSiteConfig,
   updateSiteConfig,
@@ -33418,7 +33924,7 @@ var runThrowsErrors = /* @__PURE__ */ __name(async function({ postRenderCallback
       continue;
     }
     element.setAttribute("data-processed", "true");
-    const id33 = `mermaid-${idGenerator.next()}`;
+    const id39 = `mermaid-${idGenerator.next()}`;
     txt = element.innerHTML;
     txt = dedent(utils_default.entityDecode(txt)).trim().replace(/<br\s*\/?>/gi, "<br/>");
     const init2 = utils_default.detectInit(txt);
@@ -33426,10 +33932,10 @@ var runThrowsErrors = /* @__PURE__ */ __name(async function({ postRenderCallback
       log.debug("Detected early reinit: ", init2);
     }
     try {
-      const { svg: svg2, bindFunctions } = await render2(id33, txt, element);
+      const { svg: svg2, bindFunctions } = await render2(id39, txt, element);
       element.innerHTML = svg2;
       if (postRenderCallback) {
-        await postRenderCallback(id33);
+        await postRenderCallback(id39);
       }
       if (bindFunctions) {
         bindFunctions(element);
@@ -33525,10 +34031,10 @@ var parse2 = /* @__PURE__ */ __name(async (text2, parseOptions) => {
     executeQueue().catch(reject);
   });
 }, "parse");
-var render2 = /* @__PURE__ */ __name((id33, text2, container) => {
+var render2 = /* @__PURE__ */ __name((id39, text2, container) => {
   return new Promise((resolve, reject) => {
     const performCall = /* @__PURE__ */ __name(() => new Promise((res, rej) => {
-      mermaidAPI.render(id33, text2, container).then(
+      mermaidAPI.render(id39, text2, container).then(
         (r2) => {
           res(r2);
           resolve(r2);
@@ -33547,8 +34053,8 @@ var render2 = /* @__PURE__ */ __name((id33, text2, container) => {
   });
 }, "render");
 var getRegisteredDiagramsMetadata = /* @__PURE__ */ __name(() => {
-  return Object.keys(detectors).map((id33) => ({
-    id: id33
+  return Object.keys(detectors).map((id39) => ({
+    id: id39
   }));
 }, "getRegisteredDiagramsMetadata");
 var mermaid = {
@@ -33644,7 +34150,7 @@ function ensureMermaid(theme) {
   });
 }
 let mermaidRenderQueue = Promise.resolve();
-function renderMermaidSvg(id33, code, theme) {
+function renderMermaidSvg(id39, code, theme) {
   const task = async () => {
     ensureMermaid(theme);
     const container = document.createElement("div");
@@ -33652,7 +34158,7 @@ function renderMermaidSvg(id33, code, theme) {
     container.style.position = "absolute";
     document.body.appendChild(container);
     try {
-      const result = await mermaid_default.render(id33, code, container);
+      const result = await mermaid_default.render(id39, code, container);
       return result.svg;
     } finally {
       if (container.parentNode === document.body) {
@@ -33693,8 +34199,8 @@ function DiagramViewer({ diagram: diagram2, theme }) {
     if (!isMermaid || mode !== "render") return;
     let cancelled = false;
     setErr("");
-    const id33 = `m-${rid.replace(/[:]/g, "")}-${theme}-${renderNonceRef.current++}`;
-    renderMermaidSvg(id33, diagram2.code, theme).then((nextSvg) => {
+    const id39 = `m-${rid.replace(/[:]/g, "")}-${theme}-${renderNonceRef.current++}`;
+    renderMermaidSvg(id39, diagram2.code, theme).then((nextSvg) => {
       if (cancelled) return;
       setSvg(nextSvg);
     }).catch((e2) => {
@@ -37811,9 +38317,9 @@ function FeedbackPanel({
       return matchesStatus && matchesType && matchesSearch;
     });
   }, [feedback, statusFilter, typeFilter, searchQuery]);
-  const handleCopy = (id33) => {
-    void navigator.clipboard.writeText(id33);
-    setCopiedId(id33);
+  const handleCopy = (id39) => {
+    void navigator.clipboard.writeText(id39);
+    setCopiedId(id39);
     setTimeout(() => setCopiedId(null), 2e3);
   };
   if (!workspace) {
@@ -38238,6 +38744,12 @@ const bookLanguageOptions = [
   { value: "th", label: "ไทย" },
   { value: "id", label: "Bahasa Indonesia" }
 ];
+const rightsBasisOptions = [
+  { value: "lawfully_acquired_private_use", label: "Lawfully acquired copy for private use" },
+  { value: "author_owned", label: "I am the author or rights holder" },
+  { value: "licensed", label: "I have a licence or permission" },
+  { value: "public_domain", label: "Public domain or open licence" }
+];
 function LibraryWorkspace({ workspace, onBookImported, onOpenBookNote }) {
   var _a2;
   const fileInputRef = reactExports.useRef(null);
@@ -38246,6 +38758,7 @@ function LibraryWorkspace({ workspace, onBookImported, onOpenBookNote }) {
   const [title, setTitle] = reactExports.useState("");
   const [editionLabel, setEditionLabel] = reactExports.useState("Imported edition");
   const [language, setLanguage] = reactExports.useState("en");
+  const [rightsBasis, setRightsBasis] = reactExports.useState("lawfully_acquired_private_use");
   const [source, setSource] = reactExports.useState("");
   const [sourceFile, setSourceFile] = reactExports.useState(null);
   const [sourceFormat, setSourceFormat] = reactExports.useState("markdown");
@@ -38268,6 +38781,7 @@ function LibraryWorkspace({ workspace, onBookImported, onOpenBookNote }) {
     setTitle("");
     setEditionLabel("Imported edition");
     setLanguage("en");
+    setRightsBasis("lawfully_acquired_private_use");
     setSource("");
     setSourceFile(null);
     setSourceFormat("markdown");
@@ -38299,7 +38813,7 @@ function LibraryWorkspace({ workspace, onBookImported, onOpenBookNote }) {
     setTitle(file.name.replace(/\.(pdf|epub|md|markdown|txt)$/i, ""));
     setError("");
     if (format2 === "markdown" || format2 === "text") {
-      void file.text().then(setSource).catch((reason) => setError(messageOf$1(reason)));
+      void file.text().then(setSource).catch((reason) => setError(messageOf$2(reason)));
     } else {
       setSource("");
     }
@@ -38321,7 +38835,8 @@ function LibraryWorkspace({ workspace, onBookImported, onOpenBookNote }) {
         organization_id: libraryKind === "organization" ? organizationID.trim() : void 0,
         title: title.trim(),
         edition_label: editionLabel.trim(),
-        language: language.trim()
+        language: language.trim(),
+        rights_basis: rightsBasis
       };
       const imported = sourceFile ? await importLibraryBook({ ...metadata, format: sourceFormat, source_file: sourceFile }) : await importLibraryBook({ ...metadata, format: sourceFormat === "text" ? "text" : "markdown", markdown: source });
       setJob(imported);
@@ -38348,12 +38863,12 @@ function LibraryWorkspace({ workspace, onBookImported, onOpenBookNote }) {
           });
           setImportedNote(createdNote);
         } catch (noteReason) {
-          setError(`Book imported, but its note could not be created: ${messageOf$1(noteReason)}`);
+          setError(`Book imported, but its note could not be created: ${messageOf$2(noteReason)}`);
         }
       }
     } catch (reason) {
       setIndexStatus("failed");
-      setError(messageOf$1(reason));
+      setError(messageOf$2(reason));
     } finally {
       setBusy("");
     }
@@ -38382,7 +38897,7 @@ function LibraryWorkspace({ workspace, onBookImported, onOpenBookNote }) {
     } catch (reason) {
       setEvidence([]);
       setQueried(true);
-      setError(messageOf$1(reason));
+      setError(messageOf$2(reason));
     } finally {
       setBusy("");
     }
@@ -38406,7 +38921,7 @@ function LibraryWorkspace({ workspace, onBookImported, onOpenBookNote }) {
       setEvidence(response.results ?? evidence);
       setProposal(response.proposal ?? null);
     } catch (reason) {
-      setError(messageOf$1(reason));
+      setError(messageOf$2(reason));
     } finally {
       setBusy("");
     }
@@ -38418,7 +38933,7 @@ function LibraryWorkspace({ workspace, onBookImported, onOpenBookNote }) {
     try {
       setProposal(await reviewLibraryMemory({ workspace, proposal_id: proposal.id, decision }));
     } catch (reason) {
-      setError(messageOf$1(reason));
+      setError(messageOf$2(reason));
     } finally {
       setBusy("");
     }
@@ -38486,6 +39001,10 @@ function LibraryWorkspace({ workspace, onBookImported, onOpenBookNote }) {
         /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [
           "Language",
           /* @__PURE__ */ jsxRuntimeExports.jsx("select", { value: language, onChange: (event) => setLanguage(event.target.value), children: bookLanguageOptions.map((option) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: option.value, children: option.label }, option.value)) })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [
+          "Rights basis",
+          /* @__PURE__ */ jsxRuntimeExports.jsx("select", { value: rightsBasis, onChange: (event) => setRightsBasis(event.target.value), children: rightsBasisOptions.map((option) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: option.value, children: option.label }, option.value)) })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [
           "Library",
@@ -38654,7 +39173,7 @@ function Fact({ label, value }) {
     /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { title: value, children: value })
   ] });
 }
-function messageOf$1(reason) {
+function messageOf$2(reason) {
   return reason instanceof Error ? reason.message : String(reason);
 }
 function bookFormatForFile(filename) {
@@ -38727,7 +39246,7 @@ function NotebookWorkspace({
     setActiveNote(null);
     setOpenTabs([]);
     setError("");
-    void refreshNotes().catch((reason) => setError(messageOf(reason)));
+    void refreshNotes().catch((reason) => setError(messageOf$1(reason)));
   }, [refreshNotes]);
   reactExports.useEffect(() => {
     activeNoteRef.current = activeNote;
@@ -38779,7 +39298,7 @@ function NotebookWorkspace({
       setBacklinks(links.backlinks);
       setRevisions(history.revisions);
     } catch (reason) {
-      setError(messageOf(reason));
+      setError(messageOf$1(reason));
     }
   }, [workspace]);
   const createNewNote = reactExports.useCallback(async () => {
@@ -38802,7 +39321,7 @@ function NotebookWorkspace({
         return (_a3 = editorRef.current) == null ? void 0 : _a3.focus();
       });
     } catch (reason) {
-      setError(messageOf(reason));
+      setError(messageOf$1(reason));
     }
   }, [notes, openNote, refreshNotes, workspace]);
   const createImportedBookNote = reactExports.useCallback(async (book) => {
@@ -38856,7 +39375,7 @@ function NotebookWorkspace({
       setRevisions(history.revisions);
     } catch (reason) {
       setSaveState("error");
-      setError(messageOf(reason));
+      setError(messageOf$1(reason));
     }
   }, [refreshNotes, saveState, workspace]);
   reactExports.useEffect(() => {
@@ -38940,7 +39459,7 @@ function NotebookWorkspace({
       closeTab(note2.id);
       await refreshNotes();
     } catch (reason) {
-      setError(messageOf(reason));
+      setError(messageOf$1(reason));
     } finally {
       removingNoteIDsRef.current.delete(note2.id);
     }
@@ -38951,7 +39470,7 @@ function NotebookWorkspace({
       await refreshNotes();
       await openNote(note2.id);
     } catch (reason) {
-      setError(messageOf(reason));
+      setError(messageOf$1(reason));
     }
   }
   async function openOrCreateLinkedNote(title) {
@@ -38974,7 +39493,7 @@ function NotebookWorkspace({
       await refreshNotes();
       await openNote(response.note.id);
     } catch (reason) {
-      setError(messageOf(reason));
+      setError(messageOf$1(reason));
     }
   }
   async function restoreRevision(revision) {
@@ -38991,7 +39510,7 @@ function NotebookWorkspace({
       setSaveState("saved");
       await openNote(response.note.id);
     } catch (reason) {
-      setError(messageOf(reason));
+      setError(messageOf$1(reason));
     }
   }
   async function retryIndex() {
@@ -39003,7 +39522,7 @@ function NotebookWorkspace({
       activeNoteRef.current = pending;
       setSaveState("saved");
     } catch (reason) {
-      setError(messageOf(reason));
+      setError(messageOf$1(reason));
     }
   }
   async function runSearch() {
@@ -39020,7 +39539,7 @@ function NotebookWorkspace({
       });
       setSearchResults(response.results ?? []);
     } catch (reason) {
-      setError(messageOf(reason));
+      setError(messageOf$1(reason));
     } finally {
       setSearchBusy(false);
     }
@@ -39049,7 +39568,7 @@ function NotebookWorkspace({
       setAskAnswer(answer || "No grounded answer was found. Try a more specific question or another scope.");
       setAskEvidence(responses.flatMap((response) => response.memories_included_full ?? []));
     } catch (reason) {
-      setError(messageOf(reason));
+      setError(messageOf$1(reason));
     } finally {
       setAskBusy(false);
     }
@@ -39077,7 +39596,7 @@ ${formatEvidenceLinks(askEvidence)}`,
       await openNote(response.note.id);
       setDestination("notes");
     } catch (reason) {
-      setError(messageOf(reason));
+      setError(messageOf$1(reason));
     }
   }
   async function appendAnswerToActiveNote() {
@@ -39609,8 +40128,317 @@ function safePathTitle(value) {
 function capitalize(value) {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
-function messageOf(reason) {
+function messageOf$1(reason) {
   return reason instanceof Error ? reason.message : String(reason);
+}
+const clientKinds = [
+  { value: "codex", label: "Codex" },
+  { value: "claude", label: "Claude" },
+  { value: "cursor", label: "Cursor" },
+  { value: "other", label: "Other" }
+];
+const emptyForm = {
+  id: "",
+  display_name: "",
+  client_kind: "codex",
+  tool_profile: "default"
+};
+function ClientsPanel() {
+  const [profiles, setProfiles] = reactExports.useState([]);
+  const [form, setForm] = reactExports.useState(emptyForm);
+  const [busy, setBusy] = reactExports.useState(false);
+  const [error, setError] = reactExports.useState("");
+  async function refresh() {
+    setBusy(true);
+    try {
+      const response = await listClientProfiles();
+      setProfiles(response.profiles ?? []);
+      setError("");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusy(false);
+    }
+  }
+  reactExports.useEffect(() => {
+    void refresh();
+  }, []);
+  async function createProfile(event) {
+    event.preventDefault();
+    setBusy(true);
+    try {
+      const response = await createClientProfile(form);
+      setProfiles((current) => [...current, response.profile].sort((a2, b2) => a2.id.localeCompare(b2.id)));
+      setForm(emptyForm);
+      setError("");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function saveProfile(profile) {
+    setBusy(true);
+    try {
+      const response = await updateClientProfile({
+        id: profile.id,
+        display_name: profile.display_name,
+        client_kind: profile.client_kind,
+        tool_profile: profile.tool_profile,
+        expected_revision: profile.revision
+      });
+      setProfiles((current) => current.map((item) => item.id === response.profile.id ? response.profile : item));
+      setError("");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function removeProfile(profile) {
+    if (!window.confirm(`Delete client profile “${profile.display_name}”? Its next MCP startup will fail until reconfigured.`)) return;
+    setBusy(true);
+    try {
+      await deleteClientProfile({ id: profile.id, expected_revision: profile.revision });
+      setProfiles((current) => current.filter((item) => item.id !== profile.id));
+      setError("");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusy(false);
+    }
+  }
+  function patchProfile(id39, patch) {
+    setProfiles((current) => current.map((profile) => profile.id === id39 ? { ...profile, ...patch } : profile));
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "surfacePanel clientsPanel", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("header", { className: "clientsHeader", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "clientsEyebrow", children: "installation settings" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "panelTitle", children: "MCP Clients" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "panelSubtitle", children: "Give each local client its own tool surface. Settings apply across every workspace in this Agent Memory installation." })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "clientsRefresh", type: "button", onClick: () => void refresh(), disabled: busy, children: "Refresh" })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "profileExplainer", "aria-label": "Tool profile comparison", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "profileLabel", children: "Default" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "5 workflow tools" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Write, search, recall, feedback, and session finalization. Recommended for normal agent work." })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "profileLabel profileLabelExpanded", children: "Expanded" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "7 tools" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Adds health diagnostics and session browsing for operators and troubleshooting clients." })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "reconnectNotice", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { "aria-hidden": "true", children: "↻" }),
+        " Saved changes apply after that client reconnects or restarts."
+      ] })
+    ] }),
+    error ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "errAlert", role: "alert", children: error }) : null,
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("form", { className: "clientCreateForm", onSubmit: createProfile, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "clientFormHeading", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Register a client" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("small", { children: "No credentials or commands are stored." })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Client ID" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("input", { required: true, pattern: "[a-z][a-z0-9_-]{0,63}", placeholder: "codex-main", value: form.id, onChange: (event) => setForm({ ...form, id: event.target.value }) })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Display name" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("input", { required: true, maxLength: 80, placeholder: "Codex Desktop", value: form.display_name, onChange: (event) => setForm({ ...form, display_name: event.target.value }) })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Client kind" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("select", { value: form.client_kind, onChange: (event) => setForm({ ...form, client_kind: event.target.value }), children: clientKinds.map((kind) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: kind.value, children: kind.label }, kind.value)) })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Tool profile" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("select", { value: form.tool_profile, onChange: (event) => setForm({ ...form, tool_profile: event.target.value }), children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "default", children: "Default · 5 tools" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "expanded", children: "Expanded · 7 tools" })
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "clientPrimaryAction", type: "submit", disabled: busy, children: "Add client" })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "clientRegistry", "aria-live": "polite", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "clientRegistryHeading", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Registered clients" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: profiles.length.toString().padStart(2, "0") })
+      ] }),
+      busy && profiles.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "clientEmpty", children: "Loading client profiles…" }) : null,
+      !busy && profiles.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "clientEmpty", children: "No clients registered yet. Add the first local MCP client above." }) : null,
+      profiles.map((profile) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+        ClientProfileRow,
+        {
+          profile,
+          busy,
+          onChange: (patch) => patchProfile(profile.id, patch),
+          onSave: () => void saveProfile(profile),
+          onDelete: () => void removeProfile(profile)
+        },
+        `${profile.id}:${profile.revision}`
+      ))
+    ] })
+  ] });
+}
+function ClientProfileRow({
+  profile,
+  busy,
+  onChange,
+  onSave,
+  onDelete
+}) {
+  const [copied, setCopied] = reactExports.useState(false);
+  const connectionValue = `AGENT_MEMORY_CLIENT_ID=${profile.id}`;
+  async function copyConnectionValue() {
+    await navigator.clipboard.writeText(connectionValue);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1500);
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "clientRow", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "clientIdentity", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "clientKindMark", children: profile.client_kind.slice(0, 2).toUpperCase() }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("input", { "aria-label": `Display name for ${profile.id}`, maxLength: 80, value: profile.display_name, onChange: (event) => onChange({ display_name: event.target.value }) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "clientID", children: [
+          profile.id,
+          " · revision ",
+          profile.revision
+        ] })
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "clientField", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Kind" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("select", { value: profile.client_kind, onChange: (event) => onChange({ client_kind: event.target.value }), children: clientKinds.map((kind) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: kind.value, children: kind.label }, kind.value)) })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "clientField", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Tool profile" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("select", { value: profile.tool_profile, onChange: (event) => onChange({ tool_profile: event.target.value }), children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "default", children: "Default · 5" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "expanded", children: "Expanded · 7" })
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { className: "connectionValue", type: "button", onClick: () => void copyConnectionValue(), title: "Copy connection value", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: connectionValue }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: copied ? "copied" : "copy" })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "clientActions", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: onSave, disabled: busy || profile.display_name.trim() === "", children: "Save" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "clientDelete", type: "button", onClick: onDelete, disabled: busy, children: "Delete" })
+    ] })
+  ] });
+}
+function DeploymentPanel() {
+  const [profile, setProfile] = reactExports.useState(null);
+  const [busy, setBusy] = reactExports.useState(false);
+  const [error, setError] = reactExports.useState("");
+  const [saved, setSaved] = reactExports.useState("");
+  async function refresh() {
+    setBusy(true);
+    try {
+      const response = await getDeploymentProfile();
+      setProfile(response.profile);
+      setError("");
+      setSaved("");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusy(false);
+    }
+  }
+  reactExports.useEffect(() => {
+    void refresh();
+  }, []);
+  function patch(patchValue) {
+    setProfile((current) => current ? { ...current, ...patchValue } : current);
+    setSaved("");
+  }
+  function setBudget(monthlyBudget) {
+    patch({ monthly_infrastructure_operations_budget_usd: monthlyBudget });
+  }
+  async function save() {
+    if (!profile) return;
+    setBusy(true);
+    try {
+      const response = await updateDeploymentProfile({
+        monthly_infrastructure_operations_budget_usd: profile.monthly_infrastructure_operations_budget_usd,
+        decision_status: profile.decision_status,
+        expected_revision: profile.revision
+      });
+      setProfile(response.profile);
+      setError("");
+      setSaved("Infrastructure planning settings saved. No deployment or spending action was performed.");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+      setSaved("");
+    } finally {
+      setBusy(false);
+    }
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "surfacePanel deploymentPanel", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("header", { className: "deploymentHeader", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "deploymentEyebrow", children: "internal operator settings" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "panelTitle", children: "Self-managed infrastructure" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "panelSubtitle", children: "One installation-wide planning profile for internal DevOps and operations. It is not available to SaaS tenants, workspaces, or MCP clients." })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "deploymentSecondary", type: "button", onClick: () => void refresh(), disabled: busy, children: "Refresh" })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "deploymentBoundary", "aria-label": "Configuration safety boundary", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "deploymentBoundaryMark", children: "INTERNAL" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "Planning only — saving never deploys or spends." }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Development, staging, and production remain self-managed. This record contains no provider choice, credentials, customer billing, or infrastructure command." })
+      ] })
+    ] }),
+    error ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "errAlert", role: "alert", children: error }) : null,
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "deploymentFeedback", "aria-live": "polite", children: saved }),
+    !profile && busy ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "deploymentLoading", children: "Loading infrastructure settings…" }) : null,
+    profile ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "deploymentEditor", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "deploymentStatusRow", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: profile.decision_status === "assumed" ? "deploymentStatus assumed" : "deploymentStatus confirmed", children: profile.decision_status === "assumed" ? "ASSUMED" : "OPERATOR CONFIRMED" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+          "revision ",
+          profile.revision
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "deploymentFields", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Monthly infrastructure operations budget · USD" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "input",
+            {
+              type: "number",
+              min: "0",
+              max: "1000000",
+              step: "1",
+              value: profile.monthly_infrastructure_operations_budget_usd,
+              onChange: (event) => setBudget(Number(event.target.value))
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("small", { children: "Default assumption: $1,000. This is an internal planning ceiling, not a customer price or automated expenditure." })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Decision status" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("select", { value: profile.decision_status, onChange: (event) => patch({ decision_status: event.target.value }), children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "assumed", children: "Assumed · temporary planning value" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "operator_confirmed", children: "Operator confirmed" })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("small", { children: "Confirmation records an internal planning decision only." })
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "deploymentActions", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+          "Current monthly ceiling: $",
+          profile.monthly_infrastructure_operations_budget_usd.toLocaleString("en-US")
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => void save(), disabled: busy, children: "Save infrastructure settings" })
+      ] })
+    ] }) : null
+  ] });
 }
 const __vite_import_meta_env__ = {};
 const notebookEnabled = (__vite_import_meta_env__ == null ? void 0 : __vite_import_meta_env__.VITE_NOTEBOOK_ENABLED) !== "false";
@@ -40309,6 +41137,14 @@ function App() {
     { key: "08", label: "Skills", surface: "skills", open: () => {
       setSurface("skills");
       setSelectedMemory(null);
+    } },
+    { key: "09", label: "Clients", surface: "clients", open: () => {
+      setSurface("clients");
+      setSelectedMemory(null);
+    } },
+    { key: "10", label: "Infrastructure", surface: "deployment", open: () => {
+      setSurface("deployment");
+      setSelectedMemory(null);
     } }
   ];
   const activeNavigationItem = navigationItems.find((item) => item.surface === surface) ?? navigationItems[0];
@@ -40541,6 +41377,8 @@ function App() {
             error: skillsErr
           }
         ) : null,
+        surface === "clients" ? /* @__PURE__ */ jsxRuntimeExports.jsx(ClientsPanel, {}) : null,
+        surface === "deployment" ? /* @__PURE__ */ jsxRuntimeExports.jsx(DeploymentPanel, {}) : null,
         surface === "wiki" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
           WikiPanel,
           {
@@ -40880,6 +41718,100 @@ function tryParseJSON(str2) {
     return null;
   }
 }
+function RightsAttestationGate({ children: children2 }) {
+  const [attestation, setAttestation] = reactExports.useState(null);
+  const [acceptedStatementIDs, setAcceptedStatementIDs] = reactExports.useState(/* @__PURE__ */ new Set());
+  const [loading, setLoading] = reactExports.useState(true);
+  const [submitting, setSubmitting] = reactExports.useState(false);
+  const [error, setError] = reactExports.useState("");
+  const loadStatus = reactExports.useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      setAttestation(await getRightsAttestationStatus());
+    } catch (reason) {
+      setError(messageOf(reason));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+  reactExports.useEffect(() => {
+    void loadStatus();
+  }, [loadStatus]);
+  reactExports.useEffect(() => {
+    setAcceptedStatementIDs(/* @__PURE__ */ new Set());
+  }, [attestation == null ? void 0 : attestation.policy.version]);
+  async function acceptCurrentPolicy() {
+    if (!attestation) return;
+    setSubmitting(true);
+    setError("");
+    try {
+      await acceptRightsAttestation({
+        policy_version: attestation.policy.version,
+        accepted_statement_ids: [...acceptedStatementIDs]
+      });
+      setAttestation(await getRightsAttestationStatus());
+    } catch (reason) {
+      setError(messageOf(reason));
+      await loadStatus();
+    } finally {
+      setSubmitting(false);
+    }
+  }
+  const status = attestation == null ? void 0 : attestation.status;
+  if (status === "active") return /* @__PURE__ */ jsxRuntimeExports.jsx(jsxRuntimeExports.Fragment, { children: children2 });
+  if (loading && !attestation) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("main", { className: "rightsAttestationLoading", "aria-live": "polite", children: "Checking your source-upload policy…" });
+  }
+  if (!attestation) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("main", { className: "rightsAttestationLoading", role: "alert", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "We couldn’t load the source-upload policy." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: error || "The rights-attestation service is unavailable." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => void loadStatus(), children: "Try again" })
+    ] });
+  }
+  const { policy } = attestation;
+  acceptedStatementIDs.size === policy.statements.length;
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rightsAttestationBackdrop", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "rightsAttestationDialog", role: "dialog", "aria-modal": "true", "aria-labelledby": "rights-attestation-title", "aria-describedby": "rights-attestation-summary", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("header", { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "rightsAttestationMark", "aria-hidden": "true", children: "§" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [
+          "Private source policy · renew every ",
+          policy.renewal_days,
+          " days"
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { id: "rights-attestation-title", children: "Confirm your right to use uploaded materials" })
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { id: "rights-attestation-summary", className: "rightsAttestationPrimary", children: policy.primary_confirmation }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rightsAttestationStatements", children: policy.statements.map((statement, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "input",
+        {
+          type: "checkbox",
+          autoFocus: index === 0,
+          checked: acceptedStatementIDs.has(statement.id),
+          onChange: (event) => {
+            const next2 = new Set(acceptedStatementIDs);
+            if (event.target.checked) next2.add(statement.id);
+            else next2.delete(statement.id);
+            setAcceptedStatementIDs(next2);
+          }
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: statement.text })
+    ] }, statement.id)) }),
+    error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "rightsAttestationError", role: "alert", children: error }) : null,
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("footer", { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "This is your representation, not copyright verification by Agent Memory." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: submitting || acceptedStatementIDs.size !== policy.statements.length, onClick: () => void acceptCurrentPolicy(), children: submitting ? "Recording confirmation…" : "Confirm and continue" })
+    ] })
+  ] }) });
+}
+function messageOf(reason) {
+  return reason instanceof Error ? reason.message : String(reason);
+}
 const PRELOAD_RECOVERY_KEY = "agent-memory:vite-preload-recovery";
 const PRELOAD_RECOVERY_OVERLAY_ID = "agent-memory-preload-recovery";
 const PRELOAD_RECOVERY_TOAST_ID = "agent-memory-preload-toast";
@@ -41081,127 +42013,130 @@ function installPreloadRecovery() {
 }
 installPreloadRecovery();
 ReactDOM.createRoot(document.getElementById("root")).render(
-  /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.StrictMode, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(App, {}) })
+  /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.StrictMode, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(RightsAttestationGate, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(App, {}) }) })
 );
 export {
-  commonDb_exports as $,
-  defaultConfig2 as A,
-  rgba$1 as B,
-  __export as C,
-  getConfig as D,
-  setupGraphViewbox2 as E,
-  cleanAndMerge as F,
-  defaultConfig_default as G,
-  random as H,
-  selectSvgElement as I,
+  halfPi as $,
+  cleanAndMerge as A,
+  defaultConfig_default as B,
+  random as C,
+  selectSvgElement as D,
+  getThemeVariables3 as E,
+  setConfig2 as F,
+  load as G,
+  hasKatex as H,
+  calculateMathMLDimensions as I,
   JSON_SCHEMA as J,
-  getThemeVariables3 as K,
-  hasKatex as L,
-  calculateMathMLDimensions as M,
-  parseFontSize as N,
-  getUrl as O,
-  renderKatexSanitized as P,
-  parseGenericTypes as Q,
-  line$1 as R,
-  curveBasis as S,
-  generateId as T,
-  lineBreakRegex as U,
-  isDark as V,
-  lighten as W,
-  darken as X,
-  setupGraphViewbox as Y,
+  parseFontSize as K,
+  getUrl as L,
+  renderKatexSanitized as M,
+  purify as N,
+  parseGenericTypes as O,
+  line$1 as P,
+  curveBasis as Q,
+  generateId as R,
+  lineBreakRegex as S,
+  isDark as T,
+  lighten as U,
+  darken as V,
+  setupGraphViewbox as W,
+  commonDb_exports as X,
+  withPath as Y,
   ZERO_WIDTH_SPACE as Z,
   __name as _,
   getAccTitle as a,
-  insertEdge as a$,
-  withPath as a0,
-  halfPi as a1,
-  epsilon as a2,
-  tau as a3,
-  cos as a4,
-  sin as a5,
-  min as a6,
-  abs$1 as a7,
-  pi as a8,
-  sqrt as a9,
-  argumentsTag as aA,
-  uint32ArrayTag as aB,
-  uint16ArrayTag as aC,
-  uint8ClampedArrayTag as aD,
-  uint8ArrayTag as aE,
-  objectTag as aF,
-  int32ArrayTag as aG,
-  int16ArrayTag as aH,
-  int8ArrayTag as aI,
-  float64ArrayTag as aJ,
-  float32ArrayTag as aK,
-  arrayTag as aL,
-  getLineFunctionsWithOffset as aM,
-  getEffectiveHtmlLabels as aN,
-  createText as aO,
-  computeLabelTransform as aP,
-  getSubGraphTitleMargins as aQ,
-  getStylesFromArray as aR,
-  decodeEntities as aS,
-  configureLabelImages as aT,
-  adjustChannel as aU,
-  markers_default as aV,
-  clear2 as aW,
-  clear as aX,
-  clear$1 as aY,
-  updateNodeBounds as aZ,
-  setNodeElem as a_,
-  atan2 as aa,
-  constant as ab,
-  asin as ac,
-  acos as ad,
-  max as ae,
-  insertCluster as af,
-  insertNode as ag,
-  positionNode as ah,
-  Utils as ai,
-  Color$1 as aj,
+  getEffectiveHtmlLabels as a$,
+  epsilon as a0,
+  tau as a1,
+  cos as a2,
+  sin as a3,
+  min as a4,
+  abs$1 as a5,
+  pi as a6,
+  sqrt as a7,
+  atan2 as a8,
+  constant as a9,
+  computeDimensionOfText as aA,
+  isPrimitive as aB,
+  getTag as aC,
+  isTypedArray as aD,
+  arrayBufferTag as aE,
+  dataViewTag as aF,
+  booleanTag as aG,
+  numberTag as aH,
+  stringTag as aI,
+  dateTag as aJ,
+  regexpTag as aK,
+  symbolTag as aL,
+  mapTag as aM,
+  setTag as aN,
+  argumentsTag as aO,
+  uint32ArrayTag as aP,
+  uint16ArrayTag as aQ,
+  uint8ClampedArrayTag as aR,
+  uint8ArrayTag as aS,
+  objectTag as aT,
+  int32ArrayTag as aU,
+  int16ArrayTag as aV,
+  int8ArrayTag as aW,
+  float64ArrayTag as aX,
+  float32ArrayTag as aY,
+  arrayTag as aZ,
+  getLineFunctionsWithOffset as a_,
+  asin as aa,
+  acos as ab,
+  max as ac,
+  insertCluster as ad,
+  insertNode as ae,
+  positionNode as af,
+  Utils as ag,
+  Color$1 as ah,
+  getIconSVG as ai,
+  registerIconPacks as aj,
   calculateTextDimensions as ak,
   at as al,
-  computeDimensionOfText as am,
-  isPrimitive as an,
-  getTag as ao,
-  isTypedArray as ap,
-  arrayBufferTag as aq,
-  dataViewTag as ar,
-  booleanTag as as,
-  numberTag as at,
-  stringTag as au,
-  dateTag as av,
-  regexpTag as aw,
-  symbolTag as ax,
-  mapTag as ay,
-  setTag as az,
+  markers_default as am,
+  clear2 as an,
+  clear as ao,
+  clear$1 as ap,
+  updateNodeBounds as aq,
+  setNodeElem as ar,
+  getSubGraphTitleMargins as as,
+  insertEdge as at,
+  positionEdgeLabel as au,
+  insertEdgeLabel as av,
+  __vitePreload as aw,
+  edgeLabels as ax,
+  terminalLabels as ay,
+  markerOffsets as az,
   setAccTitle as b,
-  positionEdgeLabel as b0,
-  insertEdgeLabel as b1,
-  array as b2,
-  getUserDefinedConfig as b3,
-  getDefaultExportFromCjs as b4,
-  getIconSVG as b5,
-  registerIconPacks as b6,
-  unknownIcon as b7,
-  constant$1 as b8,
-  interpolateNumber as b9,
-  color as ba,
-  interpolateRgb as bb,
-  interpolateString as bc,
-  styles2String as bd,
-  isLabelStyle as be,
-  Rgb as bf,
-  rgbConvert as bg,
-  define as bh,
-  extend$1 as bi,
-  Color as bj,
-  nogamma as bk,
-  hue as bl,
-  dayjs2 as bm,
-  __vitePreload as bn,
+  createText as b0,
+  computeLabelTransform as b1,
+  getStylesFromArray as b2,
+  decodeEntities as b3,
+  configureLabelImages as b4,
+  adjustChannel as b5,
+  array as b6,
+  getUserDefinedConfig as b7,
+  getDefaultExportFromCjs as b8,
+  unknownIcon as b9,
+  defaultConfig2 as ba,
+  constant$1 as bb,
+  interpolateNumber as bc,
+  color as bd,
+  interpolateRgb as be,
+  interpolateString as bf,
+  styles2String as bg,
+  isLabelStyle as bh,
+  Rgb as bi,
+  rgbConvert as bj,
+  define as bk,
+  extend$1 as bl,
+  Color as bm,
+  nogamma as bn,
+  hue as bo,
+  dayjs2 as bp,
+  isValidShape as bq,
   getConfig2 as c,
   select as d,
   configureSvgSize as e,
@@ -41213,17 +42148,17 @@ export {
   common_default as k,
   log as l,
   calculateTextHeight as m,
-  setConfig2 as n,
-  getRegisteredLayoutAlgorithm as o,
-  setDiagramTitle as p,
-  getDiagramTitle as q,
-  render$1 as r,
+  setDiagramTitle as n,
+  getDiagramTitle as o,
+  clear$2 as p,
+  getEdgeId as q,
+  rgba$1 as r,
   setAccDescription as s,
-  load as t,
-  utils_default as u,
-  isValidShape as v,
+  __export as t,
+  getRegisteredLayoutAlgorithm as u,
+  render$1 as v,
   wrapLabel as w,
-  getEdgeId as x,
-  purify as y,
-  clear$2 as z
+  utils_default as x,
+  getConfig as y,
+  setupGraphViewbox2 as z
 };

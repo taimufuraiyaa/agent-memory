@@ -623,6 +623,16 @@ func newDashboardCommand() *cobra.Command {
 				BaseDir:           filepath.Dir(cfg.dbPath),
 				EmbeddingProvider: provider,
 			}
+			if err := api.ConfigureLocalRightsAttestation(ctx, svc); err != nil {
+				return err
+			}
+			if err := api.ConfigureLocalClientProfiles(svc); err != nil {
+				return err
+			}
+			if err := api.ConfigureLocalDeploymentProfile(svc); err != nil {
+				return err
+			}
+			defer func() { _ = svc.Close() }()
 			server := &http.Server{
 				Addr:    addr,
 				Handler: api.NewMux(svc),

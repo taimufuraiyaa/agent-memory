@@ -10,6 +10,7 @@ import {
   type LibraryPassageResult,
   type LibraryStructuralNode,
   type NoteDocument,
+  type RightsBasis,
 } from '../lib/api'
 
 type LibraryKind = 'personal' | 'organization'
@@ -49,6 +50,13 @@ const bookLanguageOptions = [
   { value: 'id', label: 'Bahasa Indonesia' },
 ]
 
+const rightsBasisOptions: Array<{ value: RightsBasis; label: string }> = [
+  { value: 'lawfully_acquired_private_use', label: 'Lawfully acquired copy for private use' },
+  { value: 'author_owned', label: 'I am the author or rights holder' },
+  { value: 'licensed', label: 'I have a licence or permission' },
+  { value: 'public_domain', label: 'Public domain or open licence' },
+]
+
 export function LibraryWorkspace({ workspace, onBookImported, onOpenBookNote }: LibraryWorkspaceProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [libraryKind, setLibraryKind] = useState<LibraryKind>('personal')
@@ -56,6 +64,7 @@ export function LibraryWorkspace({ workspace, onBookImported, onOpenBookNote }: 
   const [title, setTitle] = useState('')
   const [editionLabel, setEditionLabel] = useState('Imported edition')
   const [language, setLanguage] = useState('en')
+  const [rightsBasis, setRightsBasis] = useState<RightsBasis>('lawfully_acquired_private_use')
   const [source, setSource] = useState('')
   const [sourceFile, setSourceFile] = useState<File | null>(null)
   const [sourceFormat, setSourceFormat] = useState<BookFileFormat>('markdown')
@@ -80,6 +89,7 @@ export function LibraryWorkspace({ workspace, onBookImported, onOpenBookNote }: 
     setTitle('')
     setEditionLabel('Imported edition')
     setLanguage('en')
+    setRightsBasis('lawfully_acquired_private_use')
     setSource('')
     setSourceFile(null)
     setSourceFormat('markdown')
@@ -136,6 +146,7 @@ export function LibraryWorkspace({ workspace, onBookImported, onOpenBookNote }: 
         title: title.trim(),
         edition_label: editionLabel.trim(),
         language: language.trim(),
+        rights_basis: rightsBasis,
       }
       const imported = sourceFile
         ? await importLibraryBook({ ...metadata, format: sourceFormat, source_file: sourceFile })
@@ -291,6 +302,7 @@ export function LibraryWorkspace({ workspace, onBookImported, onOpenBookNote }: 
             <label>Book title<input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Book title" /></label>
             <label>Edition<input value={editionLabel} onChange={(event) => setEditionLabel(event.target.value)} /></label>
             <label>Language<select value={language} onChange={(event) => setLanguage(event.target.value)}>{bookLanguageOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+            <label>Rights basis<select value={rightsBasis} onChange={(event) => setRightsBasis(event.target.value as RightsBasis)}>{rightsBasisOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
             <label>Library<select value={libraryKind} onChange={(event) => setLibraryKind(event.target.value as LibraryKind)}><option value="personal">Personal library</option><option value="organization">Organization library</option></select></label>
             {libraryKind === 'organization' ? <label>Organization ID<input value={organizationID} onChange={(event) => setOrganizationID(event.target.value)} /></label> : null}
           </div>

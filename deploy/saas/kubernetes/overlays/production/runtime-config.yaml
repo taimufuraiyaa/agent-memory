@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: agent-memory-runtime
+data:
+  AGENT_MEMORY_SAAS_ENV: production
+  AGENT_MEMORY_SAAS_LISTEN_ADDR: ":8080"
+  AGENT_MEMORY_TELEMETRY_LISTEN_ADDR: ":9090"
+  AGENT_MEMORY_TRACING_ENABLED: "true"
+  AGENT_MEMORY_TRACING_SAMPLE_RATE: "0.1"
+  AGENT_MEMORY_MODEL_PROVIDER: openai-compatible
+  AGENT_MEMORY_MODEL_DIR: /tmp/agent-memory-models
+  AGENT_MEMORY_MODEL_RETENTION: provider-zero-retention
+  AGENT_MEMORY_MODEL_VERSION: replace-with-approved-route
+  AGENT_MEMORY_MODEL_DIMENSION: "1536"
+  AGENT_MEMORY_OIDC_ISSUER: https://replace-with-production-issuer.example
+  AGENT_MEMORY_OIDC_AUDIENCE: agent-memory-production
+  AGENT_MEMORY_SAAS_SHUTDOWN_TIMEOUT: 20s

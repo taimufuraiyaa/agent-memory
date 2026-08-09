@@ -14,6 +14,9 @@ import (
 
 	"github.com/taimufuraiyaa/agent-memory/internal/api/dashboard"
 	"github.com/taimufuraiyaa/agent-memory/internal/application"
+	"github.com/taimufuraiyaa/agent-memory/internal/attestation"
+	"github.com/taimufuraiyaa/agent-memory/internal/clientprofile"
+	"github.com/taimufuraiyaa/agent-memory/internal/deploymentprofile"
 	"github.com/taimufuraiyaa/agent-memory/internal/embeddings"
 	"github.com/taimufuraiyaa/agent-memory/internal/engine"
 	"github.com/taimufuraiyaa/agent-memory/internal/observability"
@@ -23,11 +26,16 @@ import (
 )
 
 type Service struct {
-	Workspace         string
-	BaseDir           string
-	EmbeddingProvider embeddings.Provider
-	Scheduler         Scheduler
-	LibraryRoleRunner readingroom.RoleRunner
+	Workspace              string
+	BaseDir                string
+	EmbeddingProvider      embeddings.Provider
+	Scheduler              Scheduler
+	LibraryRoleRunner      readingroom.RoleRunner
+	RightsAttestation      *attestation.Service
+	RightsAttestationStore *attestation.SQLiteStore
+	RightsSubjectResolver  func(*http.Request) (string, error)
+	ClientProfiles         *clientprofile.Store
+	DeploymentProfile      *deploymentprofile.Store
 
 	mu             sync.RWMutex
 	stores         map[string]*workspaceAssets
@@ -128,6 +136,12 @@ func (s *Service) Close() error {
 		}
 		delete(s.stores, name)
 	}
+	if s.RightsAttestationStore != nil {
+		if err := s.RightsAttestationStore.Close(); err != nil {
+			closeErr = errors.Join(closeErr, fmt.Errorf("close rights attestation store: %w", err))
+		}
+		s.RightsAttestationStore = nil
+	}
 	return closeErr
 }
 
@@ -221,6 +235,9 @@ func NewMux(svc *Service) *http.ServeMux {
 	mux.Handle("/metrics", promhttp.Handler())
 	mux.HandleFunc("/health", healthHandler(svc))
 	mux.HandleFunc("/api/v1/capabilities", capabilitiesHandler())
+	mux.HandleFunc("/api/v1/client-profiles", clientProfilesHandler(svc))
+	mux.HandleFunc("/api/v1/client-profiles/", clientProfileHandler(svc))
+	mux.HandleFunc("/api/v1/deployment-profile", deploymentProfileHandler(svc))
 	mux.HandleFunc("/ops/dashboard", opsDashboardHandler(svc))
 	mux.HandleFunc("/api/v1/scheduler/status", schedulerStatusHandler(svc))
 	mux.HandleFunc("/api/v1/scheduler/history", schedulerHistoryHandler(svc))
@@ -290,6 +307,8 @@ func NewMux(svc *Service) *http.ServeMux {
 	mux.HandleFunc("/api/v1/replay/sessions", replaySessionsHandler(svc))
 	mux.HandleFunc("/api/v1/replay/events", replayEventsHandler(svc))
 	mux.HandleFunc("/api/v1/skills", workspaceSkillsHandler(svc))
+	mux.HandleFunc("/api/v1/rights-attestation/status", rightsAttestationStatusHandler(svc))
+	mux.HandleFunc("/api/v1/rights-attestation/accept", rightsAttestationAcceptHandler(svc))
 
 	mux.HandleFunc("/api/v1/library/imports", libraryImportHandler(svc))
 	mux.HandleFunc("/api/v1/library/jobs", libraryJobHandler(svc))

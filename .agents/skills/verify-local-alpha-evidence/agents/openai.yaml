@@ -1,0 +1,4 @@
+interface:
+  display_name: "Verify Local Alpha Evidence"
+  short_description: "Validate isolated Floci security and game-day evidence"
+  default_prompt: "Use $verify-local-alpha-evidence to validate the local Floci/OIDC security, isolation, load, credential, provider-outage, deletion, and operational evidence package."

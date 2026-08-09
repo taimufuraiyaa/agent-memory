@@ -1,0 +1,51 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: agent-memory-migrate
+spec:
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: migration
+        agent-memory.io/network-tier: private-service
+    spec:
+      restartPolicy: Never
+      serviceAccountName: agent-memory-migration
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: migrate
+          image: agent-memory-migrate@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: AGENT_MEMORY_SAAS_SERVICE
+              value: migration
+          envFrom:
+            - configMapRef:
+                name: agent-memory-runtime
+            - secretRef:
+                name: agent-memory-migration-secrets
+          resources:
+            requests:
+              cpu: 100m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi

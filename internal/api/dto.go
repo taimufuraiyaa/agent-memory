@@ -22,6 +22,7 @@ type LibraryImportRequest struct {
 	Language       string `json:"language"`
 	Format         string `json:"format,omitempty"`
 	Markdown       string `json:"markdown"`
+	RightsBasis    string `json:"rights_basis"`
 }
 
 type LibraryQueryRequest struct {

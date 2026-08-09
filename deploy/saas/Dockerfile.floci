@@ -1,0 +1,24 @@
+FROM golang:1.26-alpine@sha256:0178a641fbb4858c5f1b48e34bdaabe0350a330a1b1149aabd498d0699ff5fb2 AS tools
+
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked go mod download
+COPY cmd/agent-memory-s3-init ./cmd/agent-memory-s3-init
+RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked \
+    --mount=type=cache,target=/root/.cache/go-build,sharing=locked \
+    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" \
+    -o /out/agent-memory-s3-init ./cmd/agent-memory-s3-init
+
+FROM floci/floci:1.6.0@sha256:eab36252ea43a4a73928423f0372219052c5c6f87207f6c4754db14b91d6ed30
+
+USER 0
+RUN microdnf upgrade -y \
+    && microdnf clean all \
+    && rm -rf /var/cache/dnf \
+    && rm -f /usr/local/bin/gosu
+COPY --from=tools /out/agent-memory-s3-init /usr/local/bin/agent-memory-s3-init
+
+# Starting directly as Floci's runtime user bypasses the root/gosu branch of
+# the upstream entrypoint. The one-shot volume initializer owns /data for this
+# UID before the emulator starts.
+USER 1001:0

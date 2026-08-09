@@ -150,6 +150,19 @@ func NewRetrievalEngine(vector *VectorSearcher) *RetrievalEngine {
 	}
 }
 
+// NewRetrievalEngineWithClock creates a retrieval engine with an explicit clock.
+// It is intended for deterministic parity and time-boundary verification.
+func NewRetrievalEngineWithClock(vector *VectorSearcher, clock func() time.Time) *RetrievalEngine {
+	if clock == nil {
+		clock = func() time.Time { return time.Now().UTC() }
+	}
+	return &RetrievalEngine{
+		vector: vector,
+		cache:  NewQueryCache(DefaultQueryCacheConfig()),
+		clock:  clock,
+	}
+}
+
 // NewRetrievalEngineWithCache creates a retrieval engine with custom cache config.
 func NewRetrievalEngineWithCache(vector *VectorSearcher, cacheConfig QueryCacheConfig) *RetrievalEngine {
 	return &RetrievalEngine{

@@ -21,6 +21,7 @@ var schemaMigrations = []migrationStep{
 	{1, "baseline-schema", func(ctx context.Context, s *Store) error { return migrateBaselineSchema(ctx, s) }},
 	{2, "json-vectors-to-blobs", func(ctx context.Context, s *Store) error { return s.migrateJSONVectorsToBlobs(ctx) }},
 	{3, "session-column-and-order-indexes", migrateSessionColumnAndIndexes},
+	{4, "source-attestation-provenance", migrateSourceAttestationProvenance},
 }
 
 var migrateMu sync.Mutex
@@ -119,4 +120,18 @@ func migrateSessionColumnAndIndexes(ctx context.Context, s *Store) error {
 		}
 	}
 	return nil
+}
+
+func migrateSourceAttestationProvenance(ctx context.Context, s *Store) error {
+	_, err := s.db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS source_attestations (
+		source_asset_id TEXT PRIMARY KEY,
+		subject_id TEXT NOT NULL,
+		receipt_id TEXT NOT NULL,
+		policy_version TEXT NOT NULL,
+		rights_basis TEXT NOT NULL,
+		source_fingerprint TEXT NOT NULL,
+		recorded_at TEXT NOT NULL,
+		FOREIGN KEY(source_asset_id) REFERENCES source_assets(id) ON DELETE CASCADE
+	)`)
+	return err
 }

@@ -275,6 +275,15 @@ func newServeCommand() *cobra.Command {
 				EmbeddingProvider: provider,
 				Scheduler:         scheduler,
 			}
+			if err := api.ConfigureLocalRightsAttestation(ctx, svc); err != nil {
+				return err
+			}
+			if err := api.ConfigureLocalClientProfiles(svc); err != nil {
+				return err
+			}
+			if err := api.ConfigureLocalDeploymentProfile(svc); err != nil {
+				return err
+			}
 			server := &http.Server{
 				Addr:    addr,
 				Handler: api.InstrumentedHandler(api.NewMux(svc)),

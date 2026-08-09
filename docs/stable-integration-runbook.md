@@ -31,6 +31,13 @@ the workflow tools: write, search, recall, feedback, and session finalization.
 Set `AGENT_MEMORY_MCP_PROFILE=expanded` on the MCP server when operator-facing
 health checks or captured-session browsing must also be available.
 
+For durable per-client selection, open Dashboard → System → Clients, register a
+stable client ID, choose Default or Expanded, and add the displayed
+`AGENT_MEMORY_CLIENT_ID=<id>` to that client's MCP environment. The saved record
+is installation-wide, but the choice is independent for every client. Restart
+or reconnect that client after changing its profile. The environment-only
+`AGENT_MEMORY_MCP_PROFILE` path remains supported when no client ID is set.
+
 ## Trust and replay
 
 Use `agent-memory audit` for filtered append-only mutation records and

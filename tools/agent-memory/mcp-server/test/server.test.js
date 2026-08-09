@@ -99,6 +99,85 @@ test("fails closed for an unsupported tool profile", async () => {
   assert.match(stderr, /unsupported AGENT_MEMORY_MCP_PROFILE: everything/);
 });
 
+test("resolves distinct persisted profiles by client id before listing tools", async (t) => {
+  const server = http.createServer((request, response) => {
+    const id = request.url.split("/").at(-1);
+    const toolProfile = id === "claude" ? "expanded" : "default";
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(JSON.stringify({ ok: true, version: "v1", data: { profile: { id, tool_profile: toolProfile } } }));
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => server.close());
+  const serviceURL = `http://127.0.0.1:${server.address().port}`;
+
+  const codex = startServer({ AGENT_MEMORY_CLIENT_ID: "codex", AGENT_MEMORY_URL: serviceURL });
+  const claude = startServer({ AGENT_MEMORY_CLIENT_ID: "claude", AGENT_MEMORY_URL: serviceURL });
+  t.after(() => codex.kill());
+  t.after(() => claude.kill());
+  codex.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 40, method: "tools/list", params: {} })}\n`);
+  claude.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 41, method: "tools/list", params: {} })}\n`);
+
+  const [codexResponse, claudeResponse] = await Promise.all([readMessage(codex), readMessage(claude)]);
+  assert.equal(codexResponse.result.tools.length, 5);
+  assert.equal(claudeResponse.result.tools.length, 7);
+  assert.ok(claudeResponse.result.tools.some((tool) => tool.name === "memory_sessions"));
+});
+
+test("persisted client profile is authoritative over the legacy profile variable", async (t) => {
+  const server = http.createServer((_request, response) => {
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(JSON.stringify({ ok: true, data: { profile: { id: "codex", tool_profile: "default" } } }));
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => server.close());
+  const child = startServer({
+    AGENT_MEMORY_CLIENT_ID: "codex",
+    AGENT_MEMORY_MCP_PROFILE: "everything",
+    AGENT_MEMORY_URL: `http://127.0.0.1:${server.address().port}`,
+  });
+  t.after(() => child.kill());
+  child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 42, method: "tools/list", params: {} })}\n`);
+
+  assert.equal((await readMessage(child)).result.tools.length, 5);
+});
+
+test("fails closed when an explicit client id cannot be resolved", async (t) => {
+  const server = http.createServer((_request, response) => {
+    response.writeHead(404, { "content-type": "application/json" });
+    response.end(JSON.stringify({ ok: false, error: { code: "client_profile_not_found", message: "missing" } }));
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => server.close());
+  const child = startServer({ AGENT_MEMORY_CLIENT_ID: "missing", AGENT_MEMORY_URL: `http://127.0.0.1:${server.address().port}` });
+  let stderr = "";
+  child.stderr.on("data", (chunk) => { stderr += chunk.toString("utf8"); });
+
+  const exitCode = await new Promise((resolve, reject) => {
+    child.once("error", reject);
+    child.once("exit", resolve);
+  });
+  assert.notEqual(exitCode, 0);
+  assert.match(stderr, /cannot resolve AGENT_MEMORY_CLIENT_ID missing: service returned HTTP 404/);
+  assert.doesNotMatch(stderr, /client_profile_not_found|missing"/);
+});
+
+test("rejects malformed and hosted client-id resolution", async () => {
+  for (const env of [
+    { AGENT_MEMORY_CLIENT_ID: "Bad ID" },
+    { AGENT_MEMORY_CLIENT_ID: "codex", AGENT_MEMORY_MODE: "hosted", AGENT_MEMORY_TOKEN: "token", AGENT_MEMORY_TENANT: "tenant" },
+  ]) {
+    const child = startServer(env);
+    let stderr = "";
+    child.stderr.on("data", (chunk) => { stderr += chunk.toString("utf8"); });
+    const exitCode = await new Promise((resolve, reject) => {
+      child.once("error", reject);
+      child.once("exit", resolve);
+    });
+    assert.notEqual(exitCode, 0);
+    assert.match(stderr, /AGENT_MEMORY_CLIENT_ID/);
+  }
+});
+
 test("proxies health, write, and compact search to the service", async (t) => {
   const requests = [];
   const server = http.createServer((request, response) => {
@@ -198,4 +277,51 @@ test("reports HTTP transport degradation without silently changing backends", as
   assert.equal(response.result.isError, true);
   assert.match(response.result.content[0].text, /transport=http/);
   assert.match(response.result.content[0].text, /degraded=true/);
+});
+
+test("hosted mode is explicit, authenticated, tenant-scoped, and uses hosted paths", async (t) => {
+  const requests = [];
+  const server = http.createServer((request, response) => {
+    let body = "";
+    request.on("data", (chunk) => { body += chunk; });
+    request.on("end", () => {
+      requests.push({ url: request.url, authorization: request.headers.authorization, tenant: request.headers["x-agent-memory-tenant"], body: JSON.parse(body) });
+      const data = request.url === "/v1/source-queries"
+        ? { evidence: [{ passage_id: "p1", citation_id: "c1", text: "hosted evidence", score: 0.9 }], context: { used_tokens: 2, budget: 100 } }
+        : { id: "m1" };
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({ ok: true, version: "v1", data }));
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => server.close());
+  const child = startServer({
+    AGENT_MEMORY_MODE: "hosted",
+    AGENT_MEMORY_URL: `http://127.0.0.1:${server.address().port}`,
+    AGENT_MEMORY_TOKEN: "hosted-secret",
+    AGENT_MEMORY_TENANT: "tenant-1",
+  });
+  t.after(() => child.kill());
+
+  child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 30, method: "tools/call", params: { name: "memory_write", arguments: { workspace: "workspace-1", content: "hosted fact", type: "semantic" } } })}\n`);
+  const write = await readMessage(child);
+  assert.equal(write.result.structuredContent._transport.mode, "hosted");
+  child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 31, method: "tools/call", params: { name: "memory_search", arguments: { query: "hosted", source_ids: ["source-1"] } } })}\n`);
+  const search = await readMessage(child);
+  assert.equal(search.result.structuredContent.results[0].citation_id, "c1");
+  assert.deepEqual(requests.map((request) => request.url), ["/v1/memories", "/v1/source-queries"]);
+  assert.ok(requests.every((request) => request.authorization === "Bearer hosted-secret" && request.tenant === "tenant-1"));
+  assert.equal(requests[0].body.workspace_id, "workspace-1");
+});
+
+test("hosted mode fails closed without explicit credentials", async () => {
+  const child = startServer({ AGENT_MEMORY_MODE: "hosted", AGENT_MEMORY_TOKEN: "", AGENT_MEMORY_TENANT: "" });
+  let stderr = "";
+  child.stderr.on("data", (chunk) => { stderr += chunk.toString("utf8"); });
+  const exitCode = await new Promise((resolve, reject) => {
+    child.once("error", reject);
+    child.once("exit", resolve);
+  });
+  assert.notEqual(exitCode, 0);
+  assert.match(stderr, /requires AGENT_MEMORY_TOKEN and AGENT_MEMORY_TENANT/);
 });

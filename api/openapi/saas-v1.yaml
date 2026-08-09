@@ -1,0 +1,599 @@
+openapi: 3.1.0
+info:
+  title: Agent Memory Hosted API
+  version: 1.0.0
+  description: Provider-neutral contract for the private multi-tenant service.
+servers:
+  - url: https://api.example.invalid
+    description: Placeholder replaced by each environment.
+security:
+  - BearerAuth: []
+paths:
+  /v1/signup:
+    post:
+      operationId: provisionPersonalAccount
+      description: Provisions the verified provider identity after staged-launch admission controls pass.
+      parameters:
+        - name: X-Agent-Memory-Country
+          in: header
+          required: true
+          description: Trusted edge-derived ISO 3166-1 alpha-2 country code.
+          schema: {type: string, pattern: "^[A-Z]{2}$"}
+        - name: X-Agent-Memory-Country-Timestamp
+          in: header
+          required: true
+          description: Trusted edge assertion time as Unix seconds; accepted for at most five minutes.
+          schema: {type: string, pattern: "^[0-9]{10}$"}
+        - name: X-Agent-Memory-Country-Signature
+          in: header
+          required: true
+          description: HMAC-SHA-256 over the normalized country and timestamp using the edge-only secret.
+          schema: {type: string, pattern: "^[a-f0-9]{64}$"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [age_confirmed]
+              properties:
+                invitation_token:
+                  type: string
+                  description: Required only while the active launch policy is invitation-only.
+                age_confirmed:
+                  type: boolean
+                  description: Confirms the user meets the minimum age displayed by the active policy.
+      responses:
+        "201": {$ref: "#/components/responses/Success"}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "429": {$ref: "#/components/responses/Error"}
+  /v1/whoami:
+    get:
+      operationId: getAuthorizationContext
+      responses:
+        "200": {$ref: "#/components/responses/Success"}
+        "404": {$ref: "#/components/responses/Error"}
+  /v1/attestations/rights:
+    get:
+      operationId: getRightsAttestation
+      responses:
+        "200":
+          description: Current policy and receipt status.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessEnvelope"
+    post:
+      operationId: acceptRightsAttestation
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [policy_version, accepted_statement_ids]
+              properties:
+                policy_version: {type: string, minLength: 1}
+                accepted_statement_ids:
+                  type: array
+                  minItems: 1
+                  items: {type: string, minLength: 1}
+      responses:
+        "200": {$ref: "#/components/responses/Success"}
+        "409": {$ref: "#/components/responses/Error"}
+  /v1/memories:
+    post:
+      operationId: createMemory
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [workspace_id, type, content, source]
+              properties:
+                workspace_id: {type: string, minLength: 1}
+                type: {enum: [episodic, semantic, procedural, outcome]}
+                content: {type: string, minLength: 1, maxLength: 2000}
+                source: {type: object}
+                keywords:
+                  type: array
+                  maxItems: 3
+                  items: {type: string, minLength: 1, maxLength: 128}
+      responses:
+        "201": {$ref: "#/components/responses/Success"}
+        "400": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+  /v1/credentials:
+    get:
+      operationId: listAgentCredentials
+      responses:
+        "200": {$ref: "#/components/responses/Success"}
+    post:
+      operationId: createAgentCredential
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [label, scopes, expires_at]
+              properties:
+                label: {type: string, minLength: 1, maxLength: 128}
+                scopes: {type: array, minItems: 1, items: {type: string}}
+                expires_at: {type: string, format: date-time}
+      responses:
+        "201": {$ref: "#/components/responses/Success"}
+        "403": {$ref: "#/components/responses/Error"}
+  /v1/credentials/{credential_id}:
+    delete:
+      operationId: revokeAgentCredential
+      parameters:
+        - name: credential_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        "200": {$ref: "#/components/responses/Success"}
+        "404": {$ref: "#/components/responses/Error"}
+  /v1/current-credential:
+    delete:
+      operationId: revokeCurrentAgentCredential
+      description: Revokes the bearer agent credential used for this request without requiring credential-management scope.
+      responses:
+        "200": {$ref: "#/components/responses/Success"}
+        "403": {$ref: "#/components/responses/Error"}
+  /v1/credentials/{credential_id}/rotate:
+    post:
+      operationId: rotateAgentCredential
+      parameters:
+        - name: credential_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [expires_at]
+              properties:
+                expires_at: {type: string, format: date-time}
+      responses:
+        "201": {$ref: "#/components/responses/Success"}
+        "404": {$ref: "#/components/responses/Error"}
+  /v1/exports:
+    post:
+      operationId: requestTenantExport
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                workspace_id: {type: string, format: uuid}
+      responses:
+        "202": {$ref: "#/components/responses/AcceptedOperation"}
+        "404": {$ref: "#/components/responses/Error"}
+  /v1/exports/{export_id}:
+    get:
+      operationId: getTenantExport
+      parameters:
+        - name: export_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        "200": {$ref: "#/components/responses/Success"}
+        "404": {$ref: "#/components/responses/Error"}
+  /v1/exports/{export_id}/download:
+    get:
+      operationId: downloadTenantExport
+      parameters:
+        - name: export_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        "200":
+          description: Decrypted JSON export for the authorized requester.
+          content:
+            application/json:
+              schema: {type: object}
+        "404": {$ref: "#/components/responses/Error"}
+  /v1/imports:
+    post:
+      operationId: importPortableBundle
+      description: Imports an authenticated AMPB2 encrypted bundle into an explicitly selected workspace. Sensitive passphrase headers must be redacted by infrastructure.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/ImportWorkspace"
+        - $ref: "#/components/parameters/BundlePassphrase"
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema: {type: string, format: binary, maxLength: 262144000}
+      responses:
+        "200": {$ref: "#/components/responses/Success"}
+        "400": {$ref: "#/components/responses/Error"}
+        "413": {$ref: "#/components/responses/Error"}
+        "428": {$ref: "#/components/responses/Error"}
+  /v1/imports/{import_id}:
+    get:
+      operationId: getPortableImportReport
+      parameters:
+        - name: import_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        "200": {$ref: "#/components/responses/Success"}
+        "404": {$ref: "#/components/responses/Error"}
+  /v1/search:
+    post:
+      operationId: searchMemory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [workspace_id, query]
+              properties:
+                workspace_id: {type: string, minLength: 1}
+                query: {type: string, minLength: 1, maxLength: 4000}
+                limit: {type: integer, minimum: 1, maximum: 200, default: 20}
+                cursor: {type: string, maxLength: 2048}
+      responses:
+        "200": {$ref: "#/components/responses/Success"}
+        "400": {$ref: "#/components/responses/Error"}
+  /v1/sources:
+    get:
+      operationId: listSources
+      parameters:
+        - name: workspace_id
+          in: query
+          required: false
+          schema: {type: string, format: uuid}
+      responses:
+        "200": {$ref: "#/components/responses/Success"}
+        "404": {$ref: "#/components/responses/Error"}
+  /v1/sources/{source_id}:
+    get:
+      operationId: getSource
+      parameters:
+        - name: source_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        "200": {$ref: "#/components/responses/Success"}
+        "404": {$ref: "#/components/responses/Error"}
+    delete:
+      operationId: requestSourceDeletion
+      parameters:
+        - name: source_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200": {$ref: "#/components/responses/Success"}
+        "202": {$ref: "#/components/responses/AcceptedOperation"}
+        "404": {$ref: "#/components/responses/Error"}
+  /v1/sources/{source_id}/retry:
+    post:
+      operationId: retrySourceExtraction
+      parameters:
+        - name: source_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        "202": {$ref: "#/components/responses/AcceptedOperation"}
+        "404": {$ref: "#/components/responses/Error"}
+  /v1/sources/uploads:
+    post:
+      operationId: createSourceUpload
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [workspace_id, filename, media_type, size_bytes, checksum_sha256, rights_basis]
+              properties:
+                workspace_id: {type: string, minLength: 1}
+                filename: {type: string, minLength: 1, maxLength: 512}
+                media_type: {enum: [application/pdf, application/epub+zip, text/markdown, text/plain]}
+                size_bytes: {type: integer, minimum: 1}
+                checksum_sha256: {type: string, pattern: "^[a-f0-9]{64}$"}
+                rights_basis: {enum: [author_owned, licensed, public_domain_or_open, lawfully_acquired_private_use]}
+      responses:
+        "202": {$ref: "#/components/responses/AcceptedOperation"}
+        "409": {$ref: "#/components/responses/Error"}
+        "428": {$ref: "#/components/responses/Error"}
+  /v1/source-uploads/{grant_id}/content:
+    put:
+      operationId: uploadGrantedSourceContent
+      security: []
+      parameters:
+        - name: grant_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+        - name: token
+          in: query
+          required: true
+          schema: {type: string, minLength: 32}
+      requestBody:
+        required: true
+        content:
+          application/pdf: {schema: {type: string, format: binary}}
+          application/epub+zip: {schema: {type: string, format: binary}}
+          text/markdown: {schema: {type: string, format: binary}}
+          text/plain: {schema: {type: string, format: binary}}
+      responses:
+        "200": {$ref: "#/components/responses/Success"}
+        "404": {$ref: "#/components/responses/Error"}
+  /v1/source-queries:
+    post:
+      operationId: queryAuthorizedSources
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [source_ids, query, provider, model]
+              properties:
+                source_ids:
+                  type: array
+                  minItems: 1
+                  maxItems: 100
+                  items: {type: string, format: uuid}
+                query: {type: string, minLength: 1, maxLength: 4000}
+                limit: {type: integer, minimum: 1, maximum: 50, default: 10}
+                context_token_budget: {type: integer, minimum: 1, maximum: 32768, default: 1200}
+                generate: {type: boolean, default: false}
+                provider: {type: string, minLength: 1}
+                model: {type: string, minLength: 1}
+      responses:
+        "200": {$ref: "#/components/responses/Success"}
+        "400": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+  /v1/memory-proposals:
+    post:
+      operationId: createReviewedMemoryProposal
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [workspace_id, memory_type, content, transformation, evidence]
+              properties:
+                workspace_id: {type: string, format: uuid}
+                memory_type: {enum: [episodic, semantic, procedural, outcome]}
+                content: {type: string, minLength: 1, maxLength: 2000}
+                transformation: {enum: [summary, interpretation, synthesis, user_edit]}
+                evidence:
+                  type: array
+                  minItems: 1
+                  maxItems: 50
+                  items: {$ref: "#/components/schemas/ProposalEvidence"}
+      responses:
+        "201": {$ref: "#/components/responses/Success"}
+        "400": {$ref: "#/components/responses/Error"}
+  /v1/memory-proposals/{proposal_id}:
+    parameters:
+      - $ref: "#/components/parameters/ProposalID"
+    get:
+      operationId: getReviewedMemoryProposal
+      responses:
+        "200": {$ref: "#/components/responses/Success"}
+        "404": {$ref: "#/components/responses/Error"}
+    patch:
+      operationId: editReviewedMemoryProposal
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [content, transformation]
+              properties:
+                content: {type: string, minLength: 1, maxLength: 2000}
+                transformation: {enum: [summary, interpretation, synthesis, user_edit]}
+      responses:
+        "200": {$ref: "#/components/responses/Success"}
+        "409": {$ref: "#/components/responses/Error"}
+  /v1/memory-proposals/{proposal_id}/accept:
+    post:
+      operationId: acceptReviewedMemoryProposal
+      parameters:
+        - $ref: "#/components/parameters/ProposalID"
+      responses:
+        "200": {$ref: "#/components/responses/Success"}
+        "409": {$ref: "#/components/responses/Error"}
+  /v1/memory-proposals/{proposal_id}/reject:
+    post:
+      operationId: rejectReviewedMemoryProposal
+      parameters:
+        - $ref: "#/components/parameters/ProposalID"
+      responses:
+        "200": {$ref: "#/components/responses/Success"}
+        "409": {$ref: "#/components/responses/Error"}
+  /v1/deletions/{operation_id}:
+    get:
+      operationId: getDeletionStatus
+      parameters:
+        - name: operation_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        "200": {$ref: "#/components/responses/Success"}
+        "404": {$ref: "#/components/responses/Error"}
+  /v1/account:
+    delete:
+      operationId: requestAccountDeletion
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200": {$ref: "#/components/responses/Success"}
+        "202": {$ref: "#/components/responses/AcceptedOperation"}
+        "400": {$ref: "#/components/responses/Error"}
+  /v1/privacy:
+    get:
+      operationId: getPrivacyOverview
+      responses:
+        "200": {$ref: "#/components/responses/Success"}
+        "404": {$ref: "#/components/responses/Error"}
+  /v1/billing:
+    get:
+      operationId: getBillingOverview
+      responses:
+        "200": {$ref: "#/components/responses/Success"}
+        "404": {$ref: "#/components/responses/Error"}
+  /v1/billing/plan-changes:
+    post:
+      operationId: requestBillingPlanChange
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [action, plan_id]
+              properties:
+                action: {enum: [upgrade, cancel]}
+                plan_id: {type: string, minLength: 1}
+      responses:
+        "200": {$ref: "#/components/responses/Success"}
+        "202": {$ref: "#/components/responses/AcceptedOperation"}
+        "400": {$ref: "#/components/responses/Error"}
+  /v1/operations/{operation_id}:
+    get:
+      operationId: getOperation
+      parameters:
+        - name: operation_id
+          in: path
+          required: true
+          schema: {type: string, minLength: 1}
+      responses:
+        "200": {$ref: "#/components/responses/Success"}
+        "404": {$ref: "#/components/responses/Error"}
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: {type: string, minLength: 16, maxLength: 128}
+    TenantSelection:
+      name: X-Agent-Memory-Tenant
+      in: header
+      required: false
+      description: Selects an authorized membership and never grants access.
+      schema: {type: string, maxLength: 128}
+    ProposalID:
+      name: proposal_id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    ImportWorkspace:
+      name: X-Agent-Memory-Workspace
+      in: header
+      required: true
+      schema: {type: string, format: uuid}
+    BundlePassphrase:
+      name: X-Agent-Memory-Bundle-Passphrase
+      in: header
+      required: true
+      description: Sensitive AMPB2 decryption secret. Never persist or log this value.
+      schema: {type: string, minLength: 12, maxLength: 1024}
+  responses:
+    Success:
+      description: Successful synchronous operation.
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/SuccessEnvelope"}
+    AcceptedOperation:
+      description: Asynchronous operation accepted.
+      headers:
+        Location:
+          schema: {type: string}
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/SuccessEnvelope"}
+    Error:
+      description: Safe structured error.
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/ErrorEnvelope"}
+  schemas:
+    ProposalEvidence:
+      type: object
+      additionalProperties: false
+      required: [source_id, source_version, passage_id, citation_id]
+      properties:
+        source_id: {type: string, format: uuid}
+        source_version: {type: integer, minimum: 1}
+        passage_id: {type: string, minLength: 1}
+        citation_id: {type: string, minLength: 1}
+    SuccessEnvelope:
+      type: object
+      additionalProperties: false
+      required: [ok, version, request_id, data]
+      properties:
+        ok: {const: true}
+        version: {const: v1}
+        request_id: {type: string}
+        data: {}
+    ErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required: [ok, version, request_id, error]
+      properties:
+        ok: {const: false}
+        version: {const: v1}
+        request_id: {type: string}
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message, retryable]
+          properties:
+            code: {type: string}
+            message: {type: string}
+            retryable: {type: boolean}
+            recovery: {type: object}

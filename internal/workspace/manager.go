@@ -999,7 +999,13 @@ func writeCodexConfig(path, dataDir string) error {
 	if err != nil {
 		return fmt.Errorf("resolve Codex writable root: %w", err)
 	}
-	quoted := strconv.Quote(filepath.ToSlash(absDataDir))
+	permissionPath := absDataDir
+	if home, homeErr := os.UserHomeDir(); homeErr == nil {
+		if relative, relErr := filepath.Rel(home, absDataDir); relErr == nil && relative != "." && relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+			permissionPath = filepath.Join("~", relative)
+		}
+	}
+	quoted := strconv.Quote(filepath.ToSlash(permissionPath))
 	managed := codexConfigStart + "\n" +
 		"default_permissions = \"agent-memory-workspace\"\n" +
 		"permissions.agent-memory-workspace.filesystem.\":root\" = \"read\"\n" +

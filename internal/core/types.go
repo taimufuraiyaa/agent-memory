@@ -38,6 +38,7 @@ const (
 	SourceConsolidation    SourceType = "consolidation"
 	SourceReflection       SourceType = "reflection"
 	SourceReconstruction   SourceType = "reconstruction"
+	SourceImport           SourceType = "import"
 )
 
 // RelationType indicates relationship edges between memories.

@@ -1,13 +1,69 @@
 #!/usr/bin/env node
 import readline from "node:readline";
+import { randomUUID } from "node:crypto";
 
 const protocolVersion = "2025-03-26";
 const serviceURL = (process.env.AGENT_MEMORY_URL || "http://127.0.0.1:3210").replace(/\/$/, "");
+const serviceMode = process.env.AGENT_MEMORY_MODE || "local";
+const hostedToken = process.env.AGENT_MEMORY_TOKEN || "";
+const hostedTenant = process.env.AGENT_MEMORY_TENANT || "";
 const maxResponseBytes = Number(process.env.AGENT_MEMORY_MCP_MAX_RESPONSE_BYTES || 262144);
-const profile = process.env.AGENT_MEMORY_MCP_PROFILE || "default";
+const clientID = process.env.AGENT_MEMORY_CLIENT_ID || "";
+const legacyProfile = process.env.AGENT_MEMORY_MCP_PROFILE || "default";
 
-if (!new Set(["default", "expanded"]).has(profile)) {
-  process.stderr.write(`unsupported AGENT_MEMORY_MCP_PROFILE: ${profile}\n`);
+if (!new Set(["local", "hosted"]).has(serviceMode)) {
+  process.stderr.write(`unsupported AGENT_MEMORY_MODE: ${serviceMode}\n`);
+  process.exit(2);
+}
+
+let profile;
+try {
+  profile = await resolveToolProfile();
+} catch (error) {
+  process.stderr.write(`${error instanceof Error ? error.message : "cannot resolve MCP tool profile"}\n`);
+  process.exit(2);
+}
+
+async function resolveToolProfile() {
+  if (!clientID) {
+    if (!new Set(["default", "expanded"]).has(legacyProfile)) {
+      throw new Error(`unsupported AGENT_MEMORY_MCP_PROFILE: ${legacyProfile}`);
+    }
+    return legacyProfile;
+  }
+  if (!/^[a-z][a-z0-9_-]{0,63}$/.test(clientID)) {
+    throw new Error("AGENT_MEMORY_CLIENT_ID must be a lowercase slug up to 64 characters");
+  }
+  if (serviceMode !== "local") {
+    throw new Error("AGENT_MEMORY_CLIENT_ID profile resolution is available only in local mode");
+  }
+  let response;
+  try {
+    response = await fetch(`${serviceURL}/api/v1/client-profiles/${clientID}`, {
+      method: "GET",
+      headers: { accept: "application/json" },
+      signal: AbortSignal.timeout(3000),
+    });
+  } catch {
+    throw new Error(`cannot resolve AGENT_MEMORY_CLIENT_ID ${clientID}: local service is unavailable`);
+  }
+  if (!response.ok) {
+    throw new Error(`cannot resolve AGENT_MEMORY_CLIENT_ID ${clientID}: service returned HTTP ${response.status}`);
+  }
+  let payload;
+  try {
+    payload = await response.json();
+  } catch {
+    throw new Error(`cannot resolve AGENT_MEMORY_CLIENT_ID ${clientID}: service returned invalid JSON`);
+  }
+  const resolved = payload?.data?.profile;
+  if (payload?.ok === false || resolved?.id !== clientID || !new Set(["default", "expanded"]).has(resolved?.tool_profile)) {
+    throw new Error(`cannot resolve AGENT_MEMORY_CLIENT_ID ${clientID}: service returned an invalid client profile`);
+  }
+  return resolved.tool_profile;
+}
+if (serviceMode === "hosted" && (!hostedToken || !hostedTenant)) {
+  process.stderr.write("hosted MCP mode requires AGENT_MEMORY_TOKEN and AGENT_MEMORY_TENANT; inject the token from an OS keyring-backed launcher\n");
   process.exit(2);
 }
 
@@ -23,6 +79,7 @@ const allTools = [
     workspace: { type: "string" },
     top_k: { type: "integer", minimum: 1, maximum: 200 },
     format: { type: "string", enum: ["compact", "full"] },
+    source_ids: { type: "array", items: { type: "string" } },
   }, ["query"]),
   tool("memory_recall", "Build token-budgeted context for a task", {
     task: { type: "string" },
@@ -30,6 +87,7 @@ const allTools = [
     top_k: { type: "integer", minimum: 1, maximum: 200 },
     budget: { type: "integer", minimum: 1, maximum: 32000 },
     format: { type: "string", enum: ["compact", "full"] },
+    source_ids: { type: "array", items: { type: "string" } },
   }, ["task"]),
   tool("memory_feedback", "Record usefulness feedback for a retrieval request", {
     request_id: { type: "string" },
@@ -38,6 +96,7 @@ const allTools = [
     useful_count: { type: "integer", minimum: 0 },
     total_count: { type: "integer", minimum: 0 },
     workspace: { type: "string" },
+    memory_id: { type: "string" },
   }, ["request_id", "score"]),
   tool("memory_sessions", "List recent captured sessions", {
     workspace: { type: "string" },
@@ -46,6 +105,7 @@ const allTools = [
   tool("memory_session_end", "Extract durable learnings from a completed session", {
     transcript: { type: "string" },
     workspace: { type: "string" },
+    session_id: { type: "string" },
   }, ["transcript"]),
 ];
 const defaultToolNames = new Set([
@@ -72,7 +132,7 @@ function error(id, code, message, data) {
 }
 
 function toolResult(id, data) {
-  const withTransport = { ...data, _transport: { mode: "http", degraded: false } };
+  const withTransport = { ...data, _transport: { mode: serviceMode, protocol: "http", degraded: false } };
   const text = JSON.stringify(withTransport);
   if (Buffer.byteLength(text) > maxResponseBytes) {
     error(id, -32002, `service response exceeds ${maxResponseBytes} bytes`);
@@ -92,9 +152,15 @@ function validateArguments(definition, args) {
 }
 
 async function requestService(path, { method = "POST", body } = {}) {
+  const headers = body ? { "content-type": "application/json" } : {};
+  if (serviceMode === "hosted") {
+    headers.authorization = `Bearer ${hostedToken}`;
+    headers["x-agent-memory-tenant"] = hostedTenant;
+    headers["idempotency-key"] = randomUUID();
+  }
   const response = await fetch(`${serviceURL}${path}`, {
     method,
-    headers: body ? { "content-type": "application/json" } : undefined,
+    headers,
     body: body ? JSON.stringify(body) : undefined,
   });
   const payload = await response.json();
@@ -134,26 +200,49 @@ async function callTool(name, args) {
   validateArguments(definition, args);
   switch (name) {
     case "memory_health":
-      return requestService("/health", { method: "GET" });
+      return requestService(serviceMode === "hosted" ? "/health/live" : "/health", { method: "GET" });
     case "memory_write":
+      if (serviceMode === "hosted") {
+        if (!args.workspace) throw new Error("workspace is required in hosted mode");
+        return requestService("/v1/memories", { body: { workspace_id: args.workspace, content: args.content, type: args.type || "semantic", source: { type: "user_input" } } });
+      }
       return requestService("/api/v1/memories/write", { body: { ...args, type: args.type || "semantic" } });
     case "memory_search": {
+      if (serviceMode === "hosted") {
+        if (!args.source_ids?.length) throw new Error("source_ids are required in hosted mode");
+        const data = await requestService("/v1/source-queries", { body: { source_ids: args.source_ids, query: args.query, limit: args.top_k, provider: "local-minilm-scaffold", model: "local-hash-v1" } });
+        return args.format === "full" ? data : { request_id: data.request_id, results: (data.evidence || []).map(({ passage_id: id, text: content, score, citation_id }) => ({ id, type: "source_passage", content, score, citation_id })) };
+      }
       const data = await requestService("/api/v1/memories/search", { body: args });
       return args.format === "full" ? data : compactSearch(data);
     }
     case "memory_recall": {
+      if (serviceMode === "hosted") {
+        if (!args.source_ids?.length) throw new Error("source_ids are required in hosted mode");
+        const data = await requestService("/v1/source-queries", { body: { source_ids: args.source_ids, query: args.task, context_token_budget: args.budget, limit: args.top_k, provider: "local-minilm-scaffold", model: "local-hash-v1" } });
+        return { request_id: data.request_id, context_block: (data.evidence || []).map((item) => `[${item.citation_id}] ${item.text}`).join("\n"), tokens_used: data.context?.used_tokens || 0, tokens_budget: data.context?.budget || args.budget, memories_used: data.evidence || [] };
+      }
       const data = await requestService("/api/v1/memories/recall", { body: args });
       return args.format === "full" ? data : compactRecall(data);
     }
     case "memory_feedback":
+      if (serviceMode === "hosted") {
+        if (!args.memory_id) throw new Error("memory_id is required in hosted mode");
+        return requestService(`/v1/memories/${encodeURIComponent(args.memory_id)}/feedback`, { body: { request_id: args.request_id, outcome: args.score >= 4 ? "helpful" : args.score <= 1 ? "rejected" : "ignored", reason_category: args.reason || "" } });
+      }
       return requestService("/api/v1/requests/feedback", { body: args });
     case "memory_sessions": {
+      if (serviceMode === "hosted") throw new Error("memory_sessions is not available in hosted compatibility v1");
       const query = new URLSearchParams();
       if (args.workspace) query.set("workspace", args.workspace);
       if (args.limit) query.set("limit", String(args.limit));
       return requestService(`/api/v1/sessions${query.size ? `?${query}` : ""}`, { method: "GET" });
     }
     case "memory_session_end":
+      if (serviceMode === "hosted") {
+        if (!args.session_id || !args.workspace) throw new Error("session_id and workspace are required in hosted mode");
+        return requestService(`/v1/sessions/${encodeURIComponent(args.session_id)}/end`, { body: { workspace_id: args.workspace, transcript: args.transcript } });
+      }
       return requestService("/api/v1/memories/session-end", { body: args });
     default:
       throw new Error(`tool execution is not available for ${name}`);

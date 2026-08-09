@@ -1,4 +1,5 @@
-import { a as isSymbol, b as isObject, d as defineProperty, e as eq, c as isArrayLike, f as isIndex, g as baseRest, h as isPrototype, j as arrayLikeKeys, k as baseFlatten, s as setToString, o as overRest, l as overArg, m as isObjectLike, n as baseGetTag, p as keys, r as root, q as getSymbols, t as stubArray, u as arrayPush, v as baseGetAllKeys, U as Uint8Array, S as Symbol$1, w as getTag, x as baseUnary, y as nodeUtil, z as isBuffer, A as Stack, B as arrayEach, C as isArray, D as getAllKeys, E as isTypedArray, F as isArrayLikeObject, H as isArguments, I as isFunction, J as baseFor, K as baseIteratee, L as baseFindIndex, M as baseEach, N as arrayMap, O as castFunction, P as baseForOwn, Q as hasPath, R as identity, T as castPath, V as toKey, W as baseGet, X as hasIn, Y as toString, G as Graph, Z as forEach, _ as constant, i as isUndefined, $ as filter, a0 as values, a1 as reduce } from "./chunk-graph.js";
+import { A as isSymbol, a as isObject, c as isArrayLike, B as isIndex, e as eq, C as baseRest, D as baseFlatten, E as setToString, F as overRest, l as isObjectLike, H as baseGetTag, q as isBuffer, I as isTypedArray, v as isArray, J as isArrayLikeObject, K as isArguments, L as isFunction, M as baseFor, t as Stack, y as baseIteratee, k as keys, N as baseFindIndex, O as castFunction, P as baseForOwn, Q as hasPath, R as identity, T as castPath, V as toKey, W as baseGet, z as arrayMap, n as baseUnary, X as hasIn, Y as toString, G as Graph, Z as forEach, _ as constant, i as isUndefined, $ as filter, a0 as values, a1 as reduce } from "./chunk-graph.js";
+import { g as getPrototype, b as baseClone, k as keysIn, a as baseAssignValue, c as copyObject, d as copyArray, e as cloneBuffer, f as cloneTypedArray, i as initCloneObject, h as assignValue, j as baseMap, m as map } from "./chunk-map.js";
 var reWhitespace = /\s/;
 function trimmedEndIndex(string) {
   var index = string.length;
@@ -49,69 +50,6 @@ function toInteger(value) {
   var result = toFinite(value), remainder = result % 1;
   return result === result ? remainder ? result - remainder : result : 0;
 }
-var objectCreate = Object.create;
-var baseCreate = /* @__PURE__ */ (function() {
-  function object() {
-  }
-  return function(proto) {
-    if (!isObject(proto)) {
-      return {};
-    }
-    if (objectCreate) {
-      return objectCreate(proto);
-    }
-    object.prototype = proto;
-    var result = new object();
-    object.prototype = void 0;
-    return result;
-  };
-})();
-function copyArray(source, array) {
-  var index = -1, length = source.length;
-  array || (array = Array(length));
-  while (++index < length) {
-    array[index] = source[index];
-  }
-  return array;
-}
-function baseAssignValue(object, key, value) {
-  if (key == "__proto__" && defineProperty) {
-    defineProperty(object, key, {
-      "configurable": true,
-      "enumerable": true,
-      "value": value,
-      "writable": true
-    });
-  } else {
-    object[key] = value;
-  }
-}
-var objectProto$5 = Object.prototype;
-var hasOwnProperty$5 = objectProto$5.hasOwnProperty;
-function assignValue(object, key, value) {
-  var objValue = object[key];
-  if (!(hasOwnProperty$5.call(object, key) && eq(objValue, value)) || value === void 0 && !(key in object)) {
-    baseAssignValue(object, key, value);
-  }
-}
-function copyObject(source, props, object, customizer) {
-  var isNew = !object;
-  object || (object = {});
-  var index = -1, length = props.length;
-  while (++index < length) {
-    var key = props[index];
-    var newValue = void 0;
-    if (newValue === void 0) {
-      newValue = source[key];
-    }
-    if (isNew) {
-      baseAssignValue(object, key, newValue);
-    } else {
-      assignValue(object, key, newValue);
-    }
-  }
-  return object;
-}
 function isIterateeCall(value, index, object) {
   if (!isObject(object)) {
     return false;
@@ -140,32 +78,6 @@ function createAssigner(assigner) {
     return object;
   });
 }
-function nativeKeysIn(object) {
-  var result = [];
-  if (object != null) {
-    for (var key in Object(object)) {
-      result.push(key);
-    }
-  }
-  return result;
-}
-var objectProto$4 = Object.prototype;
-var hasOwnProperty$4 = objectProto$4.hasOwnProperty;
-function baseKeysIn(object) {
-  if (!isObject(object)) {
-    return nativeKeysIn(object);
-  }
-  var isProto = isPrototype(object), result = [];
-  for (var key in object) {
-    if (!(key == "constructor" && (isProto || !hasOwnProperty$4.call(object, key)))) {
-      result.push(key);
-    }
-  }
-  return result;
-}
-function keysIn(object) {
-  return isArrayLike(object) ? arrayLikeKeys(object, true) : baseKeysIn(object);
-}
 function flatten(array) {
   var length = array == null ? 0 : array.length;
   return length ? baseFlatten(array) : [];
@@ -173,204 +85,21 @@ function flatten(array) {
 function flatRest(func) {
   return setToString(overRest(func, void 0, flatten), func + "");
 }
-var getPrototype = overArg(Object.getPrototypeOf, Object);
-var objectTag$1 = "[object Object]";
-var funcProto = Function.prototype, objectProto$3 = Object.prototype;
+var objectTag = "[object Object]";
+var funcProto = Function.prototype, objectProto$2 = Object.prototype;
 var funcToString = funcProto.toString;
-var hasOwnProperty$3 = objectProto$3.hasOwnProperty;
+var hasOwnProperty$2 = objectProto$2.hasOwnProperty;
 var objectCtorString = funcToString.call(Object);
 function isPlainObject(value) {
-  if (!isObjectLike(value) || baseGetTag(value) != objectTag$1) {
+  if (!isObjectLike(value) || baseGetTag(value) != objectTag) {
     return false;
   }
   var proto = getPrototype(value);
   if (proto === null) {
     return true;
   }
-  var Ctor = hasOwnProperty$3.call(proto, "constructor") && proto.constructor;
+  var Ctor = hasOwnProperty$2.call(proto, "constructor") && proto.constructor;
   return typeof Ctor == "function" && Ctor instanceof Ctor && funcToString.call(Ctor) == objectCtorString;
-}
-function baseAssign(object, source) {
-  return object && copyObject(source, keys(source), object);
-}
-function baseAssignIn(object, source) {
-  return object && copyObject(source, keysIn(source), object);
-}
-var freeExports = typeof exports == "object" && exports && !exports.nodeType && exports;
-var freeModule = freeExports && typeof module == "object" && module && !module.nodeType && module;
-var moduleExports = freeModule && freeModule.exports === freeExports;
-var Buffer = moduleExports ? root.Buffer : void 0, allocUnsafe = Buffer ? Buffer.allocUnsafe : void 0;
-function cloneBuffer(buffer, isDeep) {
-  if (isDeep) {
-    return buffer.slice();
-  }
-  var length = buffer.length, result = allocUnsafe ? allocUnsafe(length) : new buffer.constructor(length);
-  buffer.copy(result);
-  return result;
-}
-function copySymbols(source, object) {
-  return copyObject(source, getSymbols(source), object);
-}
-var nativeGetSymbols = Object.getOwnPropertySymbols;
-var getSymbolsIn = !nativeGetSymbols ? stubArray : function(object) {
-  var result = [];
-  while (object) {
-    arrayPush(result, getSymbols(object));
-    object = getPrototype(object);
-  }
-  return result;
-};
-function copySymbolsIn(source, object) {
-  return copyObject(source, getSymbolsIn(source), object);
-}
-function getAllKeysIn(object) {
-  return baseGetAllKeys(object, keysIn, getSymbolsIn);
-}
-var objectProto$2 = Object.prototype;
-var hasOwnProperty$2 = objectProto$2.hasOwnProperty;
-function initCloneArray(array) {
-  var length = array.length, result = new array.constructor(length);
-  if (length && typeof array[0] == "string" && hasOwnProperty$2.call(array, "index")) {
-    result.index = array.index;
-    result.input = array.input;
-  }
-  return result;
-}
-function cloneArrayBuffer(arrayBuffer) {
-  var result = new arrayBuffer.constructor(arrayBuffer.byteLength);
-  new Uint8Array(result).set(new Uint8Array(arrayBuffer));
-  return result;
-}
-function cloneDataView(dataView, isDeep) {
-  var buffer = isDeep ? cloneArrayBuffer(dataView.buffer) : dataView.buffer;
-  return new dataView.constructor(buffer, dataView.byteOffset, dataView.byteLength);
-}
-var reFlags = /\w*$/;
-function cloneRegExp(regexp) {
-  var result = new regexp.constructor(regexp.source, reFlags.exec(regexp));
-  result.lastIndex = regexp.lastIndex;
-  return result;
-}
-var symbolProto = Symbol$1 ? Symbol$1.prototype : void 0, symbolValueOf = symbolProto ? symbolProto.valueOf : void 0;
-function cloneSymbol(symbol) {
-  return symbolValueOf ? Object(symbolValueOf.call(symbol)) : {};
-}
-function cloneTypedArray(typedArray, isDeep) {
-  var buffer = isDeep ? cloneArrayBuffer(typedArray.buffer) : typedArray.buffer;
-  return new typedArray.constructor(buffer, typedArray.byteOffset, typedArray.length);
-}
-var boolTag$1 = "[object Boolean]", dateTag$1 = "[object Date]", mapTag$2 = "[object Map]", numberTag$1 = "[object Number]", regexpTag$1 = "[object RegExp]", setTag$2 = "[object Set]", stringTag$1 = "[object String]", symbolTag$1 = "[object Symbol]";
-var arrayBufferTag$1 = "[object ArrayBuffer]", dataViewTag$1 = "[object DataView]", float32Tag$1 = "[object Float32Array]", float64Tag$1 = "[object Float64Array]", int8Tag$1 = "[object Int8Array]", int16Tag$1 = "[object Int16Array]", int32Tag$1 = "[object Int32Array]", uint8Tag$1 = "[object Uint8Array]", uint8ClampedTag$1 = "[object Uint8ClampedArray]", uint16Tag$1 = "[object Uint16Array]", uint32Tag$1 = "[object Uint32Array]";
-function initCloneByTag(object, tag, isDeep) {
-  var Ctor = object.constructor;
-  switch (tag) {
-    case arrayBufferTag$1:
-      return cloneArrayBuffer(object);
-    case boolTag$1:
-    case dateTag$1:
-      return new Ctor(+object);
-    case dataViewTag$1:
-      return cloneDataView(object, isDeep);
-    case float32Tag$1:
-    case float64Tag$1:
-    case int8Tag$1:
-    case int16Tag$1:
-    case int32Tag$1:
-    case uint8Tag$1:
-    case uint8ClampedTag$1:
-    case uint16Tag$1:
-    case uint32Tag$1:
-      return cloneTypedArray(object, isDeep);
-    case mapTag$2:
-      return new Ctor();
-    case numberTag$1:
-    case stringTag$1:
-      return new Ctor(object);
-    case regexpTag$1:
-      return cloneRegExp(object);
-    case setTag$2:
-      return new Ctor();
-    case symbolTag$1:
-      return cloneSymbol(object);
-  }
-}
-function initCloneObject(object) {
-  return typeof object.constructor == "function" && !isPrototype(object) ? baseCreate(getPrototype(object)) : {};
-}
-var mapTag$1 = "[object Map]";
-function baseIsMap(value) {
-  return isObjectLike(value) && getTag(value) == mapTag$1;
-}
-var nodeIsMap = nodeUtil && nodeUtil.isMap;
-var isMap = nodeIsMap ? baseUnary(nodeIsMap) : baseIsMap;
-var setTag$1 = "[object Set]";
-function baseIsSet(value) {
-  return isObjectLike(value) && getTag(value) == setTag$1;
-}
-var nodeIsSet = nodeUtil && nodeUtil.isSet;
-var isSet = nodeIsSet ? baseUnary(nodeIsSet) : baseIsSet;
-var CLONE_DEEP_FLAG$1 = 1, CLONE_FLAT_FLAG = 2, CLONE_SYMBOLS_FLAG$1 = 4;
-var argsTag = "[object Arguments]", arrayTag = "[object Array]", boolTag = "[object Boolean]", dateTag = "[object Date]", errorTag = "[object Error]", funcTag = "[object Function]", genTag = "[object GeneratorFunction]", mapTag = "[object Map]", numberTag = "[object Number]", objectTag = "[object Object]", regexpTag = "[object RegExp]", setTag = "[object Set]", stringTag = "[object String]", symbolTag = "[object Symbol]", weakMapTag = "[object WeakMap]";
-var arrayBufferTag = "[object ArrayBuffer]", dataViewTag = "[object DataView]", float32Tag = "[object Float32Array]", float64Tag = "[object Float64Array]", int8Tag = "[object Int8Array]", int16Tag = "[object Int16Array]", int32Tag = "[object Int32Array]", uint8Tag = "[object Uint8Array]", uint8ClampedTag = "[object Uint8ClampedArray]", uint16Tag = "[object Uint16Array]", uint32Tag = "[object Uint32Array]";
-var cloneableTags = {};
-cloneableTags[argsTag] = cloneableTags[arrayTag] = cloneableTags[arrayBufferTag] = cloneableTags[dataViewTag] = cloneableTags[boolTag] = cloneableTags[dateTag] = cloneableTags[float32Tag] = cloneableTags[float64Tag] = cloneableTags[int8Tag] = cloneableTags[int16Tag] = cloneableTags[int32Tag] = cloneableTags[mapTag] = cloneableTags[numberTag] = cloneableTags[objectTag] = cloneableTags[regexpTag] = cloneableTags[setTag] = cloneableTags[stringTag] = cloneableTags[symbolTag] = cloneableTags[uint8Tag] = cloneableTags[uint8ClampedTag] = cloneableTags[uint16Tag] = cloneableTags[uint32Tag] = true;
-cloneableTags[errorTag] = cloneableTags[funcTag] = cloneableTags[weakMapTag] = false;
-function baseClone(value, bitmask, customizer, key, object, stack) {
-  var result, isDeep = bitmask & CLONE_DEEP_FLAG$1, isFlat = bitmask & CLONE_FLAT_FLAG, isFull = bitmask & CLONE_SYMBOLS_FLAG$1;
-  if (result !== void 0) {
-    return result;
-  }
-  if (!isObject(value)) {
-    return value;
-  }
-  var isArr = isArray(value);
-  if (isArr) {
-    result = initCloneArray(value);
-    if (!isDeep) {
-      return copyArray(value, result);
-    }
-  } else {
-    var tag = getTag(value), isFunc = tag == funcTag || tag == genTag;
-    if (isBuffer(value)) {
-      return cloneBuffer(value, isDeep);
-    }
-    if (tag == objectTag || tag == argsTag || isFunc && !object) {
-      result = isFlat || isFunc ? {} : initCloneObject(value);
-      if (!isDeep) {
-        return isFlat ? copySymbolsIn(value, baseAssignIn(result, value)) : copySymbols(value, baseAssign(result, value));
-      }
-    } else {
-      if (!cloneableTags[tag]) {
-        return object ? value : {};
-      }
-      result = initCloneByTag(value, tag, isDeep);
-    }
-  }
-  stack || (stack = new Stack());
-  var stacked = stack.get(value);
-  if (stacked) {
-    return stacked;
-  }
-  stack.set(value, result);
-  if (isSet(value)) {
-    value.forEach(function(subValue) {
-      result.add(baseClone(subValue, bitmask, customizer, subValue, value, stack));
-    });
-  } else if (isMap(value)) {
-    value.forEach(function(subValue, key2) {
-      result.set(key2, baseClone(subValue, bitmask, customizer, key2, value, stack));
-    });
-  }
-  var keysFunc = isFull ? isFlat ? getAllKeysIn : getAllKeys : isFlat ? keysIn : keys;
-  var props = isArr ? void 0 : keysFunc(value);
-  arrayEach(props || value, function(subValue, key2) {
-    if (props) {
-      key2 = subValue;
-      subValue = value[key2];
-    }
-    assignValue(result, key2, baseClone(subValue, bitmask, customizer, key2, value, stack));
-  });
-  return result;
 }
 var CLONE_DEEP_FLAG = 1, CLONE_SYMBOLS_FLAG = 4;
 function cloneDeep(value) {
@@ -509,17 +238,6 @@ function findIndex(array, predicate, fromIndex) {
   return baseFindIndex(array, baseIteratee(predicate), index);
 }
 var find = createFind(findIndex);
-function baseMap(collection, iteratee) {
-  var index = -1, result = isArrayLike(collection) ? Array(collection.length) : [];
-  baseEach(collection, function(value, key, collection2) {
-    result[++index] = iteratee(value, key, collection2);
-  });
-  return result;
-}
-function map(collection, iteratee) {
-  var func = isArray(collection) ? arrayMap : baseMap;
-  return func(collection, baseIteratee(iteratee));
-}
 function forIn(object, iteratee) {
   return object == null ? object : baseFor(object, castFunction(iteratee), keysIn);
 }
@@ -1368,11 +1086,11 @@ function calcCutValue(t, g, child) {
   });
   return cutValue;
 }
-function initLowLimValues(tree, root2) {
+function initLowLimValues(tree, root) {
   if (arguments.length < 2) {
-    root2 = tree.nodes()[0];
+    root = tree.nodes()[0];
   }
-  dfsAssignLowLim(tree, {}, 1, root2);
+  dfsAssignLowLim(tree, {}, 1, root);
 }
 function dfsAssignLowLim(tree, visited, nextLim, v, parent) {
   var low = nextLim;
@@ -1429,10 +1147,10 @@ function exchangeEdges(t, g, e, f) {
   updateRanks(t, g);
 }
 function updateRanks(t, g) {
-  var root2 = find(t.nodes(), function(v) {
+  var root = find(t.nodes(), function(v) {
     return !g.node(v).parent;
   });
-  var vs = preorder(t, root2);
+  var vs = preorder(t, root);
   vs = vs.slice(1);
   forEach(vs, function(v) {
     var parent = t.node(v).parent, edge = g.edge(v, parent), flipped = false;
@@ -1473,25 +1191,25 @@ function networkSimplexRanker(g) {
   networkSimplex(g);
 }
 function run(g) {
-  var root2 = addDummyNode(g, "root", {}, "_root");
+  var root = addDummyNode(g, "root", {}, "_root");
   var depths = treeDepths(g);
   var height = max(values(depths)) - 1;
   var nodeSep = 2 * height + 1;
-  g.graph().nestingRoot = root2;
+  g.graph().nestingRoot = root;
   forEach(g.edges(), function(e) {
     g.edge(e).minlen *= nodeSep;
   });
   var weight = sumWeights(g) + 1;
   forEach(g.children(), function(child) {
-    dfs(g, root2, nodeSep, weight, height, depths, child);
+    dfs(g, root, nodeSep, weight, height, depths, child);
   });
   g.graph().nodeRankFactor = nodeSep;
 }
-function dfs(g, root2, nodeSep, weight, height, depths, v) {
+function dfs(g, root, nodeSep, weight, height, depths, v) {
   var children = g.children(v);
   if (!children.length) {
-    if (v !== root2) {
-      g.setEdge(root2, v, { weight: 0, minlen: nodeSep });
+    if (v !== root) {
+      g.setEdge(root, v, { weight: 0, minlen: nodeSep });
     }
     return;
   }
@@ -1503,7 +1221,7 @@ function dfs(g, root2, nodeSep, weight, height, depths, v) {
   g.setParent(bottom, v);
   label.borderBottom = bottom;
   forEach(children, function(child) {
-    dfs(g, root2, nodeSep, weight, height, depths, child);
+    dfs(g, root, nodeSep, weight, height, depths, child);
     var childNode = g.node(child);
     var childTop = childNode.borderTop ? childNode.borderTop : child;
     var childBottom = childNode.borderBottom ? childNode.borderBottom : child;
@@ -1521,7 +1239,7 @@ function dfs(g, root2, nodeSep, weight, height, depths, v) {
     });
   });
   if (!g.parent(v)) {
-    g.setEdge(root2, top, { weight: 0, minlen: height + depths[v] });
+    g.setEdge(root, top, { weight: 0, minlen: height + depths[v] });
   }
 }
 function treeDepths(g) {
@@ -1582,14 +1300,14 @@ function addSubgraphConstraints(g, cg, vs) {
   });
 }
 function buildLayerGraph(g, rank2, relationship) {
-  var root2 = createRootNode(g), result = new Graph({ compound: true }).setGraph({ root: root2 }).setDefaultNodeLabel(function(v) {
+  var root = createRootNode(g), result = new Graph({ compound: true }).setGraph({ root }).setDefaultNodeLabel(function(v) {
     return g.node(v);
   });
   forEach(g.nodes(), function(v) {
     var node = g.node(v), parent = g.parent(v);
     if (node.rank === rank2 || node.minRank <= rank2 && rank2 <= node.maxRank) {
       result.setNode(v);
-      result.setParent(v, parent || root2);
+      result.setParent(v, parent || root);
       forEach(g[relationship](v), function(e) {
         var u = e.v === v ? e.w : e.v, edge = result.edge(u, v), weight = !isUndefined(edge) ? edge.weight : 0;
         result.setEdge(u, v, { weight: g.edge(e).weight + weight });
@@ -1916,8 +1634,8 @@ function buildLayerGraphs(g, ranks, relationship) {
 function sweepLayerGraphs(layerGraphs, biasRight) {
   var cg = new Graph();
   forEach(layerGraphs, function(lg) {
-    var root2 = lg.graph().root;
-    var sorted = sortSubgraph(lg, root2, cg, biasRight);
+    var root = lg.graph().root;
+    var sorted = sortSubgraph(lg, root, cg, biasRight);
     forEach(sorted.vs, function(v, i) {
       lg.node(v).order = i;
     });
@@ -2090,10 +1808,10 @@ function hasConflict(conflicts, v, w) {
   return !!conflicts[v] && Object.prototype.hasOwnProperty.call(conflicts[v], w);
 }
 function verticalAlignment(g, layering, conflicts, neighborFn) {
-  var root2 = {}, align = {}, pos = {};
+  var root = {}, align = {}, pos = {};
   forEach(layering, function(layer) {
     forEach(layer, function(v, order2) {
-      root2[v] = v;
+      root[v] = v;
       align[v] = v;
       pos[v] = order2;
     });
@@ -2111,17 +1829,17 @@ function verticalAlignment(g, layering, conflicts, neighborFn) {
           var w = ws[i];
           if (align[v] === v && prevIdx < pos[w] && !hasConflict(conflicts, v, w)) {
             align[w] = v;
-            align[v] = root2[v] = root2[w];
+            align[v] = root[v] = root[w];
             prevIdx = pos[w];
           }
         }
       }
     });
   });
-  return { root: root2, align };
+  return { root, align };
 }
-function horizontalCompaction(g, layering, root2, align, reverseSep) {
-  var xs = {}, blockG = buildBlockGraph(g, layering, root2, reverseSep), borderType = reverseSep ? "borderLeft" : "borderRight";
+function horizontalCompaction(g, layering, root, align, reverseSep) {
+  var xs = {}, blockG = buildBlockGraph(g, layering, root, reverseSep), borderType = reverseSep ? "borderLeft" : "borderRight";
   function iterate(setXsFunc, nextNodesFunc) {
     var stack = blockG.nodes();
     var elem = stack.pop();
@@ -2154,19 +1872,19 @@ function horizontalCompaction(g, layering, root2, align, reverseSep) {
   iterate(pass1, blockG.predecessors.bind(blockG));
   iterate(pass2, blockG.successors.bind(blockG));
   forEach(align, function(v) {
-    xs[v] = xs[root2[v]];
+    xs[v] = xs[root[v]];
   });
   return xs;
 }
-function buildBlockGraph(g, layering, root2, reverseSep) {
+function buildBlockGraph(g, layering, root, reverseSep) {
   var blockGraph = new Graph(), graphLabel = g.graph(), sepFn = sep(graphLabel.nodesep, graphLabel.edgesep, reverseSep);
   forEach(layering, function(layer) {
     var u;
     forEach(layer, function(v) {
-      var vRoot = root2[v];
+      var vRoot = root[v];
       blockGraph.setNode(vRoot);
       if (u) {
-        var uRoot = root2[u], prevMax = blockGraph.edge(uRoot, vRoot);
+        var uRoot = root[u], prevMax = blockGraph.edge(uRoot, vRoot);
         blockGraph.setEdge(uRoot, vRoot, Math.max(sepFn(g, v, u), prevMax || 0));
       }
       u = v;
@@ -2637,7 +2355,5 @@ function canonicalize(attrs) {
   return newAttrs;
 }
 export {
-  baseClone as b,
-  layout as l,
-  map as m
+  layout as l
 };

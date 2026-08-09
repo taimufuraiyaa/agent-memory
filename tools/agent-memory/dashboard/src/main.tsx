@@ -1,6 +1,7 @@
 import { StrictMode } from 'react'
 import ReactDOM from 'react-dom/client'
 import { App } from './ui/App'
+import { RightsAttestationGate } from './ui/RightsAttestationGate'
 import './ui/styles.css'
 
 type PreloadRecoveryState = {
@@ -243,6 +244,8 @@ installPreloadRecovery()
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <RightsAttestationGate>
+      <App />
+    </RightsAttestationGate>
   </StrictMode>,
 )

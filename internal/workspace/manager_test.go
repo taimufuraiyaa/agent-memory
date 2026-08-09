@@ -3,12 +3,12 @@ package workspace
 import (
 	"context"
 	"fmt"
-	"time"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/taimufuraiyaa/agent-memory/internal/core"
 	"github.com/taimufuraiyaa/agent-memory/internal/storage/sqlite"
@@ -967,6 +967,25 @@ func TestWriteCodexConfigUsesNamedPermissionProfile(t *testing.T) {
 	}
 }
 
+func TestWriteCodexConfigUsesPortableHomeRelativeDataPath(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	dataDir := filepath.Join(home, ".agent-memory")
+	if err := writeCodexConfig(configPath, dataDir); err != nil {
+		t.Fatal(err)
+	}
+	contents, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(contents), `filesystem."~/.agent-memory" = "write"`) || strings.Contains(string(contents), filepath.ToSlash(home)) {
+		t.Fatalf("expected portable home-relative permission path, got %s", contents)
+	}
+}
+
 func TestWriteCodexGlobalFilesPreservesExistingSettings(t *testing.T) {
 	codexHome := t.TempDir()
 	dataDir := filepath.Join(t.TempDir(), "agent-memory")
@@ -1094,7 +1113,7 @@ func TestRenameUpdatesAllRuleFiles(t *testing.T) {
 
 	// Rename the workspace.
 	ren, err := mgr.Rename(context.Background(), RenameOptions{
-		CWD: cwd,
+		CWD:  cwd,
 		From: "old-name",
 		To:   "new-name",
 	})

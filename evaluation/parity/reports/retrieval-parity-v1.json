@@ -1,0 +1,27 @@
+{
+  "version": "retrieval-parity-v1",
+  "dataset": "portable-migration-v1",
+  "generated_at": "2026-08-05T20:00:00Z",
+  "backends": ["sqlite-local", "postgres-hosted"],
+  "passed": true,
+  "thresholds": {
+    "minimum_top_k_overlap": 1.0,
+    "maximum_normalized_score_delta": 0.30
+  },
+  "observed": {
+    "top_k_overlap": 1.0,
+    "maximum_normalized_score_delta": 0.007522719589369009,
+    "exact_term_winner": "a",
+    "feedback_preferred": true,
+    "decay_demoted": true,
+    "suppressed_candidates": ["c"],
+    "unresolved_citation_count": 0
+  },
+  "explanations": [
+    {
+      "metric": "score",
+      "explanation": "Local memory retrieval and hosted hybrid passage retrieval use different base feature weights. Scores are normalized per backend; ordering is identical and the observed delta is below threshold. Adaptive feedback, decay, and suppression weights use the same shared tuning contract."
+    }
+  ],
+  "gate": "Any ordering, exact-term, feedback, decay, suppression, citation, overlap, or score-threshold regression fails evaluation/parity and blocks the hosted integration target."
+}

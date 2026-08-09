@@ -13,12 +13,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/taimufuraiyaa/agent-memory/internal/attestation"
 	"github.com/taimufuraiyaa/agent-memory/internal/core"
 	"github.com/taimufuraiyaa/agent-memory/internal/engine"
 	"github.com/taimufuraiyaa/agent-memory/internal/ingestion"
 	"github.com/taimufuraiyaa/agent-memory/internal/library"
 	"github.com/taimufuraiyaa/agent-memory/internal/readingroom"
 	"github.com/taimufuraiyaa/agent-memory/internal/retrieval"
+	"github.com/taimufuraiyaa/agent-memory/internal/storage/sqlite"
 )
 
 const maxLibraryUploadBytes int64 = 128 << 20
@@ -48,12 +50,20 @@ func libraryImportHandler(svc *Service) http.HandlerFunc {
 			writeErr(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
 			return
 		}
+		receipt, rightsSubjectID, ok := requireActiveRightsAttestation(w, r, svc)
+		if !ok {
+			return
+		}
 		req, source, sourceFormat, status, err := decodeLibraryImportRequest(w, r)
 		if err != nil {
 			writeErr(w, status, "bad_request", err.Error())
 			return
 		}
 		applyLibraryImportIdentity(&req)
+		if svc.RightsAttestation != nil && !attestation.ValidRightsBasis(req.RightsBasis) {
+			writeErr(w, http.StatusBadRequest, "invalid_rights_basis", "select a supported rights basis for this source")
+			return
+		}
 		if strings.TrimSpace(req.Workspace) == "" {
 			writeErr(w, http.StatusBadRequest, "validation", "workspace is required")
 			return
@@ -106,6 +116,22 @@ func libraryImportHandler(svc *Service) http.HandlerFunc {
 					job.State, job.Error = "failed", putErr.Error()
 					break
 				}
+			}
+		}
+		if job.State == "completed" && svc.RightsAttestation != nil {
+			provenance := sqlite.SourceAttestation{
+				SourceAssetID: result.AssetID, SubjectID: rightsSubjectID, ReceiptID: receipt.ID,
+				PolicyVersion: receipt.PolicyVersion, RightsBasis: strings.TrimSpace(req.RightsBasis),
+				SourceFingerprint: core.FingerprintText(string(source)), RecordedAt: time.Now().UTC(),
+			}
+			if putErr := assets.Store.PutSourceAttestation(r.Context(), provenance); putErr != nil {
+				job.State, job.Error = "failed", "record source rights provenance: "+putErr.Error()
+			} else {
+				_ = svc.RightsAttestation.RecordDecision(r.Context(), attestation.AuditEvent{
+					SubjectID: rightsSubjectID, Operation: "source_upload", Outcome: "success",
+					PolicyVersion: receipt.PolicyVersion, ReceiptID: receipt.ID,
+					RequestID: strings.TrimSpace(r.Header.Get("X-Request-ID")),
+				})
 			}
 		}
 		svc.mu.Lock()
@@ -166,6 +192,7 @@ func decodeLibraryImportRequest(w http.ResponseWriter, r *http.Request) (Library
 		Workspace: r.FormValue("workspace"), LibraryID: r.FormValue("library_id"), LibraryKind: r.FormValue("library_kind"),
 		OrganizationID: r.FormValue("organization_id"), PrincipalID: r.FormValue("principal_id"), Title: r.FormValue("title"),
 		EditionLabel: r.FormValue("edition_label"), Language: r.FormValue("language"), Format: r.FormValue("format"),
+		RightsBasis: r.FormValue("rights_basis"),
 	}
 	file, header, err := r.FormFile("source")
 	if err != nil {

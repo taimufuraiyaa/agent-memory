@@ -3,6 +3,54 @@ export type MemoryType = 'episodic' | 'semantic' | 'procedural' | 'outcome'
 export type StorageTier = 'markdown' | 'vector' | 'vector+graph' | 'document' | 'cold'
 export type NoteIndexState = 'pending' | 'indexing' | 'ready' | 'failed' | 'retired' | 'paused'
 
+export type ClientKind = 'codex' | 'claude' | 'cursor' | 'other'
+export type ClientToolProfile = 'default' | 'expanded'
+
+export type ClientProfile = {
+  id: string
+  display_name: string
+  client_kind: ClientKind
+  tool_profile: ClientToolProfile
+  revision: number
+  created_at: string
+  updated_at: string
+}
+
+export type DeploymentDecisionStatus = 'assumed' | 'operator_confirmed'
+
+export type DeploymentProfile = {
+  monthly_infrastructure_operations_budget_usd: number
+  decision_status: DeploymentDecisionStatus
+  revision: number
+  created_at: string
+  updated_at: string
+}
+
+export type RightsBasis = 'author_owned' | 'licensed' | 'public_domain' | 'lawfully_acquired_private_use'
+
+export type RightsAttestationPolicy = {
+  version: string
+  effective_at: string
+  renewal_days: number
+  primary_confirmation: string
+  statement_digest: string
+  statements: Array<{ id: string; text: string }>
+}
+
+export type RightsAttestationStatus = {
+  status: 'required' | 'active' | 'expired'
+  reason: 'missing' | 'active' | 'expired' | 'policy_changed'
+  policy: RightsAttestationPolicy
+  receipt?: {
+    id: string
+    policy_version: string
+    statement_digest: string
+    accepted_statement_ids: string[]
+    accepted_at: string
+    expires_at: string
+  }
+}
+
 export type NoteDocument = {
   id: string
   workspace: string
@@ -52,6 +100,7 @@ export type LibraryImportRequest = {
   language: string
   format?: 'markdown' | 'text'
   markdown: string
+  rights_basis: RightsBasis
 }
 
 export type LibraryFileImportRequest = Omit<LibraryImportRequest, 'markdown' | 'format'> & {
@@ -628,6 +677,47 @@ export function listProjects(): Promise<{ projects: ProjectListItem[] }> {
   return api('/api/v1/projects/list', { method: 'GET' })
 }
 
+export function listClientProfiles(): Promise<{ profiles: ClientProfile[] }> {
+  return api('/api/v1/client-profiles', { method: 'GET' })
+}
+
+export function createClientProfile(input: {
+  id: string
+  display_name: string
+  client_kind: ClientKind
+  tool_profile: ClientToolProfile
+}): Promise<{ profile: ClientProfile }> {
+  return api('/api/v1/client-profiles', { method: 'POST', body: JSON.stringify(input) })
+}
+
+export function updateClientProfile(input: {
+  id: string
+  display_name: string
+  client_kind: ClientKind
+  tool_profile: ClientToolProfile
+  expected_revision: number
+}): Promise<{ profile: ClientProfile }> {
+  const { id, ...body } = input
+  return api(`/api/v1/client-profiles/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(body) })
+}
+
+export function deleteClientProfile(input: { id: string; expected_revision: number }): Promise<{ deleted: boolean; id: string }> {
+  const query = new URLSearchParams({ expected_revision: String(input.expected_revision) })
+  return api(`/api/v1/client-profiles/${encodeURIComponent(input.id)}?${query.toString()}`, { method: 'DELETE' })
+}
+
+export function getDeploymentProfile(): Promise<{ profile: DeploymentProfile }> {
+  return api('/api/v1/deployment-profile', { method: 'GET' })
+}
+
+export function updateDeploymentProfile(input: {
+  monthly_infrastructure_operations_budget_usd: number
+  decision_status: DeploymentDecisionStatus
+  expected_revision: number
+}): Promise<{ profile: DeploymentProfile }> {
+  return api('/api/v1/deployment-profile', { method: 'PUT', body: JSON.stringify(input) })
+}
+
 export function listNotes(input: { workspace: string; include_deleted?: boolean }): Promise<{ workspace: string; notes: NoteDocument[] }> {
   const qs = new URLSearchParams({ workspace: input.workspace })
   if (input.include_deleted) qs.set('include_deleted', 'true')
@@ -710,10 +800,22 @@ export function importLibraryBook(input: LibraryImportRequest | LibraryFileImpor
     form.append('edition_label', input.edition_label)
     form.append('language', input.language)
     form.append('format', input.format)
+    form.append('rights_basis', input.rights_basis)
     form.append('source', input.source_file)
     return api('/api/v1/library/imports', { method: 'POST', body: form })
   }
   return api('/api/v1/library/imports', { method: 'POST', body: JSON.stringify(input) })
+}
+
+export function getRightsAttestationStatus(): Promise<RightsAttestationStatus> {
+  return api('/api/v1/rights-attestation/status', { method: 'GET' })
+}
+
+export function acceptRightsAttestation(input: {
+  policy_version: string
+  accepted_statement_ids: string[]
+}): Promise<RightsAttestationStatus> {
+  return api('/api/v1/rights-attestation/accept', { method: 'POST', body: JSON.stringify(input) })
 }
 
 export function getLibraryStructure(input: { workspace: string; principal_id?: string; edition_id: string }): Promise<{ edition_id: string; nodes: LibraryStructuralNode[] }> {

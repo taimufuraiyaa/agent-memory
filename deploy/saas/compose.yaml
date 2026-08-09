@@ -1,0 +1,243 @@
+name: agent-memory-saas
+
+x-service-environment: &service-environment
+  AGENT_MEMORY_SAAS_ENV: development
+  AGENT_MEMORY_SAAS_LISTEN_ADDR: :8080
+  AGENT_MEMORY_TELEMETRY_LISTEN_ADDR: :9090
+  AGENT_MEMORY_TRACING_ENABLED: "false"
+  AGENT_MEMORY_TRACING_SAMPLE_RATE: "0.1"
+  AGENT_MEMORY_POSTGRES_URL: postgres://agent_memory:local-development@postgres:5432/agent_memory?sslmode=disable
+  AGENT_MEMORY_OBJECT_ENDPOINT: http://minio:9000
+  AGENT_MEMORY_EXPORT_ENCRYPTION_KEY: local-export-encryption-key-at-least-32-bytes
+  AGENT_MEMORY_VAULT_ENCRYPTION_KEY: local-vault-encryption-key-at-least-32-bytes
+  AGENT_MEMORY_MODEL_PROVIDER: local-minilm-scaffold
+  AGENT_MEMORY_MODEL_DIR: /tmp/agent-memory-models
+  AGENT_MEMORY_MODEL_RETENTION: local-only
+  AGENT_MEMORY_QUEUE_URL: nats://nats:4222
+  AGENT_MEMORY_SECRET_REF: local-development-only
+  AGENT_MEMORY_DEV_AUTH_TOKEN: local-development-bearer
+  AGENT_MEMORY_DEV_SUBJECT: development|member
+  AGENT_MEMORY_DEV_EMAIL: member@local.invalid
+  AGENT_MEMORY_DEV_DISPLAY_NAME: Development Member
+  AGENT_MEMORY_EDGE_COUNTRY_SECRET: ${AGENT_MEMORY_EDGE_COUNTRY_SECRET:-local-edge-country-signing-secret-32}
+
+x-service-build: &service-build
+  context: ../..
+  dockerfile: deploy/saas/Dockerfile
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_DB: agent_memory
+      POSTGRES_USER: agent_memory
+      POSTGRES_PASSWORD: local-development
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agent_memory -d agent_memory"]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+    ports:
+      - "127.0.0.1:55432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address :9001
+    environment:
+      MINIO_ROOT_USER: local-agent-memory
+      MINIO_ROOT_PASSWORD: local-development-only
+    healthcheck:
+      test: ["CMD", "minio", "--version"]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+    ports:
+      - "127.0.0.1:59000:9000"
+    volumes:
+      - object-data:/data
+
+  object-init:
+    image: minio/mc:latest
+    entrypoint: ["/bin/sh", "-ec"]
+    environment:
+      MINIO_ROOT_USER: local-agent-memory
+      MINIO_ROOT_PASSWORD: local-development-only
+      API_ACCESS_KEY: agent-memory-api
+      API_SECRET_KEY: api-local-development-only
+      WORKER_ACCESS_KEY: agent-memory-worker
+      WORKER_SECRET_KEY: worker-local-development-only
+      RECONCILER_ACCESS_KEY: agent-memory-reconciler
+      RECONCILER_SECRET_KEY: reconciler-local-development-only
+    command:
+      - |
+        mc alias set local http://minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}"
+        mc mb --ignore-existing local/agent-memory-quarantine local/agent-memory-vault local/agent-memory-exports
+        mc mb --with-lock --ignore-existing local/agent-memory-audit
+        mc admin user info local "$${API_ACCESS_KEY}" >/dev/null 2>&1 || mc admin user add local "$${API_ACCESS_KEY}" "$${API_SECRET_KEY}"
+        mc admin user info local "$${WORKER_ACCESS_KEY}" >/dev/null 2>&1 || mc admin user add local "$${WORKER_ACCESS_KEY}" "$${WORKER_SECRET_KEY}"
+        mc admin user info local "$${RECONCILER_ACCESS_KEY}" >/dev/null 2>&1 || mc admin user add local "$${RECONCILER_ACCESS_KEY}" "$${RECONCILER_SECRET_KEY}"
+        mc admin policy create local agent-memory-api /policies/api.json
+        mc admin policy create local agent-memory-worker /policies/worker.json
+        mc admin policy create local agent-memory-reconciler /policies/reconciler.json
+        mc admin policy attach local agent-memory-api --user "$${API_ACCESS_KEY}"
+        mc admin policy attach local agent-memory-worker --user "$${WORKER_ACCESS_KEY}"
+        mc admin policy attach local agent-memory-reconciler --user "$${RECONCILER_ACCESS_KEY}"
+    volumes:
+      - ./minio/policies:/policies:ro
+    depends_on:
+      minio:
+        condition: service_healthy
+
+  nats:
+    image: nats:2.11-alpine
+    command: ["--jetstream", "--store_dir=/data", "--http_port=8222"]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8222/healthz"]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+    ports:
+      - "127.0.0.1:54222:4222"
+    volumes:
+      - queue-data:/data
+
+  migrate:
+    build:
+      <<: *service-build
+      args:
+        SERVICE: agent-memory-migrate
+    environment:
+      <<: *service-environment
+      AGENT_MEMORY_SAAS_SERVICE: migration
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    build:
+      <<: *service-build
+      args:
+        SERVICE: agent-memory-api
+    environment:
+      <<: *service-environment
+      AGENT_MEMORY_SAAS_SERVICE: api
+      AGENT_MEMORY_OBJECT_ACCESS_KEY: agent-memory-api
+      AGENT_MEMORY_OBJECT_SECRET_KEY: api-local-development-only
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      minio:
+        condition: service_healthy
+      object-init:
+        condition: service_completed_successfully
+      nats:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8080:8080"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8080/health/ready"]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+
+  edge:
+    build:
+      <<: *service-build
+      args:
+        SERVICE: agent-memory-edge
+    environment:
+      AGENT_MEMORY_EDGE_LISTEN_ADDR: :8081
+      AGENT_MEMORY_EDGE_UPSTREAM: http://api:8080
+      AGENT_MEMORY_EDGE_DEFAULT_COUNTRY: VN
+      AGENT_MEMORY_EDGE_COUNTRY_SECRET: ${AGENT_MEMORY_EDGE_COUNTRY_SECRET:-local-edge-country-signing-secret-32}
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:58081:8081"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8081/_edge/health/ready"]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+
+  worker:
+    build:
+      <<: *service-build
+      args:
+        SERVICE: agent-memory-worker
+    environment:
+      <<: *service-environment
+      AGENT_MEMORY_SAAS_SERVICE: worker
+      AGENT_MEMORY_OBJECT_ACCESS_KEY: agent-memory-worker
+      AGENT_MEMORY_OBJECT_SECRET_KEY: worker-local-development-only
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      minio:
+        condition: service_healthy
+      object-init:
+        condition: service_completed_successfully
+      nats:
+        condition: service_healthy
+
+  reconciler:
+    build:
+      <<: *service-build
+      args:
+        SERVICE: agent-memory-reconciler
+    environment:
+      <<: *service-environment
+      AGENT_MEMORY_SAAS_SERVICE: reconciler
+      AGENT_MEMORY_OBJECT_ACCESS_KEY: agent-memory-reconciler
+      AGENT_MEMORY_OBJECT_SECRET_KEY: reconciler-local-development-only
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      nats:
+        condition: service_healthy
+      object-init:
+        condition: service_completed_successfully
+
+  object-policy-test:
+    image: minio/mc:latest
+    profiles: ["test"]
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        mc alias set api http://minio:9000 agent-memory-api api-local-development-only
+        mc alias set worker http://minio:9000 agent-memory-worker worker-local-development-only
+        mc alias set reconciler http://minio:9000 agent-memory-reconciler reconciler-local-development-only
+        printf quarantine | mc pipe api/agent-memory-quarantine/quarantine/policy-test
+        mc cat worker/agent-memory-quarantine/quarantine/policy-test >/dev/null
+        if mc cat api/agent-memory-vault/vault/policy-test >/dev/null 2>&1; then echo 'api read vault unexpectedly allowed'; exit 1; fi
+        printf encrypted | mc pipe worker/agent-memory-vault/vault/policy-test
+        mc ls reconciler/agent-memory-vault/vault/ >/dev/null
+        if mc cat reconciler/agent-memory-vault/vault/policy-test >/dev/null 2>&1; then echo 'reconciler read vault unexpectedly allowed'; exit 1; fi
+        printf export | mc pipe worker/agent-memory-exports/exports/policy-test
+        mc cat api/agent-memory-exports/exports/policy-test >/dev/null
+        if printf forbidden | mc pipe api/agent-memory-exports/exports/api-write-test >/dev/null 2>&1; then echo 'api export write unexpectedly allowed'; exit 1; fi
+        printf audit | mc pipe reconciler/agent-memory-audit/audit/policy-test
+        mc cat reconciler/agent-memory-audit/audit/policy-test >/dev/null
+        if mc cat api/agent-memory-audit/audit/policy-test >/dev/null 2>&1; then echo 'api audit read unexpectedly allowed'; exit 1; fi
+        if mc cat worker/agent-memory-audit/audit/policy-test >/dev/null 2>&1; then echo 'worker audit read unexpectedly allowed'; exit 1; fi
+        if mc rm reconciler/agent-memory-audit/audit/policy-test >/dev/null 2>&1; then echo 'reconciler audit delete unexpectedly allowed'; exit 1; fi
+        mc rm worker/agent-memory-quarantine/quarantine/policy-test
+        mc rm worker/agent-memory-vault/vault/policy-test
+        mc rm worker/agent-memory-exports/exports/policy-test
+        echo 'service-specific object capabilities verified'
+    depends_on:
+      object-init:
+        condition: service_completed_successfully
+
+volumes:
+  postgres-data:
+  object-data:
+  queue-data:

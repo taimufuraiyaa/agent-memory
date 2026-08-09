@@ -1,0 +1,89 @@
+groups:
+  - name: agent-memory-saas-slo
+    interval: 30s
+    rules:
+      - alert: AgentMemoryAPIErrorBudgetBurn
+        expr: |
+          (
+            sum(rate(agent_memory_saas_http_requests_total{outcome="error"}[5m]))
+            /
+            clamp_min(sum(rate(agent_memory_saas_http_requests_total[5m])), 0.001)
+          ) > 0.01
+        for: 10m
+        labels:
+          severity: page
+          owner: platform-oncall
+        annotations:
+          summary: Hosted API is burning the provisional availability error budget
+          runbook: docs/saas/operational-readiness.md
+
+      - alert: AgentMemoryAPILatencyHigh
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le) (rate(agent_memory_saas_http_request_duration_seconds_bucket[10m]))
+          ) > 1
+        for: 15m
+        labels:
+          severity: ticket
+          owner: platform-oncall
+        annotations:
+          summary: Hosted API p95 latency exceeds one second
+          runbook: docs/saas/operational-readiness.md
+
+      - alert: AgentMemoryWorkerFailures
+        expr: |
+          sum by (operation) (
+            increase(agent_memory_saas_component_operations_total{component="worker",outcome="error"}[10m])
+          ) > 2
+        for: 5m
+        labels:
+          severity: page
+          owner: data-pipeline-oncall
+        annotations:
+          summary: A hosted background operation is repeatedly failing
+          runbook: docs/saas/operational-readiness.md
+
+      - alert: AgentMemoryQueueFailures
+        expr: |
+          increase(agent_memory_saas_component_operations_total{component="queue",outcome="error"}[10m]) > 0
+        for: 5m
+        labels:
+          severity: page
+          owner: platform-oncall
+        annotations:
+          summary: Durable event publication is failing
+          runbook: docs/saas/operational-readiness.md
+
+      - alert: AgentMemoryObjectStorageFailures
+        expr: |
+          increase(agent_memory_saas_component_operations_total{component="object_storage",outcome="error"}[15m]) > 0
+        for: 5m
+        labels:
+          severity: page
+          owner: data-pipeline-oncall
+        annotations:
+          summary: Object storage processing or reconciliation is failing
+          runbook: docs/saas/operational-readiness.md
+
+      - alert: AgentMemoryModelGatewayFailures
+        expr: |
+          increase(agent_memory_saas_component_operations_total{component="model_gateway",outcome="error"}[15m]) > 2
+        for: 10m
+        labels:
+          severity: ticket
+          owner: model-platform-oncall
+        annotations:
+          summary: Model gateway calls are repeatedly failing
+          runbook: docs/saas/operational-readiness.md
+
+      - alert: AgentMemoryCostSpike
+        expr: |
+          sum(increase(agent_memory_saas_cost_microusd_total[1h])) > 50000000
+        for: 15m
+        labels:
+          severity: ticket
+          owner: product-finance
+        annotations:
+          summary: Hosted model cost exceeded the provisional hourly ceiling
+          runbook: docs/saas/billing-payment-incident.md
+

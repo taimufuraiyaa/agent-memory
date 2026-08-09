@@ -12,14 +12,19 @@ func TestMigrationsAppliedExactlyOnce(t *testing.T) {
 	ctx := context.Background()
 	dbPath := filepath.Join(t.TempDir(), "migrate-once.db")
 
-	// Open once — all three migrations should be recorded.
+	// Open once — every known migration should be recorded.
 	s1, err := Open(ctx, dbPath)
 	if err != nil {
 		t.Fatalf("first open: %v", err)
 	}
 	v1 := appliedVersions(t, s1)
-	if len(v1) != 3 || !v1[1] || !v1[2] || !v1[3] {
-		t.Fatalf("first open: expected versions {1,2,3}, got %v", v1)
+	if len(v1) != len(schemaMigrations) {
+		t.Fatalf("first open: expected %d versions, got %v", len(schemaMigrations), v1)
+	}
+	for _, migration := range schemaMigrations {
+		if !v1[migration.Version] {
+			t.Fatalf("first open: migration %d missing from %v", migration.Version, v1)
+		}
 	}
 	if err := s1.Close(); err != nil {
 		t.Fatalf("close: %v", err)

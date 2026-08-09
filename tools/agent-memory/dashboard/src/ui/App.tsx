@@ -68,6 +68,8 @@ import { WikiPanel } from './WikiPanel'
 import { FeedbackPanel } from './FeedbackPanel'
 import { SkillsPanel } from './SkillsPanel'
 import { NotebookWorkspace } from './NotebookWorkspace'
+import { ClientsPanel } from './ClientsPanel'
+import { DeploymentPanel } from './DeploymentPanel'
 
 const notebookEnabled = (import.meta as ImportMeta & {
   env?: Record<string, string | undefined>
@@ -826,6 +828,8 @@ export function App() {
     { key: '06', label: 'Wiki', surface: 'wiki', open: () => openWiki() },
     { key: '07', label: 'Feedback', surface: 'feedback', open: () => { setSurface('feedback'); setSelectedMemory(null) } },
     { key: '08', label: 'Skills', surface: 'skills', open: () => { setSurface('skills'); setSelectedMemory(null) } },
+    { key: '09', label: 'Clients', surface: 'clients', open: () => { setSurface('clients'); setSelectedMemory(null) } },
+    { key: '10', label: 'Infrastructure', surface: 'deployment', open: () => { setSurface('deployment'); setSelectedMemory(null) } },
   ]
   const activeNavigationItem = navigationItems.find((item) => item.surface === surface) ?? navigationItems[0]
 
@@ -1043,6 +1047,10 @@ export function App() {
                   error={skillsErr}
                 />
               ) : null}
+
+              {surface === 'clients' ? <ClientsPanel /> : null}
+
+              {surface === 'deployment' ? <DeploymentPanel /> : null}
 
               {surface === 'wiki' ? (
                 <WikiPanel
