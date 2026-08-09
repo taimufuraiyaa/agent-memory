@@ -19,6 +19,7 @@ import (
 	"github.com/taimufuraiyaa/agent-memory/internal/deploymentprofile"
 	"github.com/taimufuraiyaa/agent-memory/internal/embeddings"
 	"github.com/taimufuraiyaa/agent-memory/internal/engine"
+	"github.com/taimufuraiyaa/agent-memory/internal/localllm"
 	"github.com/taimufuraiyaa/agent-memory/internal/observability"
 	"github.com/taimufuraiyaa/agent-memory/internal/readingroom"
 	"github.com/taimufuraiyaa/agent-memory/internal/storage/sqlite"
@@ -36,6 +37,8 @@ type Service struct {
 	RightsSubjectResolver  func(*http.Request) (string, error)
 	ClientProfiles         *clientprofile.Store
 	DeploymentProfile      *deploymentprofile.Store
+	LocalLLMStore          *localllm.Store
+	LocalLLMChecker        *localllm.Checker
 
 	mu             sync.RWMutex
 	stores         map[string]*workspaceAssets
@@ -311,6 +314,8 @@ func NewMux(svc *Service) *http.ServeMux {
 	mux.HandleFunc("/api/v1/rights-attestation/accept", rightsAttestationAcceptHandler(svc))
 
 	mux.HandleFunc("/api/v1/library/imports", libraryImportHandler(svc))
+	mux.HandleFunc("/api/v1/library/local-llm", libraryLocalLLMHandler(svc))
+	mux.HandleFunc("/api/v1/library/local-llm/test", libraryLocalLLMTestHandler(svc))
 	mux.HandleFunc("/api/v1/library/jobs", libraryJobHandler(svc))
 	mux.HandleFunc("/api/v1/library/structure", libraryStructureHandler(svc))
 	mux.HandleFunc("/api/v1/library/query", libraryQueryHandler(svc))

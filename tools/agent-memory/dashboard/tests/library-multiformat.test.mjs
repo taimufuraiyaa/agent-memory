@@ -89,3 +89,24 @@ test('successful book preparation creates an ordinary removable notebook note', 
   assert.match(librarySource, />Open note<\/button>/)
   assert.match(librarySource, /Book imported, but its note could not be created/)
 })
+
+test('book import asks for local setup or explicit parser fallback', () => {
+  assert.match(apiSource, /export type LocalLLMStatus/)
+  assert.match(apiSource, /export function getLibraryLocalLLMStatus/)
+  assert.match(apiSource, /export function testLibraryLocalLLM/)
+  assert.match(apiSource, /export function saveLibraryLocalLLM/)
+  assert.match(librarySource, /Set up local LLM/)
+  assert.match(librarySource, /Continue with built-in parser/)
+  assert.match(librarySource, /Cancel import/)
+  assert.match(librarySource, /Remember parser-only choice on this device/)
+  assert.match(librarySource, /agent-memory:library-import-mode/)
+})
+
+test('local setup stays truthful about parser and future enrichment stages', () => {
+  assert.match(librarySource, /OpenAI-compatible local endpoint/)
+  assert.match(librarySource, /Test connection/)
+  assert.match(librarySource, /Save setup/)
+  assert.match(librarySource, /The deterministic parser still creates citations/)
+  assert.match(librarySource, /Scanned PDFs still require the OCR processing stage/)
+  assert.doesNotMatch(librarySource, /Local LLM read complete/)
+})

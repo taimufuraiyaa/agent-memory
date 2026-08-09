@@ -126,6 +126,26 @@ export type LibraryImportJob = {
   created_at: string
 }
 
+export type LocalLLMConfig = {
+  enabled: boolean
+  base_url: string
+  text_model: string
+  vision_model?: string
+  api_key?: string
+  clear_api_key?: boolean
+  timeout_seconds?: number
+}
+
+export type LocalLLMStatus = {
+  config: Omit<LocalLLMConfig, 'api_key' | 'clear_api_key'> & { api_key_configured: boolean }
+  configured: boolean
+  enabled: boolean
+  reachable: boolean
+  text_model_available: boolean
+  vision_model_available?: boolean
+  error?: string
+}
+
 export type LibraryStructuralNode = {
   id: string
   edition_id: string
@@ -816,6 +836,18 @@ export function acceptRightsAttestation(input: {
   accepted_statement_ids: string[]
 }): Promise<RightsAttestationStatus> {
   return api('/api/v1/rights-attestation/accept', { method: 'POST', body: JSON.stringify(input) })
+}
+
+export function getLibraryLocalLLMStatus(): Promise<LocalLLMStatus> {
+  return api('/api/v1/library/local-llm', { method: 'GET' })
+}
+
+export function testLibraryLocalLLM(input: LocalLLMConfig): Promise<LocalLLMStatus> {
+  return api('/api/v1/library/local-llm/test', { method: 'POST', body: JSON.stringify(input) })
+}
+
+export function saveLibraryLocalLLM(input: LocalLLMConfig): Promise<LocalLLMStatus> {
+  return api('/api/v1/library/local-llm', { method: 'PUT', body: JSON.stringify(input) })
 }
 
 export function getLibraryStructure(input: { workspace: string; principal_id?: string; edition_id: string }): Promise<{ edition_id: string; nodes: LibraryStructuralNode[] }> {

@@ -7174,6 +7174,15 @@ function getRightsAttestationStatus() {
 function acceptRightsAttestation(input) {
   return api("/api/v1/rights-attestation/accept", { method: "POST", body: JSON.stringify(input) });
 }
+function getLibraryLocalLLMStatus() {
+  return api("/api/v1/library/local-llm", { method: "GET" });
+}
+function testLibraryLocalLLM(input) {
+  return api("/api/v1/library/local-llm/test", { method: "POST", body: JSON.stringify(input) });
+}
+function saveLibraryLocalLLM(input) {
+  return api("/api/v1/library/local-llm", { method: "PUT", body: JSON.stringify(input) });
+}
 function getLibraryStructure(input) {
   const qs = new URLSearchParams({ workspace: input.workspace, edition_id: input.edition_id });
   if (input.principal_id) qs.set("principal_id", input.principal_id);
@@ -38744,6 +38753,11 @@ const bookLanguageOptions = [
   { value: "th", label: "ไทย" },
   { value: "id", label: "Bahasa Indonesia" }
 ];
+const importModeStorageKey = "agent-memory:library-import-mode";
+function savedPreference(key, fallback) {
+  if (typeof window === "undefined") return fallback;
+  return window.localStorage.getItem(key) || fallback;
+}
 const rightsBasisOptions = [
   { value: "lawfully_acquired_private_use", label: "Lawfully acquired copy for private use" },
   { value: "author_owned", label: "I am the author or rights holder" },
@@ -38774,6 +38788,42 @@ function LibraryWorkspace({ workspace, onBookImported, onOpenBookNote }) {
   const [queried, setQueried] = reactExports.useState(false);
   const [busy, setBusy] = reactExports.useState("");
   const [error, setError] = reactExports.useState("");
+  const [localLLMStatus, setLocalLLMStatus] = reactExports.useState(null);
+  const [localLLMNotice, setLocalLLMNotice] = reactExports.useState("");
+  const [importDecisionOpen, setImportDecisionOpen] = reactExports.useState(false);
+  const [setupOpen, setSetupOpen] = reactExports.useState(false);
+  const [rememberParserOnly, setRememberParserOnly] = reactExports.useState(false);
+  const [parserOnlyRemembered, setParserOnlyRemembered] = reactExports.useState(() => savedPreference(importModeStorageKey, "") === "parser");
+  const [localLLMConfig, setLocalLLMConfig] = reactExports.useState({
+    enabled: true,
+    base_url: "http://127.0.0.1:11434/v1",
+    text_model: "",
+    vision_model: "",
+    api_key: "",
+    timeout_seconds: 3
+  });
+  reactExports.useEffect(() => {
+    let active = true;
+    void getLibraryLocalLLMStatus().then((status) => {
+      if (!active) return;
+      setLocalLLMStatus(status);
+      if (status.configured) {
+        setLocalLLMConfig({
+          enabled: status.config.enabled,
+          base_url: status.config.base_url,
+          text_model: status.config.text_model,
+          vision_model: status.config.vision_model ?? "",
+          api_key: "",
+          timeout_seconds: status.config.timeout_seconds
+        });
+      }
+    }).catch((reason) => {
+      if (active) setLocalLLMNotice(`Local endpoint status unavailable: ${messageOf$2(reason)}. The built-in parser remains available.`);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
   reactExports.useEffect(() => {
     resetBook();
   }, [workspace]);
@@ -38796,6 +38846,8 @@ function LibraryWorkspace({ workspace, onBookImported, onOpenBookNote }) {
     setProposal(null);
     setQueried(false);
     setError("");
+    setImportDecisionOpen(false);
+    setSetupOpen(false);
   }
   function validateScope() {
     if (!workspace) return "Select a project workspace first.";
@@ -38818,13 +38870,29 @@ function LibraryWorkspace({ workspace, onBookImported, onOpenBookNote }) {
       setSource("");
     }
   }
-  async function importBook() {
-    var _a3;
+  function validateImport() {
     const scopeError = validateScope();
     if (scopeError || !title.trim() || !editionLabel.trim() || !language.trim() || !sourceFile && !source.trim()) {
-      setError(scopeError || "Check the title, edition, language, and selected book before continuing.");
+      return scopeError || "Check the title, edition, language, and selected book before continuing.";
+    }
+    return "";
+  }
+  async function beginImport() {
+    const validationError = validateImport();
+    if (validationError) {
+      setError(validationError);
       return;
     }
+    const localReady = Boolean((localLLMStatus == null ? void 0 : localLLMStatus.enabled) && localLLMStatus.reachable && localLLMStatus.text_model_available);
+    if (!localReady && !parserOnlyRemembered) {
+      setError("");
+      setImportDecisionOpen(true);
+      return;
+    }
+    await importBook();
+  }
+  async function importBook() {
+    var _a3;
     setBusy("import");
     setIndexStatus("reading");
     setError("");
@@ -38869,6 +38937,33 @@ function LibraryWorkspace({ workspace, onBookImported, onOpenBookNote }) {
     } catch (reason) {
       setIndexStatus("failed");
       setError(messageOf$2(reason));
+    } finally {
+      setBusy("");
+    }
+  }
+  async function continueWithParser() {
+    if (rememberParserOnly) {
+      window.localStorage.setItem(importModeStorageKey, "parser");
+      setParserOnlyRemembered(true);
+    }
+    setImportDecisionOpen(false);
+    setSetupOpen(false);
+    await importBook();
+  }
+  async function checkLocalLLM(save) {
+    setBusy("llm");
+    setError("");
+    setLocalLLMNotice("");
+    try {
+      const status = save ? await saveLibraryLocalLLM(localLLMConfig) : await testLibraryLocalLLM(localLLMConfig);
+      setLocalLLMStatus(status);
+      if (status.reachable && status.text_model_available) {
+        setLocalLLMNotice(save ? "Setup saved. Local endpoint is reachable and the text model is available." : "Connection succeeded and the text model is available.");
+      } else {
+        setLocalLLMNotice(status.error || "The endpoint responded, but the configured text model is unavailable.");
+      }
+    } catch (reason) {
+      setLocalLLMNotice(messageOf$2(reason));
     } finally {
       setBusy("");
     }
@@ -39018,10 +39113,91 @@ function LibraryWorkspace({ workspace, onBookImported, onOpenBookNote }) {
           /* @__PURE__ */ jsxRuntimeExports.jsx("input", { value: organizationID, onChange: (event) => setOrganizationID(event.target.value) })
         ] }) : null
       ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "libraryPlanes", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "Built-in parser" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Always available · citation baseline" })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "Local endpoint" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: (localLLMStatus == null ? void 0 : localLLMStatus.reachable) && localLLMStatus.text_model_available ? "Connected" : "Optional · not operational" })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "OCR" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Separate processing stage" })
+        ] })
+      ] }),
+      parserOnlyRemembered ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "notebookHint", children: [
+        "Parser-only choice remembered on this device. ",
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => {
+          window.localStorage.removeItem(importModeStorageKey);
+          setParserOnlyRemembered(false);
+        }, children: "Ask again" })
+      ] }) : null,
       /* @__PURE__ */ jsxRuntimeExports.jsxs("footer", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Indexing happens in the background. The original source stays separate from any memory you choose to keep." }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "primaryNotebookButton", type: "button", onClick: () => void importBook(), children: "Start reading" })
-      ] })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "primaryNotebookButton", type: "button", onClick: () => void beginImport(), children: "Start reading" })
+      ] }),
+      importDecisionOpen ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "libraryProposal", role: "dialog", "aria-label": "Choose book processing mode", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sourceBadge agent", children: "Optional local processing" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "Decision required" })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: "No operational local LLM is configured" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Set up an OpenAI-compatible local endpoint, or continue with the built-in parser. The deterministic parser still creates citations and remains the source of truth." }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Scanned PDFs still require the OCR processing stage; parser-only import cannot invent text for image-only pages." }),
+        (localLLMStatus == null ? void 0 : localLLMStatus.error) ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "notebookHint", children: [
+          "Endpoint status: ",
+          localLLMStatus.error
+        ] }) : null,
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("input", { type: "checkbox", checked: rememberParserOnly, onChange: (event) => setRememberParserOnly(event.target.checked) }),
+          " Remember parser-only choice on this device"
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "primaryNotebookButton", type: "button", onClick: () => setSetupOpen(true), disabled: busy !== "", children: "Set up local LLM" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => void continueWithParser(), disabled: busy !== "", children: "Continue with built-in parser" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => {
+            setImportDecisionOpen(false);
+            setSetupOpen(false);
+          }, disabled: busy !== "", children: "Cancel import" })
+        ] })
+      ] }) : null,
+      setupOpen ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "libraryProposal", "aria-label": "Local LLM setup", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sourceBadge agent", children: "Local setup" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "OpenAI-compatible" })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: "Connect a local model server" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Use an OpenAI-compatible local endpoint from Ollama, LM Studio, vLLM, or an equivalent server. Initial setup accepts loopback addresses only." }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "libraryScopeGrid", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [
+            "Base URL",
+            /* @__PURE__ */ jsxRuntimeExports.jsx("input", { value: localLLMConfig.base_url, onChange: (event) => setLocalLLMConfig({ ...localLLMConfig, base_url: event.target.value }), placeholder: "http://127.0.0.1:11434/v1" })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [
+            "Text model",
+            /* @__PURE__ */ jsxRuntimeExports.jsx("input", { value: localLLMConfig.text_model, onChange: (event) => setLocalLLMConfig({ ...localLLMConfig, text_model: event.target.value }), placeholder: "Local model ID" })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [
+            "Vision model ",
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "optionalLabel", children: "optional" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("input", { value: localLLMConfig.vision_model ?? "", onChange: (event) => setLocalLLMConfig({ ...localLLMConfig, vision_model: event.target.value }), placeholder: "Vision model ID" })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [
+            "API key ",
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "optionalLabel", children: "write-only" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("input", { type: "password", value: localLLMConfig.api_key ?? "", onChange: (event) => setLocalLLMConfig({ ...localLLMConfig, api_key: event.target.value }), placeholder: (localLLMStatus == null ? void 0 : localLLMStatus.config.api_key_configured) ? "Stored key unchanged when blank" : "Optional" })
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "notebookHint", children: "A successful test proves connectivity only. Local summary and OCR jobs will report their own processing provenance when those stages run." }),
+        localLLMNotice ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "notebookHint", role: "status", children: localLLMNotice }) : null,
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "primaryNotebookButton", type: "button", onClick: () => void checkLocalLLM(false), disabled: busy !== "", children: busy === "llm" ? "Checking…" : "Test connection" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => void checkLocalLLM(true), disabled: busy !== "", children: "Save setup" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => setSetupOpen(false), disabled: busy !== "", children: "Back" })
+        ] })
+      ] }) : null
     ] }) : null,
     isIndexing ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "libraryIndexingState", "aria-live": "polite", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "libraryIndexingBook", "aria-hidden": "true", children: [
