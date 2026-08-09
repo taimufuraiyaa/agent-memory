@@ -1,6 +1,6 @@
 # SaaS Implementation Status
 
-Last updated: 2026-08-08.
+Last updated: 2026-08-09.
 
 ## Verified
 
@@ -47,7 +47,7 @@ Last updated: 2026-08-08.
   API explicitly selects the production discovery authenticator and rejects
   development credentials. The ordinary Floci command removes this optional
   provider and restores development identity. This is local rehearsal, not
-  managed-provider or production key-custody evidence.
+  self-managed production-identity or production key-custody evidence.
 - `make saas-local-alpha-gate` starts a separate Floci Compose project with
   dynamic loopback ports and isolated volumes, then runs 27 fail-closed checks:
   health, the complete four-format lifecycle, local/Kubernetes/release
@@ -83,7 +83,8 @@ Last updated: 2026-08-08.
   response-body fields are also excluded. These operational
   rehearsals remain local development evidence and do not satisfy managed
   secret storage, human operator identity, staging rollback, approved timing
-  risk, real provider degradation, external model cost, regional load, elapsed
+  risk, real production-component degradation, external model cost,
+  deployment-site load, elapsed
   deletion windows, independent review, or owner approval.
 - The Docker build context is bounded by `.dockerignore`; the validated context
   is under 1 MB rather than the original 1.6 GB workspace transfer.
@@ -220,10 +221,11 @@ Last updated: 2026-08-08.
 
 ## In progress
 
-- Phase 0 jurisdiction, counsel, and managed-provider decisions.
-- A real tagged staging deployment and provider-specific managed production
-  infrastructure; the provider-neutral release automation is ready but no
-  cluster or managed-provider credentials are selected in this repository.
+- Phase 0 jurisdiction, counsel, self-managed production-topology, and optional
+  external-integration decisions.
+- A real tagged staging deployment and self-managed production infrastructure;
+  the Kubernetes release automation is ready but no staging or production
+  cluster inventory and credentials are committed to this repository.
 - External penetration testing and independent tenant-isolation review.
 - Real internal-alpha/private-beta execution, observation windows, staffing,
   production billing reconciliation, and support/notice operations.
@@ -232,7 +234,7 @@ Last updated: 2026-08-08.
 ## Remaining release boundary
 
 Repository-owned implementation now reaches P12. The remaining open checklist
-items are external decisions, production infrastructure/provider work, drills
+items are external decisions, self-managed production infrastructure work, drills
 against a deployed environment, elapsed observation windows, independent
 reviews, staffing, and accountable-owner approvals. The release-gate tool fails
 closed when those evidence samples are missing; tests never self-certify them.

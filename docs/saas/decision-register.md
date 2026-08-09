@@ -10,8 +10,8 @@ is a release dependency, not permission for engineering to guess.
 | Original retention | Approved in principle | Encrypted originals retained until deletion or scoped legal hold | Privacy copy and counsel review remain required |
 | Rights confirmation | Approved | First use and every 30 days; per-source rights basis; no copyright-verification claim | Implemented local behavior; hosted parity remains |
 | Launch countries | Open | No country is inferred from developer or user location | Product and counsel: country list, minimum age, notice venue, support language |
-| Managed identity | Open | Standards-based verified identity behind an adapter | Security/vendor review and exit plan |
-| Infrastructure ownership | Approved | Development, staging, and production are self-managed; no external cloud-provider deployment | Internal DevOps, operations, security, capacity, recovery, and topology evidence |
+| Production identity and key custody | Open | Self-managed standards-based identity behind an OIDC adapter | Security review, recovery drill, MFA/account-recovery policy, and key-custody evidence |
+| Infrastructure ownership | Approved | Development, staging, and production are self-managed; no external cloud-provider deployment | [Self-managed architecture](self-managed-architecture.md), plus internal DevOps, operations, security, capacity, recovery, and topology evidence |
 | Billing and email | Open | Provider-neutral event and entitlement boundaries | Product/vendor review and sandbox credentials |
 | Model providers | Open | Tenant-aware gateway; no customer content in general logs or shared training | Privacy/security/provider contract review |
 | Trial and paid limits | Open | Bounded trial and one individual plan | Product pricing and unit-economics model |
@@ -19,9 +19,10 @@ is a release dependency, not permission for engineering to guess.
 | Audit retention | Open | Content-free hot search plus tamper-resistant archive | Security and counsel approval |
 | Retrieval parity threshold | Open | Fixed local-versus-hosted benchmark blocks cutover | Product/engineering threshold approval |
 
-Engineering may build self-managed interfaces and local emulators while these
-items are open. Production integrations, legal text, and rollout gates
-must not be marked complete until their named evidence exists.
+Engineering may build self-managed infrastructure, interfaces, and local
+emulators while these items are open. External business integrations, legal
+text, and rollout gates must not be marked complete until their named evidence
+exists.
 
 Internal operators may record the monthly infrastructure operations budget and
 its assumption status under System → Infrastructure. These installation-scoped

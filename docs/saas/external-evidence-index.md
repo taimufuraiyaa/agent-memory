@@ -3,7 +3,8 @@
 The external-evidence index turns the 57 open P0-P12 controls into one
 machine-verifiable collection queue. It verifies integrity and authorization;
 it does not claim that a local fixture, Floci, or a repository test satisfies a
-staging, provider, legal, business, elapsed-window, or independent-review
+staging, production infrastructure, external-integration, legal, business,
+elapsed-window, or independent-review
 control.
 
 ## Package layout
@@ -37,9 +38,10 @@ closed.
 
 1. Find the human ID, normalized `approval_control`, owner group, and exact
    evidence requirement in the canonical catalog.
-2. Collect the real artifact from the accountable external system. Create one
-   deterministic dossier and publish the unchanged dossier to immutable
-   storage. Record a content-free URI that reviewers can resolve.
+2. Collect the real artifact from the accountable source system. This may be a
+   self-managed staging/production system or an approved external integration.
+   Create one deterministic dossier and publish the unchanged dossier to
+   immutable storage. Record a content-free URI that reviewers can resolve.
 3. Copy the same dossier into the package below `artifacts/`. Add exactly one
    index entry. Use `external_staging`, `external_production`,
    `external_review`, `external_business`, or `external_observation`; use

@@ -17,13 +17,13 @@
       "id": "P0.2-A",
       "approval_control": "p0_2_a",
       "owner_group": "architecture_security_privacy_operations",
-      "evidence_requirement": "Signed provider ADRs, regions, DPAs, subprocessors, and service inventory"
+      "evidence_requirement": "Signed topology/service ADRs, facility and failure-domain inventory, data-flow review, and external-integration contracts where used"
     },
     {
       "id": "P0.2-B",
       "approval_control": "p0_2_b",
       "owner_group": "operations",
-      "evidence_requirement": "Per-provider exit runbook plus successful export/restore exercise"
+      "evidence_requirement": "Per-component and per-integration runbooks plus successful failover or export/restore exercises"
     },
     {
       "id": "P0.2-C",
@@ -53,7 +53,7 @@
       "id": "P1.4-A",
       "approval_control": "p1_4_a",
       "owner_group": "platform_security",
-      "evidence_requirement": "Provider account/project, namespace, identity, secret, network, and data-store inventory with drift report"
+      "evidence_requirement": "Self-managed site, cluster, namespace, identity, secret, network, and data-store inventory with drift report"
     },
     {
       "id": "P1.4-B",
@@ -65,7 +65,7 @@
       "id": "P1.4-C",
       "approval_control": "p1_4_c",
       "owner_group": "security_operations",
-      "evidence_requirement": "Provider firewall/private-endpoint export and independent reachability scan"
+      "evidence_requirement": "Self-managed firewall/network-policy export and independent reachability scan"
     },
     {
       "id": "CP1-A",
@@ -107,7 +107,7 @@
       "id": "CP3-B",
       "approval_control": "cp3_b",
       "owner_group": "operations",
-      "evidence_requirement": "Managed backup identifier, restore timestamps, integrity reconciliation, measured RPO/RTO"
+      "evidence_requirement": "Self-managed backup identifier, restore timestamps, integrity reconciliation, measured RPO/RTO"
     },
     {
       "id": "CP4-A",
@@ -143,7 +143,7 @@
       "id": "CP5-C",
       "approval_control": "cp5_c",
       "owner_group": "product_operations",
-      "evidence_requirement": "Versioned load report with corpus size, concurrency, region, model, p50/p95/p99, and cost"
+      "evidence_requirement": "Versioned load report with corpus size, concurrency, deployment site, model route, p50/p95/p99, and cost"
     },
     {
       "id": "P6.5-A",
@@ -161,7 +161,7 @@
       "id": "P7.4-A",
       "approval_control": "p7_4_a",
       "owner_group": "privacy_operations",
-      "evidence_requirement": "Provider retention configuration plus aged-backup test after the full published interval"
+      "evidence_requirement": "Self-managed backup-retention configuration plus aged-backup test after the full published interval"
     },
     {
       "id": "CP7-A",
@@ -239,7 +239,7 @@
       "id": "P11.2-A",
       "approval_control": "p11_2_a",
       "owner_group": "finance_engineering",
-      "evidence_requirement": "Provider settlement/invoice reconciliation with sampled tenant usage and variance"
+      "evidence_requirement": "Payment-processor settlement/invoice reconciliation with sampled tenant usage and variance"
     },
     {
       "id": "P11.3-A",
@@ -345,4 +345,3 @@
     }
   ]
 }
-

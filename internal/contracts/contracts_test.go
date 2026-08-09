@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"gopkg.in/yaml.v3"
@@ -134,6 +135,45 @@ func TestCompatibilityMapExists(t *testing.T) {
 	} {
 		if !contains(contents, marker) {
 			t.Errorf("compatibility contract missing section %q", marker)
+		}
+	}
+}
+
+func TestSaaSArchitectureDoesNotRequireExternalCloudInfrastructure(t *testing.T) {
+	documents := [][]string{
+		{"docs", "saas", "self-managed-architecture.md"},
+		{"docs", "saas", "implementation-status.md"},
+		{"docs", "saas", "external-evidence-matrix.md"},
+		{"api", "evidence", "v1", "external-control-catalog.json"},
+	}
+	architecture := string(readFile(t, "docs", "saas", "self-managed-architecture.md"))
+	for _, required := range []string{
+		"Self-managed Agent Memory platform",
+		"Self-managed OIDC identity",
+		"Optional payment processor",
+		"Optional transactional email service",
+		"Optional external model API",
+	} {
+		if !strings.Contains(architecture, required) {
+			t.Errorf("self-managed architecture is missing boundary %q", required)
+		}
+	}
+	forbidden := []string{
+		"Select managed providers",
+		"selected cloud's infrastructure layer",
+		"provider account/project",
+		"provider firewall/private-endpoint",
+		"managed-provider configuration",
+		"provider-specific managed production infrastructure",
+		"selected provider's multi-AZ class",
+	}
+
+	for _, parts := range documents {
+		contents := string(readFile(t, parts...))
+		for _, phrase := range forbidden {
+			if strings.Contains(contents, phrase) {
+				t.Errorf("%s retains external-cloud deployment assumption %q", filepath.Join(parts...), phrase)
+			}
 		}
 	}
 }
