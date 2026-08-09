@@ -37,6 +37,9 @@ coverage/
 .coverage/
 .profiles/
 
+# Local analysis output
+/search_upgrade_results.json
+
 # Benchmark results (can be large)
 benchmark/results/*/
 !benchmark/results/.gitkeep
@@ -82,5 +85,6 @@ Thumbs.db
 *.swo
 *~
 
-.build
+# Local build and runtime state
+.build/
 .local/
