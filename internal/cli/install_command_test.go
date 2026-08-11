@@ -8,10 +8,18 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/taimufuraiyaa/agent-memory/internal/bootstrap"
 	"github.com/taimufuraiyaa/agent-memory/internal/storage/sqlite"
 )
 
 func TestInstallCommandBasic(t *testing.T) {
+	originalPlannerInstaller := ensureOllamaPlanner
+	selectedPlannerModel := ""
+	ensureOllamaPlanner = func(_ context.Context, options bootstrap.OllamaPlannerOptions) (bootstrap.OllamaPlannerResult, error) {
+		selectedPlannerModel = options.Model
+		return bootstrap.OllamaPlannerResult{Endpoint: bootstrap.DefaultOllamaEndpoint, Model: options.Model, RuntimeReused: true, ModelAvailable: true}, nil
+	}
+	t.Cleanup(func() { ensureOllamaPlanner = originalPlannerInstaller })
 	dataDir := t.TempDir()
 	binDir := t.TempDir()
 	cwd := t.TempDir()
@@ -45,6 +53,7 @@ func TestInstallCommandBasic(t *testing.T) {
 		"--no-model",
 		"--skip-onnx-runtime",
 		"--no-dashboard",
+		"--local-llm-model", "qwen3:14b",
 		"--write-env",
 		"--project-name", "test-install-proj",
 		"--ide", "cursor",
@@ -77,6 +86,19 @@ func TestInstallCommandBasic(t *testing.T) {
 	}
 	if !strings.Contains(envContent, `AGENT_MEMORY_TERM_BLOOM_MODE="shadow"`) {
 		t.Fatalf("expected safe term Bloom rollout mode in env file, got: %s", envContent)
+	}
+	for _, expected := range []string{
+		`AGENT_MEMORY_QUERY_PLANNER_ENABLED="true"`,
+		`AGENT_MEMORY_QUERY_PLANNER_ENDPOINT="http://127.0.0.1:11434"`,
+		`AGENT_MEMORY_QUERY_PLANNER_MODEL="qwen3:14b"`,
+		`AGENT_MEMORY_QUERY_PLANNER_TIMEOUT="15s"`,
+	} {
+		if !strings.Contains(envContent, expected) {
+			t.Fatalf("expected planner setting %s in env file, got: %s", expected, envContent)
+		}
+	}
+	if selectedPlannerModel != "qwen3:14b" {
+		t.Fatalf("planner installer received model %q", selectedPlannerModel)
 	}
 
 	store, err := sqlite.Open(context.Background(), filepath.Join(dataDir, "test-install-proj.db"))
@@ -111,6 +133,42 @@ func TestInstallCommandBasic(t *testing.T) {
 	ruleContent := string(ruleBytes)
 	if !strings.Contains(ruleContent, "workspace: test-install-proj") {
 		t.Fatalf("expected workspace name in cursor rule, got: %s", ruleContent)
+	}
+}
+
+func TestResolveHeadlessPlannerModelPreservesAliasAndValidatesCatalog(t *testing.T) {
+	for _, test := range []struct {
+		withLocal bool
+		model     string
+		want      string
+		wantErr   bool
+	}{
+		{withLocal: false, model: "", want: ""},
+		{withLocal: true, model: "", want: "qwen3:8b"},
+		{withLocal: false, model: "qwen3:4b", want: "qwen3:4b"},
+		{withLocal: false, model: "qwen3:14b", want: "qwen3:14b"},
+		{withLocal: false, model: "none", want: ""},
+		{withLocal: false, model: "remote/custom", wantErr: true},
+		{withLocal: true, model: "qwen3:4b", wantErr: true},
+	} {
+		got, err := resolveHeadlessPlannerModel(test.withLocal, test.model)
+		if (err != nil) != test.wantErr || got != test.want {
+			t.Fatalf("with=%v model=%q got=%q err=%v", test.withLocal, test.model, got, err)
+		}
+	}
+}
+
+func TestPlannerEnvironmentUsesExactModelOrExplicitlyDisables(t *testing.T) {
+	ready := plannerEnvironment(true, true, "qwen3:4b")
+	if ready["AGENT_MEMORY_QUERY_PLANNER_ENABLED"] != "true" || ready["AGENT_MEMORY_QUERY_PLANNER_MODEL"] != "qwen3:4b" {
+		t.Fatalf("ready environment=%v", ready)
+	}
+	disabled := plannerEnvironment(false, true, "")
+	if len(disabled) != 1 || disabled["AGENT_MEMORY_QUERY_PLANNER_ENABLED"] != "false" {
+		t.Fatalf("disabled environment=%v", disabled)
+	}
+	if untouched := plannerEnvironment(false, false, ""); len(untouched) != 0 {
+		t.Fatalf("implicit parser-only changed planner environment=%v", untouched)
 	}
 }
 

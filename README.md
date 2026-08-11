@@ -68,6 +68,32 @@ brew install --HEAD taimufuraiyaa/agent-memory/agent-memory
 #### Option B: CLI Binary Installation
 ```bash
 go install ./cmd/agent-memory
+agent-memory install
+```
+
+On an interactive terminal, `agent-memory install` opens a component checklist:
+use Up/Down to move, Space to select or unselect, and Enter to review and
+install. The full-screen interface provides a highlighted active row, aligned
+status and size columns, live selection counts, and a persistent shortcut bar.
+The recommended profile includes the local `qwen3:8b` question
+planner. Selecting it opens a second terminal step with `None`, `qwen3:4b`
+(2.5 GB), recommended `qwen3:8b` (5.2 GB), and `qwen3:14b` (9.3 GB) choices
+before making any changes. The required core is locked; ONNX Runtime, MiniLM,
+the dashboard, local planner, and current-workspace rules remain independently
+selectable.
+
+For scripts and redirected execution, the installer never waits for terminal
+input. Existing flags remain supported, with these explicit controls:
+
+```bash
+# Preserve the legacy headless install without the optional Qwen planner.
+agent-memory install --no-tui
+
+# Headless local planner installation and exact-model verification.
+agent-memory install --no-tui --with-local-llm
+
+# Select another supported model, or use "none" for parser-only operation.
+agent-memory install --no-tui --local-llm-model qwen3:4b
 ```
 
 #### Option C: Installer Script (Auto-downloads local embedding model)
