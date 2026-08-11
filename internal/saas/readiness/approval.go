@@ -67,6 +67,13 @@ type ApprovalReport struct {
 	Expired  []string                    `json:"expired"`
 }
 
+// ValidateTrustBundle verifies the schema, key material, identities, and
+// authorization scopes of a separately loaded trust bundle.
+func ValidateTrustBundle(bundle TrustBundle) error {
+	_, err := validateTrustBundle(bundle)
+	return err
+}
+
 type approvalPayload struct {
 	Schema         string `json:"schema"`
 	Gate           string `json:"gate"`

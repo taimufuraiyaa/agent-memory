@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-memory.local/schemas/evidence/v1/public-beta-approval-export-receipt.schema.json",
+  "title": "Agent Memory signed public-beta approval export receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "classification", "environment", "export_id", "review_id", "review_policy_version", "inventory_id", "inventory_receipt_sha256", "plan_id", "plan_receipt_sha256", "change_id", "change_receipt_sha256", "release_id", "release_receipt_sha256", "launch_asset_review_id", "launch_asset_receipt_sha256", "beta_gate_review_id", "beta_gate_receipt_sha256", "trust_bundle_sha256", "approval_export_sha256", "release_authority_review_sha256", "exported_at", "reviewed_at", "generated_at", "ready", "checks", "input_sha256", "manifest_sha256", "collected_at", "approval_artifact_count", "required_control_count", "verified_control_count", "missing_control_count", "rejected_control_count", "expired_control_count", "minimum_expiry_seconds", "control_results", "check_count", "passed_count", "failed_count", "inconclusive_count"],
+  "properties": {
+    "schema": {"const": "agent-memory-public-beta-approval-export-receipt-v1"},
+    "classification": {"const": "production_external"}, "environment": {"const": "production"},
+    "export_id": {"$ref": "#/$defs/opaque"}, "review_id": {"$ref": "#/$defs/opaque"}, "review_policy_version": {"$ref": "#/$defs/opaque"},
+    "inventory_id": {"$ref": "#/$defs/opaque"}, "inventory_receipt_sha256": {"$ref": "#/$defs/digest"}, "plan_id": {"$ref": "#/$defs/opaque"}, "plan_receipt_sha256": {"$ref": "#/$defs/digest"}, "change_id": {"$ref": "#/$defs/opaque"}, "change_receipt_sha256": {"$ref": "#/$defs/digest"}, "release_id": {"$ref": "#/$defs/opaque"}, "release_receipt_sha256": {"$ref": "#/$defs/digest"},
+    "launch_asset_review_id": {"$ref": "#/$defs/opaque"}, "launch_asset_receipt_sha256": {"$ref": "#/$defs/digest"}, "beta_gate_review_id": {"$ref": "#/$defs/opaque"}, "beta_gate_receipt_sha256": {"$ref": "#/$defs/digest"},
+    "trust_bundle_sha256": {"$ref": "#/$defs/digest"}, "approval_export_sha256": {"$ref": "#/$defs/digest"}, "release_authority_review_sha256": {"$ref": "#/$defs/digest"},
+    "exported_at": {"$ref": "#/$defs/timestamp"}, "reviewed_at": {"$ref": "#/$defs/timestamp"}, "generated_at": {"$ref": "#/$defs/timestamp"}, "ready": {"type": "boolean"},
+    "checks": {"type": "array", "minItems": 8, "maxItems": 8, "items": {"$ref": "#/$defs/check"}},
+    "input_sha256": {"$ref": "#/$defs/digest"}, "manifest_sha256": {"$ref": "#/$defs/digest"}, "collected_at": {"$ref": "#/$defs/timestamp"},
+    "approval_artifact_count": {"type": "integer", "minimum": 1, "maximum": 256}, "required_control_count": {"const": 6}, "verified_control_count": {"type": "integer", "minimum": 0, "maximum": 6}, "missing_control_count": {"type": "integer", "minimum": 0, "maximum": 6}, "rejected_control_count": {"type": "integer", "minimum": 0, "maximum": 6}, "expired_control_count": {"type": "integer", "minimum": 0, "maximum": 6}, "minimum_expiry_seconds": {"type": "integer", "minimum": 0, "maximum": 7776000},
+    "control_results": {"type": "array", "minItems": 6, "maxItems": 6, "items": {"$ref": "#/$defs/control_result"}},
+    "check_count": {"const": 8}, "passed_count": {"type": "integer", "minimum": 0, "maximum": 8}, "failed_count": {"type": "integer", "minimum": 0, "maximum": 8}, "inconclusive_count": {"type": "integer", "minimum": 0, "maximum": 8}
+  },
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"}, "opaque": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"}, "timestamp": {"type": "string", "format": "date-time"},
+    "check_id": {"enum": ["prerequisite_receipts_ready", "common_production_release", "trust_bundle_valid", "immutable_export_complete", "authorized_signatures_valid", "reviewed_evidence_bound", "approvals_current", "release_authority_review_complete"]},
+    "check": {"type": "object", "additionalProperties": false, "required": ["id", "outcome", "evidence_sha256"], "properties": {"id": {"$ref": "#/$defs/check_id"}, "outcome": {"enum": ["passed", "failed", "inconclusive"]}, "evidence_sha256": {"$ref": "#/$defs/digest"}}},
+    "control_id": {"enum": ["beta_readiness", "external_signup", "legal_pages", "security_contact", "status_page", "support_policy"]},
+    "control_result": {"type": "object", "additionalProperties": false, "required": ["control", "outcome"], "properties": {"control": {"$ref": "#/$defs/control_id"}, "outcome": {"enum": ["passed", "failed", "inconclusive"]}}}
+  }
+}

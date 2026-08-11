@@ -107,6 +107,18 @@ func (c *Client) SearchLocal(ctx context.Context, workspace, query string, limit
 	return c.request(ctx, http.MethodPost, "/api/v1/memories/search", map[string]any{"workspace": workspace, "query": query, "top_k": limit}, nil)
 }
 
+func (c *Client) SearchHosted(ctx context.Context, workspace, query string, limit int, cursor string) (json.RawMessage, error) {
+	if c.mode != ModeHosted {
+		return nil, errors.New("SearchHosted is available only in explicit hosted mode")
+	}
+	return c.request(ctx, http.MethodPost, "/v1/search", map[string]any{
+		"workspace_id": workspace,
+		"query":        query,
+		"limit":        limit,
+		"cursor":       cursor,
+	}, nil)
+}
+
 func (c *Client) QuerySources(ctx context.Context, value SourceQuery) (json.RawMessage, error) {
 	if c.mode != ModeHosted {
 		return nil, errors.New("QuerySources is available only in explicit hosted mode")

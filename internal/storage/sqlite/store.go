@@ -1379,7 +1379,7 @@ func (s *Store) ListMemoriesByWorkspace(ctx context.Context, workspace string) (
 SELECT id, type, content, diagram_lang, diagram_code, workspace, source_json, entities_json, tags_json, confidence, storage_tier, pinned, superseded_by, access_count, last_accessed, decay_score, salience_score, suppression_score, useful_count, ignored_count, rejected_count, harmful_count, last_helpful_at, last_rejected_at, suppression_until, familiarity_band_last, outcome_json, created_at, updated_at
 FROM memories
 WHERE workspace = ?
-ORDER BY updated_at DESC`, workspace)
+ORDER BY updated_at DESC, rowid DESC`, workspace)
 	if err != nil {
 		s.logSlowQuery(ctx, "list_memories_by_workspace", workspace, time.Since(_startList))
 		return nil, err
@@ -1462,7 +1462,7 @@ func (s *Store) ListRecentMemoriesByWorkspace(ctx context.Context, workspace str
 SELECT id, type, content, diagram_lang, diagram_code, workspace, source_json, entities_json, tags_json, confidence, storage_tier, pinned, superseded_by, access_count, last_accessed, decay_score, salience_score, suppression_score, useful_count, ignored_count, rejected_count, harmful_count, last_helpful_at, last_rejected_at, suppression_until, familiarity_band_last, outcome_json, created_at, updated_at
 FROM memories
 WHERE workspace = ?
-ORDER BY created_at DESC
+ORDER BY created_at DESC, rowid DESC
 LIMIT ?`, workspace, limit)
 	if err != nil {
 		return nil, err

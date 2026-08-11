@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-memory.local/schemas/evidence/v1/staging-format-ingestion-receipt.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "ready", "environment", "release_id", "release_receipt_sha256", "input_sha256", "generated_at", "collected_at", "runs"],
+  "properties": {
+    "schema": {"const": "agent-memory-staging-format-ingestion-receipt-v1"},
+    "ready": {"type": "boolean"},
+    "environment": {"const": "staging"},
+    "release_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"},
+    "release_receipt_sha256": {"$ref": "staging-format-ingestion.schema.json#/$defs/digest"},
+    "input_sha256": {"$ref": "staging-format-ingestion.schema.json#/$defs/digest"},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "collected_at": {"type": "string", "format": "date-time"},
+    "runs": {"$ref": "staging-format-ingestion.schema.json#/$defs/runs"}
+  }
+}

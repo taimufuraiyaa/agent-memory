@@ -109,3 +109,30 @@ func TestMiddlewareRejectsInvalidCredential(t *testing.T) {
 		t.Fatalf("unsafe authentication error: %s", recorder.Body.String())
 	}
 }
+
+func TestLocalBrowserTokenSourcePrefersBearerAndAcceptsSameOriginCookie(t *testing.T) {
+	source := LocalBrowserTokenSource("agent_memory_local_session")
+	bearerRequest := httptest.NewRequest(http.MethodPost, "http://localhost/v1/memories", nil)
+	bearerRequest.Header.Set("Authorization", "Bearer agent-token")
+	bearerRequest.AddCookie(&http.Cookie{Name: "agent_memory_local_session", Value: "browser-token"})
+	if token, err := source(bearerRequest); err != nil || token != "agent-token" {
+		t.Fatalf("bearer token=%q err=%v", token, err)
+	}
+
+	cookieRequest := httptest.NewRequest(http.MethodPost, "http://localhost/v1/memories", nil)
+	cookieRequest.Header.Set("Origin", "http://localhost")
+	cookieRequest.AddCookie(&http.Cookie{Name: "agent_memory_local_session", Value: "browser-token"})
+	if token, err := source(cookieRequest); err != nil || token != "browser-token" {
+		t.Fatalf("cookie token=%q err=%v", token, err)
+	}
+}
+
+func TestLocalBrowserTokenSourceRejectsCrossSiteUnsafeCookieRequest(t *testing.T) {
+	source := LocalBrowserTokenSource("agent_memory_local_session")
+	request := httptest.NewRequest(http.MethodDelete, "http://localhost/v1/account", nil)
+	request.Header.Set("Origin", "https://attacker.example")
+	request.AddCookie(&http.Cookie{Name: "agent_memory_local_session", Value: "browser-token"})
+	if _, err := source(request); !errors.Is(err, ErrCrossSiteSessionRequest) {
+		t.Fatalf("error=%v, want cross-site rejection", err)
+	}
+}

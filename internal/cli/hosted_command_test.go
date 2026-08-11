@@ -113,7 +113,7 @@ func TestHostedMCPInjectsKeyringTokenOnlyIntoChildEnvironment(t *testing.T) {
 		t.Fatal(err)
 	}
 	joined := strings.Join(environment, "\n")
-	if executable != "custom-mcp" || !strings.Contains(joined, "AGENT_MEMORY_TOKEN=am_sk_child_only") || strings.Contains(joined, "stale-token") || !strings.Contains(joined, "AGENT_MEMORY_MODE=hosted") {
+	if executable != "custom-mcp" || !strings.Contains(joined, "AGENT_MEMORY_TOKEN=am_sk_child_only") || strings.Contains(joined, "stale-token") || !strings.Contains(joined, "AGENT_MEMORY_MODE=hosted") || !strings.Contains(joined, "AGENT_MEMORY_API_URL=https://memory.example.test") || !strings.Contains(joined, "AGENT_MEMORY_TENANT_ID=11111111-1111-4111-8111-111111111111") {
 		t.Fatalf("executable=%q environment=%q", executable, joined)
 	}
 }

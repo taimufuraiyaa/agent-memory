@@ -184,6 +184,9 @@ func (g *Gateway) withRetry(ctx context.Context, state *providerState, call func
 	for attempt := 0; attempt <= state.policy.MaxRetries; attempt++ {
 		callContext, cancel := context.WithTimeout(ctx, state.policy.Timeout)
 		value, err := call(callContext)
+		if contextErr := callContext.Err(); contextErr != nil {
+			err = contextErr
+		}
 		cancel()
 		if err == nil {
 			g.mu.Lock()
@@ -211,6 +214,9 @@ func (g *Gateway) withGenerateRetry(ctx context.Context, state *providerState, c
 	for attempt := 0; attempt <= state.policy.MaxRetries; attempt++ {
 		callContext, cancel := context.WithTimeout(ctx, state.policy.Timeout)
 		value, err := call(callContext)
+		if contextErr := callContext.Err(); contextErr != nil {
+			err = contextErr
+		}
 		cancel()
 		if err == nil {
 			g.resetCircuit(state)

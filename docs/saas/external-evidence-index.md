@@ -34,6 +34,12 @@ unknown or duplicate controls, local/mock classifications, absolute or
 traversing paths, symlinks, empty files, and mismatched classifications fail
 closed.
 
+The verifier captures one non-symlink artifact-root descriptor for the complete
+pass. All dossiers are opened relative to that root, intermediate directories
+are checked before and after hashing, and the public root path is revalidated
+before success. Replacing the root or `artifacts/` during verification is a
+failed operational attempt; retry only against a stable immutable export.
+
 ## Collect one control
 
 1. Find the human ID, normalized `approval_control`, owner group, and exact
@@ -66,6 +72,31 @@ The separately managed trust bundle must scope that public key to gate
 `external_evidence` and control `p1_2_a`. Retain newer rejection decisions in
 the exported approval directory; newest signed decision wins.
 
+Verification reads trust and approval JSON from the exact bounded regular-file
+descriptor it validated, then rechecks the path identity, size, and modification
+time after decoding. The production verifier owns catalog, index, trust,
+approval-set, signature, and dossier verification as one path-based operation.
+After the complete dossier pass it revalidates every metadata path and the
+approval snapshot before returning the report and exact catalog, index, trust,
+and approval-set SHA-256 values. Before hashing, it also snapshots every
+approval-eligible indexed dossier's clean path, identity, size, and modification
+time beneath the captured artifact root. Each hash must use that file, and the
+complete dossier set plus intermediate directories is revalidated after the
+last hash. Replacing an earlier dossier while a later one is processed therefore
+fails closed. The verifier keeps that same root descriptor open while it checks
+catalog, index, trust, and approvals one final time, then repeats the complete
+dossier set and public root identity before returning. The approval directory
+is treated as one snapshot:
+its identity, sorted JSON membership, and each member's identity, size, and
+modification time must be unchanged before and after loading. If an approval
+export or metadata source is updated while dossiers are being checked,
+verification fails closed; finish the update and retry so a release decision
+never mixes two source generations.
+The offline signer applies the same rule to its owner-only private key and the
+reviewed dossier: both paths must still identify the opened files with unchanged
+size and modification time after the key read and dossier hash, or no approval
+artifact is emitted.
+
 ## Verify the complete index
 
 ```sh
@@ -85,3 +116,13 @@ The JSON report contains only counts and sorted human control IDs. Archive the
 report with the release record, but retain the dossiers, index, approval
 history, and trust bundle in the immutable external evidence system. Never mark
 the matrix rows complete based only on a local ready fixture.
+
+## Canonical catalog trust anchor
+
+The production verifier does not trust an arbitrary structurally valid catalog.
+It strictly decodes the supplied catalog, deterministically encodes its typed
+semantic representation, and requires the exact 57-control SHA-256 compiled
+into the release. Changing order, IDs, approval controls, owner groups, or
+evidence requirements requires an intentional release update and coordinated
+matrix/approval migration. A substituted or truncated catalog exits `1` and
+emits no readiness report.

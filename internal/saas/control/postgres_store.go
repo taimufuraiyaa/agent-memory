@@ -50,6 +50,13 @@ func (s *PostgresStore) ProvisionPersonalAccount(ctx context.Context, command Pr
 	}
 	inserted := accountID == command.AccountID
 	if !inserted {
+		var tenantID string
+		if err := tx.QueryRow(ctx, `SELECT id::text FROM saas_tenants WHERE personal_owner_account_id=$1`, accountID).Scan(&tenantID); err != nil {
+			return PersonalAccount{}, fmt.Errorf("load existing personal tenant id: %w", err)
+		}
+		if _, err := tx.Exec(ctx, "SELECT set_config('app.tenant_id', $1, true)", tenantID); err != nil {
+			return PersonalAccount{}, fmt.Errorf("set existing tenant transaction context: %w", err)
+		}
 		var existing PersonalAccount
 		err := tx.QueryRow(ctx, `SELECT a.id::text, t.id::text,
 			COALESCE((SELECT w.id::text FROM saas_workspaces w WHERE w.tenant_id=t.id AND w.state='active' ORDER BY w.created_at LIMIT 1), ''),
@@ -113,6 +120,47 @@ func (s *PostgresStore) ProvisionPersonalAccount(ctx context.Context, command Pr
 		return PersonalAccount{}, err
 	}
 	return PersonalAccount{AccountID: command.AccountID, TenantID: command.TenantID, WorkspaceID: command.WorkspaceID, Role: "owner", State: "active", CreatedAt: createdAt}, nil
+}
+
+func (s *PostgresStore) FindPersonalAccount(ctx context.Context, externalSubject string) (PersonalAccount, error) {
+	if s == nil || s.pool == nil {
+		return PersonalAccount{}, auth.ErrTenantUnavailable
+	}
+	externalSubject = strings.TrimSpace(externalSubject)
+	var accountID, tenantID string
+	var createdAt time.Time
+	err := s.pool.QueryRow(ctx, `SELECT a.id::text,t.id::text,a.created_at
+		FROM saas_accounts a JOIN saas_tenants t ON t.personal_owner_account_id=a.id
+		WHERE a.external_subject=$1 AND a.state='active' AND t.state='active'`, externalSubject).Scan(&accountID, &tenantID, &createdAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return PersonalAccount{}, auth.ErrTenantUnavailable
+	}
+	if err != nil {
+		return PersonalAccount{}, err
+	}
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return PersonalAccount{}, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err := tx.Exec(ctx, "SELECT set_config('app.tenant_id', $1, true)", tenantID); err != nil {
+		return PersonalAccount{}, err
+	}
+	account := PersonalAccount{AccountID: accountID, TenantID: tenantID, CreatedAt: createdAt, State: "active"}
+	err = tx.QueryRow(ctx, `SELECT m.role,w.id::text
+		FROM saas_memberships m JOIN saas_workspaces w ON w.tenant_id=m.tenant_id
+		WHERE m.tenant_id=$1 AND m.account_id=$2 AND m.state='active' AND w.state='active'
+		ORDER BY w.created_at LIMIT 1`, tenantID, accountID).Scan(&account.Role, &account.WorkspaceID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return PersonalAccount{}, auth.ErrTenantUnavailable
+	}
+	if err != nil {
+		return PersonalAccount{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return PersonalAccount{}, err
+	}
+	return account, nil
 }
 
 func (s *PostgresStore) Resolve(ctx context.Context, externalSubject, selectedTenantID string) (auth.Membership, error) {

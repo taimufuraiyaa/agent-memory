@@ -31,6 +31,10 @@ description: Validate and operate the provider-neutral Agent Memory Kubernetes r
 - A failed receipt stays failed after a successful rollback. Receipt validation
   or atomic publication failure fails the release and triggers rollback once
   workloads have been applied.
+- Post-rollback verification is read-only. It binds exact passed and failed
+  staging release receipt hashes and queries only fixed Deployment images,
+  revisions, desired replicas, and ready replicas. It never initiates rollback
+  or treats the failed receipt's rollback boolean as proof of restoration.
 - Static or mocked tests do not prove a real staging deployment, secret
   rotation, private managed-data ingress, or rollback drill. Keep those
   acceptance items open until immutable external evidence exists.
@@ -45,6 +49,10 @@ description: Validate and operate the provider-neutral Agent Memory Kubernetes r
    mocked Kubernetes contract:
 
    `make saas-release-script-test`
+
+   Prove strict receipt-pair binding and bounded post-rollback collection:
+
+   `go test ./internal/saas/platformrollback ./cmd/agent-memory-platform-rollback ./internal/contracts -count=1`
 
 3. Validate workflow expressions and shell syntax:
 
@@ -76,6 +84,12 @@ resolved digests, migration Job result, Deployment revision/status, health
 checks, and rollback result in the external evidence store. Hash the receipt
 after upload and reference that digest from the accountable approval; do not
 edit or reuse the local path.
+
+After an authorized failed-rollout drill, validate live restoration with
+`make saas-platform-rollback-verify` as documented in
+`docs/saas/staging-rollback-verification.md`. Retain the passed baseline,
+failed attempt, and verification receipts together. A mocked ready receipt does
+not satisfy P1.2 or Checkpoint 1.
 
 The GitHub `hosted release` workflow performs the same staging sequence for a
 `v*` tag after publishing and attesting all four images. It requires the

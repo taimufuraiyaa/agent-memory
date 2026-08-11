@@ -192,6 +192,48 @@ func (s *Service) Commit(ctx context.Context, reservationID string, account cont
 	return tx.Commit(ctx)
 }
 
+// InitializeLocalOwner installs the product rollout row normally created when
+// managed signup admission commits. It is called only by the explicitly
+// enabled development-only local owner adapter and does not modify signup
+// admission policy.
+func (s *Service) InitializeLocalOwner(ctx context.Context, account control.PersonalAccount) error {
+	if s == nil || s.pool == nil || strings.TrimSpace(account.AccountID) == "" || strings.TrimSpace(account.TenantID) == "" {
+		return errors.New("invalid local owner initialization")
+	}
+	now := s.now().UTC()
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	policy, err := loadPolicy(ctx, tx)
+	if err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, "SELECT set_config('app.tenant_id',$1,true)", account.TenantID); err != nil {
+		return err
+	}
+	trialEnd := now.Add(time.Duration(policy.TrialDays) * 24 * time.Hour)
+	flags := `{"source_upload":true,"generation":true,"exports":true}`
+	created, err := tx.Exec(ctx, `INSERT INTO saas_tenant_launch_controls(tenant_id,source_cap,trial_expires_at,feature_flags,policy_version,updated_at) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(tenant_id) DO NOTHING`, account.TenantID, policy.SourceCap, trialEnd, flags, policy.Version, now)
+	if err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `UPDATE saas_tenant_entitlements SET max_source_count=LEAST(max_source_count,$2),updated_at=$3 WHERE tenant_id=$1`, account.TenantID, policy.SourceCap, now); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `UPDATE saas_subscriptions SET current_period_ends_at=$2,updated_at=$3 WHERE tenant_id=$1 AND state='trialing'`, account.TenantID, trialEnd, now); err != nil {
+		return err
+	}
+	if created.RowsAffected() == 1 {
+		dimensions := map[string]any{"phase": policy.Phase, "policy_version": policy.Version, "channel": "local_owner"}
+		if _, err := tx.Exec(ctx, `INSERT INTO saas_product_analytics(tenant_id,id,event_name,outcome,safe_dimensions,occurred_at) VALUES($1,$2,'signup_completed','success',$3,$4)`, account.TenantID, uuid.NewString(), dimensions, now); err != nil {
+			return err
+		}
+	}
+	return tx.Commit(ctx)
+}
+
 func (s *Service) Cancel(ctx context.Context, reservationID string) error {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {

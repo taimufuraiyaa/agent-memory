@@ -13,6 +13,7 @@ import (
 
 type RetainedClass struct {
 	DataClass       string `json:"data_class"`
+	Purpose         string `json:"purpose"`
 	PolicyVersion   string `json:"policy_version"`
 	Owner           string `json:"owner"`
 	Trigger         string `json:"trigger"`
@@ -74,13 +75,13 @@ func (s *Service) Overview(ctx context.Context) (Overview, error) {
 		return Overview{}, err
 	}
 	result := Overview{RetainedClasses: []RetainedClass{}, SourceAccess: []AccessEvent{}, Exports: []Export{}, Deletions: []Deletion{}, RevocationExplanation: "Access is revoked immediately when deletion starts.", PhysicalPurgeExplanation: "Encrypted objects, derived text, indexes, queues, and caches purge asynchronously; completion appears only after every subsystem confirms deletion."}
-	rows, err := tx.Query(ctx, `SELECT data_class,version,owner,retention_trigger,duration_seconds,deletion_method,hold_behavior,customer_impact FROM saas_retention_policies WHERE retired_at IS NULL ORDER BY data_class`)
+	rows, err := tx.Query(ctx, `SELECT data_class,purpose,version,owner,retention_trigger,duration_seconds,deletion_method,hold_behavior,customer_impact FROM saas_retention_policies WHERE retired_at IS NULL ORDER BY data_class`)
 	if err != nil {
 		return result, err
 	}
 	for rows.Next() {
 		var v RetainedClass
-		if err := rows.Scan(&v.DataClass, &v.PolicyVersion, &v.Owner, &v.Trigger, &v.DurationSeconds, &v.DeletionMethod, &v.HoldBehavior, &v.CustomerImpact); err != nil {
+		if err := rows.Scan(&v.DataClass, &v.Purpose, &v.PolicyVersion, &v.Owner, &v.Trigger, &v.DurationSeconds, &v.DeletionMethod, &v.HoldBehavior, &v.CustomerImpact); err != nil {
 			rows.Close()
 			return result, err
 		}

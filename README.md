@@ -193,6 +193,11 @@ For a source checkout, build the embedded dashboard and binary once with
 127.0.0.1:3210`. The production binary serves `/dashboard/` itself; npm is not
 needed at runtime.
 
+The standalone command and the hosted URL now use one embedded React webapp.
+The server publishes a small, no-store runtime manifest that selects either
+standalone SQLite workflows or hosted tenant-scoped workflows; there is no
+second hosted frontend to maintain.
+
 ### Notebook and dashboard capabilities
 
 - **Notebook-first workspace**: Notes is the default home, with a workspace explorer, multi-note tabs, Markdown editing, rendered preview, Mermaid diagrams, and responsive desktop/mobile layouts.
@@ -203,6 +208,7 @@ needed at runtime.
 - **System workspace**: Existing Overview, Sessions, Diagnostics, Benchmark, Lifecycle, Wiki, Feedback, Skills, raw stats, Explain Mode, Recall Preview, and Memory Advisor remain reachable under System.
 - **Per-client MCP profiles**: System → Clients registers Codex, Claude, Cursor, or custom clients and assigns Default (five workflow tools) or Expanded (adds health and session browsing). Add the displayed `AGENT_MEMORY_CLIENT_ID` value to that client's MCP environment and reconnect it. Profiles apply across all local workspaces, but each client selects its own profile.
 - **Internal infrastructure settings**: System → Infrastructure lets internal operators configure the installation-wide monthly infrastructure operations budget and its assumption status. New installations default to an assumed USD 1,000/month. The control is not available to tenants or MCP clients, and saving never deploys infrastructure or spends money.
+- **Copy-first hosted migration**: System → Migration downloads an encrypted AMPB2 copy of the selected workspace's memories and active notes. Browser migration excludes uploaded source originals and never deletes local data.
 - **Keyboard workflow**: Command palette, new note, global search, Ask, save, close tab, and next/previous tab shortcuts are supported with visible focus states.
 
 The notebook is enabled by default. For the one-release rollback window, build
@@ -256,6 +262,13 @@ neither emulator is production release evidence. See the
 [Floci project](https://github.com/floci-io/floci) for its AWS compatibility
 scope.
 
+To migrate from the standalone dashboard, download an encrypted copy from
+System → Migration. In the hosted dashboard, connect an authorized tenant and
+workspace, then use **Import standalone migration** with that `.ampb2` file and
+its passphrase. Imports are manifest-verified, resumable, and idempotent. Retry
+the same selected file without changing it to reuse the same request key; keep
+the standalone database until the hosted counts have been verified.
+
 The OIDC profile keeps the same edge URL and exposes its loopback-only provider
 on port `58082`. It exercises the production discovery/JWKS verifier with one
 fixed synthetic identity and ephemeral signing keys. It is opt-in; restoring
@@ -277,6 +290,12 @@ dependencies while liveness remains process-only. Passed manifests, receipts,
 archives, and SHA-256 sidecars are written under
 `.local/evidence/`; they are classified as local development evidence and do
 not replace staging or accountable-owner approval.
+
+For internally operated staging and production, the repository also provides a
+provider-neutral inventory → plan → apply/drift → production exposure evidence
+chain. The final receipt binds private firewall and external reachability
+artifacts by SHA-256 without putting network addresses or scanner output in
+Git. See the [production private-authority exposure runbook](docs/saas/production-private-authority-exposure.md).
 
 ---
 

@@ -25,6 +25,10 @@ import (
 	"github.com/taimufuraiyaa/agent-memory/internal/embeddings"
 )
 
+var localHostedDashboardBaseURL = "http://localhost:58081"
+
+const dashboardRuntimeSchema = "agent-memory-dashboard-runtime-v1"
+
 func openInBrowser(url string) error {
 	if strings.TrimSpace(url) == "" {
 		return errors.New("url is required")
@@ -67,6 +71,37 @@ func waitForHTTP(url string, timeout time.Duration) error {
 		time.Sleep(125 * time.Millisecond)
 	}
 	return errors.New("timeout waiting for server")
+}
+
+func discoverHostedDashboard(ctx context.Context, client *http.Client, baseURL string) (string, bool) {
+	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	if baseURL == "" || client == nil {
+		return "", false
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+"/dashboard/runtime.json", nil)
+	if err != nil {
+		return "", false
+	}
+	res, err := client.Do(req)
+	if err != nil {
+		return "", false
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		return "", false
+	}
+	body, err := io.ReadAll(io.LimitReader(res.Body, 4097))
+	if err != nil || len(body) > 4096 {
+		return "", false
+	}
+	var manifest struct {
+		Schema string `json:"schema"`
+		Mode   string `json:"mode"`
+	}
+	if err := json.Unmarshal(body, &manifest); err != nil || manifest.Schema != dashboardRuntimeSchema || manifest.Mode != "hosted" {
+		return "", false
+	}
+	return baseURL + "/dashboard/", true
 }
 
 type dashboardPID struct {
@@ -454,7 +489,7 @@ func newDashboardCommand() *cobra.Command {
 	var status bool
 	cmd := &cobra.Command{
 		Use:     "dashboard",
-		Short:   "Open the local dashboard (starts Go API + React dev server)",
+		Short:   "Open the Agent Memory webapp (reuses Floci or starts a local fallback)",
 		Aliases: []string{"ui"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, cancel := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
@@ -506,6 +541,23 @@ func newDashboardCommand() *cobra.Command {
 			}
 			if start && stop {
 				return errors.New("only one of --start or --stop can be set")
+			}
+			if start {
+				client := &http.Client{
+					Timeout: 750 * time.Millisecond,
+					CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+						return http.ErrUseLastResponse
+					},
+				}
+				if url, ok := discoverHostedDashboard(ctx, client, localHostedDashboardBaseURL); ok {
+					_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "reusing running Agent Memory webapp")
+					if noOpen {
+						_, _ = fmt.Fprintln(cmd.OutOrStdout(), url)
+						return nil
+					}
+					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "opening %s\n", url)
+					return openInBrowser(url)
+				}
 			}
 			if stop {
 				var (

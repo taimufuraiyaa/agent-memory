@@ -8,6 +8,29 @@ import (
 	"testing"
 )
 
+func TestReadRegularJSONRejectsPathReplacedBySymlinkToOpenedFile(t *testing.T) {
+	directory := t.TempDir()
+	path := filepath.Join(directory, "input.json")
+	originalPath := filepath.Join(directory, "opened.json")
+	if err := os.WriteFile(path, []byte(`{"value":"expected"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var destination struct {
+		Value string `json:"value"`
+	}
+	err := readRegularJSONWithHook(path, &destination, func() {
+		if err := os.Rename(path, originalPath); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(originalPath, path); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if err == nil {
+		t.Fatal("JSON input whose path became a symlink was accepted")
+	}
+}
+
 func TestRunBuildsAndVerifiesLocalEvidenceManifest(t *testing.T) {
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, "receipts"), 0o700); err != nil {

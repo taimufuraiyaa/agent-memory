@@ -45,6 +45,7 @@ required_contracts=(
   'identity provider outage'
   'OIDC discovery unavailable'
   'AGENT_MEMORY_SMOKE_AUTH_TOKEN'
+  'AGENT_MEMORY_SMOKE_COUNTRY_SECRET="$initial_edge_country_secret"'
   'compose.oidc.yaml'
   'resolve_oidc_url'
   'resolve_api_url'

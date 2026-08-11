@@ -49,6 +49,84 @@ func TestLoadReadsTypedHostedConfiguration(t *testing.T) {
 	}
 }
 
+func TestLoadReadsBoundedLocalSemanticRoleConfiguration(t *testing.T) {
+	setValidEnvironment(t)
+	t.Setenv("AGENT_MEMORY_QUERY_PLANNER_ENABLED", "true")
+	t.Setenv("AGENT_MEMORY_QUERY_PLANNER_ENDPOINT", "http://host.docker.internal:11434")
+	t.Setenv("AGENT_MEMORY_QUERY_PLANNER_MODEL", "qwen3:8b")
+	t.Setenv("AGENT_MEMORY_QUERY_PLANNER_TIMEOUT", "8s")
+	t.Setenv("AGENT_MEMORY_RERANKER_ENABLED", "true")
+	t.Setenv("AGENT_MEMORY_RERANKER_ENDPOINT", "http://host.docker.internal:11435")
+	t.Setenv("AGENT_MEMORY_RERANKER_MODEL", "qwen3-reranker:0.6b")
+	t.Setenv("AGENT_MEMORY_RERANKER_TIMEOUT", "12s")
+	t.Setenv("AGENT_MEMORY_RERANKER_MIN_RELEVANCE", "0.55")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.QueryPlannerEnabled || cfg.QueryPlannerModel != "qwen3:8b" || cfg.QueryPlannerTimeout != 8*time.Second {
+		t.Fatalf("planner config=%+v", cfg)
+	}
+	if !cfg.RerankerEnabled || cfg.RerankerModel != "qwen3-reranker:0.6b" || cfg.RerankerTimeout != 12*time.Second || cfg.RerankerMinRelevance != 0.55 {
+		t.Fatalf("reranker config=%+v", cfg)
+	}
+}
+
+func TestLoadRejectsIncompleteOrUnboundedLocalSemanticRoles(t *testing.T) {
+	setValidEnvironment(t)
+	t.Setenv("AGENT_MEMORY_QUERY_PLANNER_ENABLED", "true")
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "QUERY_PLANNER") {
+		t.Fatalf("missing planner config error=%v", err)
+	}
+
+	setValidEnvironment(t)
+	t.Setenv("AGENT_MEMORY_RERANKER_ENABLED", "true")
+	t.Setenv("AGENT_MEMORY_RERANKER_ENDPOINT", "http://host.docker.internal:11435")
+	t.Setenv("AGENT_MEMORY_RERANKER_MODEL", "reranker")
+	t.Setenv("AGENT_MEMORY_RERANKER_MIN_RELEVANCE", "1.1")
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "MIN_RELEVANCE") {
+		t.Fatalf("invalid reranker threshold error=%v", err)
+	}
+}
+
+func TestLocalOnboardingRequiresExplicitDevelopmentIdentityOptIn(t *testing.T) {
+	setValidEnvironment(t)
+	t.Setenv("AGENT_MEMORY_LOCAL_ONBOARDING", "true")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.LocalOnboardingEnabled {
+		t.Fatal("expected explicit local onboarding opt-in")
+	}
+
+	t.Setenv("AGENT_MEMORY_SAAS_ENV", "staging")
+	t.Setenv("AGENT_MEMORY_IDENTITY_MODE", "oidc")
+	for _, name := range []string{"AGENT_MEMORY_DEV_AUTH_TOKEN", "AGENT_MEMORY_DEV_SUBJECT", "AGENT_MEMORY_DEV_EMAIL", "AGENT_MEMORY_DEV_DISPLAY_NAME"} {
+		t.Setenv(name, "")
+	}
+	t.Setenv("AGENT_MEMORY_OIDC_ISSUER", "https://identity.example.test")
+	t.Setenv("AGENT_MEMORY_OIDC_AUDIENCE", "agent-memory-web")
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "LOCAL_ONBOARDING") {
+		t.Fatalf("Load() error=%v, want local onboarding boundary failure", err)
+	}
+}
+
+func TestLocalOnboardingRejectsDevelopmentOIDCMode(t *testing.T) {
+	setValidEnvironment(t)
+	t.Setenv("AGENT_MEMORY_LOCAL_ONBOARDING", "true")
+	t.Setenv("AGENT_MEMORY_IDENTITY_MODE", "oidc")
+	for _, name := range []string{"AGENT_MEMORY_DEV_AUTH_TOKEN", "AGENT_MEMORY_DEV_SUBJECT", "AGENT_MEMORY_DEV_EMAIL", "AGENT_MEMORY_DEV_DISPLAY_NAME"} {
+		t.Setenv(name, "")
+	}
+	t.Setenv("AGENT_MEMORY_OIDC_ISSUER", "http://oidc:8082")
+	t.Setenv("AGENT_MEMORY_OIDC_AUDIENCE", "agent-memory-local")
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "LOCAL_ONBOARDING") {
+		t.Fatalf("Load() error=%v, want development OIDC onboarding rejection", err)
+	}
+}
+
 func TestLoadRejectsInvalidTracingSampleRate(t *testing.T) {
 	setValidEnvironment(t)
 	t.Setenv("AGENT_MEMORY_TRACING_SAMPLE_RATE", "1.1")

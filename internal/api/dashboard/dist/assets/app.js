@@ -7092,6 +7092,20 @@ async function api(path, init2) {
   }
   return env.data;
 }
+async function downloadPortableMigration(workspace, passphrase) {
+  var _a2;
+  const response = await fetch("/api/v1/migrations/portable-export", {
+    method: "POST",
+    cache: "no-store",
+    headers: { accept: "application/octet-stream", "content-type": "application/json" },
+    body: JSON.stringify({ workspace, passphrase })
+  });
+  if (!response.ok) {
+    const envelope = await response.json().catch(() => ({}));
+    throw new Error(((_a2 = envelope.error) == null ? void 0 : _a2.message) || "The encrypted migration bundle could not be created.");
+  }
+  return response.blob();
+}
 function listProjects() {
   return api("/api/v1/projects/list", { method: "GET" });
 }
@@ -40616,6 +40630,66 @@ function DeploymentPanel() {
     ] }) : null
   ] });
 }
+function MigrationPanel({ workspace }) {
+  const [passphrase, setPassphrase] = reactExports.useState("");
+  const [confirmation, setConfirmation] = reactExports.useState("");
+  const [status, setStatus] = reactExports.useState("");
+  const [busy, setBusy] = reactExports.useState(false);
+  async function createBundle(event) {
+    event.preventDefault();
+    if (passphrase !== confirmation) {
+      setStatus("The passphrases do not match.");
+      return;
+    }
+    setBusy(true);
+    setStatus("Creating an encrypted copy…");
+    try {
+      const bundle = await downloadPortableMigration(workspace, passphrase);
+      const url = URL.createObjectURL(bundle);
+      const anchor2 = document.createElement("a");
+      anchor2.href = url;
+      anchor2.download = `agent-memory-${workspace || "workspace"}.ampb2`;
+      anchor2.click();
+      URL.revokeObjectURL(url);
+      setStatus("Encrypted migration copy downloaded. Local data is not deleted.");
+      setPassphrase("");
+      setConfirmation("");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "The migration copy could not be created.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "panel migrationPanel", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "panelHeader", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "eyebrow", children: "Portable AMPB2" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { children: "Move this workspace to hosted Agent Memory" })
+    ] }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "panelBody", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "This creates an encrypted copy of memories and active notes. Uploaded source originals are excluded from browser migration." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "Copy first:" }),
+        " Local data is not deleted. Keep it until you verify the hosted import, then remove it yourself only if you choose."
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("form", { className: "formStack", onSubmit: createBundle, children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [
+          "Workspace",
+          /* @__PURE__ */ jsxRuntimeExports.jsx("input", { value: workspace, readOnly: true })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [
+          "Bundle passphrase",
+          /* @__PURE__ */ jsxRuntimeExports.jsx("input", { type: "password", autoComplete: "new-password", minLength: 12, maxLength: 1024, required: true, value: passphrase, onChange: (event) => setPassphrase(event.target.value) })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [
+          "Confirm passphrase",
+          /* @__PURE__ */ jsxRuntimeExports.jsx("input", { type: "password", autoComplete: "new-password", minLength: 12, maxLength: 1024, required: true, value: confirmation, onChange: (event) => setConfirmation(event.target.value) })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "submit", disabled: busy || !workspace, children: busy ? "Creating encrypted copy…" : "Download migration copy" })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", "aria-live": "polite", children: status })
+    ] })
+  ] });
+}
 const __vite_import_meta_env__ = {};
 const notebookEnabled = (__vite_import_meta_env__ == null ? void 0 : __vite_import_meta_env__.VITE_NOTEBOOK_ENABLED) !== "false";
 function App() {
@@ -41321,6 +41395,10 @@ function App() {
     { key: "10", label: "Infrastructure", surface: "deployment", open: () => {
       setSurface("deployment");
       setSelectedMemory(null);
+    } },
+    { key: "11", label: "Migration", surface: "migration", open: () => {
+      setSurface("migration");
+      setSelectedMemory(null);
     } }
   ];
   const activeNavigationItem = navigationItems.find((item) => item.surface === surface) ?? navigationItems[0];
@@ -41555,6 +41633,7 @@ function App() {
         ) : null,
         surface === "clients" ? /* @__PURE__ */ jsxRuntimeExports.jsx(ClientsPanel, {}) : null,
         surface === "deployment" ? /* @__PURE__ */ jsxRuntimeExports.jsx(DeploymentPanel, {}) : null,
+        surface === "migration" ? /* @__PURE__ */ jsxRuntimeExports.jsx(MigrationPanel, { workspace }) : null,
         surface === "wiki" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
           WikiPanel,
           {
@@ -41894,7 +41973,160 @@ function tryParseJSON(str2) {
     return null;
   }
 }
-function RightsAttestationGate({ children: children2 }) {
+function hostedHeaders(connection, initial) {
+  const headers = new Headers(initial);
+  if (connection.token) headers.set("Authorization", `Bearer ${connection.token}`);
+  headers.set("X-Agent-Memory-Tenant", connection.tenant);
+  return headers;
+}
+async function localSessionRequest(path, init2 = {}) {
+  var _a2;
+  const headers = new Headers(init2.headers);
+  if (init2.body) headers.set("Content-Type", "application/json");
+  const response = await fetch(path, { ...init2, headers, credentials: "same-origin", cache: "no-store" });
+  if (response.status === 204) return { state: "signup_required" };
+  const value = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(((_a2 = value.error) == null ? void 0 : _a2.message) || "The local session is unavailable.");
+  return value.data;
+}
+function getLocalSession() {
+  return localSessionRequest("/v1/local-session");
+}
+function signupLocalOwner(input) {
+  return localSessionRequest("/v1/local-session/signup", { method: "POST", body: JSON.stringify(input) });
+}
+async function logoutLocalSession() {
+  await localSessionRequest("/v1/local-session", { method: "DELETE" });
+}
+async function hostedRequest(connection, path, init2 = {}) {
+  var _a2;
+  const headers = hostedHeaders(connection, init2.headers);
+  if (init2.body && !(init2.body instanceof FormData) && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+  const response = await fetch(path, { ...init2, headers, credentials: "same-origin", cache: "no-store" });
+  const value = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(((_a2 = value.error) == null ? void 0 : _a2.message) || "The request was not accepted.");
+  return value.data;
+}
+function listHostedSources(connection) {
+  return hostedRequest(connection, `/v1/sources?workspace_id=${encodeURIComponent(connection.workspace)}`);
+}
+function getHostedRightsAttestationStatus(connection) {
+  return hostedRequest(connection, "/v1/attestations/rights");
+}
+function acceptHostedRightsAttestation(connection, input) {
+  return hostedRequest(connection, "/v1/attestations/rights", { method: "POST", body: JSON.stringify(input) });
+}
+function retryHostedSource(connection, sourceID) {
+  return hostedRequest(connection, `/v1/sources/${encodeURIComponent(sourceID)}/retry`, { method: "POST", body: "{}" });
+}
+function deleteHostedSource(connection, sourceID) {
+  return hostedRequest(connection, `/v1/sources/${encodeURIComponent(sourceID)}`, { method: "DELETE", headers: { "Idempotency-Key": crypto.randomUUID() } });
+}
+function searchHostedMemories(connection, query) {
+  return hostedRequest(connection, "/v1/search", { method: "POST", body: JSON.stringify({ workspace_id: connection.workspace, query, limit: 20 }) });
+}
+function queryHostedSources(connection, sourceIDs, query) {
+  return hostedRequest(connection, "/v1/source-queries", { method: "POST", body: JSON.stringify({ source_ids: sourceIDs, query, generate: false, provider: "local-minilm-scaffold", model: "local-hash-v1" }) });
+}
+function createHostedProposal(connection, input) {
+  return hostedRequest(connection, "/v1/memory-proposals", { method: "POST", body: JSON.stringify({ workspace_id: connection.workspace, memory_type: input.type, content: input.content, transformation: "interpretation", evidence: input.evidence.map(({ source_id, source_version, passage_id, citation_id }) => ({ source_id, source_version, passage_id, citation_id })) }) });
+}
+function editHostedProposal(connection, proposalID, content) {
+  return hostedRequest(connection, `/v1/memory-proposals/${encodeURIComponent(proposalID)}`, { method: "PATCH", body: JSON.stringify({ content, transformation: "user_edit" }) });
+}
+function acceptHostedProposal(connection, proposalID) {
+  return hostedRequest(connection, `/v1/memory-proposals/${encodeURIComponent(proposalID)}/accept`, { method: "POST", body: "{}" });
+}
+function rejectHostedProposal(connection, proposalID) {
+  return hostedRequest(connection, `/v1/memory-proposals/${encodeURIComponent(proposalID)}/reject`, { method: "POST", body: "{}" });
+}
+function getHostedPrivacy(connection) {
+  return hostedRequest(connection, "/v1/privacy");
+}
+function getHostedBilling(connection) {
+  return hostedRequest(connection, "/v1/billing");
+}
+function requestHostedPlanChange(connection, action, planID) {
+  return hostedRequest(connection, "/v1/billing/plan-changes", { method: "POST", headers: { "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify({ action, plan_id: planID }) });
+}
+function listHostedCredentials(connection) {
+  return hostedRequest(connection, "/v1/credentials");
+}
+function createHostedCredential(connection, label, scopes, expiresAt) {
+  return hostedRequest(connection, "/v1/credentials", { method: "POST", body: JSON.stringify({ label, scopes, expires_at: expiresAt }) });
+}
+function rotateHostedCredential(connection, credentialID, expiresAt) {
+  return hostedRequest(connection, `/v1/credentials/${encodeURIComponent(credentialID)}/rotate`, { method: "POST", body: JSON.stringify({ expires_at: expiresAt }) });
+}
+function revokeHostedCredential(connection, credentialID) {
+  return hostedRequest(connection, `/v1/credentials/${encodeURIComponent(credentialID)}`, { method: "DELETE" });
+}
+function requestHostedExport(connection) {
+  return hostedRequest(connection, "/v1/exports", { method: "POST", body: JSON.stringify({ workspace_id: connection.workspace }) });
+}
+function getHostedExport(connection, exportID) {
+  return hostedRequest(connection, `/v1/exports/${encodeURIComponent(exportID)}`);
+}
+async function downloadHostedExport(connection, exportID) {
+  const response = await fetch(`/v1/exports/${encodeURIComponent(exportID)}/download`, { headers: hostedHeaders(connection), credentials: "same-origin", cache: "no-store" });
+  if (!response.ok) throw new Error("The export is not ready for download.");
+  return response.blob();
+}
+function deleteHostedAccount(connection) {
+  return hostedRequest(connection, "/v1/account", { method: "DELETE", headers: { "Idempotency-Key": crypto.randomUUID() } });
+}
+function sourceMediaType(file) {
+  const extension2 = file.name.toLowerCase().split(".").pop();
+  if (extension2 === "pdf") return "application/pdf";
+  if (extension2 === "epub") return "application/epub+zip";
+  if (extension2 === "md" || extension2 === "markdown") return "text/markdown";
+  if (extension2 === "txt") return "text/plain";
+  throw new Error("Choose a PDF, EPUB, Markdown, or plain-text file.");
+}
+async function sha256(file) {
+  const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
+  return Array.from(new Uint8Array(digest), (value) => value.toString(16).padStart(2, "0")).join("");
+}
+async function uploadHostedSource(connection, file, rightsBasis) {
+  const mediaType = sourceMediaType(file);
+  const checksum = await sha256(file);
+  const grant = await hostedRequest(connection, "/v1/sources/uploads", {
+    method: "POST",
+    headers: { "Idempotency-Key": crypto.randomUUID() },
+    body: JSON.stringify({
+      workspace_id: connection.workspace,
+      filename: file.name,
+      media_type: mediaType,
+      size_bytes: file.size,
+      checksum_sha256: checksum,
+      rights_basis: rightsBasis
+    })
+  });
+  const response = await fetch(grant.upload_path, {
+    method: "PUT",
+    cache: "no-store",
+    headers: { "Content-Type": mediaType },
+    body: file
+  });
+  if (!response.ok) throw new Error("The file upload could not be completed.");
+  return { source_id: grant.source_id };
+}
+function importHostedBundle(connection, file, passphrase, idempotencyKey) {
+  return hostedRequest(connection, "/v1/imports", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/octet-stream",
+      "X-Agent-Memory-Workspace": connection.workspace,
+      "X-Agent-Memory-Bundle-Passphrase": passphrase,
+      "Idempotency-Key": idempotencyKey
+    },
+    body: file
+  });
+}
+function getHostedImport(connection, importID) {
+  return hostedRequest(connection, `/v1/imports/${encodeURIComponent(importID)}`);
+}
+function RightsAttestationGate({ children: children2, getStatus = getRightsAttestationStatus, accept = acceptRightsAttestation }) {
   const [attestation, setAttestation] = reactExports.useState(null);
   const [acceptedStatementIDs, setAcceptedStatementIDs] = reactExports.useState(/* @__PURE__ */ new Set());
   const [loading, setLoading] = reactExports.useState(true);
@@ -41904,13 +42136,13 @@ function RightsAttestationGate({ children: children2 }) {
     setLoading(true);
     setError("");
     try {
-      setAttestation(await getRightsAttestationStatus());
+      setAttestation(await getStatus());
     } catch (reason) {
       setError(messageOf(reason));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [getStatus]);
   reactExports.useEffect(() => {
     void loadStatus();
   }, [loadStatus]);
@@ -41922,11 +42154,11 @@ function RightsAttestationGate({ children: children2 }) {
     setSubmitting(true);
     setError("");
     try {
-      await acceptRightsAttestation({
+      await accept({
         policy_version: attestation.policy.version,
         accepted_statement_ids: [...acceptedStatementIDs]
       });
-      setAttestation(await getRightsAttestationStatus());
+      setAttestation(await getStatus());
     } catch (reason) {
       setError(messageOf(reason));
       await loadStatus();
@@ -41987,6 +42219,829 @@ function RightsAttestationGate({ children: children2 }) {
 }
 function messageOf(reason) {
   return reason instanceof Error ? reason.message : String(reason);
+}
+const emptyConnection = { token: "", tenant: "", workspace: "" };
+const terminalSourceStates = /* @__PURE__ */ new Set(["ready", "failed", "rejected", "disabled", "deleted"]);
+const sourcePollIntervalMs = 2e3;
+const areas = [
+  { id: "home", label: "Home", hint: "Workspace overview" },
+  { id: "library", label: "Library", hint: "Sources and questions" },
+  { id: "memory", label: "Memory", hint: "Search and review" },
+  { id: "data", label: "Data", hint: "Privacy and migration" },
+  { id: "settings", label: "Settings", hint: "Plan and access" }
+];
+function formatLabel(value) {
+  const spaced = value.replaceAll("_", " ").replace(/([a-z])([A-Z])/g, "$1 $2");
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+function formatFieldValue(value) {
+  if (value == null || value === "") return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "productMuted", children: "Not set" });
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (typeof value === "number") return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "productNumber", children: value.toLocaleString() });
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) {
+    if (value.length === 0) return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "productMuted", children: "None" });
+    const scalarValues = value.filter((item) => ["string", "number", "boolean"].includes(typeof item)).slice(0, 4);
+    return scalarValues.length === value.length ? scalarValues.map(String).join(", ") : `${value.length} items`;
+  }
+  if (typeof value === "object") {
+    const entries2 = Object.entries(value).slice(0, 6);
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "productNestedValue", children: entries2.map(([key, nested]) => `${formatLabel(key)}: ${typeof nested === "object" ? "available" : String(nested)}`).join(" · ") });
+  }
+  return String(value);
+}
+function ProductFields({ value, empty: empty2 }) {
+  if (!value) return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "productEmpty compact", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: empty2 }) });
+  const entries2 = Object.entries(value).slice(0, 24);
+  if (entries2.length === 0) return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "productEmpty compact", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "No details are available." }) });
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("dl", { className: "productFields", children: entries2.map(([key, field]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { children: formatLabel(key) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { children: formatFieldValue(field) })
+  ] }, key)) });
+}
+function SectionHeading({ eyebrow, title, description, action }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("header", { className: "productSectionHeading", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "productEyebrow", children: eyebrow }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { children: title }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: description })
+    ] }),
+    action ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "productSectionAction", children: action }) : null
+  ] });
+}
+function StateBadge({ value }) {
+  const normalized = value.toLowerCase();
+  const tone = normalized === "ready" || normalized === "active" || normalized === "completed" ? "positive" : normalized === "failed" || normalized === "expired" || normalized === "deleting" ? "negative" : "neutral";
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: `stateBadge ${tone}`, children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { "aria-hidden": "true" }),
+    formatLabel(value)
+  ] });
+}
+function HostedApp({ runtime }) {
+  var _a2;
+  const localOnboarding = runtime.features.includes("local_onboarding");
+  const [draft, setDraft] = reactExports.useState(emptyConnection);
+  const [connection, setConnection] = reactExports.useState(emptyConnection);
+  const [activeArea, setActiveArea] = reactExports.useState("home");
+  const [sources, setSources] = reactExports.useState([]);
+  const [memories, setMemories] = reactExports.useState([]);
+  const [evidence, setEvidence] = reactExports.useState([]);
+  const [semanticContext, setSemanticContext] = reactExports.useState(null);
+  const [status, setStatus] = reactExports.useState(localOnboarding ? "Checking this private installation…" : "Enter your connection details to begin.");
+  const [localSessionState, setLocalSessionState] = reactExports.useState(localOnboarding ? "loading" : "signup_required");
+  const [busy, setBusy] = reactExports.useState(false);
+  const [uploadFile, setUploadFile] = reactExports.useState(null);
+  const [uploadRights, setUploadRights] = reactExports.useState("lawfully_acquired_private_use");
+  const [uploadPhase, setUploadPhase] = reactExports.useState("");
+  const [proposal, setProposal] = reactExports.useState(null);
+  const [privacy, setPrivacy] = reactExports.useState(null);
+  const [billing, setBilling] = reactExports.useState(null);
+  const [credentials, setCredentials] = reactExports.useState([]);
+  const [credentialSecret, setCredentialSecret] = reactExports.useState("");
+  const [exportOperation, setExportOperation] = reactExports.useState(null);
+  const [migrationFile, setMigrationFile] = reactExports.useState(null);
+  const [migrationPassphrase, setMigrationPassphrase] = reactExports.useState("");
+  const [migrationKey, setMigrationKey] = reactExports.useState(crypto.randomUUID());
+  const [migrationResult, setMigrationResult] = reactExports.useState(null);
+  const connected = Boolean(connection.tenant && connection.workspace && (connection.token || localOnboarding));
+  const readySources = reactExports.useMemo(() => sources.filter((source) => {
+    var _a3;
+    return (((_a3 = source.progress) == null ? void 0 : _a3.state) || source.state) === "ready";
+  }), [sources]);
+  const hasProcessingSources = reactExports.useMemo(
+    () => sources.some((source) => {
+      var _a3;
+      return !terminalSourceStates.has((((_a3 = source.progress) == null ? void 0 : _a3.state) || source.state).toLowerCase());
+    }),
+    [sources]
+  );
+  const getHostedAttestationStatus = reactExports.useCallback(() => getHostedRightsAttestationStatus(connection), [connection]);
+  const acceptHostedAttestation = reactExports.useCallback((input) => acceptHostedRightsAttestation(connection, input), [connection]);
+  reactExports.useEffect(() => {
+    if (!localOnboarding) return;
+    let current = true;
+    void getLocalSession().then(async (session) => {
+      if (!current) return;
+      setLocalSessionState(session.state);
+      if (session.state === "authenticated") await openLocalSession(session.tenant_id || "", session.workspace_id || "");
+      else setStatus("Create the owner of this private installation to begin.");
+    }).catch((error) => {
+      if (!current) return;
+      setLocalSessionState("signup_required");
+      setStatus(error instanceof Error ? error.message : "The local session could not be checked.");
+    });
+    return () => {
+      current = false;
+    };
+  }, [localOnboarding]);
+  reactExports.useEffect(() => {
+    if (!connected || !hasProcessingSources) return;
+    let active = true;
+    const refresh = () => {
+      void listHostedSources(connection).then((values) => {
+        if (active) setSources(values);
+      }).catch(() => void 0);
+    };
+    const interval2 = window.setInterval(refresh, sourcePollIntervalMs);
+    return () => {
+      active = false;
+      window.clearInterval(interval2);
+    };
+  }, [connected, connection, hasProcessingSources]);
+  async function refreshSources(active = connection) {
+    const values = await listHostedSources(active);
+    setSources(values);
+    setStatus(values.length ? `${values.length} private source records are current.` : "Your library is ready for its first source.");
+  }
+  async function connect(event) {
+    event.preventDefault();
+    setBusy(true);
+    setStatus("Opening your private workspace…");
+    try {
+      const values = await listHostedSources(draft);
+      setSources(values);
+      setConnection(draft);
+      setActiveArea("home");
+      setStatus("Private workspace connected for this browser session.");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Connection failed. Check the three values and try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function openLocalSession(tenant, workspace) {
+    if (!tenant || !workspace) throw new Error("The local owner workspace is incomplete.");
+    const active = { token: "", tenant, workspace };
+    const values = await listHostedSources(active);
+    setSources(values);
+    setConnection(active);
+    setActiveArea("home");
+    setLocalSessionState("authenticated");
+    setStatus(values.length ? `${values.length} private source records are current.` : "Your private workspace is ready.");
+  }
+  async function createLocalOwner(event) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    setBusy(true);
+    setStatus("Creating your private workspace…");
+    try {
+      const session = await signupLocalOwner({
+        display_name: String(form.get("display_name") || ""),
+        email: String(form.get("email") || ""),
+        private_installation_confirmed: form.get("private_installation_confirmed") === "on"
+      });
+      await openLocalSession(session.tenant_id || "", session.workspace_id || "");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "The local owner could not be created.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function disconnect() {
+    if (localOnboarding) await logoutLocalSession();
+    setConnection(emptyConnection);
+    setDraft(emptyConnection);
+    setCredentialSecret("");
+    setMigrationPassphrase("");
+    setLocalSessionState(localOnboarding ? "signup_required" : localSessionState);
+    setStatus(localOnboarding ? "Signed out from this browser. Your private data remains on this installation." : "Connection cleared from this browser session.");
+  }
+  async function uploadSource(event) {
+    event.preventDefault();
+    if (!uploadFile) return;
+    const form = event.currentTarget;
+    setBusy(true);
+    setUploadPhase("Checking file integrity and requesting private custody…");
+    try {
+      await uploadHostedSource(connection, uploadFile, uploadRights);
+      setUploadPhase("Upload received. Indexing will continue in the background.");
+      setStatus(`${uploadFile.name} is now in the private processing queue.`);
+      setUploadFile(null);
+      form.reset();
+      await refreshSources();
+    } catch (error) {
+      setUploadPhase(error instanceof Error ? error.message : "The source could not be uploaded.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function runMemorySearch(event) {
+    var _a3;
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    setBusy(true);
+    try {
+      const result = await searchHostedMemories(connection, String(form.get("query") || ""));
+      setMemories(result.items || []);
+      setStatus(((_a3 = result.items) == null ? void 0 : _a3.length) ? `${result.items.length} matching memories found.` : "No durable memories matched this search.");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Search failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function runSourceQuery(event) {
+    var _a3, _b2;
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    setBusy(true);
+    try {
+      const result = await queryHostedSources(connection, readySources.map((source) => source.id), String(form.get("query") || ""));
+      setEvidence(result.evidence || []);
+      setSemanticContext(((_a3 = result.context) == null ? void 0 : _a3.semantic) || null);
+      setStatus(result.answerable ? `${((_b2 = result.evidence) == null ? void 0 : _b2.length) || 0} reconstructed source contexts are ready.` : result.evidence_available ? "Related source context was found, but it is not sufficient to answer this question." : "The ready sources do not contain enough authorized evidence.");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Source query failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function createProposal(event) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    try {
+      setProposal(await createHostedProposal(connection, { content: String(form.get("content") || ""), type: String(form.get("type") || "semantic"), evidence }));
+      setStatus("Proposal created. Review it before accepting durable memory.");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Proposal failed.");
+    }
+  }
+  async function changeProposal(action) {
+    if (!proposal) return;
+    try {
+      const next2 = action === "edit" ? await editHostedProposal(connection, proposal.id, proposal.content) : action === "accept" ? await acceptHostedProposal(connection, proposal.id) : await rejectHostedProposal(connection, proposal.id);
+      setProposal(next2);
+      setStatus(action === "accept" ? "Memory accepted with source lineage." : action === "reject" ? "Proposal rejected; no memory was created." : "Proposal edit saved.");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Proposal update failed.");
+    }
+  }
+  async function loadOperations() {
+    setBusy(true);
+    const results = await Promise.allSettled([getHostedPrivacy(connection), getHostedBilling(connection), listHostedCredentials(connection)]);
+    if (results[0].status === "fulfilled") setPrivacy(results[0].value);
+    if (results[1].status === "fulfilled") setBilling(results[1].value);
+    if (results[2].status === "fulfilled") setCredentials(results[2].value || []);
+    const loaded = results.filter((result) => result.status === "fulfilled").length;
+    setStatus(loaded === 3 ? "Privacy, plan, and credential controls are current." : `${loaded} of 3 settings areas loaded. Some permissions may be unavailable.`);
+    setBusy(false);
+  }
+  async function createCredential(event) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const values = new FormData(form);
+    const scopes = String(values.get("scopes") || "").split(",").map((value) => value.trim()).filter(Boolean);
+    try {
+      const created = await createHostedCredential(connection, String(values.get("label") || ""), scopes, new Date(String(values.get("expires_at") || "")).toISOString());
+      setCredentialSecret(String(created.secret || created.token || ""));
+      setStatus("Credential created. Its secret is shown once below.");
+      setCredentials(await listHostedCredentials(connection));
+      form.reset();
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Credential creation failed.");
+    }
+  }
+  async function beginExport() {
+    try {
+      setExportOperation(await requestHostedExport(connection));
+      setStatus("Export requested. Refresh until it is ready.");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Export request failed.");
+    }
+  }
+  async function refreshExport() {
+    if (!exportOperation) return;
+    try {
+      setExportOperation(await getHostedExport(connection, exportOperation.id));
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Export status failed.");
+    }
+  }
+  async function saveExport() {
+    if (!exportOperation) return;
+    try {
+      const blob = await downloadHostedExport(connection, exportOperation.id);
+      const url = URL.createObjectURL(blob);
+      const anchor2 = document.createElement("a");
+      anchor2.href = url;
+      anchor2.download = `agent-memory-hosted-${connection.workspace}.json`;
+      anchor2.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Export download failed.");
+    }
+  }
+  async function runMigrationImport(event) {
+    event.preventDefault();
+    if (!migrationFile) return;
+    setBusy(true);
+    try {
+      const result = await importHostedBundle(connection, migrationFile, migrationPassphrase, migrationKey);
+      setMigrationResult(result);
+      setStatus(`Migration ${result.state}. Imported ${result.report.imported.length}, merged ${result.report.merged.length}, skipped ${result.report.skipped.length}, failed ${result.report.failed.length}.`);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Migration import failed. Retry uses the same safe request key.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function refreshMigration() {
+    if (!migrationResult) return;
+    try {
+      setMigrationResult(await getHostedImport(connection, migrationResult.id));
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Migration status failed.");
+    }
+  }
+  if (!connected) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "hostedProduct productEntry", "data-runtime-mode": runtime.mode, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("a", { className: "skipLink", href: "#hosted-main-content", children: "Skip to onboarding" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("header", { className: "entryHeader", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "productBrand", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { "aria-hidden": "true", children: "am" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "Agent Memory" })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Private knowledge, under your control." })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("main", { id: "hosted-main-content", className: "entryCanvas", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "entryStory", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "productEyebrow", children: "Self-managed workspace" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { children: localOnboarding ? "Your knowledge stays yours." : "Connect your private workspace." }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "entryLead", children: "Bring books, notes, and durable agent memory into one place you operate yourself." }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("ul", { className: "entryPromises", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: "Source originals stay inside your deployment." }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: "Derived memory requires your review." }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: localOnboarding ? "Your browser session never exposes an API token." : "Connection details are cleared when you reload." })
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "connectionCard", "aria-labelledby": "connection-title", children: [
+          localOnboarding ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "productEyebrow", children: "Private local installation" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "connection-title", children: localSessionState === "loading" ? "Opening your workspace" : "Create local owner" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: localSessionState === "loading" ? "Checking for an existing owner on this device." : "This first account owns the private tenant and default workspace on this installation." })
+            ] }),
+            localSessionState === "loading" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "sessionLoading", "aria-live": "polite", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { "aria-hidden": "true" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Checking local session…" })
+            ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("form", { className: "productForm", onSubmit: createLocalOwner, children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [
+                "Your name",
+                /* @__PURE__ */ jsxRuntimeExports.jsx("input", { name: "display_name", autoComplete: "name", maxLength: 120, required: true })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [
+                "Email address",
+                /* @__PURE__ */ jsxRuntimeExports.jsx("input", { name: "email", type: "email", autoComplete: "email", maxLength: 254, required: true })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "productChoice localOwnerConfirmation", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("input", { name: "private_installation_confirmed", type: "checkbox", required: true }),
+                " I confirm this is my private installation and I am creating its local owner."
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "productPrimary", disabled: busy, children: busy ? "Creating workspace…" : "Create local owner" })
+            ] })
+          ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "productEyebrow", children: "Managed session" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "connection-title", children: "Open workspace" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Use the values configured by this deployment. Nothing is saved in the browser." })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("form", { className: "productForm", onSubmit: connect, children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [
+                "Access token",
+                /* @__PURE__ */ jsxRuntimeExports.jsx("input", { type: "password", autoComplete: "off", required: true, value: draft.token, onChange: (event) => setDraft({ ...draft, token: event.target.value }) })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [
+                "Tenant ID",
+                /* @__PURE__ */ jsxRuntimeExports.jsx("input", { autoComplete: "off", required: true, value: draft.tenant, onChange: (event) => setDraft({ ...draft, tenant: event.target.value.trim() }) })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [
+                "Workspace ID",
+                /* @__PURE__ */ jsxRuntimeExports.jsx("input", { autoComplete: "off", required: true, value: draft.workspace, onChange: (event) => setDraft({ ...draft, workspace: event.target.value.trim() }) })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "productPrimary", disabled: busy, children: busy ? "Opening workspace…" : "Open workspace" })
+            ] })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "productStatus inline", role: "status", "aria-live": "polite", children: status })
+        ] })
+      ] })
+    ] });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(RightsAttestationGate, { getStatus: getHostedAttestationStatus, accept: acceptHostedAttestation, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "hostedProduct", "data-runtime-mode": runtime.mode, children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("a", { className: "skipLink", href: "#hosted-main-content", children: "Skip to content" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("header", { className: "productHeader", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "productBrand", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { "aria-hidden": "true", children: "am" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "Agent Memory" })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "workspaceContext", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "connectionDot", "aria-hidden": "true" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("small", { children: "Hosted Agent Memory" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: connection.workspace })
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "productTextButton", type: "button", onClick: () => void disconnect(), children: localOnboarding ? "Sign out" : "Disconnect" })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("nav", { className: "productNavigation", "aria-label": "Product areas", children: areas.map((area) => /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: activeArea === area.id ? "active" : "", "aria-current": activeArea === area.id ? "page" : void 0, onClick: () => setActiveArea(area.id), children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: area.label }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("small", { children: area.hint })
+    ] }, area.id)) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("main", { id: "hosted-main-content", className: "productCanvas", children: [
+      activeArea === "home" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "productSection", "aria-labelledby": "home-title", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionHeading, { eyebrow: "Workspace overview", title: "Good to see your knowledge taking shape.", description: "A current view of private sources and the work ready for you.", action: /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "productPrimary", type: "button", onClick: () => setActiveArea("library"), children: "Add a source" }) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "metricStrip", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: sources.length }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Private sources" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("small", { children: "in this workspace" })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: readySources.length }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Ready to ask" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("small", { children: "indexed and authorized" })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: memories.length }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Loaded memories" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("small", { children: "from your latest search" })
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "homeComposition", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "homePrimary", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "productEyebrow", children: "Next useful step" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { children: sources.length ? "Ask what your library already knows." : "Start with a book or note you trust." }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: sources.length ? `${readySources.length} sources are ready for grounded questions and cited evidence.` : "Upload one private copy. Agent Memory will index it without publishing it outside this deployment." }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => setActiveArea("library"), children: sources.length ? "Go to Library" : "Add first source" })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("aside", { className: "homeAside", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { children: "How memory stays trustworthy" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("ol", { children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "1" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "Evidence first" }),
+                  "Ask private sources and inspect citations."
+                ] })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "2" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "Review the idea" }),
+                  "Edit or reject a proposed memory."
+                ] })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "3" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "Accept deliberately" }),
+                  "Only approved ideas become durable."
+                ] })
+              ] })
+            ] })
+          ] })
+        ] })
+      ] }) : null,
+      activeArea === "library" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "productSection", "aria-labelledby": "library-title", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionHeading, { eyebrow: "Private source custody", title: "Library", description: "Upload lawful copies, follow their indexing state, and ask only ready sources.", action: /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "productSecondary", disabled: busy, onClick: () => void refreshSources(), children: "Refresh sources" }) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "libraryLayout", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "uploadStudio", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "productEyebrow", children: "Add to Library" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { children: "Upload a private source" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "PDF, EPUB, Markdown, or text. The browser verifies the file before private custody begins." }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("form", { className: "productForm", onSubmit: uploadSource, children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "fileDrop", children: [
+                "Source file",
+                /* @__PURE__ */ jsxRuntimeExports.jsx("input", { type: "file", accept: ".pdf,.epub,.md,.markdown,.txt", required: true, onChange: (event) => {
+                  var _a3;
+                  return setUploadFile(((_a3 = event.target.files) == null ? void 0 : _a3[0]) || null);
+                } }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: uploadFile ? `${uploadFile.name} · ${(uploadFile.size / 1048576).toFixed(1)} MB` : "Choose one file" })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [
+                "Rights basis",
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("select", { value: uploadRights, onChange: (event) => setUploadRights(event.target.value), children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "lawfully_acquired_private_use", children: "Lawfully acquired private copy" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "author_owned", children: "I am the author or rights holder" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "licensed", children: "Licensed for this use" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "public_domain_or_open", children: "Public domain or open license" })
+                ] })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "productPrimary", disabled: busy || !uploadFile, children: busy ? "Preparing source…" : "Upload privately" })
+            ] }),
+            uploadPhase ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "productStatus inline", role: "status", children: uploadPhase }) : null
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "sourceCollection", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "collectionHeading", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { children: "Source custody" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+                sources.length,
+                " total"
+              ] })
+            ] }),
+            sources.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "productEmpty", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { "aria-hidden": "true", children: "＋" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: "Your library is empty" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Choose a source on the left. Its processing and retention state will appear here." })
+            ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "sourceList", children: sources.map((source) => {
+              var _a3, _b2, _c2, _d2;
+              const state2 = ((_a3 = source.progress) == null ? void 0 : _a3.state) || source.state;
+              return /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "sourceRow", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "sourceType", "aria-hidden": "true", children: ((_b2 = source.filename.split(".").pop()) == null ? void 0 : _b2.slice(0, 4)) || "file" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "sourceIdentity", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: source.filename }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [
+                    source.media_type,
+                    ((_c2 = source.progress) == null ? void 0 : _c2.stage) ? ` · ${formatLabel(source.progress.stage)}` : ""
+                  ] })
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(StateBadge, { value: state2 }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "sourceActions", children: [
+                  ((_d2 = source.failure) == null ? void 0 : _d2.retryable) ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => void retryHostedSource(connection, source.id).then(() => refreshSources()), children: "Retry" }) : null,
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "danger", onClick: () => window.confirm(`Delete ${source.filename}?`) && void deleteHostedSource(connection, source.id).then(() => refreshSources()), children: "Delete" })
+                ] })
+              ] }, source.id);
+            }) })
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "askStudio", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "askIntro", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "productEyebrow", children: "Reconstructive recall" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { children: "Ask ready sources" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Agent Memory restores the surrounding authorized context before deciding whether the source can answer." }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+              readySources.length,
+              " ready sources"
+            ] })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("form", { className: "askForm", onSubmit: runSourceQuery, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("textarea", { name: "query", rows: 4, maxLength: 4e3, placeholder: "What do these sources say about…", required: true }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "productChoice", children: "Locally reconstructed from cited passages" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "productPrimary", disabled: busy || readySources.length === 0, children: "Recall source context" })
+            ] })
+          ] })
+        ] }),
+        evidence.length ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "answerLayout", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("header", { className: "reconstructionHeading", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "productEyebrow", children: "Source recall" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { children: "Reconstructed source context" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "These are cited source windows, not durable memories. Review them before accepting any interpretation into Memory." }),
+            (semanticContext == null ? void 0 : semanticContext.planner_used) ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "semanticTrace", children: [
+              "Understood as ",
+              formatLabel(semanticContext.intent || "question"),
+              " · ",
+              semanticContext.language || "unknown language",
+              " · ",
+              semanticContext.subject || "unspecified subject",
+              semanticContext.reranker_used ? " · Locally reranked" : ""
+            ] }) : ((_a2 = semanticContext == null ? void 0 : semanticContext.fallbacks) == null ? void 0 : _a2.length) ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "semanticTrace fallback", children: "Deterministic recall fallback · local understanding unavailable" }) : null
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("section", { className: "evidenceList", "aria-label": "Reconstructed cited source context", children: evidence.map((item) => {
+            var _a3, _b2;
+            const citationCount = ((_a3 = item.included_citation_ids) == null ? void 0 : _a3.length) || 1;
+            return /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "evidenceHeading", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: ((_b2 = item.locator) == null ? void 0 : _b2.display) || "Source context" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "evidenceMeta", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("small", { children: [
+                    citationCount,
+                    " supporting citation",
+                    citationCount === 1 ? "" : "s"
+                  ] }),
+                  item.window_clipped ? /* @__PURE__ */ jsxRuntimeExports.jsx("small", { className: "contextWarning", children: "Context clipped at a safe limit" }) : null
+                ] })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: item.text }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: "Source lineage" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: (item.included_citation_ids || [item.citation_id]).join(" · ") })
+              ] })
+            ] }, `${item.source_id}:${item.citation_id}`);
+          }) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "productSecondary", onClick: () => setActiveArea("memory"), children: "Review as memory" })
+        ] }) : null
+      ] }) : null,
+      activeArea === "memory" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "productSection", "aria-labelledby": "memory-title", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionHeading, { eyebrow: "Durable knowledge", title: "Memory", description: "Find what the agent retains and approve new memory only when the evidence is strong." }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "searchStudio", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { children: "Search durable memories" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("form", { className: "productSearch", onSubmit: runMemorySearch, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("input", { name: "query", maxLength: 4e3, placeholder: "Search an idea, decision, or procedure", required: true }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "productPrimary", disabled: busy, children: "Search" })
+          ] })
+        ] }),
+        memories.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "productEmpty", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { "aria-hidden": "true", children: "⌕" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: "No memories loaded" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Search for a concept to inspect durable memory in this workspace." })
+        ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memoryResults", children: memories.map((memory) => /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(StateBadge, { value: memory.type }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("small", { children: memory.updated_at ? new Date(memory.updated_at).toLocaleDateString() : "Durable memory" })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: memory.content })
+        ] }, memory.id)) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "proposalStudio", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "productEyebrow", children: "Human review" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { children: "Review derived memory" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: evidence.length ? `${evidence.length} cited passages are ready to support a proposal.` : "Ask your Library first. A proposal needs cited evidence." })
+          ] }),
+          evidence.length ? /* @__PURE__ */ jsxRuntimeExports.jsxs("form", { className: "productForm", onSubmit: createProposal, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [
+              "Proposed memory",
+              /* @__PURE__ */ jsxRuntimeExports.jsx("textarea", { name: "content", rows: 4, maxLength: 2e3, required: true })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [
+              "Memory type",
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("select", { name: "type", defaultValue: "semantic", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "semantic", children: "Semantic" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "procedural", children: "Procedural" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "episodic", children: "Episodic" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "outcome", children: "Outcome" })
+              ] })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "productPrimary", children: "Create review proposal" })
+          ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "productSecondary", onClick: () => setActiveArea("library"), children: "Ask Library" }),
+          proposal ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "proposalReview", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "collectionHeading", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: "Review before accepting" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(StateBadge, { value: proposal.status })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("textarea", { "aria-label": "Proposal content", value: proposal.content, onChange: (event) => setProposal({ ...proposal, content: event.target.value }) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "productActions", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => void changeProposal("edit"), children: "Save edit" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "productPrimary", type: "button", onClick: () => void changeProposal("accept"), children: "Accept memory" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "danger", type: "button", onClick: () => void changeProposal("reject"), children: "Reject" })
+            ] })
+          ] }) : null
+        ] })
+      ] }) : null,
+      activeArea === "data" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "productSection", "aria-labelledby": "data-title", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionHeading, { eyebrow: "Portability and rights", title: "Data", description: "Understand retained data, create exports, and move a standalone workspace by explicit copy.", action: /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "productSecondary", disabled: busy, onClick: () => void loadOperations(), children: "Refresh privacy details" }) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "productSurface", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "surfaceHeading", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "productEyebrow", children: "Customer controls" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { children: "Privacy & retention" })
+          ] }) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(ProductFields, { value: privacy, empty: "Refresh to inspect the retained data classes and deletion behavior available to this workspace." })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "dataColumns", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "productSurface", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "productEyebrow", children: "Portable copy" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { children: "Data export" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Request a hosted export, wait for preparation, then download it during its short availability window." }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "productActions", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "productPrimary", type: "button", onClick: () => void beginExport(), children: "Request export" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: !exportOperation, onClick: () => void refreshExport(), children: "Refresh" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: (exportOperation == null ? void 0 : exportOperation.state) !== "ready", onClick: () => void saveExport(), children: "Download" })
+            ] }),
+            exportOperation ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "operationState", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(StateBadge, { value: exportOperation.state }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: exportOperation.expires_at || "Expiry pending" })
+            ] }) : null
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "productSurface", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "productEyebrow", children: "Copy-first move" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { children: "Import standalone migration" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Import an encrypted AMPB2 copy. Browser-created copies include memories and notes, not uploaded source originals." }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("form", { className: "productForm", onSubmit: runMigrationImport, children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [
+                "AMPB2 bundle",
+                /* @__PURE__ */ jsxRuntimeExports.jsx("input", { type: "file", accept: ".ampb2,application/octet-stream", required: true, onChange: (event) => {
+                  var _a3;
+                  setMigrationFile(((_a3 = event.target.files) == null ? void 0 : _a3[0]) || null);
+                  setMigrationResult(null);
+                  setMigrationKey(crypto.randomUUID());
+                } })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [
+                "Bundle passphrase",
+                /* @__PURE__ */ jsxRuntimeExports.jsx("input", { type: "password", autoComplete: "off", minLength: 12, maxLength: 1024, required: true, value: migrationPassphrase, onChange: (event) => setMigrationPassphrase(event.target.value) })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "productPrimary", disabled: busy || !migrationFile, children: "Import encrypted copy" })
+            ] }),
+            migrationResult ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "operationReport", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [
+                "Imported ",
+                /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: migrationResult.report.imported.length }),
+                " · merged ",
+                /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: migrationResult.report.merged.length }),
+                " · skipped ",
+                /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: migrationResult.report.skipped.length }),
+                " · failed ",
+                /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: migrationResult.report.failed.length })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(StateBadge, { value: migrationResult.state }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => void refreshMigration(), children: "Refresh import" })
+              ] })
+            ] }) : null
+          ] })
+        ] })
+      ] }) : null,
+      activeArea === "settings" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "productSection", "aria-labelledby": "settings-title", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionHeading, { eyebrow: "Workspace administration", title: "Settings", description: "Manage plan context, scoped agent access, and the hosted account lifecycle.", action: /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "productSecondary", disabled: busy, onClick: () => void loadOperations(), children: "Refresh settings" }) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "productSurface", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "surfaceHeading", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "productEyebrow", children: "Subscription" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { children: "Plan & usage" })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "productActions", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => void requestHostedPlanChange(connection, "upgrade", "individual").then(() => setStatus("Plan change queued.")), children: "Request Individual plan" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "danger", onClick: () => window.confirm("Cancel the paid plan?") && void requestHostedPlanChange(connection, "cancel", "trial").then(() => setStatus("Cancellation queued.")), children: "Cancel paid plan" })
+            ] })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(ProductFields, { value: billing, empty: "Refresh to inspect plan and reconciled usage available to this workspace." })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "productSurface", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "surfaceHeading", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "productEyebrow", children: "Scoped machine access" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { children: "Agent credentials" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Create the narrowest credential each client needs." })
+          ] }) }),
+          credentialSecret ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "oneTimeSecret", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "Copy this secret now" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "It will disappear when dismissed or when this page reloads." })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: credentialSecret }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "productActions", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => void navigator.clipboard.writeText(credentialSecret).then(() => setStatus("Credential secret copied.")), children: "Copy secret" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => setCredentialSecret(""), children: "Dismiss" })
+            ] })
+          ] }) : null,
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("form", { className: "credentialForm", onSubmit: createCredential, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [
+              "Label",
+              /* @__PURE__ */ jsxRuntimeExports.jsx("input", { name: "label", maxLength: 128, required: true })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [
+              "Scopes",
+              /* @__PURE__ */ jsxRuntimeExports.jsx("input", { name: "scopes", placeholder: "memory:read,memory:write", required: true })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [
+              "Expires at",
+              /* @__PURE__ */ jsxRuntimeExports.jsx("input", { name: "expires_at", type: "datetime-local", required: true })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "productPrimary", disabled: !connected, children: "Create credential" })
+          ] }),
+          credentials.length ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "credentialList", children: credentials.map((credential) => {
+            const id39 = String(credential.id || "");
+            return /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: String(credential.label || id39) }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [
+                  String(credential.scopes || "Scoped access"),
+                  " · ",
+                  String(credential.state || "")
+                ] })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "productActions", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => void rotateHostedCredential(connection, id39, new Date(Date.now() + 30 * 864e5).toISOString()).then(() => loadOperations()), children: "Rotate" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "danger", type: "button", onClick: () => void revokeHostedCredential(connection, id39).then(() => loadOperations()), children: "Revoke" })
+              ] })
+            ] }, id39);
+          }) }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "productEmpty compact", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "No agent credentials are loaded." }) })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "dangerZone", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "productEyebrow", children: "Irreversible account action" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { children: "Delete hosted account" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Starts the verified hosted deletion lifecycle. It never affects a standalone SQLite workspace." })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "danger", onClick: () => window.confirm("Delete this hosted account and all tenant data?") && void deleteHostedAccount(connection).then((operation) => setStatus(`Account deletion ${operation.state}.`)), children: "Delete account" })
+        ] })
+      ] }) : null
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "productStatus", role: "status", "aria-live": "polite", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { "aria-hidden": "true" }),
+      status
+    ] })
+  ] }) });
+}
+async function loadDashboardRuntime() {
+  const response = await fetch("/dashboard/runtime.json", {
+    method: "GET",
+    headers: { Accept: "application/json" },
+    cache: "no-store",
+    credentials: "same-origin"
+  });
+  if (!response.ok) throw new Error(`Runtime discovery failed (${response.status}).`);
+  const value = await response.json();
+  const modeValid = value.mode === "standalone" || value.mode === "hosted";
+  const prefixValid = value.api_prefix === "/api/v1" || value.api_prefix === "/v1";
+  if (value.schema !== "agent-memory-dashboard-runtime-v1" || !modeValid || !prefixValid || !Array.isArray(value.features)) {
+    throw new Error("Runtime discovery returned an unsupported manifest.");
+  }
+  if (value.mode === "standalone" && value.api_prefix !== "/api/v1" || value.mode === "hosted" && value.api_prefix !== "/v1") {
+    throw new Error("Runtime discovery returned an inconsistent API boundary.");
+  }
+  if (!value.features.every((feature) => typeof feature === "string")) {
+    throw new Error("Runtime discovery returned invalid capabilities.");
+  }
+  return value;
 }
 const PRELOAD_RECOVERY_KEY = "agent-memory:vite-preload-recovery";
 const PRELOAD_RECOVERY_OVERLAY_ID = "agent-memory-preload-recovery";
@@ -42188,9 +43243,27 @@ function installPreloadRecovery() {
   });
 }
 installPreloadRecovery();
-ReactDOM.createRoot(document.getElementById("root")).render(
-  /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.StrictMode, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(RightsAttestationGate, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(App, {}) }) })
-);
+function RuntimeUnavailable({ message }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("main", { className: "runtimeUnavailable", role: "alert", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "eyebrow", children: "Safe startup" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { children: "Dashboard runtime unavailable" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: message }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => window.location.reload(), children: "Retry discovery" })
+  ] });
+}
+async function bootstrap() {
+  const root2 = ReactDOM.createRoot(document.getElementById("root"));
+  try {
+    const runtime = await loadDashboardRuntime();
+    root2.render(
+      /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.StrictMode, { children: runtime.mode === "hosted" ? /* @__PURE__ */ jsxRuntimeExports.jsx(HostedApp, { runtime }) : /* @__PURE__ */ jsxRuntimeExports.jsx(RightsAttestationGate, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(App, {}) }) })
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Runtime discovery failed.";
+    root2.render(/* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.StrictMode, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(RuntimeUnavailable, { message }) }));
+  }
+}
+void bootstrap();
 export {
   halfPi as $,
   cleanAndMerge as A,

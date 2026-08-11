@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -13,6 +14,9 @@ import (
 )
 
 var ErrTenantUnavailable = errors.New("tenant unavailable")
+var ErrCrossSiteSessionRequest = errors.New("cross-site browser session request")
+
+type TokenSource func(*http.Request) (string, error)
 
 type Identity struct {
 	SubjectID    string
@@ -82,12 +86,23 @@ func MiddlewareWithObserver(authenticator Authenticator, memberships MembershipR
 }
 
 func MiddlewareWithGuards(authenticator Authenticator, memberships MembershipResolver, observer DenialObserver, gate RequestGate) func(http.Handler) http.Handler {
+	return MiddlewareWithGuardsAndTokenSource(authenticator, memberships, observer, gate, bearerHeaderTokenSource)
+}
+
+func MiddlewareWithGuardsAndTokenSource(authenticator Authenticator, memberships MembershipResolver, observer DenialObserver, gate RequestGate, tokenSource TokenSource) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			requestID := uuid.NewString()
 			w.Header().Set("X-Request-ID", requestID)
-			token, ok := bearerToken(r.Header.Get("Authorization"))
-			if !ok {
+			if tokenSource == nil {
+				tokenSource = bearerHeaderTokenSource
+			}
+			token, tokenErr := tokenSource(r)
+			if errors.Is(tokenErr, ErrCrossSiteSessionRequest) {
+				writeError(w, http.StatusForbidden, requestID, "cross_site_request", "The browser session cannot authorize this request.")
+				return
+			}
+			if tokenErr != nil || strings.TrimSpace(token) == "" {
 				writeError(w, http.StatusUnauthorized, requestID, "unauthenticated", "Authentication is required.")
 				return
 			}
@@ -137,6 +152,38 @@ func MiddlewareWithGuards(authenticator Authenticator, memberships MembershipRes
 			next.ServeHTTP(w, r.WithContext(WithRequestContext(r.Context(), resolved)))
 		})
 	}
+}
+
+func bearerHeaderTokenSource(r *http.Request) (string, error) {
+	token, _ := bearerToken(r.Header.Get("Authorization"))
+	return token, nil
+}
+
+func LocalBrowserTokenSource(cookieName string) TokenSource {
+	cookieName = strings.TrimSpace(cookieName)
+	return func(r *http.Request) (string, error) {
+		if token, ok := bearerToken(r.Header.Get("Authorization")); ok {
+			return token, nil
+		}
+		cookie, err := r.Cookie(cookieName)
+		if err != nil || strings.TrimSpace(cookie.Value) == "" {
+			return "", nil
+		}
+		if r.Method != http.MethodGet && r.Method != http.MethodHead && r.Method != http.MethodOptions && !SameOriginBrowserRequest(r) {
+			return "", ErrCrossSiteSessionRequest
+		}
+		return strings.TrimSpace(cookie.Value), nil
+	}
+}
+
+// SameOriginBrowserRequest reports whether browser metadata proves that a
+// state-changing request came from the same origin as the API.
+func SameOriginBrowserRequest(r *http.Request) bool {
+	if origin := strings.TrimSpace(r.Header.Get("Origin")); origin != "" {
+		parsed, err := url.Parse(origin)
+		return err == nil && strings.EqualFold(parsed.Host, r.Host) && (parsed.Scheme == "http" || parsed.Scheme == "https")
+	}
+	return strings.EqualFold(strings.TrimSpace(r.Header.Get("Sec-Fetch-Site")), "same-origin")
 }
 
 func bearerToken(header string) (string, bool) {

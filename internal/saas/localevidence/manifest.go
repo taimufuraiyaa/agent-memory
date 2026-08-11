@@ -64,7 +64,16 @@ type Manifest struct {
 	Files          []File    `json:"files"`
 }
 
+type receiptSnapshot struct {
+	relative string
+	info     os.FileInfo
+}
+
 func Build(root string, metadata Metadata) (Manifest, error) {
+	return buildWithHook(root, metadata, nil)
+}
+
+func buildWithHook(root string, metadata Metadata, afterReceipt func(int)) (Manifest, error) {
 	manifest := Manifest{
 		Schema: SchemaV1, Classification: ClassificationLocalDevelopment,
 		RunID: metadata.RunID, Profile: metadata.Profile, GitCommit: metadata.GitCommit,
@@ -75,25 +84,51 @@ func Build(root string, metadata Metadata) (Manifest, error) {
 	if err != nil {
 		return Manifest{}, err
 	}
+	evidenceRoot, rootInfo, err := openEvidenceRoot(root)
+	if err != nil {
+		return Manifest{}, err
+	}
+	defer evidenceRoot.Close()
 	manifest.Checks = checks
 	manifest.Files = make([]File, 0, len(checks))
 	seenReceipts := make(map[string]struct{}, len(checks))
+	snapshots := make([]receiptSnapshot, 0, len(checks))
 	for _, check := range checks {
 		if _, duplicate := seenReceipts[check.Receipt]; duplicate {
 			return Manifest{}, errors.New("local evidence receipt is duplicated")
 		}
 		seenReceipts[check.Receipt] = struct{}{}
-		file, err := hashReceipt(root, check.Receipt)
+		snapshot, err := snapshotReceipt(evidenceRoot, check.Receipt)
 		if err != nil {
-			return Manifest{}, fmt.Errorf("hash receipt %q: %w", check.Receipt, err)
+			return Manifest{}, fmt.Errorf("snapshot receipt %q: %w", check.Receipt, err)
+		}
+		snapshots = append(snapshots, snapshot)
+	}
+	for index, snapshot := range snapshots {
+		file, err := hashReceipt(evidenceRoot, snapshot)
+		if err != nil {
+			return Manifest{}, fmt.Errorf("hash receipt %q: %w", snapshot.relative, err)
 		}
 		manifest.Files = append(manifest.Files, file)
+		if afterReceipt != nil {
+			afterReceipt(index)
+		}
+	}
+	if err := validateReceiptSnapshots(evidenceRoot, snapshots); err != nil {
+		return Manifest{}, err
+	}
+	if err := validateEvidenceRoot(root, evidenceRoot, rootInfo); err != nil {
+		return Manifest{}, err
 	}
 	sort.Slice(manifest.Files, func(i, j int) bool { return manifest.Files[i].Path < manifest.Files[j].Path })
 	return manifest, nil
 }
 
 func Validate(root string, manifest Manifest) error {
+	return validateWithHook(root, manifest, nil)
+}
+
+func validateWithHook(root string, manifest Manifest, afterReceipt func(int)) error {
 	if manifest.Schema != SchemaV1 || manifest.Classification != ClassificationLocalDevelopment || !manifest.Passed {
 		return errors.New("local evidence manifest identity is invalid")
 	}
@@ -102,7 +137,7 @@ func Validate(root string, manifest Manifest) error {
 		GitDirty: manifest.GitDirty, StartedAt: manifest.StartedAt,
 		CompletedAt: manifest.CompletedAt, Checks: manifest.Checks,
 	}
-	rebuilt, err := Build(root, metadata)
+	rebuilt, err := buildWithHook(root, metadata, afterReceipt)
 	if err != nil {
 		return err
 	}
@@ -149,22 +184,70 @@ func safeReceiptPath(value string) bool {
 	return clean == value && !strings.Contains(clean, "../") && clean != "receipts"
 }
 
-func hashReceipt(root, relative string) (File, error) {
-	path := filepath.Join(root, filepath.FromSlash(relative))
+func openEvidenceRoot(path string) (*os.Root, os.FileInfo, error) {
 	info, err := os.Lstat(path)
+	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		return nil, nil, errors.New("evidence root must be a directory and not a symlink")
+	}
+	root, err := os.OpenRoot(filepath.Clean(path))
+	if err != nil {
+		return nil, nil, errors.New("open evidence root")
+	}
+	opened, err := root.Lstat(".")
+	if err != nil || !opened.IsDir() || !os.SameFile(info, opened) {
+		root.Close()
+		return nil, nil, errors.New("evidence root changed before it was opened")
+	}
+	return root, opened, nil
+}
+
+func validateEvidenceRoot(path string, root *os.Root, opened os.FileInfo) error {
+	openedAfterRead, err := root.Lstat(".")
+	if err != nil || !openedAfterRead.IsDir() || !os.SameFile(opened, openedAfterRead) {
+		return errors.New("evidence root changed while receipts were hashed")
+	}
+	pathAfterRead, err := os.Lstat(path)
+	if err != nil || !pathAfterRead.IsDir() || pathAfterRead.Mode()&os.ModeSymlink != 0 || !os.SameFile(opened, pathAfterRead) {
+		return errors.New("evidence root changed while receipts were hashed")
+	}
+	return nil
+}
+
+func snapshotReceipt(root *os.Root, relative string) (receiptSnapshot, error) {
+	name := filepath.FromSlash(relative)
+	info, err := root.Lstat(name)
 	if err != nil || !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 {
-		return File{}, errors.New("receipt must be a regular non-symlink file")
+		return receiptSnapshot{}, errors.New("receipt must be a regular non-symlink file")
 	}
 	if info.Size() < 1 || info.Size() > maximumReceiptBytes {
-		return File{}, errors.New("receipt size is invalid")
+		return receiptSnapshot{}, errors.New("receipt size is invalid")
 	}
-	handle, err := os.Open(path)
+	return receiptSnapshot{relative: relative, info: info}, nil
+}
+
+func validateReceiptSnapshots(root *os.Root, snapshots []receiptSnapshot) error {
+	for _, snapshot := range snapshots {
+		current, err := root.Lstat(filepath.FromSlash(snapshot.relative))
+		if err != nil || !sameReceipt(snapshot.info, current) {
+			return fmt.Errorf("local evidence receipt %q changed during manifest traversal", snapshot.relative)
+		}
+	}
+	return nil
+}
+
+func hashReceipt(root *os.Root, snapshot receiptSnapshot) (File, error) {
+	name := filepath.FromSlash(snapshot.relative)
+	info, err := root.Lstat(name)
+	if err != nil || !sameReceipt(snapshot.info, info) {
+		return File{}, errors.New("receipt changed before it was opened")
+	}
+	handle, err := root.Open(name)
 	if err != nil {
 		return File{}, err
 	}
 	defer handle.Close()
 	opened, err := handle.Stat()
-	if err != nil || !os.SameFile(info, opened) || !opened.Mode().IsRegular() {
+	if err != nil || !os.SameFile(info, opened) || !opened.Mode().IsRegular() || opened.Size() != info.Size() || !opened.ModTime().Equal(info.ModTime()) {
 		return File{}, errors.New("receipt changed before it was opened")
 	}
 	hash := sha256.New()
@@ -172,5 +255,19 @@ func hashReceipt(root, relative string) (File, error) {
 	if err != nil || written != info.Size() || written > maximumReceiptBytes {
 		return File{}, errors.New("receipt changed while it was hashed")
 	}
-	return File{Path: relative, SHA256: hex.EncodeToString(hash.Sum(nil)), Bytes: written}, nil
+	openedAfterRead, err := handle.Stat()
+	if err != nil || !os.SameFile(opened, openedAfterRead) || openedAfterRead.Size() != opened.Size() || !openedAfterRead.ModTime().Equal(opened.ModTime()) {
+		return File{}, errors.New("receipt changed while it was hashed")
+	}
+	pathAfterRead, err := root.Lstat(name)
+	if err != nil || !pathAfterRead.Mode().IsRegular() || !os.SameFile(opened, pathAfterRead) || pathAfterRead.Size() != opened.Size() || !pathAfterRead.ModTime().Equal(opened.ModTime()) {
+		return File{}, errors.New("receipt changed while it was hashed")
+	}
+	return File{Path: snapshot.relative, SHA256: hex.EncodeToString(hash.Sum(nil)), Bytes: written}, nil
+}
+
+func sameReceipt(expected, actual os.FileInfo) bool {
+	return actual != nil && actual.Mode().IsRegular() && actual.Mode()&os.ModeSymlink == 0 &&
+		os.SameFile(expected, actual) && expected.Size() == actual.Size() &&
+		expected.ModTime().Equal(actual.ModTime())
 }

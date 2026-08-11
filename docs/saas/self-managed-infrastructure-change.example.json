@@ -1,0 +1,52 @@
+{
+  "schema": "agent-memory-self-managed-infrastructure-change-v1",
+  "environment": "staging",
+  "change_id": "replace-with-change-id",
+  "inventory_id": "replace-with-inventory-id",
+  "inventory_receipt_sha256": "ff99aee26afbd65d252f7ddbcc101f4b8a397ac946c92e5d129cce908bd97ade",
+  "plan_id": "replace-with-plan-id",
+  "plan_receipt_sha256": "ab11cc8aa9698ff1d15747957a88f73f0b98b139585d98b854a30c8d5287bafe",
+  "generated_at": "2026-08-10T04:00:00Z",
+  "apply": {
+    "outcome": "succeeded",
+    "completed_at": "2026-08-10T02:00:00Z",
+    "raw_output_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+  },
+  "rollback": {
+    "outcome": "not_required"
+  },
+  "resource_inventory": {
+    "outcome": "collected",
+    "collected_at": "2026-08-10T03:00:00Z",
+    "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "resource_count": 42
+  },
+  "drift": {
+    "outcome": "clean",
+    "checked_at": "2026-08-10T03:30:00Z",
+    "raw_output_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+  },
+  "capabilities": [
+    {"id": "edge_ingress", "outcome": "unchanged"},
+    {"id": "application_network", "outcome": "unchanged"},
+    {"id": "data_network", "outcome": "unchanged"},
+    {"id": "kubernetes_cluster", "outcome": "unchanged"},
+    {"id": "oidc_identity", "outcome": "unchanged"},
+    {"id": "postgres", "outcome": "unchanged"},
+    {"id": "quarantine_bucket", "outcome": "unchanged"},
+    {"id": "vault_bucket", "outcome": "unchanged"},
+    {"id": "export_bucket", "outcome": "unchanged"},
+    {"id": "durable_queue", "outcome": "unchanged"},
+    {"id": "api_identity", "outcome": "unchanged"},
+    {"id": "worker_identity", "outcome": "unchanged"},
+    {"id": "reconciler_identity", "outcome": "unchanged"},
+    {"id": "migration_identity", "outcome": "unchanged"},
+    {"id": "api_secret", "outcome": "unchanged"},
+    {"id": "worker_secret", "outcome": "unchanged"},
+    {"id": "reconciler_secret", "outcome": "unchanged"},
+    {"id": "migration_secret", "outcome": "unchanged"},
+    {"id": "telemetry", "outcome": "unchanged"},
+    {"id": "postgres_backup", "outcome": "unchanged"},
+    {"id": "object_backup", "outcome": "unchanged"}
+  ]
+}

@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-memory.local/schemas/evidence/v1/staging-rollback-verification-receipt.schema.json",
+  "title": "Agent Memory staging rollback verification receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "ready", "environment", "namespace", "kubernetes_context", "baseline_release_id", "baseline_receipt_sha256", "failed_attempt_release_id", "failed_attempt_receipt_sha256", "collected_at", "deployments"],
+  "properties": {
+    "schema": {"const": "agent-memory-staging-rollback-verification-receipt-v1"},
+    "ready": {"type": "boolean"},
+    "environment": {"const": "staging"},
+    "namespace": {"const": "agent-memory-staging"},
+    "kubernetes_context": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@-]{0,252}$"},
+    "baseline_release_id": {"$ref": "#/$defs/release_id"},
+    "baseline_receipt_sha256": {"$ref": "#/$defs/sha256"},
+    "failed_attempt_release_id": {"$ref": "#/$defs/release_id"},
+    "failed_attempt_receipt_sha256": {"$ref": "#/$defs/sha256"},
+    "collected_at": {"type": "string", "format": "date-time"},
+    "deployments": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "items": {"$ref": "#/$defs/deployment"},
+      "prefixItems": [
+        {"properties": {"name": {"const": "agent-memory-api"}}},
+        {"properties": {"name": {"const": "agent-memory-worker"}}},
+        {"properties": {"name": {"const": "agent-memory-reconciler"}}}
+      ]
+    }
+  },
+  "$defs": {
+    "release_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"},
+    "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "deployment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "outcome", "revision"],
+      "properties": {
+        "name": {"enum": ["agent-memory-api", "agent-memory-worker", "agent-memory-reconciler"]},
+        "outcome": {"enum": ["restored", "image_mismatch", "not_ready", "unavailable"]},
+        "revision": {"type": "string", "pattern": "^([1-9][0-9]*|unavailable)$"}
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"ready": {"const": true}}, "required": ["ready"]},
+      "then": {
+        "properties": {
+          "deployments": {
+            "prefixItems": [
+              {"properties": {"outcome": {"const": "restored"}}},
+              {"properties": {"outcome": {"const": "restored"}}},
+              {"properties": {"outcome": {"const": "restored"}}}
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

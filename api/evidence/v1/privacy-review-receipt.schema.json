@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-memory.local/schemas/evidence/v1/privacy-review-receipt.schema.json",
+  "title": "Agent Memory CP7-A Privacy and Counsel review receipt",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema", "classification", "environment", "review_id", "dashboard_build_version", "openapi_version", "receipt_manifest_version", "dashboard_build_manifest_sha256", "openapi_sha256", "receipt_schema_manifest_sha256", "privacy_signed_review_sha256", "counsel_signed_review_sha256", "input_sha256", "review_started_at", "review_completed_at", "generated_at", "collected_at", "ready", "surface_count", "surface_passed_count", "surface_failed_count", "surface_inconclusive_count", "contract_count", "contract_passed_count", "contract_failed_count", "contract_inconclusive_count", "check_count", "passed_count", "failed_count", "inconclusive_count", "surfaces", "contracts", "checks"],
+  "properties": {
+    "schema": {"const": "agent-memory-privacy-review-receipt-v1"}, "classification": {"const": "external_business"}, "environment": {"const": "external"},
+    "review_id": {"$ref": "#/$defs/opaque"}, "dashboard_build_version": {"$ref": "#/$defs/opaque"}, "openapi_version": {"$ref": "#/$defs/opaque"}, "receipt_manifest_version": {"$ref": "#/$defs/opaque"},
+    "dashboard_build_manifest_sha256": {"$ref": "#/$defs/digest"}, "openapi_sha256": {"$ref": "#/$defs/digest"}, "receipt_schema_manifest_sha256": {"$ref": "#/$defs/digest"}, "privacy_signed_review_sha256": {"$ref": "#/$defs/digest"}, "counsel_signed_review_sha256": {"$ref": "#/$defs/digest"}, "input_sha256": {"$ref": "#/$defs/digest"},
+    "review_started_at": {"type": "string", "format": "date-time"}, "review_completed_at": {"type": "string", "format": "date-time"}, "generated_at": {"type": "string", "format": "date-time"}, "collected_at": {"type": "string", "format": "date-time"}, "ready": {"type": "boolean"},
+    "surface_count": {"const": 4}, "surface_passed_count": {"$ref": "#/$defs/surfaceCount"}, "surface_failed_count": {"$ref": "#/$defs/surfaceCount"}, "surface_inconclusive_count": {"$ref": "#/$defs/surfaceCount"},
+    "contract_count": {"const": 5}, "contract_passed_count": {"$ref": "#/$defs/contractCount"}, "contract_failed_count": {"$ref": "#/$defs/contractCount"}, "contract_inconclusive_count": {"$ref": "#/$defs/contractCount"},
+    "check_count": {"const": 8}, "passed_count": {"$ref": "#/$defs/checkCount"}, "failed_count": {"$ref": "#/$defs/checkCount"}, "inconclusive_count": {"$ref": "#/$defs/checkCount"},
+    "surfaces": {"type": "array", "minItems": 4, "maxItems": 4, "items": {"$ref": "privacy-review-input.schema.json#/$defs/surface"}}, "contracts": {"type": "array", "minItems": 5, "maxItems": 5, "items": {"$ref": "privacy-review-input.schema.json#/$defs/contract"}}, "checks": {"type": "array", "minItems": 8, "maxItems": 8, "items": {"$ref": "privacy-review-input.schema.json#/$defs/check"}}
+  },
+  "$defs": {"digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"}, "opaque": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"}, "surfaceCount": {"type": "integer", "minimum": 0, "maximum": 4}, "contractCount": {"type": "integer", "minimum": 0, "maximum": 5}, "checkCount": {"type": "integer", "minimum": 0, "maximum": 8}}
+}

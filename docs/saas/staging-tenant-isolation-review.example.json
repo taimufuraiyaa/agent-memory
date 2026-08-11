@@ -1,0 +1,26 @@
+{
+  "schema": "agent-memory-staging-tenant-isolation-review-v1",
+  "classification": "staging_external",
+  "environment": "staging",
+  "review_id": "independent-isolation-review-2026-08",
+  "inventory_id": "staging-inventory-2026-08",
+  "inventory_receipt_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "change_id": "staging-change-2026-08-10",
+  "change_receipt_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "release_id": "release-2026-08-10",
+  "release_receipt_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "ready": true,
+  "generated_at": "2026-08-10T11:45:00Z",
+  "review": {
+    "started_at": "2026-08-10T07:00:00Z",
+    "completed_at": "2026-08-10T11:30:00Z"
+  },
+  "domains": [
+    {"id": "control_api_authorization_reviewed", "outcome": "passed", "finding_count": 0, "evidence_sha256": "1111111111111111111111111111111111111111111111111111111111111111"},
+    {"id": "forced_rls_effectiveness_reviewed", "outcome": "passed", "finding_count": 0, "evidence_sha256": "2222222222222222222222222222222222222222222222222222222222222222"},
+    {"id": "identifier_substitution_reviewed", "outcome": "passed", "finding_count": 0, "evidence_sha256": "3333333333333333333333333333333333333333333333333333333333333333"},
+    {"id": "cache_namespace_reviewed", "outcome": "passed", "finding_count": 0, "evidence_sha256": "4444444444444444444444444444444444444444444444444444444444444444"},
+    {"id": "concealment_and_error_behavior_reviewed", "outcome": "passed", "finding_count": 0, "evidence_sha256": "5555555555555555555555555555555555555555555555555555555555555555"},
+    {"id": "timing_inference_reviewed", "outcome": "passed", "finding_count": 0, "evidence_sha256": "6666666666666666666666666666666666666666666666666666666666666666"}
+  ]
+}

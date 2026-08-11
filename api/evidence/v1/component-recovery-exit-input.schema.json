@@ -1,0 +1,257 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-memory.local/schemas/evidence/v1/component-recovery-exit-input.schema.json",
+  "title": "Agent Memory component recovery and integration exit input",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "classification",
+    "environment",
+    "review_id",
+    "procedure_manifest_version",
+    "exercise_manifest_version",
+    "target_policy_version",
+    "inventory_id",
+    "inventory_receipt_sha256",
+    "procedure_manifest_sha256",
+    "exercise_manifest_sha256",
+    "target_policy_sha256",
+    "operations_review_sha256",
+    "reviewed_at",
+    "generated_at",
+    "ready",
+    "subjects",
+    "checks"
+  ],
+  "properties": {
+    "schema": {
+      "const": "agent-memory-component-recovery-exit-input-v1"
+    },
+    "classification": {
+      "const": "self_managed_external"
+    },
+    "environment": {
+      "enum": [
+        "staging",
+        "production"
+      ]
+    },
+    "review_id": {
+      "$ref": "#/$defs/opaque"
+    },
+    "procedure_manifest_version": {
+      "$ref": "#/$defs/opaque"
+    },
+    "exercise_manifest_version": {
+      "$ref": "#/$defs/opaque"
+    },
+    "target_policy_version": {
+      "$ref": "#/$defs/opaque"
+    },
+    "inventory_id": {
+      "$ref": "#/$defs/opaque"
+    },
+    "inventory_receipt_sha256": {
+      "$ref": "#/$defs/digest"
+    },
+    "reviewed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "ready": {
+      "type": "boolean"
+    },
+    "subjects": {
+      "type": "array",
+      "minItems": 11,
+      "maxItems": 11,
+      "items": {
+        "$ref": "#/$defs/subject"
+      }
+    },
+    "checks": {
+      "type": "array",
+      "minItems": 8,
+      "maxItems": 8,
+      "items": {
+        "$ref": "#/$defs/check"
+      }
+    },
+    "procedure_manifest_sha256": {
+      "$ref": "#/$defs/digest"
+    },
+    "exercise_manifest_sha256": {
+      "$ref": "#/$defs/digest"
+    },
+    "target_policy_sha256": {
+      "$ref": "#/$defs/digest"
+    },
+    "operations_review_sha256": {
+      "$ref": "#/$defs/digest"
+    }
+  },
+  "$defs": {
+    "opaque": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:+-]{0,127}$"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "count": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1000000000
+    },
+    "outcome": {
+      "enum": [
+        "passed",
+        "failed",
+        "inconclusive"
+      ]
+    },
+    "operation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "procedure_sha256",
+        "exercise_sha256",
+        "attempt_count",
+        "passed_count",
+        "failed_count",
+        "inconclusive_count",
+        "maximum_target_seconds",
+        "maximum_observed_seconds",
+        "outcome"
+      ],
+      "properties": {
+        "procedure_sha256": {
+          "$ref": "#/$defs/digest"
+        },
+        "exercise_sha256": {
+          "$ref": "#/$defs/digest"
+        },
+        "attempt_count": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000000000
+        },
+        "passed_count": {
+          "$ref": "#/$defs/count"
+        },
+        "failed_count": {
+          "$ref": "#/$defs/count"
+        },
+        "inconclusive_count": {
+          "$ref": "#/$defs/count"
+        },
+        "maximum_target_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000000000
+        },
+        "maximum_observed_seconds": {
+          "$ref": "#/$defs/count"
+        },
+        "outcome": {
+          "$ref": "#/$defs/outcome"
+        }
+      }
+    },
+    "subject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "class",
+        "kind",
+        "enabled",
+        "procedure_version",
+        "replacement",
+        "failover",
+        "export",
+        "restore",
+        "outcome"
+      ],
+      "properties": {
+        "class": {
+          "enum": [
+            "core_component",
+            "external_integration"
+          ]
+        },
+        "kind": {
+          "enum": [
+            "kubernetes",
+            "identity",
+            "postgres",
+            "object_storage",
+            "queue",
+            "secrets",
+            "observability",
+            "backup",
+            "payment",
+            "email",
+            "model"
+          ]
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "procedure_version": {
+          "$ref": "#/$defs/opaque"
+        },
+        "replacement": {
+          "$ref": "#/$defs/operation"
+        },
+        "failover": {
+          "$ref": "#/$defs/operation"
+        },
+        "export": {
+          "$ref": "#/$defs/operation"
+        },
+        "restore": {
+          "$ref": "#/$defs/operation"
+        },
+        "outcome": {
+          "$ref": "#/$defs/outcome"
+        }
+      }
+    },
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "outcome",
+        "evidence_sha256"
+      ],
+      "properties": {
+        "id": {
+          "enum": [
+            "inventory_binding_verified",
+            "subject_inventory_complete",
+            "replacement_exercises_passed",
+            "failover_exercises_passed",
+            "export_exercises_passed",
+            "restore_exercises_passed",
+            "recovery_targets_met",
+            "operations_review_complete"
+          ]
+        },
+        "outcome": {
+          "$ref": "#/$defs/outcome"
+        },
+        "evidence_sha256": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    }
+  }
+}
+

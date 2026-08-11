@@ -92,6 +92,10 @@ func validateRoot(path string) error {
 }
 
 func readRegularJSON(path string, destination any) error {
+	return readRegularJSONWithHook(path, destination, nil)
+}
+
+func readRegularJSONWithHook(path string, destination any, afterOpen func()) error {
 	info, err := os.Lstat(path)
 	if err != nil || !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 || info.Size() < 2 || info.Size() > maximumJSONBytes {
 		return errors.New("JSON input must be a bounded regular non-symlink file")
@@ -102,11 +106,14 @@ func readRegularJSON(path string, destination any) error {
 	}
 	defer handle.Close()
 	opened, err := handle.Stat()
-	if err != nil || !os.SameFile(info, opened) {
+	if err != nil || !opened.Mode().IsRegular() || !os.SameFile(info, opened) || opened.Size() != info.Size() || !opened.ModTime().Equal(info.ModTime()) {
 		return errors.New("JSON input changed before it was opened")
 	}
+	if afterOpen != nil {
+		afterOpen()
+	}
 	data, err := io.ReadAll(io.LimitReader(handle, maximumJSONBytes+1))
-	if err != nil || len(data) > maximumJSONBytes {
+	if err != nil || int64(len(data)) != opened.Size() || len(data) > maximumJSONBytes {
 		return errors.New("read JSON input")
 	}
 	decoder := json.NewDecoder(bytes.NewReader(data))
@@ -116,6 +123,14 @@ func readRegularJSON(path string, destination any) error {
 	}
 	if decoder.Decode(&struct{}{}) != io.EOF {
 		return errors.New("JSON input has trailing data")
+	}
+	openedAfterRead, err := handle.Stat()
+	if err != nil || !os.SameFile(opened, openedAfterRead) || openedAfterRead.Size() != opened.Size() || !openedAfterRead.ModTime().Equal(opened.ModTime()) {
+		return errors.New("JSON input changed while reading")
+	}
+	pathAfterRead, err := os.Lstat(path)
+	if err != nil || !pathAfterRead.Mode().IsRegular() || !os.SameFile(opened, pathAfterRead) || pathAfterRead.Size() != opened.Size() || !pathAfterRead.ModTime().Equal(opened.ModTime()) {
+		return errors.New("JSON input changed while reading")
 	}
 	return nil
 }

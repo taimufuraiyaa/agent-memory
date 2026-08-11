@@ -74,3 +74,28 @@ func TestClientMapsWriteByExplicitMode(t *testing.T) {
 		t.Fatalf("mode paths=%v", paths)
 	}
 }
+
+func TestHostedSearchUsesTenantAuthenticatedMemoryEndpoint(t *testing.T) {
+	var request *http.Request
+	var body []byte
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		request = r.Clone(r.Context())
+		body, _ = io.ReadAll(r.Body)
+		_, _ = io.WriteString(w, `{"ok":true,"data":{"items":[]}}`)
+	}))
+	defer server.Close()
+	hosted, err := New(Config{Mode: ModeHosted, BaseURL: server.URL, TenantID: "11111111-1111-4111-8111-111111111111", TokenProvider: staticToken("secret")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := hosted.SearchHosted(context.Background(), "22222222-2222-4222-8222-222222222222", "durable fact", 25, "cursor-1"); err != nil {
+		t.Fatal(err)
+	}
+	if request == nil || request.URL.Path != "/v1/search" || request.Header.Get("Authorization") != "Bearer secret" || request.Header.Get("X-Agent-Memory-Tenant") != "11111111-1111-4111-8111-111111111111" {
+		t.Fatalf("hosted search request=%v", request)
+	}
+	want := `{"cursor":"cursor-1","limit":25,"query":"durable fact","workspace_id":"22222222-2222-4222-8222-222222222222"}`
+	if string(body) != want {
+		t.Fatalf("hosted search body=%s want=%s", body, want)
+	}
+}

@@ -1,0 +1,30 @@
+{
+  "schema": "agent-memory-staging-object-custody-review-v1",
+  "classification": "staging_external",
+  "environment": "staging",
+  "review_id": "custody-review-2026-08-10",
+  "inventory_id": "staging-inventory-2026-08",
+  "inventory_receipt_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "change_id": "staging-change-2026-08-10",
+  "change_receipt_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "release_id": "release-2026-08-10",
+  "release_receipt_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "ready": true,
+  "generated_at": "2026-08-10T11:45:00Z",
+  "review": {
+    "started_at": "2026-08-10T10:00:00Z",
+    "completed_at": "2026-08-10T11:30:00Z"
+  },
+  "checks": [
+    {"id": "deployed_object_policy_export_verified", "outcome": "passed", "evidence_sha256": "1111111111111111111111111111111111111111111111111111111111111111"},
+    {"id": "api_object_capabilities_verified", "outcome": "passed", "evidence_sha256": "2222222222222222222222222222222222222222222222222222222222222222"},
+    {"id": "worker_object_capabilities_verified", "outcome": "passed", "evidence_sha256": "3333333333333333333333333333333333333333333333333333333333333333"},
+    {"id": "reconciler_object_capabilities_verified", "outcome": "passed", "evidence_sha256": "4444444444444444444444444444444444444444444444444444444444444444"},
+    {"id": "vault_immutability_verified", "outcome": "passed", "evidence_sha256": "5555555555555555555555555555555555555555555555555555555555555555"},
+    {"id": "quarantine_promotion_and_removal_verified", "outcome": "passed", "evidence_sha256": "6666666666666666666666666666666666666666666666666666666666666666"},
+    {"id": "audit_archive_immutability_verified", "outcome": "passed", "evidence_sha256": "7777777777777777777777777777777777777777777777777777777777777777"},
+    {"id": "source_content_absent_from_logs", "outcome": "passed", "evidence_sha256": "8888888888888888888888888888888888888888888888888888888888888888"},
+    {"id": "source_content_absent_from_traces", "outcome": "passed", "evidence_sha256": "9999999999999999999999999999999999999999999999999999999999999999"},
+    {"id": "telemetry_access_restricted", "outcome": "passed", "evidence_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"}
+  ]
+}

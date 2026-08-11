@@ -110,6 +110,44 @@ func (r *PostgresRepository) EvidenceByPassageIDs(ctx context.Context, tenant st
 	return scanCandidates(rows)
 }
 
+func (r *PostgresRepository) ContextByAnchors(ctx context.Context, tenant string, authorizedSourceIDs []string, anchors []ContextAnchor) ([]Candidate, error) {
+	if tenant == "" || len(authorizedSourceIDs) == 0 || len(anchors) == 0 || len(anchors) > 150 {
+		return nil, errors.New("context expansion requires tenant, authorized sources, and bounded anchors")
+	}
+	sourceIDs, err := parseSourceIDs(authorizedSourceIDs)
+	if err != nil {
+		return nil, err
+	}
+	encoded, err := json.Marshal(anchors)
+	if err != nil {
+		return nil, err
+	}
+	tx, err := r.begin(ctx, tenant)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	rows, err := tx.Query(ctx, `SELECT p.source_id::text,p.source_version,p.id,p.structural_node_id,c.id,p.text_content,p.locator,
+		0::float8,0::float8,COALESCE(g.decay_score,0),COALESCE(g.salience_score,0),COALESCE(g.suppression_score,0),
+		COALESCE(g.useful_count,0),COALESCE(g.rejected_count,0),COALESCE(g.harmful_count,0),g.last_helpful_at,g.last_rejected_at,g.suppression_until
+		FROM (SELECT DISTINCT source_id,source_version,structural_node_id FROM jsonb_to_recordset($3::jsonb)
+			AS input(source_id uuid,source_version bigint,structural_node_id text,passage_id text)) AS k
+		JOIN saas_source_passages p ON p.tenant_id=$1 AND p.source_id=k.source_id AND p.source_version=k.source_version AND p.structural_node_id=k.structural_node_id
+		JOIN saas_sources s ON s.tenant_id=p.tenant_id AND s.id=p.source_id AND s.active_version=p.source_version AND s.state='ready'
+		JOIN saas_source_citations c ON c.tenant_id=p.tenant_id AND c.source_id=p.source_id AND c.source_version=p.source_version AND c.passage_id=p.id
+		LEFT JOIN saas_passage_signals g ON g.tenant_id=p.tenant_id AND g.source_id=p.source_id AND g.source_version=p.source_version AND g.passage_id=p.id
+		WHERE p.source_id=ANY($2::uuid[])
+		ORDER BY p.source_id,p.source_version,p.structural_node_id,
+			COALESCE((p.locator#>>'{pdf,page}')::int,0),
+			COALESCE((p.locator#>>'{pdf,bounding_box,1}')::float8,0) DESC,
+			COALESCE((p.locator#>>'{pdf,bounding_box,0}')::float8,0),p.id
+		LIMIT 3000`, tenant, sourceIDs, encoded)
+	if err != nil {
+		return nil, err
+	}
+	return scanCandidates(rows)
+}
+
 func (r *PostgresRepository) RecordPassageFeedback(ctx context.Context, tenant string, key EvidenceKey, sourceVersion int64, rating, actorID, requestID string, at time.Time) error {
 	if tenant == "" || key.SourceID == "" || key.PassageID == "" || sourceVersion <= 0 || !oneOf(rating, "helpful", "rejected", "harmful") || actorID == "" || requestID == "" || at.IsZero() {
 		return errors.New("passage feedback is incomplete")

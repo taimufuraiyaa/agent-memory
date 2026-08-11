@@ -6,7 +6,15 @@ import {
 } from '../lib/api'
 import './rights-attestation.css'
 
-export function RightsAttestationGate({ children }: { children: ReactNode }) {
+type AcceptanceInput = { policy_version: string; accepted_statement_ids: string[] }
+
+type RightsAttestationGateProps = {
+  children: ReactNode
+  getStatus?: () => Promise<RightsAttestationStatus>
+  accept?: (input: AcceptanceInput) => Promise<RightsAttestationStatus>
+}
+
+export function RightsAttestationGate({ children, getStatus = getRightsAttestationStatus, accept = acceptRightsAttestation }: RightsAttestationGateProps) {
   const [attestation, setAttestation] = useState<RightsAttestationStatus | null>(null)
   const [acceptedStatementIDs, setAcceptedStatementIDs] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
@@ -17,13 +25,13 @@ export function RightsAttestationGate({ children }: { children: ReactNode }) {
     setLoading(true)
     setError('')
     try {
-      setAttestation(await getRightsAttestationStatus())
+      setAttestation(await getStatus())
     } catch (reason) {
       setError(messageOf(reason))
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [getStatus])
 
   useEffect(() => {
     void loadStatus()
@@ -38,11 +46,11 @@ export function RightsAttestationGate({ children }: { children: ReactNode }) {
     setSubmitting(true)
     setError('')
     try {
-      await acceptRightsAttestation({
+      await accept({
         policy_version: attestation.policy.version,
         accepted_statement_ids: [...acceptedStatementIDs],
       })
-      setAttestation(await getRightsAttestationStatus())
+      setAttestation(await getStatus())
     } catch (reason) {
       setError(messageOf(reason))
       await loadStatus()

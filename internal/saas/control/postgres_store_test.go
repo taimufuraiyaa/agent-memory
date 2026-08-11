@@ -51,6 +51,10 @@ func TestPostgresProvisionIsTransactionalAndIdempotent(t *testing.T) {
 	if first.AccountID != second.AccountID || first.TenantID != second.TenantID {
 		t.Fatalf("duplicate identity created new resources: first=%+v second=%+v", first, second)
 	}
+	found, err := store.FindPersonalAccount(ctx, firstCommand.ExternalSubject)
+	if err != nil || found != first {
+		t.Fatalf("FindPersonalAccount() = %+v, %v; want %+v", found, err, first)
+	}
 	for table, want := range map[string]int{
 		"saas_accounts": 1, "saas_tenants": 1, "saas_memberships": 1,
 		"saas_onboarding_states": 1, "saas_outbox": 1, "saas_audit_events": 1,

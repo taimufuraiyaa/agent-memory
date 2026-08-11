@@ -1,9 +1,33 @@
 # Hosted Kubernetes deployment
 
-These manifests define the provider-neutral workload boundary. Managed
-PostgreSQL, object storage, queue, identity, secret synchronization, ingress,
-and private networking are intentionally supplied by the selected cloud
-environment rather than simulated here.
+These manifests define the self-managed workload boundary. PostgreSQL, object
+storage, queue, identity, secret synchronization, ingress, private networking,
+backup, and recovery are supplied by the installation's internally operated
+platform layer. They are not external cloud-provider dependencies and are not
+simulated by these application workload manifests.
+
+The platform contract and minimum production shape are defined in
+`docs/saas/self-managed-platform-adr.md`. Component failover, replacement,
+export, and restore expectations are defined in
+`docs/saas/component-recovery-and-exit.md`.
+
+Before collecting environment evidence, create and validate the content-free
+inventory described in `docs/saas/self-managed-platform-inventory.md`. Keep the
+real inventory outside Git and the application database.
+
+Before applying platform changes, validate the sanitized IaC plan receipt
+described in `docs/saas/self-managed-infrastructure-plan.md`. The receipt binds
+private source and raw-plan artifacts by digest without embedding topology or
+credentials; it does not replace real apply, drift, or review evidence.
+
+After the real apply and drift check, validate their sanitized binding with
+`docs/saas/self-managed-infrastructure-change.md`. Keep the raw apply, installed
+resource inventory, and drift artifacts outside Git and the application
+database.
+
+After an immutable deployment is healthy, collect the bounded cluster-state
+receipt described in `docs/saas/kubernetes-platform-preflight.md`. The collector
+checks Secret names only and never retrieves Secret representations or values.
 
 The `staging` and `production` overlays use distinct namespaces and contain no
 secret values. Before a release, the platform must create these scoped secrets:
@@ -15,7 +39,7 @@ secret values. Before a release, the platform must create these scoped secrets:
 | `agent-memory-reconciler-secrets` | Reconciler | PostgreSQL URL, object credentials/endpoint, and secret reference |
 | `agent-memory-migration-secrets` | Migration | PostgreSQL URL only |
 
-External secret synchronization and workload-identity bindings must grant each
+Internal secret synchronization and workload-identity bindings must grant each
 service only its contract. Never commit `Secret`, `data`, or `stringData`
 objects. Replace the example OIDC issuer and audience during environment
 provisioning.
@@ -41,3 +65,15 @@ including Secret values, resource YAML, logs, environment variables, tokens,
 or application data. The destination must not already exist or be a symlink.
 Move the receipt into the immutable external evidence system and reference its
 SHA-256 from the applicable signed approval.
+
+For an authorized real staging rollback drill, retain both the passed baseline
+and failed rollback-succeeded release receipts, then use the read-only
+[staging rollback verification workflow](../../../docs/saas/staging-rollback-verification.md)
+to prove that live workload images and ready replicas returned to the exact
+baseline. The verifier does not inject a fault or initiate rollback.
+
+After a passed staging release, use the
+[staging edge-to-telemetry workflow](../../../docs/saas/staging-edge-telemetry.md)
+from the observability network (or an authorized API port-forward) to bind one
+fixed content-free readiness challenge to the exact passed release receipt.
+The real exported trace and signed operations review remain external evidence.

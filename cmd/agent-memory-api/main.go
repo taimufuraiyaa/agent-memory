@@ -36,6 +36,7 @@ import (
 	"github.com/taimufuraiyaa/agent-memory/internal/saas/runtime"
 	searchservice "github.com/taimufuraiyaa/agent-memory/internal/saas/search"
 	"github.com/taimufuraiyaa/agent-memory/internal/saas/security"
+	"github.com/taimufuraiyaa/agent-memory/internal/saas/semantic"
 	sourceservice "github.com/taimufuraiyaa/agent-memory/internal/saas/source"
 	"github.com/taimufuraiyaa/agent-memory/internal/saas/telemetry"
 )
@@ -140,49 +141,89 @@ func run(cfg config.Config) error {
 		return err
 	}
 	retrievalRepository := retrieval.NewPostgresRepository(pool)
-	sourceQueries, err := retrieval.NewService(retrievalRepository, searchservice.NewPostgresRepository(pool), gateway, nil)
+	semanticOptions, err := semanticRetrievalOptions(cfg)
+	if err != nil {
+		return err
+	}
+	sourceQueries, err := retrieval.NewService(retrievalRepository, searchservice.NewPostgresRepository(pool), gateway, nil, semanticOptions...)
 	if err != nil {
 		return err
 	}
 	memoryReviews := review.NewService(review.NewPostgresRepository(pool), nil)
 	billingRepository := billing.NewRepository(pool, nil)
 	hostedMemories := memory.NewService(memoryRepository, nil)
+	hostedMemorySearch := memory.NewSearchService(memory.NewPostgresSearchRepository(pool))
 	hostedWorkflows := memory.NewWorkflowService(memoryRepository, nil)
 	retentionRegistry := retention.NewRegistry(pool)
 	deletionRepository := deletion.NewPostgresRepository(pool, retentionRegistry)
 	launchControls := launch.NewService(pool, nil)
+	var localOwner *control.LocalOwnerService
+	if cfg.LocalOnboardingEnabled {
+		localOwner, err = control.NewLocalOwnerServiceWithInitializer(accounts, cfg.DevSubject, launchControls, nil)
+		if err != nil {
+			return fmt.Errorf("initialize local owner onboarding: %w", err)
+		}
+	}
 	sourceUploads.SetRolloutGate(launchControls)
 	handler, err := api.NewHandler(api.Dependencies{
 		Readiness: func(ctx context.Context) error {
 			return checkDependencies(ctx, pool, readinessObjects, queueConnection)
 		},
-		Authenticator:   requestAuthenticator,
-		Profiles:        profiles,
-		Memberships:     accounts,
-		Signup:          control.NewSignupServiceWithAdmission(accounts, launchControls, nil),
-		Attestations:    attestations,
-		Memories:        hostedMemories,
-		Credentials:     credentials,
-		Workflows:       hostedWorkflows,
-		Exports:         exports,
-		SourceUploads:   sourceUploads,
-		SourceCatalog:   sourceCatalog,
-		SourceQueries:   sourceQueries,
-		MemoryReviews:   memoryReviews,
-		Audit:           audit.NewService(pool, nil),
-		Deletions:       deletion.NewService(deletionRepository, nil, nil),
-		AccountDeletion: deletion.NewAccountService(pool, deletionRepository, retentionRegistry, nil),
-		SecurityGate:    security.NewGate(pool),
-		Privacy:         privacy.NewService(pool),
-		Billing:         billing.NewService(billingRepository),
-		Imports:         importer.NewService(pool, hostedMemories, hostedWorkflows, sourceUploads, attestations, billingRepository, nil),
-		CountryVerifier: launch.NewCountryVerifier(cfg.EdgeCountrySecret, nil),
-		Telemetry:       observer,
+		Authenticator:     requestAuthenticator,
+		Profiles:          profiles,
+		Memberships:       accounts,
+		Signup:            control.NewSignupServiceWithAdmission(accounts, launchControls, nil),
+		Attestations:      attestations,
+		Memories:          hostedMemories,
+		MemorySearch:      hostedMemorySearch,
+		Credentials:       credentials,
+		Workflows:         hostedWorkflows,
+		Exports:           exports,
+		SourceUploads:     sourceUploads,
+		SourceCatalog:     sourceCatalog,
+		SourceQueries:     sourceQueries,
+		MemoryReviews:     memoryReviews,
+		Audit:             audit.NewService(pool, nil),
+		Deletions:         deletion.NewService(deletionRepository, nil, nil),
+		AccountDeletion:   deletion.NewAccountService(pool, deletionRepository, retentionRegistry, nil),
+		SecurityGate:      security.NewGate(pool),
+		Privacy:           privacy.NewService(pool),
+		Billing:           billing.NewService(billingRepository),
+		Imports:           importer.NewService(pool, hostedMemories, hostedWorkflows, sourceUploads, attestations, billingRepository, nil),
+		CountryVerifier:   launch.NewCountryVerifier(cfg.EdgeCountrySecret, nil),
+		Telemetry:         observer,
+		LocalOwner:        localOwner,
+		LocalSessionToken: cfg.DevAuthToken,
 	})
 	if err != nil {
 		return err
 	}
 	return runtime.RunHTTP(cfg, handler)
+}
+
+func semanticRetrievalOptions(cfg config.Config) ([]retrieval.Option, error) {
+	options := []retrieval.Option{}
+	if cfg.QueryPlannerEnabled {
+		planner, err := semantic.NewHTTPPlanner(semantic.PlannerConfig{
+			Endpoint: cfg.QueryPlannerEndpoint, Model: cfg.QueryPlannerModel, APIKey: cfg.QueryPlannerAPIKey,
+			Timeout: cfg.QueryPlannerTimeout, AllowLoopback: true, AllowInstallationHost: true,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("configure local query planner: %w", err)
+		}
+		options = append(options, retrieval.WithQueryPlanner(planner))
+	}
+	if cfg.RerankerEnabled {
+		reranker, err := semantic.NewHTTPReranker(semantic.RerankerConfig{
+			Endpoint: cfg.RerankerEndpoint, Model: cfg.RerankerModel, APIKey: cfg.RerankerAPIKey,
+			Timeout: cfg.RerankerTimeout, AllowLoopback: true, AllowInstallationHost: true,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("configure local window reranker: %w", err)
+		}
+		options = append(options, retrieval.WithWindowReranker(reranker, cfg.RerankerMinRelevance))
+	}
+	return options, nil
 }
 
 func checkDependencies(ctx context.Context, database readinessPinger, objects readinessBucketChecker, queue readinessQueue) error {

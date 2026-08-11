@@ -172,6 +172,43 @@ func TestApprovalFileIdentityChangeIsRejected(t *testing.T) {
 	}
 }
 
+func TestDecodeStrictJSONFileRejectsPostOpenPathReplacement(t *testing.T) {
+	directory := t.TempDir()
+	path := directory + "/trust.json"
+	if err := os.WriteFile(path, []byte(`{"schema":"original"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var decoded struct {
+		Schema string `json:"schema"`
+	}
+	err := decodeStrictJSONFileWithHook(path, &decoded, func() {
+		if err := os.Rename(path, path+".old"); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(`{"schema":"replacement"}`), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if err == nil {
+		t.Fatal("a path replaced after open must fail closed")
+	}
+}
+
+func TestLoadApprovalsRejectsDirectoryMembershipChange(t *testing.T) {
+	now := time.Date(2026, 8, 6, 10, 0, 0, 0, time.UTC)
+	_, private, _ := ed25519.GenerateKey(rand.Reader)
+	directory := t.TempDir()
+	writeJSONFile(t, directory+"/approved.json", signApproval(t, private, approvalFixture(now, "security_review", "approved")))
+
+	_, err := loadApprovalsWithHook(directory, func() {
+		newer := approvalFixture(now.Add(time.Minute), "security_review", "rejected")
+		writeJSONFile(t, directory+"/rejected.json", signApproval(t, private, newer))
+	})
+	if err == nil {
+		t.Fatal("an approval added after the initial snapshot must fail closed")
+	}
+}
+
 func approvalFixture(issued time.Time, control, decision string) SignedApproval {
 	return SignedApproval{
 		Schema: ApprovalArtifactSchema, Gate: "private_beta", Control: control, Decision: decision,

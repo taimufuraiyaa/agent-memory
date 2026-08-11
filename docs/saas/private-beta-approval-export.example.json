@@ -1,0 +1,81 @@
+{
+  "schema": "agent-memory-private-beta-approval-export-input-v1",
+  "classification": "staging_external",
+  "environment": "staging",
+  "export_id": "private-beta-export-2026",
+  "review_id": "private-beta-review-2026",
+  "review_policy_version": "private-beta-policy-v1",
+  "inventory_id": "staging-inventory",
+  "inventory_receipt_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "plan_id": "staging-plan",
+  "plan_receipt_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "change_id": "staging-change",
+  "change_receipt_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "release_id": "staging-release",
+  "release_receipt_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "security_closure_review_id": "security-review",
+  "security_closure_receipt_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "alert_bundle_id": "alert-bundle",
+  "alert_receipt_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+  "blocker_review_id": "blocker-review",
+  "blocker_receipt_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+  "capacity_assessment_id": "capacity-assessment",
+  "capacity_receipt_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+  "supporting_evidence_manifest_sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+  "private_beta_evidence_bundle_sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+  "trust_bundle_sha256": "5555555555555555555555555555555555555555555555555555555555555555",
+  "approval_export_sha256": "6666666666666666666666666666666666666666666666666666666666666666",
+  "domain_review_sha256": "7777777777777777777777777777777777777777777777777777777777777777",
+  "exported_at": "2026-08-10T18:00:00Z",
+  "reviewed_at": "2026-08-10T18:30:00Z",
+  "generated_at": "2026-08-10T19:00:00Z",
+  "ready": true,
+  "checks": [
+    {
+      "id": "private_beta_prerequisite_receipts_ready",
+      "outcome": "passed",
+      "evidence_sha256": "8888888888888888888888888888888888888888888888888888888888888888"
+    },
+    {
+      "id": "private_beta_common_staging_release",
+      "outcome": "passed",
+      "evidence_sha256": "8888888888888888888888888888888888888888888888888888888888888888"
+    },
+    {
+      "id": "private_beta_evidence_bundle_derived",
+      "outcome": "passed",
+      "evidence_sha256": "8888888888888888888888888888888888888888888888888888888888888888"
+    },
+    {
+      "id": "private_beta_trust_bundle_valid",
+      "outcome": "passed",
+      "evidence_sha256": "8888888888888888888888888888888888888888888888888888888888888888"
+    },
+    {
+      "id": "private_beta_immutable_export_complete",
+      "outcome": "passed",
+      "evidence_sha256": "8888888888888888888888888888888888888888888888888888888888888888"
+    },
+    {
+      "id": "private_beta_required_approvals_verified",
+      "outcome": "passed",
+      "evidence_sha256": "8888888888888888888888888888888888888888888888888888888888888888"
+    },
+    {
+      "id": "private_beta_reviewed_evidence_bound",
+      "outcome": "passed",
+      "evidence_sha256": "8888888888888888888888888888888888888888888888888888888888888888"
+    },
+    {
+      "id": "private_beta_approvals_current",
+      "outcome": "passed",
+      "evidence_sha256": "8888888888888888888888888888888888888888888888888888888888888888"
+    },
+    {
+      "id": "private_beta_accountable_domain_review_complete",
+      "outcome": "passed",
+      "evidence_sha256": "8888888888888888888888888888888888888888888888888888888888888888"
+    }
+  ]
+}
+

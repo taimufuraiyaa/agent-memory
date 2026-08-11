@@ -19,6 +19,9 @@ func TestProxyReplacesTrustedHeadersAndPreservesCorrelation(t *testing.T) {
 		if got := r.Header.Get("X-Request-ID"); got != "request-123" {
 			t.Errorf("request ID = %q", got)
 		}
+		if got := r.Header.Get("X-Trace-ID"); got != "trace-123" {
+			t.Errorf("trace ID = %q", got)
+		}
 		country := r.Header.Get("X-Agent-Memory-Country")
 		if country != "VN" {
 			t.Errorf("country = %q", country)
@@ -37,6 +40,7 @@ func TestProxyReplacesTrustedHeadersAndPreservesCorrelation(t *testing.T) {
 	}
 	request := httptest.NewRequest(http.MethodGet, "/health/live", nil)
 	request.Header.Set("X-Request-ID", "request-123")
+	request.Header.Set("X-Trace-ID", "trace-123")
 	request.Header.Set("X-Agent-Memory-Country", "US")
 	request.Header.Set("X-Agent-Memory-Country-Timestamp", "1")
 	request.Header.Set("X-Agent-Memory-Country-Signature", "spoofed")
@@ -47,6 +51,9 @@ func TestProxyReplacesTrustedHeadersAndPreservesCorrelation(t *testing.T) {
 	}
 	if response.Header().Get("X-Request-ID") != "request-123" {
 		t.Fatalf("response request ID = %q", response.Header().Get("X-Request-ID"))
+	}
+	if response.Header().Get("X-Trace-ID") != "trace-123" {
+		t.Fatalf("response trace ID = %q", response.Header().Get("X-Trace-ID"))
 	}
 }
 
@@ -74,6 +81,28 @@ func TestProxyBlocksMetricsAndReportsContentFreeUpstreamFailure(t *testing.T) {
 	}
 	if strings.Contains(string(body), target.String()) {
 		t.Fatal("failure response disclosed upstream")
+	}
+}
+
+func TestProxyBlocksInternalEvidencePathsBeforeUpstream(t *testing.T) {
+	target, _ := url.Parse("http://api:8080")
+	called := false
+	handler, err := New(Config{Upstream: target, CountrySecret: "edge-country-signing-secret-32-bytes", DefaultCountry: "VN", Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		called = true
+		return &http.Response{StatusCode: http.StatusNoContent, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(""))}, nil
+	})})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{"/internal", "/internal/evidence/requests/request-123"} {
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
+		if response.Code != http.StatusNotFound {
+			t.Fatalf("path %s status=%d, want 404", path, response.Code)
+		}
+	}
+	if called {
+		t.Fatal("internal evidence path reached upstream")
 	}
 }
 

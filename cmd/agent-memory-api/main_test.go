@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/taimufuraiyaa/agent-memory/internal/saas/config"
 )
@@ -94,5 +95,19 @@ func TestCheckDependenciesRequiresDatabaseObjectBucketAndQueue(t *testing.T) {
 				t.Fatal("unhealthy dependencies reported ready")
 			}
 		})
+	}
+}
+
+func TestSemanticRetrievalOptionsEnableRolesIndependently(t *testing.T) {
+	options, err := semanticRetrievalOptions(config.Config{})
+	if err != nil || len(options) != 0 {
+		t.Fatalf("disabled semantic options=%d err=%v", len(options), err)
+	}
+	options, err = semanticRetrievalOptions(config.Config{
+		QueryPlannerEnabled: true, QueryPlannerEndpoint: "http://127.0.0.1:11434", QueryPlannerModel: "qwen3:8b", QueryPlannerTimeout: 8 * time.Second,
+		RerankerEnabled: true, RerankerEndpoint: "http://127.0.0.1:11435", RerankerModel: "qwen3-reranker:0.6b", RerankerTimeout: 8 * time.Second, RerankerMinRelevance: 0.5,
+	})
+	if err != nil || len(options) != 2 {
+		t.Fatalf("enabled semantic options=%d err=%v", len(options), err)
 	}
 }

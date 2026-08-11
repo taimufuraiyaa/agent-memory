@@ -1,20 +1,13 @@
-// Package dashboard serves the hosted source-custody user interface.
+// Package dashboard adapts the shared Agent Memory web application to the
+// hosted /dashboard/ route.
 package dashboard
 
 import (
-	"embed"
-	"io/fs"
 	"net/http"
+
+	shareddashboard "github.com/taimufuraiyaa/agent-memory/internal/api/dashboard"
 )
 
-//go:embed static/*
-var assets embed.FS
-
 func Handler() http.Handler {
-	contents, err := fs.Sub(assets, "static")
-	if err != nil {
-		panic(err)
-	}
-	files := http.FileServer(http.FS(contents))
-	return http.StripPrefix("/dashboard/", files)
+	return http.StripPrefix("/dashboard/", shareddashboard.GetEmbeddedHandler())
 }

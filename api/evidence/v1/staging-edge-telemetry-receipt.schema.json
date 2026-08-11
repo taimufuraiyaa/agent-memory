@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-memory.local/schemas/evidence/v1/staging-edge-telemetry-receipt.schema.json",
+  "title": "Agent Memory staging edge-to-telemetry receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "ready", "environment", "release_id", "release_receipt_sha256", "request_id", "trace_id", "started_at", "completed_at", "checks"],
+  "properties": {
+    "schema": {"const": "agent-memory-staging-edge-telemetry-receipt-v1"},
+    "ready": {"type": "boolean"},
+    "environment": {"const": "staging"},
+    "release_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"},
+    "release_receipt_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "request_id": {"type": "string", "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$"},
+    "trace_id": {"type": "string", "pattern": "^[a-f0-9]{32}$"},
+    "started_at": {"type": "string", "format": "date-time"},
+    "completed_at": {"type": "string", "format": "date-time"},
+    "checks": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "items": {"$ref": "#/$defs/check"},
+      "prefixItems": [
+        {"properties": {"id": {"const": "edge_response"}}},
+        {"properties": {"id": {"const": "api_correlation"}}},
+        {"properties": {"id": {"const": "telemetry_observation"}}}
+      ]
+    }
+  },
+  "$defs": {
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "outcome"],
+      "properties": {
+        "id": {"enum": ["edge_response", "api_correlation", "telemetry_observation"]},
+        "outcome": {"enum": ["passed", "failed"]}
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"ready": {"const": true}}, "required": ["ready"]},
+      "then": {
+        "properties": {
+          "checks": {
+            "prefixItems": [
+              {"properties": {"outcome": {"const": "passed"}}},
+              {"properties": {"outcome": {"const": "passed"}}},
+              {"properties": {"outcome": {"const": "passed"}}}
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

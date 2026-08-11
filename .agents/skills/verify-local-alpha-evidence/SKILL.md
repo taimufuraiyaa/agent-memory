@@ -79,6 +79,10 @@ description: Verify or restore the Agent Memory isolated local-alpha evidence bo
    - one deletion-lifecycle receipt containing exactly the fixed four-source
      and one-account outcome. It must be derived from the passed lifecycle
      receipt and contain no deletion operation IDs.
+   - the builder and verifier anchor all selected receipts to one opened,
+     non-symlink evidence root, snapshot every selected receipt before hashing,
+     and repeat that snapshot plus root-path identity validation before
+     success. Root or receipt replacement during traversal must fail closed.
 
 5. Confirm no isolated resources remain and the persistent stack is healthy:
 
@@ -123,10 +127,19 @@ description: Verify or restore the Agent Memory isolated local-alpha evidence bo
 - If profile restoration leaves the optional OIDC provider running, restore
   the ordinary Floci profile with orphan removal. The default persistent local
   profile uses development identity; local OIDC is opt-in rehearsal only.
+- If the lifecycle signup returns HTTP 403 on a fresh database, verify the
+  safe-default migration left `saas_launch_policy.signup_enabled=false` and
+  that the smoke explicitly performs its audited, invitation-only transition
+  for the singleton `internal_alpha` policy. Never change the migration default
+  or bypass launch admission to make the local gate pass.
 - If cleanup fails, resolve exact project and database names from `run_id`.
   Never broaden a cleanup target or operate on the default Compose project.
 - If manifest verification fails, treat the receipt as mutated. Do not rebuild
   the manifest over changed files; rerun the gate under a new run ID.
+- If a stable-root or selected-receipt snapshot check fails, preserve the
+  incomplete run for diagnosis and retry only after the producer has stopped
+  replacing the evidence directory or its receipts. Never auto-merge two run
+  generations into one manifest.
 
 ## Completion evidence
 

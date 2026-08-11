@@ -693,6 +693,20 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
   return env.data as T
 }
 
+export async function downloadPortableMigration(workspace: string, passphrase: string): Promise<Blob> {
+  const response = await fetch('/api/v1/migrations/portable-export', {
+    method: 'POST',
+    cache: 'no-store',
+    headers: { accept: 'application/octet-stream', 'content-type': 'application/json' },
+    body: JSON.stringify({ workspace, passphrase }),
+  })
+  if (!response.ok) {
+    const envelope = await response.json().catch(() => ({})) as { error?: { message?: string } }
+    throw new Error(envelope.error?.message || 'The encrypted migration bundle could not be created.')
+  }
+  return response.blob()
+}
+
 export function listProjects(): Promise<{ projects: ProjectListItem[] }> {
   return api('/api/v1/projects/list', { method: 'GET' })
 }

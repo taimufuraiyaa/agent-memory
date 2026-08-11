@@ -15,7 +15,7 @@ CREATE TABLE saas_launch_policy (
 );
 
 INSERT INTO saas_launch_policy(singleton,phase,signup_enabled,invitation_required,allowed_countries,minimum_age,account_cap,trial_days,source_cap,signup_rate_per_hour,abuse_rejection_limit,policy_version,updated_at)
-VALUES(true,'internal_alpha',true,true,ARRAY['VN'],18,100,30,5,10,5,'launch-v1',clock_timestamp());
+VALUES(true,'internal_alpha',false,true,ARRAY['VN'],18,100,30,5,10,5,'launch-v1',clock_timestamp());
 
 CREATE TABLE saas_launch_invitations (
     token_sha256 text PRIMARY KEY CHECK(length(token_sha256)=64),

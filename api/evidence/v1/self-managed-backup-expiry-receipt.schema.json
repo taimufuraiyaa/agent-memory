@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-memory.local/schemas/evidence/v1/self-managed-backup-expiry-receipt.schema.json",
+  "title": "Agent Memory normalized self-managed aged-backup expiry receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "classification", "environment", "drill_id", "backup_id", "inventory_id", "inventory_receipt_sha256", "change_id", "change_receipt_sha256", "retention_inventory_receipt_sha256", "policies_sha256", "input_sha256", "backup_policy_version", "backup_retention_seconds", "expiry_deadline_at", "elapsed_since_deletion_seconds", "ready", "generated_at", "collected_at", "timeline", "check_count", "passed_count", "failed_count", "checks"],
+  "properties": {
+    "schema": {"const": "agent-memory-self-managed-backup-expiry-receipt-v1"},
+    "classification": {"const": "self_managed_external"},
+    "environment": {"const": "production"},
+    "drill_id": {"$ref": "self-managed-backup-expiry-drill.schema.json#/$defs/opaque_id"},
+    "backup_id": {"$ref": "self-managed-backup-expiry-drill.schema.json#/$defs/opaque_id"},
+    "inventory_id": {"$ref": "self-managed-backup-expiry-drill.schema.json#/$defs/opaque_id"},
+    "inventory_receipt_sha256": {"$ref": "self-managed-backup-expiry-drill.schema.json#/$defs/digest"},
+    "change_id": {"$ref": "self-managed-backup-expiry-drill.schema.json#/$defs/opaque_id"},
+    "change_receipt_sha256": {"$ref": "self-managed-backup-expiry-drill.schema.json#/$defs/digest"},
+    "retention_inventory_receipt_sha256": {"$ref": "self-managed-backup-expiry-drill.schema.json#/$defs/digest"},
+    "policies_sha256": {"$ref": "self-managed-backup-expiry-drill.schema.json#/$defs/digest"},
+    "input_sha256": {"$ref": "self-managed-backup-expiry-drill.schema.json#/$defs/digest"},
+    "backup_policy_version": {"type": "string", "minLength": 1, "maxLength": 512},
+    "backup_retention_seconds": {"type": "integer", "minimum": 1},
+    "expiry_deadline_at": {"type": "string", "format": "date-time"},
+    "elapsed_since_deletion_seconds": {"type": "integer", "minimum": 1},
+    "ready": {"type": "boolean"},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "collected_at": {"type": "string", "format": "date-time"},
+    "timeline": {"$ref": "self-managed-backup-expiry-drill.schema.json#/$defs/timeline"},
+    "check_count": {"const": 7},
+    "passed_count": {"type": "integer", "minimum": 0, "maximum": 7},
+    "failed_count": {"type": "integer", "minimum": 0, "maximum": 7},
+    "checks": {
+      "type": "array",
+      "minItems": 7,
+      "maxItems": 7,
+      "items": {"$ref": "self-managed-backup-expiry-drill.schema.json#/$defs/check"}
+    }
+  }
+}

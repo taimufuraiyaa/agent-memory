@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-memory.local/schemas/self-managed-platform-inventory-v1.json",
+  "title": "Agent Memory self-managed platform inventory",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "environment",
+    "inventory_id",
+    "generated_at",
+    "administrative_domain_id",
+    "site_id",
+    "failure_domains",
+    "components",
+    "external_integrations"
+  ],
+  "properties": {
+    "schema": {"const": "agent-memory-self-managed-platform-inventory-v1"},
+    "environment": {"enum": ["staging", "production"]},
+    "inventory_id": {"$ref": "#/$defs/opaque_id"},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "administrative_domain_id": {"$ref": "#/$defs/opaque_id"},
+    "site_id": {"$ref": "#/$defs/opaque_id"},
+    "failure_domains": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 32,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id"],
+        "properties": {"id": {"$ref": "#/$defs/opaque_id"}}
+      }
+    },
+    "components": {
+      "type": "array",
+      "minItems": 8,
+      "maxItems": 8,
+      "items": {"$ref": "#/$defs/component"}
+    },
+    "external_integrations": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "items": {"$ref": "#/$defs/external_integration"}
+    }
+  },
+  "$defs": {
+    "opaque_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+    },
+    "owner_group": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{1,63}$"
+    },
+    "component": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "owner_group", "version", "replicas", "failure_domain_ids", "public_ingress"],
+      "properties": {
+        "kind": {"enum": ["kubernetes", "identity", "postgres", "object_storage", "queue", "secrets", "observability", "backup"]},
+        "owner_group": {"$ref": "#/$defs/owner_group"},
+        "version": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$"},
+        "replicas": {"type": "integer", "minimum": 1, "maximum": 99},
+        "failure_domain_ids": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/opaque_id"}
+        },
+        "public_ingress": {"type": "boolean"}
+      }
+    },
+    "external_integration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "enabled", "owner_group"],
+      "properties": {
+        "kind": {"enum": ["payment", "email", "model"]},
+        "enabled": {"type": "boolean"},
+        "owner_group": {"$ref": "#/$defs/owner_group"}
+      }
+    }
+  }
+}

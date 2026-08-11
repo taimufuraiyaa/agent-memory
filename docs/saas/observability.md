@@ -13,6 +13,14 @@ bytes, extracted text, prompts, model output, quotes, filenames, email addresses
 and object keys are prohibited. The telemetry API accepts operational metadata
 only, so content cannot be supplied accidentally.
 
+For staging evidence, API readiness also records a short-lived exact
+observation containing only request ID, trace ID, service, bounded operation,
+status, outcome, and timestamp. The in-memory cache is capped at 1,024 entries
+with a ten-minute TTL and is not a log or trace query service. Its fixed
+`/internal/evidence/requests/{request_id}` lookup is reachable only through the
+internal observability network; the customer edge rejects all `/internal` and
+`/metrics` paths. See [Staging edge-to-telemetry evidence](staging-edge-telemetry.md).
+
 Tenant IDs remain access-controlled operational identifiers. Production log
 access follows the operator-access workflow; applications must not use logs as a
 customer-content store. Default retention targets are 30 days for logs, 15 days

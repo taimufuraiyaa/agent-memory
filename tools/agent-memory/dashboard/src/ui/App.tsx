@@ -70,6 +70,7 @@ import { SkillsPanel } from './SkillsPanel'
 import { NotebookWorkspace } from './NotebookWorkspace'
 import { ClientsPanel } from './ClientsPanel'
 import { DeploymentPanel } from './DeploymentPanel'
+import { MigrationPanel } from './MigrationPanel'
 
 const notebookEnabled = (import.meta as ImportMeta & {
   env?: Record<string, string | undefined>
@@ -830,6 +831,7 @@ export function App() {
     { key: '08', label: 'Skills', surface: 'skills', open: () => { setSurface('skills'); setSelectedMemory(null) } },
     { key: '09', label: 'Clients', surface: 'clients', open: () => { setSurface('clients'); setSelectedMemory(null) } },
     { key: '10', label: 'Infrastructure', surface: 'deployment', open: () => { setSurface('deployment'); setSelectedMemory(null) } },
+    { key: '11', label: 'Migration', surface: 'migration', open: () => { setSurface('migration'); setSelectedMemory(null) } },
   ]
   const activeNavigationItem = navigationItems.find((item) => item.surface === surface) ?? navigationItems[0]
 
@@ -1051,6 +1053,8 @@ export function App() {
               {surface === 'clients' ? <ClientsPanel /> : null}
 
               {surface === 'deployment' ? <DeploymentPanel /> : null}
+
+              {surface === 'migration' ? <MigrationPanel workspace={workspace} /> : null}
 
               {surface === 'wiki' ? (
                 <WikiPanel

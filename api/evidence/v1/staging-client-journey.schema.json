@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-memory.local/schemas/evidence/v1/staging-client-journey.schema.json",
+  "title": "Agent Memory staging client journey input",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "classification", "environment", "release_id", "release_receipt_sha256", "client_kind", "ready", "trace_id", "started_at", "completed_at", "checks"],
+  "properties": {
+    "schema": {"const": "agent-memory-staging-client-journey-v1"},
+    "classification": {"const": "staging_external"},
+    "environment": {"const": "staging"},
+    "release_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"},
+    "release_receipt_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "client_kind": {"enum": ["human_web", "scoped_agent"]},
+    "ready": {"type": "boolean"},
+    "trace_id": {"type": "string", "pattern": "^[a-f0-9]{32}$"},
+    "started_at": {"type": "string", "format": "date-time"},
+    "completed_at": {"type": "string", "format": "date-time"},
+    "checks": {
+      "type": "array",
+      "minItems": 5,
+      "maxItems": 5,
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/check"},
+      "allOf": [
+        {"contains": {"properties": {"id": {"const": "identity_authenticated"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "memory_write_audited"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "memory_search_audited"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "export_ready_audited"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "client_cleanup"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1}
+      ]
+    }
+  },
+  "$defs": {
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "outcome", "request_id"],
+      "properties": {
+        "id": {"enum": ["identity_authenticated", "memory_write_audited", "memory_search_audited", "export_ready_audited", "client_cleanup"]},
+        "outcome": {"enum": ["passed", "failed"]},
+        "request_id": {"type": "string", "format": "uuid"}
+      }
+    }
+  }
+}

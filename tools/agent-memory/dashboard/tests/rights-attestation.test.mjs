@@ -25,7 +25,8 @@ test('confirmation uses separate unchecked required statements and refreshes ser
   assert.match(gateSource, /checked=\{acceptedStatementIDs\.has\(statement\.id\)\}/)
   assert.match(gateSource, /useState<Set<string>>\(new Set\(\)\)/)
   assert.match(gateSource, /acceptedStatementIDs\.size !== policy\.statements\.length/)
-  assert.match(gateSource, /await getRightsAttestationStatus\(\)/)
+  assert.match(gateSource, /await getStatus\(\)/)
+  assert.match(gateSource, /await accept\(/)
   assert.doesNotMatch(gateSource, /defaultChecked/)
 })
 

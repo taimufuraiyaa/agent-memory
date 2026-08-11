@@ -131,6 +131,47 @@ func TestPublicSignupRateLimitAndTenantFeatureFlag(t *testing.T) {
 	}
 }
 
+func TestInitializeLocalOwnerRepairsMissingLaunchControlsIdempotently(t *testing.T) {
+	url := strings.TrimSpace(os.Getenv("AGENT_MEMORY_TEST_POSTGRES_URL"))
+	if url == "" {
+		t.Skip("AGENT_MEMORY_TEST_POSTGRES_URL is not configured")
+	}
+	ctx := context.Background()
+	pool, err := saaspostgres.Open(ctx, url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pool.Close()
+	if err := saaspostgres.Apply(ctx, pool); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `TRUNCATE saas_accounts CASCADE; UPDATE saas_launch_policy SET phase='internal_alpha',source_cap=7,trial_days=30,updated_at=clock_timestamp()`); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 8, 11, 12, 0, 0, 0, time.UTC)
+	account, err := control.NewSignupService(control.NewPostgresStore(pool), func() time.Time { return now }).Signup(ctx, control.VerifiedIdentity{ExternalSubject: "local-owner", Email: "owner@example.test", EmailVerified: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(pool, func() time.Time { return now })
+	for range 2 {
+		if err := service.InitializeLocalOwner(ctx, account); err != nil {
+			t.Fatal(err)
+		}
+	}
+	enabled, err := service.FeatureEnabled(ctx, controlRequest(account), "source_upload")
+	if err != nil || !enabled {
+		t.Fatalf("source upload enabled=%v err=%v", enabled, err)
+	}
+	var controls, analytics int
+	if err := tenantQuery(ctx, pool, account.TenantID, `SELECT count(*) FROM saas_tenant_launch_controls WHERE tenant_id=$1`, account.TenantID).Scan(&controls); err != nil || controls != 1 {
+		t.Fatalf("launch controls=%d err=%v", controls, err)
+	}
+	if err := tenantQuery(ctx, pool, account.TenantID, `SELECT count(*) FROM saas_product_analytics WHERE tenant_id=$1 AND event_name='signup_completed'`, account.TenantID).Scan(&analytics); err != nil || analytics != 1 {
+		t.Fatalf("signup analytics=%d err=%v", analytics, err)
+	}
+}
+
 func controlRequest(account control.PersonalAccount) auth.RequestContext {
 	return auth.RequestContext{AccountID: account.AccountID, SubjectID: account.AccountID, TenantID: account.TenantID, Role: "owner", Capabilities: map[string]struct{}{"source:write": {}}, RequestID: "request", TraceID: "trace"}
 }

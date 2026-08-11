@@ -21,6 +21,7 @@ type providerFixture struct {
 	embedFailures   int
 	generateError   error
 	delay           time.Duration
+	ignoreContext   bool
 	calls           int
 }
 
@@ -35,10 +36,14 @@ func (p *providerFixture) EmbedBatch(ctx context.Context, texts []string) ([][]f
 	delay := p.delay
 	p.mu.Unlock()
 	if delay > 0 {
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case <-time.After(delay):
+		if p.ignoreContext {
+			time.Sleep(delay)
+		} else {
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(delay):
+			}
 		}
 	}
 	p.mu.Lock()
@@ -196,5 +201,28 @@ func TestGatewayTimesOutWithoutLoggingPromptsAndGenerationFallsBackToEvidence(t 
 	}
 	if strings.Contains(logs.String(), secret) || strings.Contains(logs.String(), "Citable evidence") {
 		t.Fatalf("model content entered logs: %s", logs.String())
+	}
+}
+
+func TestGatewayRejectsProviderSuccessAfterAttemptDeadline(t *testing.T) {
+	provider := &providerFixture{
+		name: "private-model", model: "model-v1", retention: "zero-retention",
+		dimension: 2, delay: 20 * time.Millisecond, ignoreContext: true,
+	}
+	gateway, err := New(Config{Providers: []Provider{provider}, Policies: []ProviderPolicy{{
+		Provider: "private-model", Models: []string{"model-v1"},
+		RetentionPolicies: []string{"zero-retention"}, MaxInputTokens: 100,
+		Timeout: time.Millisecond, FailureThreshold: 2, Cooldown: time.Minute,
+	}}}, &usageFixture{}, redactorFixture{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = gateway.Embed(context.Background(), EmbedRequest{
+		TenantID: "tenant", Provider: "private-model", Model: "model-v1",
+		Texts: []string{"late provider success"},
+	})
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("late provider success error=%v", err)
 	}
 }

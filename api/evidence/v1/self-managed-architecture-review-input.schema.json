@@ -1,0 +1,148 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-memory.local/schemas/evidence/v1/self-managed-architecture-review-input.schema.json",
+  "title": "Agent Memory self-managed architecture review input",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "classification", "environment", "review_id", "review_version", "inventory_id", "inventory_receipt_sha256", "topology_adr_manifest_sha256", "service_adr_manifest_sha256", "facility_inventory_sha256", "failure_domain_review_sha256", "data_flow_manifest_sha256", "integration_contract_manifest_sha256", "accountable_review_sha256", "reviewed_at", "generated_at", "ready", "facility_count", "reviewed_failure_domain_count", "independent_failure_domain_count", "components", "data_flows", "integrations", "checks"],
+  "properties": {
+    "schema": {"const": "agent-memory-self-managed-architecture-review-input-v1"},
+    "classification": {"const": "self_managed_external"},
+    "environment": {"enum": ["staging", "production"]},
+    "review_id": {"$ref": "#/$defs/opaque"},
+    "review_version": {"$ref": "#/$defs/opaque"},
+    "inventory_id": {"$ref": "#/$defs/opaque"},
+    "inventory_receipt_sha256": {"$ref": "#/$defs/digest"},
+    "topology_adr_manifest_sha256": {"$ref": "#/$defs/digest"},
+    "service_adr_manifest_sha256": {"$ref": "#/$defs/digest"},
+    "facility_inventory_sha256": {"$ref": "#/$defs/digest"},
+    "failure_domain_review_sha256": {"$ref": "#/$defs/digest"},
+    "data_flow_manifest_sha256": {"$ref": "#/$defs/digest"},
+    "integration_contract_manifest_sha256": {"$ref": "#/$defs/digest"},
+    "accountable_review_sha256": {"$ref": "#/$defs/digest"},
+    "reviewed_at": {"type": "string", "format": "date-time"},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "ready": {"type": "boolean"},
+    "facility_count": {"type": "integer", "minimum": 1, "maximum": 32},
+    "reviewed_failure_domain_count": {"type": "integer", "minimum": 1, "maximum": 32},
+    "independent_failure_domain_count": {"type": "integer", "minimum": 1, "maximum": 32},
+    "components": {"$ref": "#/$defs/components"},
+    "data_flows": {"$ref": "#/$defs/data_flows"},
+    "integrations": {"$ref": "#/$defs/integrations"},
+    "checks": {"$ref": "#/$defs/checks"}
+  },
+  "$defs": {
+    "opaque": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:+-]{0,127}$"},
+    "digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "outcome": {"enum": ["passed", "failed", "inconclusive"]},
+    "domain": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "outcome", "evidence_sha256"],
+      "properties": {
+        "id": {"enum": ["ownership", "custody", "capacity", "failure_isolation", "cost", "incident_response"]},
+        "outcome": {"$ref": "#/$defs/outcome"},
+        "evidence_sha256": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "domains": {
+      "type": "array", "minItems": 6, "maxItems": 6, "uniqueItems": true, "items": {"$ref": "#/$defs/domain"},
+      "allOf": [
+        {"contains": {"properties": {"id": {"const": "ownership"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "custody"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "capacity"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "failure_isolation"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "cost"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "incident_response"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1}
+      ]
+    },
+    "component": {
+      "type": "object", "additionalProperties": false,
+      "required": ["kind", "declared_failure_domain_count", "service_adr_sha256", "outcome", "domains"],
+      "properties": {
+        "kind": {"enum": ["kubernetes", "identity", "postgres", "object_storage", "queue", "secrets", "observability", "backup"]},
+        "declared_failure_domain_count": {"type": "integer", "minimum": 1, "maximum": 32},
+        "service_adr_sha256": {"$ref": "#/$defs/digest"},
+        "outcome": {"$ref": "#/$defs/outcome"},
+        "domains": {"$ref": "#/$defs/domains"}
+      }
+    },
+    "components": {
+      "type": "array", "minItems": 8, "maxItems": 8, "uniqueItems": true, "items": {"$ref": "#/$defs/component"},
+      "allOf": [
+        {"contains": {"properties": {"kind": {"const": "kubernetes"}}, "required": ["kind"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"kind": {"const": "identity"}}, "required": ["kind"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"kind": {"const": "postgres"}}, "required": ["kind"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"kind": {"const": "object_storage"}}, "required": ["kind"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"kind": {"const": "queue"}}, "required": ["kind"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"kind": {"const": "secrets"}}, "required": ["kind"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"kind": {"const": "observability"}}, "required": ["kind"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"kind": {"const": "backup"}}, "required": ["kind"]}, "minContains": 1, "maxContains": 1}
+      ]
+    },
+    "data_flow": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "outcome", "evidence_sha256"],
+      "properties": {
+        "id": {"enum": ["edge_identity", "source_ingestion", "authoritative_storage", "asynchronous_processing", "retrieval_model_routing", "audit_export", "deletion_backup", "external_integrations"]},
+        "outcome": {"$ref": "#/$defs/outcome"},
+        "evidence_sha256": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "data_flows": {
+      "type": "array", "minItems": 8, "maxItems": 8, "uniqueItems": true, "items": {"$ref": "#/$defs/data_flow"},
+      "allOf": [
+        {"contains": {"properties": {"id": {"const": "edge_identity"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "source_ingestion"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "authoritative_storage"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "asynchronous_processing"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "retrieval_model_routing"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "audit_export"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "deletion_backup"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "external_integrations"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1}
+      ]
+    },
+    "integration": {
+      "type": "object", "additionalProperties": false,
+      "required": ["kind", "enabled", "disposition", "outcome", "evidence_sha256"],
+      "properties": {
+        "kind": {"enum": ["payment", "email", "model"]},
+        "enabled": {"type": "boolean"},
+        "disposition": {"enum": ["approved_contract", "disabled_decision"]},
+        "outcome": {"$ref": "#/$defs/outcome"},
+        "evidence_sha256": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "integrations": {
+      "type": "array", "minItems": 3, "maxItems": 3, "uniqueItems": true, "items": {"$ref": "#/$defs/integration"},
+      "allOf": [
+        {"contains": {"properties": {"kind": {"const": "payment"}}, "required": ["kind"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"kind": {"const": "email"}}, "required": ["kind"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"kind": {"const": "model"}}, "required": ["kind"]}, "minContains": 1, "maxContains": 1}
+      ]
+    },
+    "check": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "outcome", "evidence_sha256"],
+      "properties": {
+        "id": {"enum": ["inventory_binding_verified", "component_review_coverage_complete", "ownership_review_passed", "custody_review_passed", "capacity_cost_review_passed", "failure_isolation_review_passed", "incident_response_review_passed", "data_flow_review_passed", "integration_contract_review_passed", "architecture_security_privacy_operations_review_complete"]},
+        "outcome": {"$ref": "#/$defs/outcome"},
+        "evidence_sha256": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "checks": {
+      "type": "array", "minItems": 10, "maxItems": 10, "uniqueItems": true, "items": {"$ref": "#/$defs/check"},
+      "allOf": [
+        {"contains": {"properties": {"id": {"const": "inventory_binding_verified"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "component_review_coverage_complete"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "ownership_review_passed"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "custody_review_passed"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "capacity_cost_review_passed"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "failure_isolation_review_passed"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "incident_response_review_passed"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "data_flow_review_passed"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "integration_contract_review_passed"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "architecture_security_privacy_operations_review_complete"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1}
+      ]
+    }
+  }
+}

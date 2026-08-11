@@ -3,10 +3,10 @@ import readline from "node:readline";
 import { randomUUID } from "node:crypto";
 
 const protocolVersion = "2025-03-26";
-const serviceURL = (process.env.AGENT_MEMORY_URL || "http://127.0.0.1:3210").replace(/\/$/, "");
+const serviceURL = (process.env.AGENT_MEMORY_API_URL || process.env.AGENT_MEMORY_URL || "http://127.0.0.1:3210").replace(/\/$/, "");
 const serviceMode = process.env.AGENT_MEMORY_MODE || "local";
 const hostedToken = process.env.AGENT_MEMORY_TOKEN || "";
-const hostedTenant = process.env.AGENT_MEMORY_TENANT || "";
+const hostedTenant = process.env.AGENT_MEMORY_TENANT_ID || process.env.AGENT_MEMORY_TENANT || "";
 const maxResponseBytes = Number(process.env.AGENT_MEMORY_MCP_MAX_RESPONSE_BYTES || 262144);
 const clientID = process.env.AGENT_MEMORY_CLIENT_ID || "";
 const legacyProfile = process.env.AGENT_MEMORY_MCP_PROFILE || "default";
@@ -78,6 +78,7 @@ const allTools = [
     query: { type: "string" },
     workspace: { type: "string" },
     top_k: { type: "integer", minimum: 1, maximum: 200 },
+    cursor: { type: "string", maxLength: 2048 },
     format: { type: "string", enum: ["compact", "full"] },
     source_ids: { type: "array", items: { type: "string" } },
   }, ["query"]),
@@ -209,7 +210,18 @@ async function callTool(name, args) {
       return requestService("/api/v1/memories/write", { body: { ...args, type: args.type || "semantic" } });
     case "memory_search": {
       if (serviceMode === "hosted") {
-        if (!args.source_ids?.length) throw new Error("source_ids are required in hosted mode");
+        if (args.workspace) {
+          const body = { workspace_id: args.workspace, query: args.query };
+          if (args.top_k !== undefined) body.limit = args.top_k;
+          if (args.cursor) body.cursor = args.cursor;
+          const data = await requestService("/v1/search", { body });
+          if (args.format === "full") return data;
+          return {
+            results: (data.items || []).map(({ id, type, content, score }) => ({ id, type, content, score })),
+            ...(data.next_cursor ? { next_cursor: data.next_cursor } : {}),
+          };
+        }
+        if (!args.source_ids?.length) throw new Error("workspace or source_ids are required in hosted mode");
         const data = await requestService("/v1/source-queries", { body: { source_ids: args.source_ids, query: args.query, limit: args.top_k, provider: "local-minilm-scaffold", model: "local-hash-v1" } });
         return args.format === "full" ? data : { request_id: data.request_id, results: (data.evidence || []).map(({ passage_id: id, text: content, score, citation_id }) => ({ id, type: "source_passage", content, score, citation_id })) };
       }

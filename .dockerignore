@@ -12,6 +12,8 @@ node_modules
 **/node_modules
 **/.build
 **/dist
+!internal/api/dashboard/dist
+!internal/api/dashboard/dist/**
 agent-memory
 search_upgrade_results.json
 tools/agent-memory/dashboard/node_modules

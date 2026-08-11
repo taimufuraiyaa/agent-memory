@@ -182,6 +182,7 @@ func TestHostedHTTPFlowIsAuthenticatedAndTenantIsolated(t *testing.T) {
 	deletionRegistry := retention.NewRegistry(pool)
 	deletionRepository := deletion.NewPostgresRepository(pool, deletionRegistry)
 	hostedMemories := memory.NewService(memoryRepository, nil)
+	hostedMemorySearch := memory.NewSearchService(memory.NewPostgresSearchRepository(pool))
 	hostedWorkflows := memory.NewWorkflowService(memoryRepository, nil)
 	billingRepository := billing.NewRepository(pool, nil)
 	handler, err := NewHandler(Dependencies{
@@ -190,6 +191,7 @@ func TestHostedHTTPFlowIsAuthenticatedAndTenantIsolated(t *testing.T) {
 		Signup:          control.NewSignupService(accounts, nil),
 		Attestations:    attestations,
 		Memories:        hostedMemories,
+		MemorySearch:    hostedMemorySearch,
 		Credentials:     credentials,
 		Workflows:       hostedWorkflows,
 		Exports:         exports,
@@ -351,7 +353,7 @@ func TestHostedHTTPFlowIsAuthenticatedAndTenantIsolated(t *testing.T) {
 	}
 
 	response = requestHTTP(t, server.URL+"/v1/credentials", "token-one", one.TenantID, "POST", map[string]any{
-		"label": "test agent", "scopes": []string{"memory:write"}, "expires_at": time.Now().UTC().Add(time.Hour),
+		"label": "test agent", "scopes": []string{"memory:read", "memory:write"}, "expires_at": time.Now().UTC().Add(time.Hour),
 	}, nil)
 	if response.StatusCode != http.StatusCreated {
 		t.Fatalf("credential creation status = %d, body=%s", response.StatusCode, readBody(response))
@@ -372,6 +374,22 @@ func TestHostedHTTPFlowIsAuthenticatedAndTenantIsolated(t *testing.T) {
 		t.Fatalf("agent credential write status = %d, body=%s", response.StatusCode, readBody(response))
 	}
 	_ = response.Body.Close()
+	response = requestHTTP(t, server.URL+"/v1/search", issuedEnvelope.Data.Secret, one.TenantID, "POST", map[string]any{
+		"workspace_id": one.WorkspaceID, "query": "scoped agent", "limit": 10,
+	}, nil)
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("agent credential search status=%d body=%s", response.StatusCode, readBody(response))
+	}
+	var agentSearch struct {
+		Data memory.SearchResult `json:"data"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&agentSearch); err != nil {
+		t.Fatal(err)
+	}
+	_ = response.Body.Close()
+	if len(agentSearch.Data.Items) != 1 || agentSearch.Data.Items[0].Content != "A scoped agent fact." {
+		t.Fatalf("agent search=%+v", agentSearch.Data)
+	}
 	response = requestHTTP(t, server.URL+"/v1/current-credential", issuedEnvelope.Data.Secret, one.TenantID, "DELETE", nil, nil)
 	if response.StatusCode != http.StatusOK {
 		t.Fatalf("agent credential self-revoke status=%d body=%s", response.StatusCode, readBody(response))
@@ -391,6 +409,29 @@ func TestHostedHTTPFlowIsAuthenticatedAndTenantIsolated(t *testing.T) {
 	}, map[string]string{"Idempotency-Key": "memory-write-key-0001"})
 	if response.StatusCode != http.StatusCreated {
 		t.Fatalf("memory write status = %d, body=%s", response.StatusCode, readBody(response))
+	}
+	_ = response.Body.Close()
+	response = requestHTTP(t, server.URL+"/v1/search", "token-one", one.TenantID, "POST", map[string]any{
+		"workspace_id": one.WorkspaceID, "query": "tenant-private", "limit": 10,
+	}, nil)
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("human search status=%d body=%s", response.StatusCode, readBody(response))
+	}
+	var humanSearch struct {
+		Data memory.SearchResult `json:"data"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&humanSearch); err != nil {
+		t.Fatal(err)
+	}
+	_ = response.Body.Close()
+	if len(humanSearch.Data.Items) != 1 || humanSearch.Data.Items[0].Content != "A tenant-private fact." {
+		t.Fatalf("human search=%+v", humanSearch.Data)
+	}
+	response = requestHTTP(t, server.URL+"/v1/search", "token-one", one.TenantID, "POST", map[string]any{
+		"workspace_id": two.WorkspaceID, "query": "fact",
+	}, nil)
+	if response.StatusCode != http.StatusNotFound {
+		t.Fatalf("cross-tenant search status=%d body=%s", response.StatusCode, readBody(response))
 	}
 	_ = response.Body.Close()
 
@@ -584,6 +625,19 @@ func TestHostedHTTPFlowIsAuthenticatedAndTenantIsolated(t *testing.T) {
 		t.Fatalf("cross-tenant workspace status = %d, want 404; body=%s", response.StatusCode, readBody(response))
 	}
 	_ = response.Body.Close()
+
+	var searchAudits, agentSearchAudits int
+	var searchMetadataLeaked bool
+	if err := pool.QueryRow(ctx, `SELECT
+		count(*) FILTER (WHERE operation='memory.search'),
+		count(*) FILTER (WHERE operation='memory.search' AND actor_type='agent_credential'),
+		bool_or(operation='memory.search' AND (safe_metadata::text LIKE '%scoped agent%' OR safe_metadata::text LIKE '%tenant-private%'))
+		FROM saas_audit_events WHERE tenant_id=$1`, one.TenantID).Scan(&searchAudits, &agentSearchAudits, &searchMetadataLeaked); err != nil {
+		t.Fatal(err)
+	}
+	if searchAudits != 2 || agentSearchAudits != 1 || searchMetadataLeaked {
+		t.Fatalf("search audits=%d agent=%d leaked=%v", searchAudits, agentSearchAudits, searchMetadataLeaked)
+	}
 }
 
 func signupHTTP(t *testing.T, baseURL, token string) control.PersonalAccount {

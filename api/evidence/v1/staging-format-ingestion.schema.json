@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-memory.local/schemas/evidence/v1/staging-format-ingestion.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "classification", "environment", "release_id", "release_receipt_sha256", "ready", "generated_at", "runs"],
+  "properties": {
+    "schema": {"const": "agent-memory-staging-format-ingestion-v1"},
+    "classification": {"const": "staging_external"},
+    "environment": {"const": "staging"},
+    "release_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"},
+    "release_receipt_sha256": {"$ref": "#/$defs/digest"},
+    "ready": {"type": "boolean"},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "runs": {"$ref": "#/$defs/runs"}
+  },
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "uuid_v4": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},
+    "projection": {
+      "type": "object", "additionalProperties": false,
+      "required": ["version", "document_count", "receipt_sha256"],
+      "properties": {
+        "version": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$"},
+        "document_count": {"type": "integer", "minimum": 0, "maximum": 10000000},
+        "receipt_sha256": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "check": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "outcome", "evidence_sha256"],
+      "properties": {
+        "id": {"enum": ["upload_accepted", "source_version_published", "ingestion_job_succeeded", "fulltext_projection_ready", "vector_projection_ready", "source_ready", "source_deleted"]},
+        "outcome": {"enum": ["passed", "failed"]},
+        "evidence_sha256": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "checks": {
+      "type": "array", "minItems": 7, "maxItems": 7, "uniqueItems": true,
+      "items": {"$ref": "#/$defs/check"},
+      "allOf": [
+        {"contains": {"properties": {"id": {"const": "upload_accepted"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "source_version_published"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "ingestion_job_succeeded"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "fulltext_projection_ready"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "vector_projection_ready"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "source_ready"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "source_deleted"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1}
+      ]
+    },
+    "run": {
+      "type": "object", "additionalProperties": false,
+      "required": ["format", "media_type", "source_id", "source_version", "source_version_receipt_sha256", "ingestion_job_id", "ingestion_job_receipt_sha256", "trace_id", "started_at", "completed_at", "ready", "fulltext_projection", "vector_projection", "checks"],
+      "properties": {
+        "format": {"enum": ["pdf", "epub", "markdown", "text"]},
+        "media_type": {"enum": ["application/pdf", "application/epub+zip", "text/markdown", "text/plain"]},
+        "source_id": {"$ref": "#/$defs/uuid_v4"},
+        "source_version": {"type": "integer", "minimum": 1},
+        "source_version_receipt_sha256": {"$ref": "#/$defs/digest"},
+        "ingestion_job_id": {"$ref": "#/$defs/uuid_v4"},
+        "ingestion_job_receipt_sha256": {"$ref": "#/$defs/digest"},
+        "trace_id": {"type": "string", "pattern": "^[a-f0-9]{32}$"},
+        "started_at": {"type": "string", "format": "date-time"},
+        "completed_at": {"type": "string", "format": "date-time"},
+        "ready": {"type": "boolean"},
+        "fulltext_projection": {"$ref": "#/$defs/projection"},
+        "vector_projection": {"$ref": "#/$defs/projection"},
+        "checks": {"$ref": "#/$defs/checks"}
+      }
+    },
+    "runs": {
+      "type": "array", "minItems": 4, "maxItems": 4, "uniqueItems": true,
+      "items": {"$ref": "#/$defs/run"},
+      "allOf": [
+        {"contains": {"properties": {"format": {"const": "pdf"}, "media_type": {"const": "application/pdf"}}, "required": ["format", "media_type"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"format": {"const": "epub"}, "media_type": {"const": "application/epub+zip"}}, "required": ["format", "media_type"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"format": {"const": "markdown"}, "media_type": {"const": "text/markdown"}}, "required": ["format", "media_type"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"format": {"const": "text"}, "media_type": {"const": "text/plain"}}, "required": ["format", "media_type"]}, "minContains": 1, "maxContains": 1}
+      ]
+    }
+  }
+}

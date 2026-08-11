@@ -7,6 +7,9 @@ smoke_script="$repo_dir/scripts/saas-upload-smoke.sh"
 bash -n "$smoke_script"
 
 required_contracts=(
+  "reason_code = 'isolated_local_smoke'"
+  'signup_enabled = true'
+  "phase = 'internal_alpha'"
   'application/pdf'
   'application/epub+zip'
   'text/markdown'
@@ -14,6 +17,10 @@ required_contracts=(
   '/v1/source-queries'
   '/v1/memory-proposals'
   '/v1/exports'
+  '/v1/imports'
+  '--export-format portable'
+  'portable_retry_response'
+  'local_bundle_hash_before'
   '/v1/attestations/rights'
   'DELETE "$api_url/v1/sources/'
   'DELETE "$api_url/v1/account"'

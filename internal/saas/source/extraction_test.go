@@ -84,7 +84,7 @@ func TestExtractionWorkerPortsEveryRetainedFormatWithDurableProvenance(t *testin
 		{name: "markdown", media: "text/markdown", content: []byte("# Chapter\nA cited paragraph."), parser: ParserMarkdownV1},
 		{name: "text", media: "text/plain", content: []byte("A plain text document with provenance."), parser: ParserTextV1},
 		{name: "epub", media: "application/epub+zip", content: extractionEPUB(t), parser: ParserEPUBV1},
-		{name: "pdf", media: "application/pdf", content: extractionPDF("A positioned PDF sentence."), parser: ParserPDFNativeV1},
+		{name: "pdf", media: "application/pdf", content: extractionPDF("A positioned PDF sentence."), parser: ParserPDFNativeV2},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -120,6 +120,12 @@ func TestExtractionWorkerRejectsCrossTenantCapabilityAndPublishesNothing(t *test
 	count, err := processor.ProcessOnce(context.Background())
 	if err == nil || count != 0 || len(repo.published) != 0 || repo.failedCode != "source_unavailable" {
 		t.Fatalf("count=%d published=%d code=%q err=%v", count, len(repo.published), repo.failedCode, err)
+	}
+}
+
+func TestExtractionErrorCodeClassifiesUntrustworthyPDFText(t *testing.T) {
+	if code := extractionErrorCode(ingestion.ErrPDFTextUntrustworthy); code != "pdf_text_unreadable" {
+		t.Fatalf("code=%q", code)
 	}
 }
 

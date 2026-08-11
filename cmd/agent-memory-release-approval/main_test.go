@@ -133,3 +133,49 @@ func TestSignerFileIdentityChangeIsRejected(t *testing.T) {
 		t.Fatal("a key replaced between path validation and open must fail closed")
 	}
 }
+
+func TestLoadPrivateKeyRejectsPostOpenPathReplacement(t *testing.T) {
+	directory := t.TempDir()
+	path := filepath.Join(directory, "owner-key.pem")
+	_, private, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	der, err := x509.MarshalPKCS8PrivateKey(private)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der}), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, err = loadPrivateKeyWithHook(path, func() {
+		if err := os.Rename(path, path+".old"); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der}), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if err == nil {
+		t.Fatal("a private-key path replaced after open must fail closed")
+	}
+}
+
+func TestHashRegularFileRejectsPostOpenPathReplacement(t *testing.T) {
+	directory := t.TempDir()
+	path := filepath.Join(directory, "review.txt")
+	if err := os.WriteFile(path, []byte("original review"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := hashRegularFileWithHook(path, func() {
+		if err := os.Rename(path, path+".old"); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte("replacement review"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if err == nil {
+		t.Fatal("an evidence path replaced after open must fail closed")
+	}
+}

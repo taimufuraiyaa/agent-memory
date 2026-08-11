@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -86,5 +87,12 @@ func TestCatalogRetryRequiresWriteCapabilityAndRetainedRetryableOriginal(t *test
 	}
 	if _, err := service.Get(writer, "other-tenant-id"); !errors.Is(err, auth.ErrTenantUnavailable) {
 		t.Fatalf("missing source error=%v", err)
+	}
+}
+
+func TestSafeFailureExplainsUnreadablePDFTextAndRetainedRetry(t *testing.T) {
+	failure := safeFailure("pdf_text_unreadable", true)
+	if !failure.RetryAllowed || failure.Code != "pdf_text_unreadable" || !strings.Contains(strings.ToLower(failure.Message+" "+failure.Action), "text") {
+		t.Fatalf("failure=%+v", failure)
 	}
 }

@@ -1,0 +1,40 @@
+{
+  "schema": "agent-memory-self-managed-postgres-restore-drill-v1",
+  "classification": "self_managed_external",
+  "environment": "staging",
+  "drill_id": "replace-with-restore-drill-id",
+  "inventory_id": "replace-with-inventory-id",
+  "inventory_receipt_sha256": "ff99aee26afbd65d252f7ddbcc101f4b8a397ac946c92e5d129cce908bd97ade",
+  "change_id": "replace-with-change-id",
+  "change_receipt_sha256": "30af5d375f69c81d1ddb47d9436f1027e253c1e6b912f378a52832899e54cb9b",
+  "ready": true,
+  "generated_at": "2026-08-10T06:00:00Z",
+  "backup": {
+    "backup_id": "replace-with-backup-id",
+    "created_at": "2026-08-10T04:30:00Z",
+    "verified_at": "2026-08-10T04:35:00Z",
+    "manifest_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "verification_output_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+  },
+  "timeline": {
+    "impairment_started_at": "2026-08-10T05:00:00Z",
+    "recovery_point_at": "2026-08-10T04:58:00Z",
+    "restore_started_at": "2026-08-10T05:05:00Z",
+    "restore_completed_at": "2026-08-10T05:20:00Z",
+    "reconciliation_completed_at": "2026-08-10T05:30:00Z",
+    "service_ready_at": "2026-08-10T05:40:00Z",
+    "restore_target_disposed_at": "2026-08-10T05:45:00Z"
+  },
+  "checks": [
+    {"id": "backup_integrity", "outcome": "passed", "evidence_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"},
+    {"id": "restore_completed", "outcome": "passed", "evidence_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"},
+    {"id": "schema_migrations_match", "outcome": "passed", "evidence_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"},
+    {"id": "tenant_counts_match", "outcome": "passed", "evidence_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"},
+    {"id": "authoritative_rows_match", "outcome": "passed", "evidence_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"},
+    {"id": "outbox_reconciled", "outcome": "passed", "evidence_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"},
+    {"id": "audit_chain_verified", "outcome": "passed", "evidence_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"},
+    {"id": "deletion_tombstones_replayed", "outcome": "passed", "evidence_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"},
+    {"id": "deleted_data_absent", "outcome": "passed", "evidence_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"},
+    {"id": "restore_target_disposed", "outcome": "passed", "evidence_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"}
+  ]
+}

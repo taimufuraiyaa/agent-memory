@@ -51,6 +51,13 @@ func TestPostgresRetrievalAppliesTenantAuthorizationAndDurableFeedback(t *testin
 	if err != nil || len(hydrated) != 1 || hydrated[0].SourceID != oneSource {
 		t.Fatalf("reauthorized hydration=%+v err=%v", hydrated, err)
 	}
+	expanded, err := repository.ContextByAnchors(ctx, one.TenantID, []string{oneSource}, []ContextAnchor{
+		{SourceID: oneSource, SourceVersion: 1, StructuralNodeID: "node", PassageID: "shared-passage"},
+		{SourceID: twoSource, SourceVersion: 1, StructuralNodeID: "node", PassageID: "shared-passage"},
+	})
+	if err != nil || len(expanded) != 1 || expanded[0].SourceID != oneSource || expanded[0].PassageID != "shared-passage" {
+		t.Fatalf("authorized context expansion=%+v err=%v", expanded, err)
+	}
 	if err := repository.RecordPassageFeedback(ctx, one.TenantID, EvidenceKey{SourceID: oneSource, PassageID: "shared-passage"}, 1, "helpful", one.AccountID, uuid.NewString(), now); err != nil {
 		t.Fatal(err)
 	}

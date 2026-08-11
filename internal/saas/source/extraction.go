@@ -19,6 +19,7 @@ const (
 	ParserTextV1          = "text-v1"
 	ParserEPUBV1          = "epub-v1"
 	ParserPDFNativeV1     = "pdf-native-v1"
+	ParserPDFNativeV2     = "pdf-native-poppler-fallback-v2"
 	NormalizationTextV1   = "unicode-text-v1"
 	extractionLeasePeriod = 5 * time.Minute
 )
@@ -63,7 +64,7 @@ func NewExtractionProcessor(repository ExtractionRepository, vault TenantVaultRe
 		ingestion.MarkdownBookExtractor{Adapter: ingestion.MarkdownAdapter{ParserVersion: ParserMarkdownV1, NormalizationVersion: NormalizationTextV1}},
 		ingestion.MarkdownBookExtractor{Adapter: ingestion.MarkdownAdapter{ParserVersion: ParserTextV1, NormalizationVersion: NormalizationTextV1}, AsText: true},
 		ingestion.EPUBBookExtractor{Adapter: ingestion.EPUBAdapter{ParserVersion: ParserEPUBV1, NormalizationVersion: NormalizationTextV1}},
-		ingestion.PDFBookExtractor{Adapter: ingestion.PDFAdapter{ParserVersion: ParserPDFNativeV1, NormalizationVersion: NormalizationTextV1, Extractor: ingestion.NativePDFExtractor{}}},
+		ingestion.PDFBookExtractor{Adapter: ingestion.PDFAdapter{ParserVersion: ParserPDFNativeV2, NormalizationVersion: NormalizationTextV1, Extractor: ingestion.ReliablePDFExtractor{Primary: ingestion.NativePDFExtractor{}, Fallback: ingestion.PopplerPDFExtractor{}}}},
 	}
 	byFormat := make(map[library.SourceFormat]ingestion.BookExtractor, len(extractors))
 	for _, extractor := range extractors {
@@ -203,6 +204,9 @@ func validateExtraction(editionID, sourceID string, extraction ingestion.BookExt
 func extractionErrorCode(err error) string {
 	if err == nil {
 		return ""
+	}
+	if errors.Is(err, ingestion.ErrPDFTextUntrustworthy) {
+		return "pdf_text_unreadable"
 	}
 	message := err.Error()
 	switch {

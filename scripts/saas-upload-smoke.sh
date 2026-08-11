@@ -19,7 +19,7 @@ if [[ -n "$compose_project" ]]; then
 fi
 compose+=(-f "$compose_file")
 
-for command in curl jq openssl shasum docker zip; do
+for command in curl jq openssl shasum docker zip go; do
   command -v "$command" >/dev/null
 done
 
@@ -36,6 +36,22 @@ INSERT INTO saas_launch_invitations(
   clock_timestamp()+interval '1 hour','local-smoke',clock_timestamp()
 ) ON CONFLICT(token_sha256) DO UPDATE
 SET state='active',expires_at=EXCLUDED.expires_at,max_uses=100;
+
+DO $$
+BEGIN
+  UPDATE saas_launch_policy
+  SET signup_enabled = true,
+      invitation_required = true,
+      updated_by = 'local-smoke',
+      reason_code = 'isolated_local_smoke',
+      updated_at = clock_timestamp()
+  WHERE singleton = true
+    AND phase = 'internal_alpha';
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'isolated local smoke requires the internal-alpha launch policy';
+  END IF;
+END
+$$;
 SQL
 
 timestamp="$(date +%s)"
@@ -61,6 +77,37 @@ cleanup() {
   rm -rf -- "$fixture_dir"
 }
 trap cleanup EXIT
+
+portable_db="$fixture_dir/portable.db"
+portable_bundle="$fixture_dir/standalone.ampb2"
+portable_passphrase='local portable smoke passphrase'
+(cd "$repo_dir" && go run ./cmd/agent-memory write \
+  --workspace portable-smoke --db "$portable_db" --type semantic \
+  --content 'Portable migration smoke memory.' >/dev/null)
+printf '%s\n' "$portable_passphrase" | (cd "$repo_dir" && go run ./cmd/agent-memory export \
+  --workspace portable-smoke --db "$portable_db" --export-format portable \
+  --out "$portable_bundle" --passphrase-stdin >/dev/null)
+local_bundle_hash_before="$(shasum -a 256 "$portable_db" | awk '{print $1}')"
+portable_import_key="portable-smoke-import-$(date +%s)"
+portable_import_response="$(curl --fail-with-body --silent --show-error -X POST "$api_url/v1/imports" \
+  -H "$auth_header" -H 'Content-Type: application/octet-stream' \
+  -H "X-Agent-Memory-Workspace: $workspace_id" \
+  -H "X-Agent-Memory-Bundle-Passphrase: $portable_passphrase" \
+  -H "Idempotency-Key: $portable_import_key" \
+  --data-binary "@$portable_bundle")"
+jq -e '.data.state == "completed" and .data.duplicate == false and (.data.report.imported | length) == 1 and (.data.report.failed | length) == 0' <<<"$portable_import_response" >/dev/null
+portable_import_id="$(jq -er '.data.id' <<<"$portable_import_response")"
+portable_status_response="$(curl --fail-with-body --silent --show-error "$api_url/v1/imports/$portable_import_id" -H "$auth_header")"
+jq -e '.data.state == "completed" and (.data.report.imported | length) == 1' <<<"$portable_status_response" >/dev/null
+portable_retry_response="$(curl --fail-with-body --silent --show-error -X POST "$api_url/v1/imports" \
+  -H "$auth_header" -H 'Content-Type: application/octet-stream' \
+  -H "X-Agent-Memory-Workspace: $workspace_id" \
+  -H "X-Agent-Memory-Bundle-Passphrase: $portable_passphrase" \
+  -H "Idempotency-Key: $portable_import_key" \
+  --data-binary "@$portable_bundle")"
+jq -e --arg id "$portable_import_id" '.data.id == $id and .data.state == "completed" and .data.duplicate == true and (.data.report.imported | length) == 1' <<<"$portable_retry_response" >/dev/null
+local_bundle_hash_after="$(shasum -a 256 "$portable_db" | awk '{print $1}')"
+[[ "$local_bundle_hash_before" == "$local_bundle_hash_after" ]]
 
 create_pdf_fixture() {
   local destination="$1"

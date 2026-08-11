@@ -237,6 +237,7 @@ func NewMux(svc *Service) *http.ServeMux {
 	// Prometheus metrics scrape endpoint
 	mux.Handle("/metrics", promhttp.Handler())
 	mux.HandleFunc("/health", healthHandler(svc))
+	mux.HandleFunc("/dashboard/runtime.json", dashboardRuntime("standalone", "/api/v1", "notebook", "memory", "portable_export"))
 	mux.HandleFunc("/api/v1/capabilities", capabilitiesHandler())
 	mux.HandleFunc("/api/v1/client-profiles", clientProfilesHandler(svc))
 	mux.HandleFunc("/api/v1/client-profiles/", clientProfileHandler(svc))
@@ -282,6 +283,7 @@ func NewMux(svc *Service) *http.ServeMux {
 	mux.HandleFunc("/api/v1/projects/delete", projectsDeleteHandler(svc))
 	mux.HandleFunc("/api/v1/memories/export", memoriesExportHandler(svc))
 	mux.HandleFunc("/api/v1/memories/import", memoriesImportHandler(svc))
+	mux.HandleFunc("/api/v1/migrations/portable-export", portableMigrationExportHandler(svc))
 	mux.HandleFunc("/api/v1/memories/reconstruct", memoriesReconstructHandler(svc))
 
 	mux.HandleFunc("/api/v1/observe", observeHandler(svc))

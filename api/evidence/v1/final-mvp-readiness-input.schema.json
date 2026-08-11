@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-memory.local/evidence/v1/final-mvp-readiness-input.schema.json",
+  "title": "Agent Memory final MVP readiness input v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "classification",
+    "environment",
+    "readiness_id",
+    "program_version",
+    "review_decision_sha256",
+    "generated_at",
+    "expected_ready"
+  ],
+  "properties": {
+    "schema": { "const": "agent-memory-final-mvp-readiness-input-v1" },
+    "classification": { "const": "external_review" },
+    "environment": { "const": "external" },
+    "readiness_id": { "$ref": "#/$defs/opaque" },
+    "program_version": { "$ref": "#/$defs/opaque" },
+    "review_decision_sha256": { "$ref": "#/$defs/sha256" },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "expected_ready": { "type": "boolean" }
+  },
+  "$defs": {
+    "opaque": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:+-]{0,127}$" },
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+  }
+}

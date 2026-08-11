@@ -9,6 +9,36 @@ servers:
 security:
   - BearerAuth: []
 paths:
+  /v1/local-session:
+    get:
+      operationId: getLocalSession
+      description: Development-only first-owner status and session resume endpoint. It is absent unless local onboarding is explicitly enabled.
+      security: []
+      responses:
+        "200": {$ref: "#/components/responses/Success"}
+        "503": {$ref: "#/components/responses/Error"}
+    delete:
+      operationId: deleteLocalSession
+      description: Clears the development-only HttpOnly local browser session cookie.
+      security: []
+      responses:
+        "204": {description: Local browser session cleared.}
+  /v1/local-session/signup:
+    post:
+      operationId: provisionLocalOwner
+      description: Development-only, same-origin bootstrap for the private installation owner. It does not change managed launch admission policy.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LocalOwnerSignup"
+      responses:
+        "201": {$ref: "#/components/responses/Success"}
+        "400": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "503": {$ref: "#/components/responses/Error"}
   /v1/signup:
     post:
       operationId: provisionPersonalAccount
@@ -256,12 +286,16 @@ paths:
               additionalProperties: false
               required: [workspace_id, query]
               properties:
-                workspace_id: {type: string, minLength: 1}
+                workspace_id: {type: string, format: uuid}
                 query: {type: string, minLength: 1, maxLength: 4000}
                 limit: {type: integer, minimum: 1, maximum: 200, default: 20}
                 cursor: {type: string, maxLength: 2048}
       responses:
-        "200": {$ref: "#/components/responses/Success"}
+        "200":
+          description: Tenant-authorized memory search results.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/MemorySearchEnvelope"}
         "400": {$ref: "#/components/responses/Error"}
   /v1/sources:
     get:
@@ -470,7 +504,11 @@ paths:
     get:
       operationId: getPrivacyOverview
       responses:
-        "200": {$ref: "#/components/responses/Success"}
+        "200":
+          description: Customer-visible retention and lifecycle overview.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/PrivacyOverviewEnvelope"}
         "404": {$ref: "#/components/responses/Error"}
   /v1/billing:
     get:
@@ -562,6 +600,144 @@ components:
         application/json:
           schema: {$ref: "#/components/schemas/ErrorEnvelope"}
   schemas:
+    LocalOwnerSignup:
+      type: object
+      additionalProperties: false
+      required: [display_name, email, private_installation_confirmed]
+      properties:
+        display_name: {type: string, minLength: 1, maxLength: 160}
+        email: {type: string, format: email, maxLength: 320}
+        private_installation_confirmed:
+          type: boolean
+          const: true
+    PrivacyOverviewEnvelope:
+      type: object
+      additionalProperties: false
+      required: [ok, version, request_id, data]
+      properties:
+        ok: {const: true}
+        version: {const: v1}
+        request_id: {type: string}
+        data: {$ref: "#/components/schemas/PrivacyOverview"}
+    PrivacyOverview:
+      type: object
+      additionalProperties: false
+      required: [retained_classes, source_access, exports, deletions, revocation_explanation, physical_purge_explanation]
+      properties:
+        retained_classes:
+          type: array
+          maxItems: 12
+          items: {$ref: "#/components/schemas/RetainedClass"}
+        source_access:
+          type: array
+          maxItems: 100
+          items: {$ref: "#/components/schemas/PrivacyAccessEvent"}
+        exports:
+          type: array
+          maxItems: 50
+          items: {$ref: "#/components/schemas/PrivacyExport"}
+        deletions:
+          type: array
+          maxItems: 100
+          items: {$ref: "#/components/schemas/PrivacyDeletion"}
+        consent_expires_at: {type: string, format: date-time}
+        revocation_explanation: {type: string, minLength: 1, maxLength: 1024}
+        physical_purge_explanation: {type: string, minLength: 1, maxLength: 1024}
+    PrivacyAccessEvent:
+      type: object
+      additionalProperties: false
+      required: [operation, outcome, target_type, target_id, reason_code, occurred_at]
+      properties:
+        operation: {type: string}
+        outcome: {type: string}
+        target_type: {type: string}
+        target_id: {type: string}
+        reason_code: {type: string}
+        occurred_at: {type: string, format: date-time}
+    PrivacyExport:
+      type: object
+      additionalProperties: false
+      required: [id, state, safe_error_code, requested_at]
+      properties:
+        id: {type: string, format: uuid}
+        state: {type: string}
+        safe_error_code: {type: string}
+        requested_at: {type: string, format: date-time}
+        expires_at: {type: string, format: date-time}
+    PrivacyDeletion:
+      type: object
+      additionalProperties: false
+      required: [id, target_type, target_id, state, policy_version, safe_error_code, receipt_sha256, requested_at, pending_subsystems]
+      properties:
+        id: {type: string, format: uuid}
+        target_type: {type: string}
+        target_id: {type: string, format: uuid}
+        state: {type: string}
+        policy_version: {type: string}
+        safe_error_code: {type: string}
+        receipt_sha256: {type: string}
+        requested_at: {type: string, format: date-time}
+        completed_at: {type: string, format: date-time}
+        pending_subsystems: {type: integer, minimum: 0}
+    RetainedClass:
+      type: object
+      additionalProperties: false
+      required: [data_class, purpose, policy_version, owner, trigger, duration_seconds, deletion_method, hold_behavior, customer_impact]
+      properties:
+        data_class: {type: string, minLength: 1, maxLength: 64}
+        purpose: {type: string, minLength: 1, maxLength: 512}
+        policy_version: {type: string, minLength: 1, maxLength: 512}
+        owner: {type: string, minLength: 1, maxLength: 512}
+        trigger: {type: string, minLength: 1, maxLength: 512}
+        duration_seconds: {type: integer, minimum: 0}
+        deletion_method: {type: string, minLength: 1, maxLength: 512}
+        hold_behavior: {type: string, minLength: 1, maxLength: 512}
+        customer_impact: {type: string, minLength: 1, maxLength: 512}
+    MemorySearchItem:
+      type: object
+      additionalProperties: false
+      required: [id, workspace_id, type, content, source_kind, entities, tags, keywords, confidence, storage_tier, created_at, updated_at, score]
+      properties:
+        id: {type: string, format: uuid}
+        workspace_id: {type: string, format: uuid}
+        type: {enum: [episodic, semantic, procedural, outcome]}
+        content: {type: string, maxLength: 2000}
+        source_kind: {enum: [agent_observation, user_input, code_analysis, consolidation, reflection, reconstruction, import]}
+        entities: {type: array, items: {type: string}}
+        tags: {type: array, items: {type: string}}
+        keywords: {type: array, maxItems: 3, items: {type: string, maxLength: 128}}
+        outcome:
+          type: object
+          additionalProperties: false
+          required: [result, approach, reason, linked_memories]
+          properties:
+            result: {enum: [success, failure, partial]}
+            approach: {type: string}
+            reason: {type: string}
+            linked_memories: {type: array, items: {type: string}}
+        confidence: {type: number, minimum: 0, maximum: 1}
+        storage_tier: {enum: [markdown, vector, vector+graph, document, cold]}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        score: {type: number, minimum: 0}
+    MemorySearchEnvelope:
+      type: object
+      additionalProperties: false
+      required: [ok, version, request_id, data]
+      properties:
+        ok: {const: true}
+        version: {const: v1}
+        request_id: {type: string}
+        data:
+          type: object
+          additionalProperties: false
+          required: [items]
+          properties:
+            items:
+              type: array
+              maxItems: 200
+              items: {$ref: "#/components/schemas/MemorySearchItem"}
+            next_cursor: {type: string, maxLength: 2048}
     ProposalEvidence:
       type: object
       additionalProperties: false

@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-memory.local/schemas/evidence/v1/staging-safe-platform-launch-state.schema.json",
+  "title": "Agent Memory staging safe-platform launch-state receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "classification", "environment", "inventory_id", "inventory_receipt_sha256", "plan_id", "plan_receipt_sha256", "change_id", "change_receipt_sha256", "release_id", "release_receipt_sha256", "collected_at", "phase", "signup_enabled", "invitation_required", "policy_version", "policy_updated_at", "ready"],
+  "properties": {
+    "schema": {"const": "agent-memory-staging-safe-platform-launch-state-v1"},
+    "classification": {"const": "staging_external"},
+    "environment": {"const": "staging"},
+    "inventory_id": {"$ref": "#/$defs/opaque_id"},
+    "inventory_receipt_sha256": {"$ref": "#/$defs/digest"},
+    "plan_id": {"$ref": "#/$defs/opaque_id"},
+    "plan_receipt_sha256": {"$ref": "#/$defs/digest"},
+    "change_id": {"$ref": "#/$defs/opaque_id"},
+    "change_receipt_sha256": {"$ref": "#/$defs/digest"},
+    "release_id": {"$ref": "#/$defs/opaque_id"},
+    "release_receipt_sha256": {"$ref": "#/$defs/digest"},
+    "collected_at": {"type": "string", "format": "date-time"},
+    "phase": {"enum": ["internal_alpha", "private_beta", "public_beta", "ga"]},
+    "signup_enabled": {"type": "boolean"},
+    "invitation_required": {"type": "boolean"},
+    "policy_version": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$"},
+    "policy_updated_at": {"type": "string", "format": "date-time"},
+    "ready": {"type": "boolean"}
+  },
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "opaque_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"}
+  }
+}

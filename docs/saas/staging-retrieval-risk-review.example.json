@@ -1,0 +1,17 @@
+{
+  "schema": "agent-memory-staging-retrieval-risk-review-v1", "classification": "staging_external", "environment": "staging",
+  "review_id": "replace-with-review-id", "corpus_version": "replace-with-blind-corpus-version", "timing_method_version": "replace-with-timing-method-version", "tolerance_version": "replace-with-tolerance-version",
+  "inventory_id": "replace-with-inventory-id", "inventory_receipt_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "plan_id": "replace-with-plan-id", "plan_receipt_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "change_id": "replace-with-change-id", "change_receipt_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "release_id": "replace-with-release-id", "release_receipt_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "blind_corpus_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "timing_report_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", "cache_review_sha256": "1111111111111111111111111111111111111111111111111111111111111111", "risk_tolerance_decision_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+  "review_started_at": "2026-08-10T08:00:00Z", "review_completed_at": "2026-08-10T10:00:00Z", "generated_at": "2026-08-10T10:15:00Z",
+  "tenant_count": 2, "case_count": 500, "timing_sample_count_per_class": 80, "result_leak_count": 0, "count_leak_count": 0, "cache_leak_count": 0, "maximum_timing_delta_microseconds": 10000, "observed_timing_delta_microseconds": 4500, "ready": true,
+  "domains": [
+    {"id": "blind_corpus_independence_reviewed", "outcome": "passed", "finding_count": 0, "evidence_sha256": "3333333333333333333333333333333333333333333333333333333333333333"},
+    {"id": "result_isolation_reviewed", "outcome": "passed", "finding_count": 0, "evidence_sha256": "4444444444444444444444444444444444444444444444444444444444444444"},
+    {"id": "public_count_concealment_reviewed", "outcome": "passed", "finding_count": 0, "evidence_sha256": "5555555555555555555555555555555555555555555555555555555555555555"},
+    {"id": "statistical_timing_analysis_reviewed", "outcome": "passed", "finding_count": 0, "evidence_sha256": "6666666666666666666666666666666666666666666666666666666666666666"},
+    {"id": "cache_key_namespace_reviewed", "outcome": "passed", "finding_count": 0, "evidence_sha256": "7777777777777777777777777777777777777777777777777777777777777777"},
+    {"id": "warm_cache_contamination_reviewed", "outcome": "passed", "finding_count": 0, "evidence_sha256": "8888888888888888888888888888888888888888888888888888888888888888"},
+    {"id": "risk_tolerance_accepted", "outcome": "passed", "finding_count": 0, "evidence_sha256": "9999999999999999999999999999999999999999999999999999999999999999"}
+  ]
+}

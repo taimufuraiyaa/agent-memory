@@ -91,6 +91,10 @@ func run(args []string, now func() time.Time, stdout, stderr io.Writer) int {
 }
 
 func loadPrivateKey(path string) (ed25519.PrivateKey, error) {
+	return loadPrivateKeyWithHook(path, nil)
+}
+
+func loadPrivateKeyWithHook(path string, afterOpen func()) (ed25519.PrivateKey, error) {
 	validated, err := os.Lstat(path)
 	if err != nil || !validated.Mode().IsRegular() {
 		return nil, errors.New("private key must be a regular non-symlink file")
@@ -107,9 +111,15 @@ func loadPrivateKey(path string) (ed25519.PrivateKey, error) {
 	if err := validateOpenedRegularFile(validated, opened, maximumPrivateKeyBytes, true); err != nil {
 		return nil, err
 	}
+	if afterOpen != nil {
+		afterOpen()
+	}
 	contents, err := io.ReadAll(io.LimitReader(file, maximumPrivateKeyBytes+1))
 	if err != nil || int64(len(contents)) != opened.Size() {
 		return nil, errors.New("read private key")
+	}
+	if err := validateUnchangedOpenedPath(path, opened, file); err != nil {
+		return nil, errors.New("private key changed while reading")
 	}
 	block, rest := pem.Decode(contents)
 	if block == nil || block.Type != "PRIVATE KEY" || len(strings.TrimSpace(string(rest))) != 0 {
@@ -127,6 +137,10 @@ func loadPrivateKey(path string) (ed25519.PrivateKey, error) {
 }
 
 func hashRegularFile(path string) (string, error) {
+	return hashRegularFileWithHook(path, nil)
+}
+
+func hashRegularFileWithHook(path string, afterOpen func()) (string, error) {
 	validated, err := os.Lstat(path)
 	if err != nil || !validated.Mode().IsRegular() {
 		return "", errors.New("evidence must be a regular non-symlink file")
@@ -140,15 +154,22 @@ func hashRegularFile(path string) (string, error) {
 	if err != nil || validateOpenedRegularFile(validated, opened, 0, false) != nil {
 		return "", errors.New("evidence file changed or is invalid")
 	}
+	if afterOpen != nil {
+		afterOpen()
+	}
 	hash := sha256.New()
-	if _, err := io.Copy(hash, file); err != nil {
+	written, err := io.Copy(hash, file)
+	if err != nil || written != opened.Size() {
 		return "", errors.New("hash evidence file")
+	}
+	if err := validateUnchangedOpenedPath(path, opened, file); err != nil {
+		return "", errors.New("evidence file changed while hashing")
 	}
 	return hex.EncodeToString(hash.Sum(nil)), nil
 }
 
 func validateOpenedRegularFile(validated, opened os.FileInfo, maximumBytes int64, ownerOnly bool) error {
-	if validated == nil || opened == nil || !validated.Mode().IsRegular() || !opened.Mode().IsRegular() || !os.SameFile(validated, opened) {
+	if validated == nil || opened == nil || !validated.Mode().IsRegular() || !opened.Mode().IsRegular() || !os.SameFile(validated, opened) || validated.Size() != opened.Size() || !validated.ModTime().Equal(opened.ModTime()) {
 		return errors.New("file changed between validation and open")
 	}
 	if opened.Size() <= 0 || maximumBytes > 0 && opened.Size() > maximumBytes {
@@ -156,6 +177,18 @@ func validateOpenedRegularFile(validated, opened os.FileInfo, maximumBytes int64
 	}
 	if ownerOnly && opened.Mode().Perm()&0o077 != 0 {
 		return errors.New("private key permissions must deny group and other access")
+	}
+	return nil
+}
+
+func validateUnchangedOpenedPath(path string, opened os.FileInfo, file *os.File) error {
+	after, err := file.Stat()
+	if err != nil || !os.SameFile(opened, after) || opened.Size() != after.Size() || !opened.ModTime().Equal(after.ModTime()) {
+		return errors.New("opened file changed")
+	}
+	pathAfterRead, err := os.Lstat(path)
+	if err != nil || !pathAfterRead.Mode().IsRegular() || !os.SameFile(opened, pathAfterRead) || opened.Size() != pathAfterRead.Size() || !opened.ModTime().Equal(pathAfterRead.ModTime()) {
+		return errors.New("file path changed")
 	}
 	return nil
 }

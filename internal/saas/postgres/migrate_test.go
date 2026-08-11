@@ -37,6 +37,115 @@ func TestMigrationCoversTenantAuthoritativeTables(t *testing.T) {
 	}
 }
 
+func TestMemorySearchMigrationMaintainsGINProjectionAndRollback(t *testing.T) {
+	migrations := mustMigrations(t)
+	var search *Migration
+	for index := range migrations {
+		if migrations[index].Version == "0026_memory_search" {
+			search = &migrations[index]
+			break
+		}
+	}
+	if search == nil {
+		t.Fatal("memory search migration is missing")
+	}
+	for _, required := range []string{
+		"ADD COLUMN search_document tsvector",
+		"CREATE TRIGGER saas_memories_search_document",
+		"BEFORE INSERT OR UPDATE OF content, memory_type, source_kind, entities, tags, keywords",
+		"to_tsvector(",
+		"ALTER COLUMN search_document SET NOT NULL",
+		"USING gin(search_document)",
+	} {
+		if !strings.Contains(search.Up, required) {
+			t.Errorf("memory search up migration missing %q", required)
+		}
+	}
+	for _, required := range []string{
+		"DROP INDEX IF EXISTS saas_memories_search_document_gin",
+		"DROP TRIGGER IF EXISTS saas_memories_search_document ON saas_memories",
+		"DROP FUNCTION IF EXISTS saas_refresh_memory_search_document()",
+		"DROP COLUMN IF EXISTS search_document",
+	} {
+		if !strings.Contains(search.Down, required) {
+			t.Errorf("memory search down migration missing %q", required)
+		}
+	}
+}
+
+func TestRetentionPurposeMigrationCompletesReviewableInventory(t *testing.T) {
+	migrations := mustMigrations(t)
+	var purpose *Migration
+	for index := range migrations {
+		if migrations[index].Version == "0027_retention_purpose" {
+			purpose = &migrations[index]
+			break
+		}
+	}
+	if purpose == nil {
+		t.Fatal("retention purpose migration is missing")
+	}
+	for _, required := range []string{
+		"ADD COLUMN purpose text",
+		"ALTER COLUMN purpose SET NOT NULL",
+		"saas_retention_policy_purpose",
+		"char_length(purpose) BETWEEN 1 AND 512",
+	} {
+		if !strings.Contains(purpose.Up, required) {
+			t.Errorf("retention purpose up migration missing %q", required)
+		}
+	}
+	for _, dataClass := range []string{"account_identity", "sessions_credentials", "memory_content", "source_originals", "source_derived", "exports", "model_usage", "audit_events", "security_cases", "billing_records", "backups", "analytics"} {
+		if !strings.Contains(purpose.Up, "'"+dataClass+"'") {
+			t.Errorf("retention purpose migration missing purpose for %q", dataClass)
+		}
+	}
+	for _, required := range []string{"DROP CONSTRAINT IF EXISTS saas_retention_policy_purpose", "DROP COLUMN IF EXISTS purpose"} {
+		if !strings.Contains(purpose.Down, required) {
+			t.Errorf("retention purpose down migration missing %q", required)
+		}
+	}
+}
+
+func TestLaunchPolicyMigrationsDefaultInternalAlphaSignupClosed(t *testing.T) {
+	migrations := mustMigrations(t)
+	var launchReadiness, safeDefault *Migration
+	for index := range migrations {
+		switch migrations[index].Version {
+		case "0024_launch_readiness":
+			launchReadiness = &migrations[index]
+		case "0028_launch_policy_safe_default":
+			safeDefault = &migrations[index]
+		}
+	}
+	if launchReadiness == nil {
+		t.Fatal("launch readiness migration is missing")
+	}
+	if safeDefault == nil {
+		t.Fatal("safe launch-policy default migration is missing")
+	}
+	if !strings.Contains(launchReadiness.Up, "VALUES(true,'internal_alpha',false,true") {
+		t.Error("fresh installations must seed internal-alpha signup disabled and invitations required")
+	}
+	for _, required := range []string{
+		"UPDATE saas_launch_policy",
+		"signup_enabled = false",
+		"invitation_required = true",
+		"updated_by = 'migration'",
+		"reason_code = 'safe_platform_default_closed'",
+		"WHERE singleton = true",
+		"AND phase = 'internal_alpha'",
+		"AND (signup_enabled = true OR invitation_required = false)",
+	} {
+		if !strings.Contains(safeDefault.Up, required) {
+			t.Errorf("safe-default migration missing %q", required)
+		}
+	}
+	if strings.Contains(strings.ToLower(safeDefault.Down), "signup_enabled = true") {
+		t.Error("rolling back the safe-default migration must not reopen signup")
+	}
+}
+
 func TestApplyRollbackAndTenantRLS(t *testing.T) {
 	connectionURL := strings.TrimSpace(os.Getenv("AGENT_MEMORY_TEST_POSTGRES_URL"))
 	if connectionURL == "" {
@@ -60,6 +169,23 @@ func TestApplyRollbackAndTenantRLS(t *testing.T) {
 	}
 	if err := Apply(ctx, pool); err != nil {
 		t.Fatalf("second Apply() must be idempotent: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `UPDATE saas_launch_policy SET signup_enabled=true, invitation_required=false, updated_by='migration-test', reason_code='simulate_pre_0028', updated_at=clock_timestamp() WHERE singleton=true`); err != nil {
+		t.Fatalf("simulate already-migrated unsafe launch policy: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `DELETE FROM saas_schema_migrations WHERE version='0028_launch_policy_safe_default'`); err != nil {
+		t.Fatalf("rewind safe-default migration ledger: %v", err)
+	}
+	if err := Apply(ctx, pool); err != nil {
+		t.Fatalf("apply safe default to existing installation: %v", err)
+	}
+	var phase string
+	var signupEnabled, invitationRequired bool
+	if err := pool.QueryRow(ctx, `SELECT phase, signup_enabled, invitation_required FROM saas_launch_policy WHERE singleton=true`).Scan(&phase, &signupEnabled, &invitationRequired); err != nil {
+		t.Fatalf("read installed launch policy: %v", err)
+	}
+	if phase != "internal_alpha" || signupEnabled || !invitationRequired {
+		t.Fatalf("installed launch policy = phase %q signup %v invitation %v, want fail-closed internal alpha", phase, signupEnabled, invitationRequired)
 	}
 
 	account1, account2 := uuid.New(), uuid.New()

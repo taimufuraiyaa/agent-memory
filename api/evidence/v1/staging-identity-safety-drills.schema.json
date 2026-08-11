@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-memory.local/schemas/evidence/v1/staging-identity-safety-drills.schema.json",
+  "title": "Agent Memory staging identity-safety drill input",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "classification", "environment", "bundle_id", "inventory_id", "inventory_receipt_sha256", "plan_id", "plan_receipt_sha256", "change_id", "change_receipt_sha256", "release_id", "release_receipt_sha256", "ready", "generated_at", "drills"],
+  "properties": {
+    "schema": {"const": "agent-memory-staging-identity-safety-drills-v1"},
+    "classification": {"const": "staging_external"},
+    "environment": {"const": "staging"},
+    "bundle_id": {"$ref": "#/$defs/opaque_id"},
+    "inventory_id": {"$ref": "#/$defs/opaque_id"},
+    "inventory_receipt_sha256": {"$ref": "#/$defs/digest"},
+    "plan_id": {"$ref": "#/$defs/opaque_id"},
+    "plan_receipt_sha256": {"$ref": "#/$defs/digest"},
+    "change_id": {"$ref": "#/$defs/opaque_id"},
+    "change_receipt_sha256": {"$ref": "#/$defs/digest"},
+    "release_id": {"$ref": "#/$defs/opaque_id"},
+    "release_receipt_sha256": {"$ref": "#/$defs/digest"},
+    "ready": {"type": "boolean"},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "drills": {
+      "type": "array", "minItems": 2, "maxItems": 2,
+      "prefixItems": [
+        {"$ref": "#/$defs/identity_outage"},
+        {"$ref": "#/$defs/credential_revocation"}
+      ],
+      "items": false
+    }
+  },
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "opaque_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"},
+    "outcome": {"enum": ["passed", "failed", "inconclusive"]},
+    "check": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "outcome", "evidence_sha256"],
+      "properties": {
+        "id": {"enum": ["real_alert_delivered", "cached_key_authentication_continued", "unknown_or_invalid_trust_failed_closed", "containment_executed", "service_recovered", "credential_abuse_detected", "independent_approval_verified", "production_path_revocation_completed", "post_revoke_access_denied", "immutable_audit_retained", "customer_content_absent"]},
+        "outcome": {"$ref": "#/$defs/outcome"},
+        "evidence_sha256": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "drill_base": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "impairment_at", "detected_at", "alerted_at", "contained_at", "recovered_at", "rto_target_seconds", "target_approval_sha256", "checks"],
+      "properties": {
+        "id": {"enum": ["identity_provider_outage", "credential_revocation"]},
+        "impairment_at": {"type": "string", "format": "date-time"},
+        "detected_at": {"type": "string", "format": "date-time"},
+        "alerted_at": {"type": "string", "format": "date-time"},
+        "contained_at": {"type": "string", "format": "date-time"},
+        "recovered_at": {"type": "string", "format": "date-time"},
+        "rto_target_seconds": {"type": "integer", "minimum": 1, "maximum": 86400},
+        "target_approval_sha256": {"$ref": "#/$defs/digest"},
+        "checks": {"type": "array", "items": {"$ref": "#/$defs/check"}}
+      }
+    },
+    "identity_outage": {
+      "allOf": [
+        {"$ref": "#/$defs/drill_base"},
+        {"properties": {"id": {"const": "identity_provider_outage"}, "checks": {"minItems": 7, "maxItems": 7}}}
+      ]
+    },
+    "credential_revocation": {
+      "allOf": [
+        {"$ref": "#/$defs/drill_base"},
+        {"properties": {"id": {"const": "credential_revocation"}, "checks": {"minItems": 8, "maxItems": 8}}}
+      ]
+    }
+  }
+}

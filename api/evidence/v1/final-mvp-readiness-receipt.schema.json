@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-memory.local/evidence/v1/final-mvp-readiness-receipt.schema.json",
+  "title": "Agent Memory final MVP readiness receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "classification",
+    "environment",
+    "readiness_id",
+    "program_version",
+    "mapping_version",
+    "review_decision_sha256",
+    "input_sha256",
+    "catalog_sha256",
+    "index_sha256",
+    "trust_bundle_sha256",
+    "approval_set_sha256",
+    "generated_at",
+    "collected_at",
+    "ready",
+    "canonical_control_count",
+    "foundational_control_count",
+    "final_mvp_control_count",
+    "verified_foundational_count",
+    "missing_foundational_count",
+    "rejected_foundational_count",
+    "expired_foundational_count",
+    "unavailable_foundational_controls",
+    "gates"
+  ],
+  "properties": {
+    "schema": { "const": "agent-memory-final-mvp-readiness-receipt-v1" },
+    "classification": { "const": "external_review" },
+    "environment": { "const": "external" },
+    "readiness_id": { "$ref": "#/$defs/opaque" },
+    "program_version": { "$ref": "#/$defs/opaque" },
+    "mapping_version": { "const": "agent-memory-final-mvp-mapping-v1" },
+    "review_decision_sha256": { "$ref": "#/$defs/sha256" },
+    "input_sha256": { "$ref": "#/$defs/sha256" },
+    "catalog_sha256": { "$ref": "#/$defs/sha256" },
+    "index_sha256": { "$ref": "#/$defs/sha256" },
+    "trust_bundle_sha256": { "$ref": "#/$defs/sha256" },
+    "approval_set_sha256": { "$ref": "#/$defs/sha256" },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "collected_at": { "type": "string", "format": "date-time" },
+    "ready": { "type": "boolean" },
+    "canonical_control_count": { "const": 57 },
+    "foundational_control_count": { "const": 49 },
+    "final_mvp_control_count": { "const": 8 },
+    "verified_foundational_count": { "type": "integer", "minimum": 0, "maximum": 49 },
+    "missing_foundational_count": { "type": "integer", "minimum": 0, "maximum": 49 },
+    "rejected_foundational_count": { "type": "integer", "minimum": 0, "maximum": 49 },
+    "expired_foundational_count": { "type": "integer", "minimum": 0, "maximum": 49 },
+    "unavailable_foundational_controls": {
+      "type": "array",
+      "maxItems": 49,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/foundational_control_id" }
+    },
+    "gates": {
+      "type": "array",
+      "minItems": 8,
+      "maxItems": 8,
+      "items": { "$ref": "#/$defs/gate" }
+    }
+  },
+  "$defs": {
+    "opaque": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:+-]{0,127}$" },
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "foundational_control_id": {
+      "type": "string",
+      "enum": [
+        "P0.1-A", "P0.1-B", "P0.2-A", "P0.2-B", "P0.2-C", "CP0-A", "CP0-B",
+        "P1.2-A", "P1.4-A", "P1.4-B", "P1.4-C", "CP1-A", "CP1-B", "CP1-C",
+        "CP2-A", "CP2-B", "CP3-A", "CP3-B", "CP4-A", "CP4-B", "CP4-C",
+        "CP5-A", "CP5-B", "CP5-C", "P6.5-A", "CP6-A", "P7.4-A", "CP7-A",
+        "CP9-A", "CP9-B", "P10.1-A", "P10.2-A", "P10.2-B", "P10.3-A", "P10.3-B",
+        "CP10-A", "CP10-B", "CP10-C", "P11.1-A", "P11.2-A", "P11.3-A", "P11.3-B",
+        "P11.3-C", "CP11-A", "CP11-B", "CP11-C", "P12.2-A", "P12.2-B", "P12.2-C"
+      ]
+    },
+    "gate_id": { "type": "string", "enum": ["MVP-A", "MVP-B", "MVP-C", "MVP-D", "MVP-E", "MVP-F", "MVP-G", "MVP-H"] },
+    "outcome": { "type": "string", "enum": ["passed", "failed", "inconclusive"] },
+    "gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "outcome", "prerequisite_count", "verified_count", "missing_count", "rejected_or_expired_count", "evidence_sha256"],
+      "properties": {
+        "id": { "$ref": "#/$defs/gate_id" },
+        "outcome": { "$ref": "#/$defs/outcome" },
+        "prerequisite_count": { "type": "integer", "minimum": 1, "maximum": 49 },
+        "verified_count": { "type": "integer", "minimum": 0, "maximum": 49 },
+        "missing_count": { "type": "integer", "minimum": 0, "maximum": 49 },
+        "rejected_or_expired_count": { "type": "integer", "minimum": 0, "maximum": 49 },
+        "evidence_sha256": { "$ref": "#/$defs/sha256" }
+      }
+    }
+  }
+}

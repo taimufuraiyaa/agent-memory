@@ -97,7 +97,7 @@ func (r *PostgresRepository) RetrySource(ctx context.Context, tenantID, sourceID
 		JOIN saas_source_versions v ON v.tenant_id=s.tenant_id AND v.source_id=s.id AND v.version=s.active_version
 		JOIN LATERAL (SELECT id,safe_error_code FROM saas_jobs WHERE tenant_id=s.tenant_id AND subject_type='source' AND subject_id=s.id AND job_type='source.extract' ORDER BY created_at DESC LIMIT 1) j ON true
 		WHERE s.tenant_id=$1 AND s.id=$2::uuid FOR UPDATE OF s,v`, tenantID, sourceID).Scan(&state, &vaultKey, &jobID, &errorCode)
-	if err != nil || state != "failed" || vaultKey == "" || (errorCode != "extraction_failed" && errorCode != "source_unavailable") {
+	if err != nil || state != "failed" || vaultKey == "" || (errorCode != "extraction_failed" && errorCode != "source_unavailable" && errorCode != "pdf_text_unreadable") {
 		return auth.ErrTenantUnavailable
 	}
 	if _, err = tx.Exec(ctx, `UPDATE saas_jobs SET state='queued',available_at=$3,started_at=NULL,finished_at=NULL,lease_expires_at=NULL,safe_error_code='',updated_at=$3

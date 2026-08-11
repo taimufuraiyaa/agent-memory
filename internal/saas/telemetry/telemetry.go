@@ -4,13 +4,16 @@ package telemetry
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -22,6 +25,13 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 )
+
+const (
+	maximumEvidenceObservations = 1024
+	evidenceObservationTTL      = 10 * time.Minute
+)
+
+var evidenceIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$`)
 
 // Observer deliberately accepts only operational metadata. Request bodies,
 // response bodies, source text, prompts, and model output cannot enter it.
@@ -35,12 +45,32 @@ type Observer struct {
 	componentOps      *prometheus.CounterVec
 	componentDuration *prometheus.HistogramVec
 	costMicroUSD      *prometheus.CounterVec
+	evidenceMu        sync.Mutex
+	evidence          map[string]EvidenceObservation
+	now               func() time.Time
+}
+
+type EvidenceObservation struct {
+	RequestID  string    `json:"request_id"`
+	TraceID    string    `json:"trace_id"`
+	Service    string    `json:"service"`
+	Operation  string    `json:"operation"`
+	Status     int       `json:"status"`
+	Outcome    string    `json:"outcome"`
+	ObservedAt time.Time `json:"observed_at"`
 }
 
 func New(service string, logger *slog.Logger) *Observer {
+	return newWithClock(service, logger, time.Now)
+}
+
+func newWithClock(service string, logger *slog.Logger, now func() time.Time) *Observer {
 	service = bounded(service, "unknown")
 	if logger == nil {
 		logger = slog.Default()
+	}
+	if now == nil {
+		now = time.Now
 	}
 	registry := prometheus.NewRegistry()
 	o := &Observer{
@@ -53,6 +83,8 @@ func New(service string, logger *slog.Logger) *Observer {
 		componentOps:      prometheus.NewCounterVec(prometheus.CounterOpts{Name: "agent_memory_saas_component_operations_total", Help: "Content-free operation outcomes across hosted components."}, []string{"service", "component", "operation", "outcome"}),
 		componentDuration: prometheus.NewHistogramVec(prometheus.HistogramOpts{Name: "agent_memory_saas_component_operation_duration_seconds", Help: "Content-free operation latency across hosted components.", Buckets: prometheus.DefBuckets}, []string{"service", "component", "operation"}),
 		costMicroUSD:      prometheus.NewCounterVec(prometheus.CounterOpts{Name: "agent_memory_saas_cost_microusd_total", Help: "Attributed hosted cost in integer millionths of a US dollar."}, []string{"service", "component"}),
+		evidence:          make(map[string]EvidenceObservation, maximumEvidenceObservations),
+		now:               now,
 	}
 	registry.MustRegister(o.requests, o.duration, o.inFlight, o.componentOps, o.componentDuration, o.costMicroUSD)
 	return o
@@ -73,8 +105,9 @@ func (o *Observer) Wrap(next http.Handler) http.Handler {
 			request.TenantID = "public"
 			request.RequestID = bounded(r.Header.Get("X-Request-ID"), uuid.NewString())
 			request.TraceID = bounded(r.Header.Get("X-Trace-ID"), uuid.NewString())
-			w.Header().Set("X-Request-ID", request.RequestID)
 		}
+		w.Header().Set("X-Request-ID", request.RequestID)
+		w.Header().Set("X-Trace-ID", request.TraceID)
 		operation := operationName(r)
 		ctx, span := otel.Tracer("agent-memory/saas").Start(r.Context(), "http."+operation,
 			trace.WithAttributes(
@@ -92,6 +125,10 @@ func (o *Observer) Wrap(next http.Handler) http.Handler {
 		elapsed := time.Since(started)
 		o.requests.WithLabelValues(o.service, r.Method, operation, outcome).Inc()
 		o.duration.WithLabelValues(o.service, r.Method, operation).Observe(elapsed.Seconds())
+		o.recordEvidence(EvidenceObservation{
+			RequestID: request.RequestID, TraceID: request.TraceID, Service: o.service,
+			Operation: operation, Status: response.status, Outcome: outcome, ObservedAt: o.now().UTC(),
+		})
 		span.SetAttributes(attribute.Int("http.response.status_code", response.status), attribute.String("agent_memory.outcome", outcome))
 		if response.status >= http.StatusInternalServerError {
 			span.SetStatus(codes.Error, "server_error")
@@ -110,6 +147,66 @@ func (o *Observer) Wrap(next http.Handler) http.Handler {
 			"duration_ms", elapsed.Milliseconds(),
 		)
 	})
+}
+
+func (o *Observer) EvidenceHandler() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestID := strings.TrimSpace(r.PathValue("request_id"))
+		if !evidenceIDPattern.MatchString(requestID) {
+			http.NotFound(w, r)
+			return
+		}
+		observation := o.observation(requestID)
+		if observation.RequestID == "" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(observation)
+	})
+}
+
+func (o *Observer) recordEvidence(observation EvidenceObservation) {
+	if !evidenceIDPattern.MatchString(observation.RequestID) || !evidenceIDPattern.MatchString(observation.TraceID) {
+		return
+	}
+	o.evidenceMu.Lock()
+	defer o.evidenceMu.Unlock()
+	o.expireEvidenceLocked(o.now().UTC())
+	if _, exists := o.evidence[observation.RequestID]; !exists && len(o.evidence) >= maximumEvidenceObservations {
+		oldestID := ""
+		var oldest time.Time
+		for requestID, candidate := range o.evidence {
+			if oldestID == "" || candidate.ObservedAt.Before(oldest) {
+				oldestID, oldest = requestID, candidate.ObservedAt
+			}
+		}
+		delete(o.evidence, oldestID)
+	}
+	o.evidence[observation.RequestID] = observation
+}
+
+func (o *Observer) observation(requestID string) EvidenceObservation {
+	o.evidenceMu.Lock()
+	defer o.evidenceMu.Unlock()
+	o.expireEvidenceLocked(o.now().UTC())
+	return o.evidence[requestID]
+}
+
+func (o *Observer) evidenceCount() int {
+	o.evidenceMu.Lock()
+	defer o.evidenceMu.Unlock()
+	o.expireEvidenceLocked(o.now().UTC())
+	return len(o.evidence)
+}
+
+func (o *Observer) expireEvidenceLocked(now time.Time) {
+	cutoff := now.Add(-evidenceObservationTTL)
+	for requestID, observation := range o.evidence {
+		if observation.ObservedAt.Before(cutoff) {
+			delete(o.evidence, requestID)
+		}
+	}
 }
 
 // RecordComponent records only bounded component metadata. costMicroUSD may be

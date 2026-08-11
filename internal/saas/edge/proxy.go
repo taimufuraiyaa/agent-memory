@@ -67,13 +67,16 @@ func New(cfg Config) (http.Handler, error) {
 			_, _ = io.WriteString(w, "{\"service\":\"edge\",\"status\":\"ok\"}\n")
 			return
 		}
-		if r.URL.Path == "/metrics" || strings.HasPrefix(r.URL.Path, "/metrics/") {
+		if r.URL.Path == "/metrics" || strings.HasPrefix(r.URL.Path, "/metrics/") || r.URL.Path == "/internal" || strings.HasPrefix(r.URL.Path, "/internal/") {
 			http.NotFound(w, r)
 			return
 		}
 		requestID := boundedRequestID(r.Header.Get("X-Request-ID"))
+		traceID := boundedRequestID(r.Header.Get("X-Trace-ID"))
 		w.Header().Set("X-Request-ID", requestID)
+		w.Header().Set("X-Trace-ID", traceID)
 		r.Header.Set("X-Request-ID", requestID)
+		r.Header.Set("X-Trace-ID", traceID)
 		timestamp := strconv.FormatInt(now().UTC().Unix(), 10)
 		r.Header.Set(countryHeader, country)
 		r.Header.Set(timestampHeader, timestamp)

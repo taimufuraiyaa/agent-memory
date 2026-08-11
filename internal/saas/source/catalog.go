@@ -168,6 +168,8 @@ func safeFailure(code string, retained bool) SourceFailure {
 		return SourceFailure{}
 	case "extraction_failed":
 		return SourceFailure{Code: code, Message: "We could not process this source.", Action: "Retry processing or upload a different copy.", RetryAllowed: retained}
+	case "pdf_text_unreadable":
+		return SourceFailure{Code: code, Message: "The PDF text layer could not be decoded reliably.", Action: "Retry after updating local PDF processing or use another copy.", RetryAllowed: retained}
 	case "source_unavailable":
 		return SourceFailure{Code: code, Message: "The retained source could not be read.", Action: "Retry processing. If it fails again, upload a new copy.", RetryAllowed: retained}
 	case "format_unsupported", "signature_mismatch", "text_invalid":

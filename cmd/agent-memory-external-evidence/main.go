@@ -41,38 +41,18 @@ func run(args []string, now func() time.Time, stdout, stderr io.Writer) int {
 		}
 		evaluationTime = parsed.UTC()
 	}
-	catalog, err := evidenceindex.LoadCatalog(*catalogPath)
-	if err != nil {
-		fmt.Fprintln(stderr, err)
-		return 1
-	}
-	index, err := evidenceindex.LoadIndex(*indexPath)
-	if err != nil {
-		fmt.Fprintln(stderr, err)
-		return 1
-	}
-	bundle, err := evidenceindex.LoadTrustBundle(*trustPath)
-	if err != nil {
-		fmt.Fprintln(stderr, err)
-		return 1
-	}
-	approvals, err := evidenceindex.LoadApprovalsDirectory(*approvalsPath)
-	if err != nil {
-		fmt.Fprintln(stderr, err)
-		return 1
-	}
-	report, err := evidenceindex.Verify(catalog, index, *artifactRoot, bundle, approvals, evaluationTime)
+	verification, err := evidenceindex.VerifyCanonicalFiles(*catalogPath, *indexPath, *artifactRoot, *trustPath, *approvalsPath, evaluationTime)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
 	encoder := json.NewEncoder(stdout)
 	encoder.SetIndent("", "  ")
-	if err := encoder.Encode(report); err != nil {
+	if err := encoder.Encode(verification.Report); err != nil {
 		fmt.Fprintln(stderr, "encode external evidence report")
 		return 1
 	}
-	if !report.Ready {
+	if !verification.Report.Ready {
 		return 3
 	}
 	return 0

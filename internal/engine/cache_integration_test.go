@@ -199,14 +199,17 @@ func TestCacheIntegration(t *testing.T) {
 	t.Logf("Latency comparison - Initial: %v, Cached: %v, After Invalidation: %v",
 		latency1, latency2, latency3)
 
-	// Verify cache was actually invalidated
-	// After invalidation, the third query should be slower (cache miss)
-	if latency3 < latency2*10 {
-		t.Errorf("expected latency after invalidation to be much higher than cached query: cached=%v, after_invalidation=%v",
-			latency2, latency3)
-	}
-
 	stats3 := retrieval.CacheStats()
+	// Cache counters prove invalidation deterministically. Wall-clock ratios are
+	// diagnostic only because sub-millisecond timings become noisy under load.
+	if stats3.ResultMisses != stats2.ResultMisses+1 {
+		t.Errorf("expected one cache miss after invalidation: before=%d, after=%d",
+			stats2.ResultMisses, stats3.ResultMisses)
+	}
+	if stats3.ResultHits != stats2.ResultHits {
+		t.Errorf("invalidated query unexpectedly hit result cache: before=%d, after=%d",
+			stats2.ResultHits, stats3.ResultHits)
+	}
 	t.Logf("Final cache stats: Entries=%d, Hits=%d, Misses=%d",
 		stats3.ResultEntries, stats3.ResultHits, stats3.ResultMisses)
 }

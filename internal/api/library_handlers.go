@@ -103,7 +103,7 @@ func libraryImportHandler(svc *Service) http.HandlerFunc {
 			ingestion.MarkdownBookExtractor{Adapter: textAdapter},
 			ingestion.MarkdownBookExtractor{Adapter: textAdapter, AsText: true},
 			ingestion.EPUBBookExtractor{Adapter: ingestion.EPUBAdapter{ParserVersion: "epub-v1", NormalizationVersion: "text-v1"}},
-			ingestion.PDFBookExtractor{Adapter: ingestion.PDFAdapter{ParserVersion: "pdf-ledongthuc-5959a402", NormalizationVersion: "text-v1", Extractor: ingestion.NativePDFExtractor{}}},
+			ingestion.PDFBookExtractor{Adapter: ingestion.PDFAdapter{ParserVersion: "pdf-native-poppler-fallback-v2", NormalizationVersion: "text-v1", Extractor: ingestion.ReliablePDFExtractor{Primary: ingestion.NativePDFExtractor{}, Fallback: ingestion.PopplerPDFExtractor{}}}},
 		)
 		result, err := importer.Import(r.Context(), ingestion.BookImportInput{Title: req.Title, EditionLabel: req.EditionLabel, Language: req.Language, Format: sourceFormat, Source: source, Policy: policy})
 		job := LibraryImportJob{ID: libraryID("job", req.Workspace, req.LibraryID, req.Title, core.FingerprintText(string(source))), State: "completed", Result: result, CreatedAt: time.Now().UTC()}

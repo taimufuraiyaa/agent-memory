@@ -138,9 +138,10 @@ run_lifecycle() {
   local auth_token
   auth_token="$(fetch_oidc_token)"
   AGENT_MEMORY_SMOKE_API_URL="$edge_url" \
-    AGENT_MEMORY_SMOKE_AUTH_TOKEN="$auth_token" \
-    AGENT_MEMORY_SMOKE_EMAIL="member@oidc.local.invalid" \
-    AGENT_MEMORY_SMOKE_COMPOSE_PROJECT="$compose_project" \
+  AGENT_MEMORY_SMOKE_AUTH_TOKEN="$auth_token" \
+  AGENT_MEMORY_SMOKE_EMAIL="member@oidc.local.invalid" \
+  AGENT_MEMORY_SMOKE_COUNTRY_SECRET="$initial_edge_country_secret" \
+  AGENT_MEMORY_SMOKE_COMPOSE_PROJECT="$compose_project" \
     "$repo_dir/scripts/saas-upload-smoke.sh"
 }
 

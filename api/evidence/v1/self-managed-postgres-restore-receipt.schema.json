@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-memory.local/schemas/evidence/v1/self-managed-postgres-restore-receipt.schema.json",
+  "title": "Agent Memory normalized self-managed PostgreSQL restore receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "ready", "environment", "drill_id", "inventory_id", "inventory_receipt_sha256", "change_id", "change_receipt_sha256", "input_sha256", "collected_at", "backup", "timeline", "targets", "measured", "checks"],
+  "properties": {
+    "schema": {"const": "agent-memory-self-managed-postgres-restore-receipt-v1"},
+    "ready": {"type": "boolean"},
+    "environment": {"enum": ["staging", "production"]},
+    "drill_id": {"$ref": "self-managed-postgres-restore-drill.schema.json#/$defs/opaque_id"},
+    "inventory_id": {"$ref": "self-managed-postgres-restore-drill.schema.json#/$defs/opaque_id"},
+    "inventory_receipt_sha256": {"$ref": "self-managed-postgres-restore-drill.schema.json#/$defs/digest"},
+    "change_id": {"$ref": "self-managed-postgres-restore-drill.schema.json#/$defs/opaque_id"},
+    "change_receipt_sha256": {"$ref": "self-managed-postgres-restore-drill.schema.json#/$defs/digest"},
+    "input_sha256": {"$ref": "self-managed-postgres-restore-drill.schema.json#/$defs/digest"},
+    "collected_at": {"type": "string", "format": "date-time"},
+    "backup": {"$ref": "self-managed-postgres-restore-drill.schema.json#/$defs/backup"},
+    "timeline": {"$ref": "self-managed-postgres-restore-drill.schema.json#/$defs/timeline"},
+    "targets": {"$ref": "#/$defs/recovery"},
+    "measured": {"$ref": "#/$defs/recovery"},
+    "checks": {"$ref": "self-managed-postgres-restore-drill.schema.json#/$defs/checks"}
+  },
+  "$defs": {
+    "recovery": {
+      "type": "object", "additionalProperties": false,
+      "required": ["rpo_seconds", "rto_seconds"],
+      "properties": {
+        "rpo_seconds": {"type": "integer", "minimum": 0},
+        "rto_seconds": {"type": "integer", "minimum": 0}
+      }
+    }
+  }
+}

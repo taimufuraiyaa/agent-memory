@@ -40,6 +40,7 @@ type SignupCountryVerifier interface {
 type HTTPObserver interface {
 	Wrap(http.Handler) http.Handler
 	MetricsHandler() http.Handler
+	EvidenceHandler() http.Handler
 }
 
 type SourceQueryService interface {
@@ -54,57 +55,76 @@ type MemoryReviewService interface {
 	Reject(context.Context, string) (review.Proposal, error)
 }
 
+type MemorySearchService interface {
+	Search(context.Context, memory.SearchCommand) (memory.SearchResult, error)
+}
+
+type AuditRecorder interface {
+	Record(context.Context, auth.RequestContext, string, string, string, string, string, string, map[string]any) error
+}
+
 type Dependencies struct {
-	Readiness       func(context.Context) error
-	Authenticator   auth.Authenticator
-	Profiles        ProfileVerifier
-	Memberships     auth.MembershipResolver
-	Signup          *control.SignupService
-	Attestations    *attestation.Service
-	Memories        *memory.Service
-	Credentials     *credential.Service
-	Workflows       *memory.WorkflowService
-	Exports         *exportservice.Service
-	SourceUploads   *sourceservice.Service
-	SourceCatalog   *sourceservice.CatalogService
-	SourceQueries   SourceQueryService
-	MemoryReviews   MemoryReviewService
-	Audit           *audit.Service
-	Deletions       *deletion.Service
-	AccountDeletion *deletion.AccountService
-	SecurityGate    auth.RequestGate
-	Privacy         *privacy.Service
-	Billing         *billing.Service
-	Imports         *importer.Service
-	CountryVerifier SignupCountryVerifier
-	Telemetry       HTTPObserver
+	Readiness         func(context.Context) error
+	Authenticator     auth.Authenticator
+	Profiles          ProfileVerifier
+	Memberships       auth.MembershipResolver
+	Signup            *control.SignupService
+	Attestations      *attestation.Service
+	Memories          *memory.Service
+	MemorySearch      MemorySearchService
+	Credentials       *credential.Service
+	Workflows         *memory.WorkflowService
+	Exports           *exportservice.Service
+	SourceUploads     *sourceservice.Service
+	SourceCatalog     *sourceservice.CatalogService
+	SourceQueries     SourceQueryService
+	MemoryReviews     MemoryReviewService
+	Audit             *audit.Service
+	Deletions         *deletion.Service
+	AccountDeletion   *deletion.AccountService
+	SecurityGate      auth.RequestGate
+	Privacy           *privacy.Service
+	Billing           *billing.Service
+	Imports           *importer.Service
+	CountryVerifier   SignupCountryVerifier
+	Telemetry         HTTPObserver
+	LocalOwner        LocalOwnerService
+	LocalSessionToken string
 }
 
 func NewHandler(deps Dependencies) (http.Handler, error) {
-	if deps.Readiness == nil || deps.Authenticator == nil || deps.Profiles == nil || deps.Memberships == nil || deps.Signup == nil || deps.Attestations == nil || deps.Memories == nil || deps.Credentials == nil || deps.Workflows == nil || deps.Exports == nil || deps.SourceUploads == nil || deps.SourceCatalog == nil || deps.SourceQueries == nil || deps.MemoryReviews == nil || deps.Audit == nil || deps.Deletions == nil || deps.AccountDeletion == nil || deps.SecurityGate == nil || deps.Privacy == nil || deps.Billing == nil || deps.Imports == nil {
+	if deps.Readiness == nil || deps.Authenticator == nil || deps.Profiles == nil || deps.Memberships == nil || deps.Signup == nil || deps.Attestations == nil || deps.Memories == nil || deps.MemorySearch == nil || deps.Credentials == nil || deps.Workflows == nil || deps.Exports == nil || deps.SourceUploads == nil || deps.SourceCatalog == nil || deps.SourceQueries == nil || deps.MemoryReviews == nil || deps.Audit == nil || deps.Deletions == nil || deps.AccountDeletion == nil || deps.SecurityGate == nil || deps.Privacy == nil || deps.Billing == nil || deps.Imports == nil {
 		return nil, errors.New("hosted API dependencies are incomplete")
 	}
 	root := http.NewServeMux()
-	root.HandleFunc("GET /health/live", probe)
-	root.HandleFunc("GET /health/ready", readyProbe(deps.Readiness))
+	registerOperationalRoutes(root, deps.Readiness, deps.Telemetry)
 	observe := func(handler http.Handler) http.Handler {
 		if deps.Telemetry == nil {
 			return handler
 		}
 		return deps.Telemetry.Wrap(handler)
 	}
+	features := []string{"sources", "memory", "portable_import", "privacy", "billing"}
+	if deps.LocalOwner != nil {
+		if strings.TrimSpace(deps.LocalSessionToken) == "" {
+			return nil, errors.New("local onboarding session token is required")
+		}
+		features = append(features, "local_onboarding")
+		root.Handle("GET /v1/local-session", observe(localSessionStatus(deps.LocalOwner, deps.LocalSessionToken)))
+		root.Handle("POST /v1/local-session/signup", observe(localOwnerSignup(deps.LocalOwner, deps.LocalSessionToken)))
+		root.HandleFunc("DELETE /v1/local-session", localSessionLogout)
+	}
+	root.HandleFunc("/dashboard/runtime.json", dashboardRuntime("hosted", "/v1", features...))
 	root.Handle("POST /v1/signup", observe(signup(deps)))
 	root.Handle("PUT /v1/source-uploads/{grant_id}/content", observe(uploadSource(deps.SourceUploads)))
 	root.Handle("/dashboard/", dashboard.Handler())
-	if deps.Telemetry != nil {
-		root.Handle("GET /metrics", deps.Telemetry.MetricsHandler())
-	}
 
 	protected := http.NewServeMux()
 	protected.HandleFunc("GET /v1/whoami", whoami)
 	protected.HandleFunc("GET /v1/attestations/rights", attestationStatus(deps.Attestations))
 	protected.HandleFunc("POST /v1/attestations/rights", attestationAccept(deps.Attestations))
 	protected.HandleFunc("POST /v1/memories", writeMemory(deps.Memories))
+	protected.Handle("POST /v1/search", searchMemories(deps.MemorySearch, deps.Audit))
 	protected.HandleFunc("GET /v1/credentials", listCredentials(deps.Credentials))
 	protected.HandleFunc("POST /v1/credentials", createCredential(deps.Credentials))
 	protected.HandleFunc("DELETE /v1/current-credential", revokeCurrentCredential(deps.Credentials))
@@ -135,8 +155,25 @@ func NewHandler(deps Dependencies) (http.Handler, error) {
 	protected.HandleFunc("POST /v1/billing/plan-changes", requestPlanChange(deps.Billing))
 	protected.HandleFunc("POST /v1/imports", importPortableBundle(deps.Imports))
 	protected.HandleFunc("GET /v1/imports/{import_id}", importStatus(deps.Imports))
-	root.Handle("/v1/", auth.MiddlewareWithGuards(deps.Authenticator, deps.Memberships, deps.Audit, deps.SecurityGate)(observe(protected)))
+	protectedMiddleware := auth.MiddlewareWithGuards(deps.Authenticator, deps.Memberships, deps.Audit, deps.SecurityGate)
+	if deps.LocalOwner != nil {
+		protectedMiddleware = auth.MiddlewareWithGuardsAndTokenSource(deps.Authenticator, deps.Memberships, deps.Audit, deps.SecurityGate, auth.LocalBrowserTokenSource(localSessionCookieName))
+	}
+	root.Handle("/v1/", protectedMiddleware(observe(protected)))
 	return root, nil
+}
+
+func registerOperationalRoutes(root *http.ServeMux, readiness func(context.Context) error, telemetry HTTPObserver) {
+	root.HandleFunc("GET /health/live", probe)
+	ready := http.Handler(http.HandlerFunc(readyProbe(readiness)))
+	if telemetry != nil {
+		ready = telemetry.Wrap(ready)
+	}
+	root.Handle("GET /health/ready", ready)
+	if telemetry != nil {
+		root.Handle("GET /metrics", telemetry.MetricsHandler())
+		root.Handle("GET /internal/evidence/requests/{request_id}", telemetry.EvidenceHandler())
+	}
 }
 
 func importPortableBundle(service *importer.Service) http.HandlerFunc {
@@ -779,6 +816,44 @@ func writeMemory(service *memory.Service) http.HandlerFunc {
 		}
 		writeSuccess(w, http.StatusCreated, request.RequestID, map[string]any{"memory": entry, "duplicate": duplicate})
 	}
+}
+
+func searchMemories(service MemorySearchService, auditor AuditRecorder) http.Handler {
+	type input struct {
+		WorkspaceID string `json:"workspace_id"`
+		Query       string `json:"query"`
+		Limit       int    `json:"limit"`
+		Cursor      string `json:"cursor"`
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		request, _ := auth.FromContext(r.Context())
+		var body input
+		if err := decodeJSON(r, &body); err != nil {
+			writeError(w, http.StatusBadRequest, request.RequestID, "invalid_request", "The request body is invalid.")
+			return
+		}
+		result, err := service.Search(r.Context(), memory.SearchCommand{
+			WorkspaceID: body.WorkspaceID, Query: body.Query, Limit: body.Limit, Cursor: body.Cursor,
+		})
+		if err != nil {
+			status, code := http.StatusServiceUnavailable, "search_unavailable"
+			if errors.Is(err, memory.ErrInvalidSearch) {
+				status, code = http.StatusBadRequest, "invalid_request"
+			} else if errors.Is(err, memory.ErrSearchForbidden) || errors.Is(err, auth.ErrTenantUnavailable) {
+				status, code = http.StatusNotFound, "resource_not_found"
+			}
+			writeError(w, status, request.RequestID, code, "Memory search could not be completed.")
+			return
+		}
+		if err := auditor.Record(
+			r.Context(), request, "memory", "memory.search", "success", "workspace", body.WorkspaceID,
+			"authorized", map[string]any{"result_count": len(result.Items), "has_next": result.NextCursor != ""},
+		); err != nil {
+			writeError(w, http.StatusServiceUnavailable, request.RequestID, "audit_unavailable", "Memory search could not be completed.")
+			return
+		}
+		writeSuccess(w, http.StatusOK, request.RequestID, result)
+	})
 }
 
 func bearer(header string) (string, bool) {

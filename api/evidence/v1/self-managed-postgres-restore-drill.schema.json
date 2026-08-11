@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-memory.local/schemas/evidence/v1/self-managed-postgres-restore-drill.schema.json",
+  "title": "Agent Memory self-managed PostgreSQL restore drill input",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "classification", "environment", "drill_id", "inventory_id", "inventory_receipt_sha256", "change_id", "change_receipt_sha256", "ready", "generated_at", "backup", "timeline", "checks"],
+  "properties": {
+    "schema": {"const": "agent-memory-self-managed-postgres-restore-drill-v1"},
+    "classification": {"const": "self_managed_external"},
+    "environment": {"enum": ["staging", "production"]},
+    "drill_id": {"$ref": "#/$defs/opaque_id"},
+    "inventory_id": {"$ref": "#/$defs/opaque_id"},
+    "inventory_receipt_sha256": {"$ref": "#/$defs/digest"},
+    "change_id": {"$ref": "#/$defs/opaque_id"},
+    "change_receipt_sha256": {"$ref": "#/$defs/digest"},
+    "ready": {"type": "boolean"},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "backup": {"$ref": "#/$defs/backup"},
+    "timeline": {"$ref": "#/$defs/timeline"},
+    "checks": {"$ref": "#/$defs/checks"}
+  },
+  "$defs": {
+    "opaque_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"},
+    "digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "backup": {
+      "type": "object", "additionalProperties": false,
+      "required": ["backup_id", "created_at", "verified_at", "manifest_sha256", "verification_output_sha256"],
+      "properties": {
+        "backup_id": {"$ref": "#/$defs/opaque_id"},
+        "created_at": {"type": "string", "format": "date-time"},
+        "verified_at": {"type": "string", "format": "date-time"},
+        "manifest_sha256": {"$ref": "#/$defs/digest"},
+        "verification_output_sha256": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "timeline": {
+      "type": "object", "additionalProperties": false,
+      "required": ["impairment_started_at", "recovery_point_at", "restore_started_at", "restore_completed_at", "reconciliation_completed_at", "service_ready_at", "restore_target_disposed_at"],
+      "properties": {
+        "impairment_started_at": {"type": "string", "format": "date-time"},
+        "recovery_point_at": {"type": "string", "format": "date-time"},
+        "restore_started_at": {"type": "string", "format": "date-time"},
+        "restore_completed_at": {"type": "string", "format": "date-time"},
+        "reconciliation_completed_at": {"type": "string", "format": "date-time"},
+        "service_ready_at": {"type": "string", "format": "date-time"},
+        "restore_target_disposed_at": {"type": "string", "format": "date-time"}
+      }
+    },
+    "checks": {
+      "type": "array", "minItems": 10, "maxItems": 10, "uniqueItems": true,
+      "items": {"$ref": "#/$defs/check"},
+      "allOf": [
+        {"contains": {"properties": {"id": {"const": "backup_integrity"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "restore_completed"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "schema_migrations_match"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "tenant_counts_match"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "authoritative_rows_match"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "outbox_reconciled"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "audit_chain_verified"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "deletion_tombstones_replayed"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "deleted_data_absent"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "restore_target_disposed"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1}
+      ]
+    },
+    "check": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "outcome", "evidence_sha256"],
+      "properties": {
+        "id": {"enum": ["backup_integrity", "restore_completed", "schema_migrations_match", "tenant_counts_match", "authoritative_rows_match", "outbox_reconciled", "audit_chain_verified", "deletion_tombstones_replayed", "deleted_data_absent", "restore_target_disposed"]},
+        "outcome": {"enum": ["passed", "failed"]},
+        "evidence_sha256": {"$ref": "#/$defs/digest"}
+      }
+    }
+  }
+}

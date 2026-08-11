@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-memory.local/schemas/evidence/v1/staging-retrieval-risk-receipt.schema.json",
+  "title": "Agent Memory independent staging retrieval-risk receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "classification", "environment", "review_id", "corpus_version", "timing_method_version", "tolerance_version", "inventory_id", "inventory_receipt_sha256", "plan_id", "plan_receipt_sha256", "change_id", "change_receipt_sha256", "release_id", "release_receipt_sha256", "blind_corpus_sha256", "timing_report_sha256", "cache_review_sha256", "risk_tolerance_decision_sha256", "input_sha256", "review_started_at", "review_completed_at", "generated_at", "collected_at", "tenant_count", "case_count", "timing_sample_count_per_class", "result_leak_count", "count_leak_count", "cache_leak_count", "maximum_timing_delta_microseconds", "observed_timing_delta_microseconds", "ready", "domain_count", "passed_count", "failed_count", "inconclusive_count", "finding_count", "risk_breach_count", "domains"],
+  "properties": {
+    "schema": {"const": "agent-memory-staging-retrieval-risk-receipt-v1"},
+    "classification": {"const": "staging_external"}, "environment": {"const": "staging"},
+    "review_id": {"$ref": "#/$defs/opaque_id"}, "corpus_version": {"$ref": "#/$defs/opaque_id"}, "timing_method_version": {"$ref": "#/$defs/opaque_id"}, "tolerance_version": {"$ref": "#/$defs/opaque_id"},
+    "inventory_id": {"$ref": "#/$defs/opaque_id"}, "inventory_receipt_sha256": {"$ref": "#/$defs/digest"}, "plan_id": {"$ref": "#/$defs/opaque_id"}, "plan_receipt_sha256": {"$ref": "#/$defs/digest"}, "change_id": {"$ref": "#/$defs/opaque_id"}, "change_receipt_sha256": {"$ref": "#/$defs/digest"}, "release_id": {"$ref": "#/$defs/opaque_id"}, "release_receipt_sha256": {"$ref": "#/$defs/digest"},
+    "blind_corpus_sha256": {"$ref": "#/$defs/digest"}, "timing_report_sha256": {"$ref": "#/$defs/digest"}, "cache_review_sha256": {"$ref": "#/$defs/digest"}, "risk_tolerance_decision_sha256": {"$ref": "#/$defs/digest"}, "input_sha256": {"$ref": "#/$defs/digest"},
+    "review_started_at": {"type": "string", "format": "date-time"}, "review_completed_at": {"type": "string", "format": "date-time"}, "generated_at": {"type": "string", "format": "date-time"}, "collected_at": {"type": "string", "format": "date-time"},
+    "tenant_count": {"const": 2}, "case_count": {"$ref": "#/$defs/count"}, "timing_sample_count_per_class": {"$ref": "#/$defs/count"}, "result_leak_count": {"$ref": "#/$defs/zero_count"}, "count_leak_count": {"$ref": "#/$defs/zero_count"}, "cache_leak_count": {"$ref": "#/$defs/zero_count"},
+    "maximum_timing_delta_microseconds": {"type": "integer", "minimum": 1, "maximum": 60000000}, "observed_timing_delta_microseconds": {"type": "integer", "minimum": 0, "maximum": 60000000},
+    "ready": {"type": "boolean"}, "domain_count": {"const": 7}, "passed_count": {"type": "integer", "minimum": 0, "maximum": 7}, "failed_count": {"type": "integer", "minimum": 0, "maximum": 7}, "inconclusive_count": {"type": "integer", "minimum": 0, "maximum": 7}, "finding_count": {"$ref": "#/$defs/zero_count"}, "risk_breach_count": {"type": "integer", "minimum": 0, "maximum": 4},
+    "domains": {"type": "array", "minItems": 7, "maxItems": 7, "items": {"$ref": "#/$defs/domain"}}
+  },
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"}, "opaque_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"}, "count": {"type": "integer", "minimum": 1, "maximum": 1000000}, "zero_count": {"type": "integer", "minimum": 0, "maximum": 1000000},
+    "domain": {"type": "object", "additionalProperties": false, "required": ["id", "outcome", "finding_count", "evidence_sha256"], "properties": {"id": {"enum": ["blind_corpus_independence_reviewed", "result_isolation_reviewed", "public_count_concealment_reviewed", "statistical_timing_analysis_reviewed", "cache_key_namespace_reviewed", "warm_cache_contamination_reviewed", "risk_tolerance_accepted"]}, "outcome": {"enum": ["passed", "failed", "inconclusive"]}, "finding_count": {"$ref": "#/$defs/zero_count"}, "evidence_sha256": {"$ref": "#/$defs/digest"}}}
+  }
+}

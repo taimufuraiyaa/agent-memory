@@ -123,8 +123,20 @@ services:
     environment:
       <<: *service-environment
       AGENT_MEMORY_SAAS_SERVICE: api
+      AGENT_MEMORY_LOCAL_ONBOARDING: "true"
       AGENT_MEMORY_OBJECT_ACCESS_KEY: agent-memory-api
       AGENT_MEMORY_OBJECT_SECRET_KEY: api-local-development-only
+      AGENT_MEMORY_QUERY_PLANNER_ENABLED: "true"
+      AGENT_MEMORY_QUERY_PLANNER_ENDPOINT: http://host.docker.internal:11434
+      AGENT_MEMORY_QUERY_PLANNER_MODEL: qwen3:8b
+      AGENT_MEMORY_QUERY_PLANNER_TIMEOUT: 15s
+      AGENT_MEMORY_RERANKER_ENABLED: ${AGENT_MEMORY_RERANKER_ENABLED:-false}
+      AGENT_MEMORY_RERANKER_ENDPOINT: ${AGENT_MEMORY_RERANKER_ENDPOINT:-http://host.docker.internal:11435}
+      AGENT_MEMORY_RERANKER_MODEL: ${AGENT_MEMORY_RERANKER_MODEL:-qwen3-reranker:0.6b}
+      AGENT_MEMORY_RERANKER_TIMEOUT: ${AGENT_MEMORY_RERANKER_TIMEOUT:-10s}
+      AGENT_MEMORY_RERANKER_MIN_RELEVANCE: ${AGENT_MEMORY_RERANKER_MIN_RELEVANCE:-0.5}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       migrate:
         condition: service_completed_successfully

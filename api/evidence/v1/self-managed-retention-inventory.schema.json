@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-memory.local/schemas/evidence/v1/self-managed-retention-inventory.schema.json",
+  "title": "Agent Memory self-managed retention inventory receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "classification", "ready", "environment", "inventory_id", "inventory_receipt_sha256", "change_id", "change_receipt_sha256", "collected_at", "policy_count", "policies_sha256", "policies"],
+  "properties": {
+    "schema": {"const": "agent-memory-self-managed-retention-inventory-v1"},
+    "classification": {"const": "self_managed_external"},
+    "ready": {"const": true},
+    "environment": {"enum": ["staging", "production"]},
+    "inventory_id": {"$ref": "#/$defs/opaque_id"},
+    "inventory_receipt_sha256": {"$ref": "#/$defs/digest"},
+    "change_id": {"$ref": "#/$defs/opaque_id"},
+    "change_receipt_sha256": {"$ref": "#/$defs/digest"},
+    "collected_at": {"type": "string", "format": "date-time"},
+    "policy_count": {"const": 12},
+    "policies_sha256": {"$ref": "#/$defs/digest"},
+    "policies": {
+      "type": "array",
+      "minItems": 12,
+      "maxItems": 12,
+      "items": {"$ref": "#/$defs/policy"}
+    }
+  },
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "opaque_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"},
+    "bounded_text": {"type": "string", "minLength": 1, "maxLength": 512, "pattern": "^\\S(?:.|\\n)*\\S$|^\\S$"},
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["data_class", "purpose", "policy_version", "owner", "trigger", "duration_seconds", "deletion_method", "hold_behavior", "migration_plan", "customer_impact", "effective_at"],
+      "properties": {
+        "data_class": {"enum": ["account_identity", "analytics", "audit_events", "backups", "billing_records", "exports", "memory_content", "model_usage", "security_cases", "sessions_credentials", "source_derived", "source_originals"]},
+        "purpose": {"$ref": "#/$defs/bounded_text"},
+        "policy_version": {"$ref": "#/$defs/bounded_text"},
+        "owner": {"$ref": "#/$defs/bounded_text"},
+        "trigger": {"$ref": "#/$defs/bounded_text"},
+        "duration_seconds": {"type": "integer", "minimum": 0},
+        "deletion_method": {"$ref": "#/$defs/bounded_text"},
+        "hold_behavior": {"$ref": "#/$defs/bounded_text"},
+        "migration_plan": {"$ref": "#/$defs/bounded_text"},
+        "customer_impact": {"$ref": "#/$defs/bounded_text"},
+        "effective_at": {"type": "string", "format": "date-time"}
+      }
+    }
+  }
+}
