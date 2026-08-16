@@ -111,3 +111,13 @@ func TestSemanticRetrievalOptionsEnableRolesIndependently(t *testing.T) {
 		t.Fatalf("enabled semantic options=%d err=%v", len(options), err)
 	}
 }
+
+func TestSemanticRetrievalOptionsPreservePlannerWhenWarmupIsUnavailable(t *testing.T) {
+	options, err := semanticRetrievalOptions(config.Config{
+		QueryPlannerEnabled: true, QueryPlannerEndpoint: "http://127.0.0.1:1", QueryPlannerModel: "qwen3:8b", QueryPlannerTimeout: time.Second,
+		QueryPlannerWarmupEnabled: true, QueryPlannerWarmupTimeout: time.Second, QueryPlannerKeepAlive: time.Minute,
+	})
+	if err != nil || len(options) != 1 {
+		t.Fatalf("planner warmup fallback options=%d err=%v", len(options), err)
+	}
+}

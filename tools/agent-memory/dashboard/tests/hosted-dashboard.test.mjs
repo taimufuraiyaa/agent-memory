@@ -13,7 +13,7 @@ test('hosted connection stays in React memory and scopes every request', () => {
 })
 
 test('hosted surface preserves source custody, search, query, and proposal review', () => {
-  for (const marker of ['Source custody', 'Search durable memories', 'Ask ready sources', 'Review derived memory']) {
+  for (const marker of ['Your sources', 'Memory context', 'Ask about this source', 'Keep as memory']) {
     assert.match(appSource, new RegExp(marker))
   }
   for (const path of ['/v1/sources', '/v1/search', '/v1/source-queries', '/v1/memory-proposals']) {

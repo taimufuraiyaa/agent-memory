@@ -55,6 +55,11 @@ func TestLoadReadsBoundedLocalSemanticRoleConfiguration(t *testing.T) {
 	t.Setenv("AGENT_MEMORY_QUERY_PLANNER_ENDPOINT", "http://host.docker.internal:11434")
 	t.Setenv("AGENT_MEMORY_QUERY_PLANNER_MODEL", "qwen3:8b")
 	t.Setenv("AGENT_MEMORY_QUERY_PLANNER_TIMEOUT", "8s")
+	t.Setenv("AGENT_MEMORY_QUERY_PLANNER_WARMUP_ENABLED", "true")
+	t.Setenv("AGENT_MEMORY_QUERY_PLANNER_WARMUP_TIMEOUT", "20s")
+	t.Setenv("AGENT_MEMORY_QUERY_PLANNER_KEEP_ALIVE", "45m")
+	t.Setenv("AGENT_MEMORY_QUERY_PLANNER_CACHE_TTL", "12m")
+	t.Setenv("AGENT_MEMORY_QUERY_PLANNER_CACHE_CAPACITY", "128")
 	t.Setenv("AGENT_MEMORY_RERANKER_ENABLED", "true")
 	t.Setenv("AGENT_MEMORY_RERANKER_ENDPOINT", "http://host.docker.internal:11435")
 	t.Setenv("AGENT_MEMORY_RERANKER_MODEL", "qwen3-reranker:0.6b")
@@ -65,7 +70,9 @@ func TestLoadReadsBoundedLocalSemanticRoleConfiguration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !cfg.QueryPlannerEnabled || cfg.QueryPlannerModel != "qwen3:8b" || cfg.QueryPlannerTimeout != 8*time.Second {
+	if !cfg.QueryPlannerEnabled || cfg.QueryPlannerModel != "qwen3:8b" || cfg.QueryPlannerTimeout != 8*time.Second ||
+		!cfg.QueryPlannerWarmupEnabled || cfg.QueryPlannerWarmupTimeout != 20*time.Second || cfg.QueryPlannerKeepAlive != 45*time.Minute ||
+		cfg.QueryPlannerCacheTTL != 12*time.Minute || cfg.QueryPlannerCacheCapacity != 128 {
 		t.Fatalf("planner config=%+v", cfg)
 	}
 	if !cfg.RerankerEnabled || cfg.RerankerModel != "qwen3-reranker:0.6b" || cfg.RerankerTimeout != 12*time.Second || cfg.RerankerMinRelevance != 0.55 {
@@ -87,6 +94,36 @@ func TestLoadRejectsIncompleteOrUnboundedLocalSemanticRoles(t *testing.T) {
 	t.Setenv("AGENT_MEMORY_RERANKER_MIN_RELEVANCE", "1.1")
 	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "MIN_RELEVANCE") {
 		t.Fatalf("invalid reranker threshold error=%v", err)
+	}
+}
+
+func TestLoadRejectsUnboundedPlannerWarmupAndCacheConfiguration(t *testing.T) {
+	for name, variable := range map[string][2]string{
+		"zero residency": {"AGENT_MEMORY_QUERY_PLANNER_KEEP_ALIVE", "0s"},
+		"long residency": {"AGENT_MEMORY_QUERY_PLANNER_KEEP_ALIVE", "25h"},
+		"warmup timeout": {"AGENT_MEMORY_QUERY_PLANNER_WARMUP_TIMEOUT", "2m"},
+		"cache ttl":      {"AGENT_MEMORY_QUERY_PLANNER_CACHE_TTL", "25h"},
+		"cache capacity": {"AGENT_MEMORY_QUERY_PLANNER_CACHE_CAPACITY", "4097"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			setValidEnvironment(t)
+			t.Setenv("AGENT_MEMORY_QUERY_PLANNER_ENABLED", "true")
+			t.Setenv("AGENT_MEMORY_QUERY_PLANNER_ENDPOINT", "http://host.docker.internal:11434")
+			t.Setenv("AGENT_MEMORY_QUERY_PLANNER_MODEL", "qwen3:8b")
+			t.Setenv(variable[0], variable[1])
+			if _, err := Load(); err == nil || !strings.Contains(err.Error(), "QUERY_PLANNER") {
+				t.Fatalf("Load() error=%v, want planner bound failure", err)
+			}
+		})
+	}
+
+	setValidEnvironment(t)
+	t.Setenv("AGENT_MEMORY_QUERY_PLANNER_ENABLED", "true")
+	t.Setenv("AGENT_MEMORY_QUERY_PLANNER_ENDPOINT", "http://host.docker.internal:11434")
+	t.Setenv("AGENT_MEMORY_QUERY_PLANNER_MODEL", "qwen3:8b")
+	t.Setenv("AGENT_MEMORY_QUERY_PLANNER_WARMUP_ENABLED", "sometimes")
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "QUERY_PLANNER_WARMUP_ENABLED") {
+		t.Fatalf("invalid warmup flag error=%v", err)
 	}
 }
 

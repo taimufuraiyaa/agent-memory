@@ -7,15 +7,43 @@ const apiSource = await readFile(new URL('../src/lib/hostedApi.ts', import.meta.
 const cssSource = await readFile(new URL('../src/ui/hosted.css', import.meta.url), 'utf8')
 
 test('hosted product uses task navigation instead of one long control sheet', () => {
-  assert.match(appSource, /type HostedArea = 'home' \| 'library' \| 'memory' \| 'data' \| 'settings'/)
+  assert.match(appSource, /type HostedArea = 'home' \| 'library' \| 'settings'/)
   assert.match(appSource, /aria-label="Product areas"/)
   assert.match(appSource, /id="hosted-main-content"/)
   assert.match(appSource, /className="skipLink"/)
-  for (const area of ['Home', 'Library', 'Memory', 'Data', 'Settings']) {
+  for (const area of ['Home', 'Library', 'Settings']) {
     assert.match(appSource, new RegExp(`label: '${area}'`))
   }
+  assert.doesNotMatch(appSource, /label: 'Memory'/)
+  assert.doesNotMatch(appSource, /label: 'Data'/)
   assert.match(appSource, /activeArea === 'library'/)
   assert.match(appSource, /activeArea === 'settings'/)
+})
+
+test('library is a selected-source conversation workspace', () => {
+  assert.match(appSource, /selectedSourceId/)
+  assert.match(appSource, /conversationsBySource/)
+  assert.match(appSource, /className="librarySourceRail"/)
+  assert.match(appSource, /className="libraryConversation"/)
+  assert.match(appSource, /className="conversationComposer"/)
+  assert.match(appSource, /queryHostedSources\(connection, \[selectedSource\.id\]/)
+})
+
+test('conversation recalls durable memory without confusing it with source citations', () => {
+  assert.match(appSource, /Promise\.allSettled/)
+  assert.match(appSource, /searchHostedMemories\(connection, query\)/)
+  assert.match(appSource, /Memory context/)
+  assert.match(appSource, /Previously reviewed durable knowledge/)
+  assert.match(appSource, /Keep as memory/)
+  assert.doesNotMatch(appSource, /activeArea === 'memory'/)
+})
+
+test('privacy and portability controls are consolidated into settings', () => {
+  assert.doesNotMatch(appSource, /activeArea === 'data'/)
+  assert.match(appSource, /activeArea === 'settings'/)
+  for (const marker of ['Privacy &amp; retention', 'Data export', 'Import standalone migration']) {
+    assert.match(appSource, new RegExp(marker))
+  }
 })
 
 test('unconnected sessions get a dedicated private connection entry', () => {
@@ -53,9 +81,9 @@ test('citation identifiers and passages wrap in independent rows', () => {
 })
 
 test('library presents reconstructive source context separately from durable memory', () => {
-  assert.match(appSource, /Reconstructed source context/)
-  assert.match(appSource, /Locally reconstructed from cited passages/)
-  assert.match(appSource, /supporting citation/)
+  assert.match(appSource, /reconstructed source context/)
+  assert.match(appSource, /Source evidence and reviewed memory stay visibly separate/)
+  assert.match(appSource, /citation/)
   assert.match(appSource, /item\.locator\?\.display/)
   assert.doesNotMatch(appSource, /Add generated synthesis/)
   assert.match(apiSource, /reconstruction_strategy\?: string/)
@@ -65,9 +93,8 @@ test('library presents reconstructive source context separately from durable mem
 	assert.match(apiSource, /planner_used\?: boolean/)
 	assert.match(apiSource, /reranker_used\?: boolean/)
 	assert.match(appSource, /Understood as/)
-	assert.match(appSource, /Deterministic recall fallback/)
   assert.match(apiSource, /evidence_available: boolean/)
-	assert.match(appSource, /Context clipped at a safe limit/)
+  assert.match(appSource, /not a source citation/)
 })
 
 test('customer operations use bounded field presentation and partial loading', () => {

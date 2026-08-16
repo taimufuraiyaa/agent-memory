@@ -349,10 +349,15 @@ func resolveHeadlessPlannerModel(withLocalLLM bool, model string) (string, error
 func plannerEnvironment(ready, selectionExplicit bool, model string) map[string]string {
 	if ready {
 		return map[string]string{
-			"AGENT_MEMORY_QUERY_PLANNER_ENABLED":  "true",
-			"AGENT_MEMORY_QUERY_PLANNER_ENDPOINT": bootstrap.DefaultOllamaEndpoint,
-			"AGENT_MEMORY_QUERY_PLANNER_MODEL":    model,
-			"AGENT_MEMORY_QUERY_PLANNER_TIMEOUT":  "15s",
+			"AGENT_MEMORY_QUERY_PLANNER_ENABLED":        "true",
+			"AGENT_MEMORY_QUERY_PLANNER_ENDPOINT":       bootstrap.DefaultOllamaEndpoint,
+			"AGENT_MEMORY_QUERY_PLANNER_MODEL":          model,
+			"AGENT_MEMORY_QUERY_PLANNER_TIMEOUT":        "15s",
+			"AGENT_MEMORY_QUERY_PLANNER_WARMUP_ENABLED": "true",
+			"AGENT_MEMORY_QUERY_PLANNER_WARMUP_TIMEOUT": "30s",
+			"AGENT_MEMORY_QUERY_PLANNER_KEEP_ALIVE":     "30m",
+			"AGENT_MEMORY_QUERY_PLANNER_CACHE_TTL":      "10m",
+			"AGENT_MEMORY_QUERY_PLANNER_CACHE_CAPACITY": "256",
 		}
 	}
 	if selectionExplicit && model == "" {

@@ -3,6 +3,7 @@ package semantic
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -72,12 +74,30 @@ type PlannerConfig struct {
 	Model                 string
 	APIKey                string
 	Timeout               time.Duration
+	WarmupTimeout         time.Duration
+	CacheCapacity         int
+	CacheTTL              time.Duration
 	AllowLoopback         bool
 	AllowInstallationHost bool
 	Client                *http.Client
 }
 
 type RerankerConfig = PlannerConfig
+
+type PlannerWarmState string
+
+const (
+	PlannerConfigured  PlannerWarmState = "configured"
+	PlannerWarming     PlannerWarmState = "warming"
+	PlannerWarm        PlannerWarmState = "warm"
+	PlannerUnavailable PlannerWarmState = "unavailable"
+)
+
+type PlannerWarmStatus struct {
+	State     PlannerWarmState
+	Model     string
+	LastError string
+}
 
 type httpRoleClient struct {
 	endpoint string
@@ -86,15 +106,94 @@ type httpRoleClient struct {
 	client   *http.Client
 }
 
-type HTTPPlanner struct{ role httpRoleClient }
+type HTTPPlanner struct {
+	role       httpRoleClient
+	warmRole   httpRoleClient
+	warmMu     sync.RWMutex
+	warmStatus PlannerWarmStatus
+	requestMu  sync.Mutex
+	cache      map[string]plannerCacheEntry
+	inflight   map[string]*plannerCall
+	cacheTTL   time.Duration
+	cacheLimit int
+	now        func() time.Time
+}
 type HTTPReranker struct{ role httpRoleClient }
 
+type plannerCacheEntry struct {
+	plan      QueryPlan
+	expiresAt time.Time
+}
+
+type plannerCall struct {
+	done chan struct{}
+	plan QueryPlan
+	err  error
+}
+
 func NewHTTPPlanner(config PlannerConfig) (*HTTPPlanner, error) {
+	if config.CacheCapacity < 0 || config.CacheCapacity > 4096 {
+		return nil, errors.New("planner cache capacity must be between zero and 4096")
+	}
+	if config.CacheCapacity > 0 && (config.CacheTTL < time.Second || config.CacheTTL > 24*time.Hour) {
+		return nil, errors.New("planner cache lifetime must be between one second and 24 hours")
+	}
 	role, err := newHTTPRoleClient(config)
 	if err != nil {
 		return nil, err
 	}
-	return &HTTPPlanner{role: role}, nil
+	warmConfig := config
+	if config.WarmupTimeout > 0 {
+		warmConfig.Timeout = config.WarmupTimeout
+	}
+	warmRole, err := newHTTPRoleClient(warmConfig)
+	if err != nil {
+		return nil, err
+	}
+	return &HTTPPlanner{
+		role: role, warmRole: warmRole,
+		warmStatus: PlannerWarmStatus{State: PlannerConfigured, Model: role.model},
+		cache:      make(map[string]plannerCacheEntry), inflight: make(map[string]*plannerCall),
+		cacheTTL: config.CacheTTL, cacheLimit: config.CacheCapacity, now: time.Now,
+	}, nil
+}
+
+func (p *HTTPPlanner) WarmStatus() PlannerWarmStatus {
+	p.warmMu.RLock()
+	defer p.warmMu.RUnlock()
+	return p.warmStatus
+}
+
+func (p *HTTPPlanner) Warm(ctx context.Context, keepAlive time.Duration) error {
+	if keepAlive < time.Minute || keepAlive > 24*time.Hour {
+		return errors.New("planner warm residency must be between one minute and 24 hours")
+	}
+	p.setWarmStatus(PlannerWarming, "")
+	payload := map[string]any{
+		"model":      p.role.model,
+		"stream":     false,
+		"keep_alive": keepAlive.String(),
+	}
+	var response struct {
+		Done bool `json:"done"`
+	}
+	if err := p.warmRole.post(ctx, "/api/generate", payload, &response); err != nil {
+		p.setWarmStatus(PlannerUnavailable, err.Error())
+		return err
+	}
+	if !response.Done {
+		err := errors.New("planner warmup did not complete")
+		p.setWarmStatus(PlannerUnavailable, err.Error())
+		return err
+	}
+	p.setWarmStatus(PlannerWarm, "")
+	return nil
+}
+
+func (p *HTTPPlanner) setWarmStatus(state PlannerWarmState, lastError string) {
+	p.warmMu.Lock()
+	p.warmStatus = PlannerWarmStatus{State: state, Model: p.role.model, LastError: lastError}
+	p.warmMu.Unlock()
 }
 
 func NewHTTPReranker(config RerankerConfig) (*HTTPReranker, error) {
@@ -154,6 +253,53 @@ func (p *HTTPPlanner) Plan(ctx context.Context, question string) (QueryPlan, err
 	if question == "" || len(question) > maxQuestionBytes {
 		return QueryPlan{}, errors.New("query planner question is empty or too large")
 	}
+	if err := ctx.Err(); err != nil {
+		return QueryPlan{}, err
+	}
+	key := p.planKey(question)
+	if plan, ok := p.cachedPlan(key); ok {
+		return plan, nil
+	}
+
+	p.requestMu.Lock()
+	if entry, ok := p.cache[key]; ok && p.now().Before(entry.expiresAt) {
+		plan := cloneQueryPlan(entry.plan)
+		p.requestMu.Unlock()
+		return plan, nil
+	}
+	call, waiting := p.inflight[key]
+	if !waiting {
+		call = &plannerCall{done: make(chan struct{})}
+		p.inflight[key] = call
+		go p.completePlan(key, question, call)
+	}
+	p.requestMu.Unlock()
+
+	select {
+	case <-ctx.Done():
+		return QueryPlan{}, ctx.Err()
+	case <-call.done:
+		return cloneQueryPlan(call.plan), call.err
+	}
+}
+
+func (p *HTTPPlanner) completePlan(key, question string, call *plannerCall) {
+	plan, err := p.planUncached(context.Background(), question)
+	p.requestMu.Lock()
+	call.plan, call.err = plan, err
+	if err == nil && p.cacheLimit > 0 {
+		p.removeExpiredLocked()
+		if len(p.cache) >= p.cacheLimit {
+			p.evictEarliestLocked()
+		}
+		p.cache[key] = plannerCacheEntry{plan: cloneQueryPlan(plan), expiresAt: p.now().Add(p.cacheTTL)}
+	}
+	delete(p.inflight, key)
+	close(call.done)
+	p.requestMu.Unlock()
+}
+
+func (p *HTTPPlanner) planUncached(ctx context.Context, question string) (QueryPlan, error) {
 	payload := map[string]any{
 		"model":            p.role.model,
 		"stream":           false,
@@ -196,6 +342,53 @@ func (p *HTTPPlanner) Plan(ctx context.Context, question string) (QueryPlan, err
 		return QueryPlan{}, errors.New("query planner returned a subject outside the definition question")
 	}
 	return plan, nil
+}
+
+func (p *HTTPPlanner) planKey(question string) string {
+	normalized := strings.Join(strings.Fields(question), " ")
+	return fmt.Sprintf("%x", sha256.Sum256([]byte(p.role.model+"\x00query-plan-v1\x00"+normalized)))
+}
+
+func (p *HTTPPlanner) cachedPlan(key string) (QueryPlan, bool) {
+	p.requestMu.Lock()
+	defer p.requestMu.Unlock()
+	entry, ok := p.cache[key]
+	if !ok {
+		return QueryPlan{}, false
+	}
+	if !p.now().Before(entry.expiresAt) {
+		delete(p.cache, key)
+		return QueryPlan{}, false
+	}
+	return cloneQueryPlan(entry.plan), true
+}
+
+func (p *HTTPPlanner) removeExpiredLocked() {
+	now := p.now()
+	for key, entry := range p.cache {
+		if !now.Before(entry.expiresAt) {
+			delete(p.cache, key)
+		}
+	}
+}
+
+func (p *HTTPPlanner) evictEarliestLocked() {
+	var earliestKey string
+	var earliest time.Time
+	for key, entry := range p.cache {
+		if earliestKey == "" || entry.expiresAt.Before(earliest) {
+			earliestKey, earliest = key, entry.expiresAt
+		}
+	}
+	if earliestKey != "" {
+		delete(p.cache, earliestKey)
+	}
+}
+
+func cloneQueryPlan(plan QueryPlan) QueryPlan {
+	plan.RetrievalTerms = append([]string(nil), plan.RetrievalTerms...)
+	plan.Exclusions = append([]string(nil), plan.Exclusions...)
+	return plan
 }
 
 func simpleDefinitionQuestion(question string) bool {

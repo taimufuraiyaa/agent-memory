@@ -206,10 +206,17 @@ func semanticRetrievalOptions(cfg config.Config) ([]retrieval.Option, error) {
 	if cfg.QueryPlannerEnabled {
 		planner, err := semantic.NewHTTPPlanner(semantic.PlannerConfig{
 			Endpoint: cfg.QueryPlannerEndpoint, Model: cfg.QueryPlannerModel, APIKey: cfg.QueryPlannerAPIKey,
-			Timeout: cfg.QueryPlannerTimeout, AllowLoopback: true, AllowInstallationHost: true,
+			Timeout: cfg.QueryPlannerTimeout, WarmupTimeout: cfg.QueryPlannerWarmupTimeout,
+			CacheCapacity: cfg.QueryPlannerCacheCapacity, CacheTTL: cfg.QueryPlannerCacheTTL,
+			AllowLoopback: true, AllowInstallationHost: true,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("configure local query planner: %w", err)
+		}
+		if cfg.QueryPlannerWarmupEnabled {
+			warmupContext, cancel := context.WithTimeout(context.Background(), cfg.QueryPlannerWarmupTimeout)
+			_ = planner.Warm(warmupContext, cfg.QueryPlannerKeepAlive)
+			cancel()
 		}
 		options = append(options, retrieval.WithQueryPlanner(planner))
 	}

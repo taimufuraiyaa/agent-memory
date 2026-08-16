@@ -35,48 +35,53 @@ const (
 )
 
 type Config struct {
-	Environment            Environment
-	Service                Service
-	ListenAddr             string
-	TelemetryAddr          string
-	TracingEnabled         bool
-	TracingSampleRate      float64
-	PostgresURL            string
-	ObjectEndpoint         string
-	ObjectAccessKey        string
-	ObjectSecretKey        string
-	ExportEncryptionKey    string
-	VaultEncryptionKey     string
-	ModelProvider          string
-	ModelDirectory         string
-	ModelRetention         string
-	ModelEndpoint          string
-	ModelAPIKey            string
-	ModelVersion           string
-	ModelDimension         int
-	QueryPlannerEnabled    bool
-	QueryPlannerEndpoint   string
-	QueryPlannerModel      string
-	QueryPlannerAPIKey     string
-	QueryPlannerTimeout    time.Duration
-	RerankerEnabled        bool
-	RerankerEndpoint       string
-	RerankerModel          string
-	RerankerAPIKey         string
-	RerankerTimeout        time.Duration
-	RerankerMinRelevance   float64
-	QueueURL               string
-	SecretRef              string
-	DevAuthToken           string
-	DevSubject             string
-	DevEmail               string
-	DevDisplayName         string
-	LocalOnboardingEnabled bool
-	IdentityMode           IdentityMode
-	OIDCIssuer             string
-	OIDCAudience           string
-	EdgeCountrySecret      string
-	ShutdownTimeout        time.Duration
+	Environment               Environment
+	Service                   Service
+	ListenAddr                string
+	TelemetryAddr             string
+	TracingEnabled            bool
+	TracingSampleRate         float64
+	PostgresURL               string
+	ObjectEndpoint            string
+	ObjectAccessKey           string
+	ObjectSecretKey           string
+	ExportEncryptionKey       string
+	VaultEncryptionKey        string
+	ModelProvider             string
+	ModelDirectory            string
+	ModelRetention            string
+	ModelEndpoint             string
+	ModelAPIKey               string
+	ModelVersion              string
+	ModelDimension            int
+	QueryPlannerEnabled       bool
+	QueryPlannerEndpoint      string
+	QueryPlannerModel         string
+	QueryPlannerAPIKey        string
+	QueryPlannerTimeout       time.Duration
+	QueryPlannerWarmupEnabled bool
+	QueryPlannerWarmupTimeout time.Duration
+	QueryPlannerKeepAlive     time.Duration
+	QueryPlannerCacheTTL      time.Duration
+	QueryPlannerCacheCapacity int
+	RerankerEnabled           bool
+	RerankerEndpoint          string
+	RerankerModel             string
+	RerankerAPIKey            string
+	RerankerTimeout           time.Duration
+	RerankerMinRelevance      float64
+	QueueURL                  string
+	SecretRef                 string
+	DevAuthToken              string
+	DevSubject                string
+	DevEmail                  string
+	DevDisplayName            string
+	LocalOnboardingEnabled    bool
+	IdentityMode              IdentityMode
+	OIDCIssuer                string
+	OIDCAudience              string
+	EdgeCountrySecret         string
+	ShutdownTimeout           time.Duration
 }
 
 func Load() (Config, error) {
@@ -90,48 +95,60 @@ func Load() (Config, error) {
 		}
 	}
 	cfg := Config{
-		Environment:            environment,
-		Service:                Service(strings.TrimSpace(os.Getenv("AGENT_MEMORY_SAAS_SERVICE"))),
-		ListenAddr:             envOr("AGENT_MEMORY_SAAS_LISTEN_ADDR", ":8080"),
-		TelemetryAddr:          envOr("AGENT_MEMORY_TELEMETRY_LISTEN_ADDR", ":9090"),
-		TracingEnabled:         strings.EqualFold(strings.TrimSpace(os.Getenv("AGENT_MEMORY_TRACING_ENABLED")), "true"),
-		TracingSampleRate:      0.1,
-		PostgresURL:            strings.TrimSpace(os.Getenv("AGENT_MEMORY_POSTGRES_URL")),
-		ObjectEndpoint:         strings.TrimSpace(os.Getenv("AGENT_MEMORY_OBJECT_ENDPOINT")),
-		ObjectAccessKey:        strings.TrimSpace(os.Getenv("AGENT_MEMORY_OBJECT_ACCESS_KEY")),
-		ObjectSecretKey:        strings.TrimSpace(os.Getenv("AGENT_MEMORY_OBJECT_SECRET_KEY")),
-		ExportEncryptionKey:    strings.TrimSpace(os.Getenv("AGENT_MEMORY_EXPORT_ENCRYPTION_KEY")),
-		VaultEncryptionKey:     strings.TrimSpace(os.Getenv("AGENT_MEMORY_VAULT_ENCRYPTION_KEY")),
-		ModelProvider:          envOr("AGENT_MEMORY_MODEL_PROVIDER", "local-minilm-scaffold"),
-		ModelDirectory:         envOr("AGENT_MEMORY_MODEL_DIR", "/tmp/agent-memory-models"),
-		ModelRetention:         envOr("AGENT_MEMORY_MODEL_RETENTION", "local-only"),
-		ModelEndpoint:          strings.TrimRight(strings.TrimSpace(os.Getenv("AGENT_MEMORY_MODEL_ENDPOINT")), "/"),
-		ModelAPIKey:            strings.TrimSpace(os.Getenv("AGENT_MEMORY_MODEL_API_KEY")),
-		ModelVersion:           envOr("AGENT_MEMORY_MODEL_VERSION", "local-hash-v1"),
-		ModelDimension:         384,
-		QueryPlannerEnabled:    strings.EqualFold(strings.TrimSpace(os.Getenv("AGENT_MEMORY_QUERY_PLANNER_ENABLED")), "true"),
-		QueryPlannerEndpoint:   strings.TrimRight(strings.TrimSpace(os.Getenv("AGENT_MEMORY_QUERY_PLANNER_ENDPOINT")), "/"),
-		QueryPlannerModel:      strings.TrimSpace(os.Getenv("AGENT_MEMORY_QUERY_PLANNER_MODEL")),
-		QueryPlannerAPIKey:     strings.TrimSpace(os.Getenv("AGENT_MEMORY_QUERY_PLANNER_API_KEY")),
-		QueryPlannerTimeout:    8 * time.Second,
-		RerankerEnabled:        strings.EqualFold(strings.TrimSpace(os.Getenv("AGENT_MEMORY_RERANKER_ENABLED")), "true"),
-		RerankerEndpoint:       strings.TrimRight(strings.TrimSpace(os.Getenv("AGENT_MEMORY_RERANKER_ENDPOINT")), "/"),
-		RerankerModel:          strings.TrimSpace(os.Getenv("AGENT_MEMORY_RERANKER_MODEL")),
-		RerankerAPIKey:         strings.TrimSpace(os.Getenv("AGENT_MEMORY_RERANKER_API_KEY")),
-		RerankerTimeout:        8 * time.Second,
-		RerankerMinRelevance:   0.5,
-		QueueURL:               strings.TrimSpace(os.Getenv("AGENT_MEMORY_QUEUE_URL")),
-		SecretRef:              strings.TrimSpace(os.Getenv("AGENT_MEMORY_SECRET_REF")),
-		DevAuthToken:           strings.TrimSpace(os.Getenv("AGENT_MEMORY_DEV_AUTH_TOKEN")),
-		DevSubject:             strings.TrimSpace(os.Getenv("AGENT_MEMORY_DEV_SUBJECT")),
-		DevEmail:               strings.TrimSpace(os.Getenv("AGENT_MEMORY_DEV_EMAIL")),
-		DevDisplayName:         strings.TrimSpace(os.Getenv("AGENT_MEMORY_DEV_DISPLAY_NAME")),
-		LocalOnboardingEnabled: strings.EqualFold(strings.TrimSpace(os.Getenv("AGENT_MEMORY_LOCAL_ONBOARDING")), "true"),
-		IdentityMode:           identityMode,
-		OIDCIssuer:             strings.TrimRight(strings.TrimSpace(os.Getenv("AGENT_MEMORY_OIDC_ISSUER")), "/"),
-		OIDCAudience:           strings.TrimSpace(os.Getenv("AGENT_MEMORY_OIDC_AUDIENCE")),
-		EdgeCountrySecret:      strings.TrimSpace(os.Getenv("AGENT_MEMORY_EDGE_COUNTRY_SECRET")),
-		ShutdownTimeout:        10 * time.Second,
+		Environment:               environment,
+		Service:                   Service(strings.TrimSpace(os.Getenv("AGENT_MEMORY_SAAS_SERVICE"))),
+		ListenAddr:                envOr("AGENT_MEMORY_SAAS_LISTEN_ADDR", ":8080"),
+		TelemetryAddr:             envOr("AGENT_MEMORY_TELEMETRY_LISTEN_ADDR", ":9090"),
+		TracingEnabled:            strings.EqualFold(strings.TrimSpace(os.Getenv("AGENT_MEMORY_TRACING_ENABLED")), "true"),
+		TracingSampleRate:         0.1,
+		PostgresURL:               strings.TrimSpace(os.Getenv("AGENT_MEMORY_POSTGRES_URL")),
+		ObjectEndpoint:            strings.TrimSpace(os.Getenv("AGENT_MEMORY_OBJECT_ENDPOINT")),
+		ObjectAccessKey:           strings.TrimSpace(os.Getenv("AGENT_MEMORY_OBJECT_ACCESS_KEY")),
+		ObjectSecretKey:           strings.TrimSpace(os.Getenv("AGENT_MEMORY_OBJECT_SECRET_KEY")),
+		ExportEncryptionKey:       strings.TrimSpace(os.Getenv("AGENT_MEMORY_EXPORT_ENCRYPTION_KEY")),
+		VaultEncryptionKey:        strings.TrimSpace(os.Getenv("AGENT_MEMORY_VAULT_ENCRYPTION_KEY")),
+		ModelProvider:             envOr("AGENT_MEMORY_MODEL_PROVIDER", "local-minilm-scaffold"),
+		ModelDirectory:            envOr("AGENT_MEMORY_MODEL_DIR", "/tmp/agent-memory-models"),
+		ModelRetention:            envOr("AGENT_MEMORY_MODEL_RETENTION", "local-only"),
+		ModelEndpoint:             strings.TrimRight(strings.TrimSpace(os.Getenv("AGENT_MEMORY_MODEL_ENDPOINT")), "/"),
+		ModelAPIKey:               strings.TrimSpace(os.Getenv("AGENT_MEMORY_MODEL_API_KEY")),
+		ModelVersion:              envOr("AGENT_MEMORY_MODEL_VERSION", "local-hash-v1"),
+		ModelDimension:            384,
+		QueryPlannerEnabled:       strings.EqualFold(strings.TrimSpace(os.Getenv("AGENT_MEMORY_QUERY_PLANNER_ENABLED")), "true"),
+		QueryPlannerEndpoint:      strings.TrimRight(strings.TrimSpace(os.Getenv("AGENT_MEMORY_QUERY_PLANNER_ENDPOINT")), "/"),
+		QueryPlannerModel:         strings.TrimSpace(os.Getenv("AGENT_MEMORY_QUERY_PLANNER_MODEL")),
+		QueryPlannerAPIKey:        strings.TrimSpace(os.Getenv("AGENT_MEMORY_QUERY_PLANNER_API_KEY")),
+		QueryPlannerTimeout:       8 * time.Second,
+		QueryPlannerWarmupTimeout: 30 * time.Second,
+		QueryPlannerKeepAlive:     30 * time.Minute,
+		QueryPlannerCacheTTL:      10 * time.Minute,
+		QueryPlannerCacheCapacity: 256,
+		RerankerEnabled:           strings.EqualFold(strings.TrimSpace(os.Getenv("AGENT_MEMORY_RERANKER_ENABLED")), "true"),
+		RerankerEndpoint:          strings.TrimRight(strings.TrimSpace(os.Getenv("AGENT_MEMORY_RERANKER_ENDPOINT")), "/"),
+		RerankerModel:             strings.TrimSpace(os.Getenv("AGENT_MEMORY_RERANKER_MODEL")),
+		RerankerAPIKey:            strings.TrimSpace(os.Getenv("AGENT_MEMORY_RERANKER_API_KEY")),
+		RerankerTimeout:           8 * time.Second,
+		RerankerMinRelevance:      0.5,
+		QueueURL:                  strings.TrimSpace(os.Getenv("AGENT_MEMORY_QUEUE_URL")),
+		SecretRef:                 strings.TrimSpace(os.Getenv("AGENT_MEMORY_SECRET_REF")),
+		DevAuthToken:              strings.TrimSpace(os.Getenv("AGENT_MEMORY_DEV_AUTH_TOKEN")),
+		DevSubject:                strings.TrimSpace(os.Getenv("AGENT_MEMORY_DEV_SUBJECT")),
+		DevEmail:                  strings.TrimSpace(os.Getenv("AGENT_MEMORY_DEV_EMAIL")),
+		DevDisplayName:            strings.TrimSpace(os.Getenv("AGENT_MEMORY_DEV_DISPLAY_NAME")),
+		LocalOnboardingEnabled:    strings.EqualFold(strings.TrimSpace(os.Getenv("AGENT_MEMORY_LOCAL_ONBOARDING")), "true"),
+		IdentityMode:              identityMode,
+		OIDCIssuer:                strings.TrimRight(strings.TrimSpace(os.Getenv("AGENT_MEMORY_OIDC_ISSUER")), "/"),
+		OIDCAudience:              strings.TrimSpace(os.Getenv("AGENT_MEMORY_OIDC_AUDIENCE")),
+		EdgeCountrySecret:         strings.TrimSpace(os.Getenv("AGENT_MEMORY_EDGE_COUNTRY_SECRET")),
+		ShutdownTimeout:           10 * time.Second,
+	}
+	warmupEnabled := strings.TrimSpace(os.Getenv("AGENT_MEMORY_QUERY_PLANNER_WARMUP_ENABLED"))
+	if warmupEnabled != "" {
+		value, err := strconv.ParseBool(warmupEnabled)
+		if err != nil {
+			return Config{}, fmt.Errorf("AGENT_MEMORY_QUERY_PLANNER_WARMUP_ENABLED must be true or false")
+		}
+		cfg.QueryPlannerWarmupEnabled = cfg.QueryPlannerEnabled && value
 	}
 	if raw := strings.TrimSpace(os.Getenv("AGENT_MEMORY_MODEL_DIMENSION")); raw != "" {
 		value, err := strconv.Atoi(raw)
@@ -151,6 +168,30 @@ func Load() (Config, error) {
 			}
 			*destination = value
 		}
+	}
+	for name, bounds := range map[string]struct {
+		destination *time.Duration
+		minimum     time.Duration
+		maximum     time.Duration
+	}{
+		"AGENT_MEMORY_QUERY_PLANNER_WARMUP_TIMEOUT": {&cfg.QueryPlannerWarmupTimeout, time.Second, time.Minute},
+		"AGENT_MEMORY_QUERY_PLANNER_KEEP_ALIVE":     {&cfg.QueryPlannerKeepAlive, time.Minute, 24 * time.Hour},
+		"AGENT_MEMORY_QUERY_PLANNER_CACHE_TTL":      {&cfg.QueryPlannerCacheTTL, time.Second, 24 * time.Hour},
+	} {
+		if raw := strings.TrimSpace(os.Getenv(name)); raw != "" {
+			value, err := time.ParseDuration(raw)
+			if err != nil || value < bounds.minimum || value > bounds.maximum {
+				return Config{}, fmt.Errorf("%s must be between %s and %s", name, bounds.minimum, bounds.maximum)
+			}
+			*bounds.destination = value
+		}
+	}
+	if raw := strings.TrimSpace(os.Getenv("AGENT_MEMORY_QUERY_PLANNER_CACHE_CAPACITY")); raw != "" {
+		value, err := strconv.Atoi(raw)
+		if err != nil || value < 0 || value > 4096 {
+			return Config{}, fmt.Errorf("AGENT_MEMORY_QUERY_PLANNER_CACHE_CAPACITY must be between 0 and 4096")
+		}
+		cfg.QueryPlannerCacheCapacity = value
 	}
 	if raw := strings.TrimSpace(os.Getenv("AGENT_MEMORY_RERANKER_MIN_RELEVANCE")); raw != "" {
 		value, err := strconv.ParseFloat(raw, 64)

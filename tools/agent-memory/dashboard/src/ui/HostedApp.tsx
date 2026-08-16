@@ -39,17 +39,27 @@ import {
 } from '../lib/hostedApi'
 import { RightsAttestationGate } from './RightsAttestationGate'
 
-type HostedArea = 'home' | 'library' | 'memory' | 'data' | 'settings'
+type HostedArea = 'home' | 'library' | 'settings'
+
+type ConversationTurn = {
+  id: string
+  role: 'user' | 'assistant'
+  text?: string
+  answerable?: boolean
+  evidence?: HostedEvidence[]
+  memories?: HostedMemory[]
+  semanticContext?: HostedSemanticContext | null
+  sourceError?: string
+  memoryError?: string
+}
 
 const emptyConnection: HostedConnection = { token: '', tenant: '', workspace: '' }
 const terminalSourceStates = new Set(['ready', 'failed', 'rejected', 'disabled', 'deleted'])
 const sourcePollIntervalMs = 2_000
 const areas: Array<{ id: HostedArea; label: string; hint: string }> = [
   { id: 'home', label: 'Home', hint: 'Workspace overview' },
-  { id: 'library', label: 'Library', hint: 'Sources and questions' },
-  { id: 'memory', label: 'Memory', hint: 'Search and review' },
-  { id: 'data', label: 'Data', hint: 'Privacy and migration' },
-  { id: 'settings', label: 'Settings', hint: 'Plan and access' },
+  { id: 'library', label: 'Library', hint: 'Read and converse' },
+  { id: 'settings', label: 'Settings', hint: 'Data, plan, and access' },
 ]
 
 function formatLabel(value: string): string {
@@ -110,9 +120,12 @@ export function HostedApp({ runtime }: { runtime: DashboardRuntime }) {
   const [connection, setConnection] = useState<HostedConnection>(emptyConnection)
   const [activeArea, setActiveArea] = useState<HostedArea>('home')
   const [sources, setSources] = useState<HostedSource[]>([])
+  const [selectedSourceId, setSelectedSourceId] = useState('')
+  const [conversationsBySource, setConversationsBySource] = useState<Record<string, ConversationTurn[]>>({})
+  const [showUpload, setShowUpload] = useState(false)
+  const [showMemoryReview, setShowMemoryReview] = useState(false)
   const [memories, setMemories] = useState<HostedMemory[]>([])
   const [evidence, setEvidence] = useState<HostedEvidence[]>([])
-	const [semanticContext, setSemanticContext] = useState<HostedSemanticContext | null>(null)
   const [status, setStatus] = useState(localOnboarding ? 'Checking this private installation…' : 'Enter your connection details to begin.')
   const [localSessionState, setLocalSessionState] = useState<'loading' | 'signup_required' | 'authenticated'>(localOnboarding ? 'loading' : 'signup_required')
   const [busy, setBusy] = useState(false)
@@ -131,6 +144,9 @@ export function HostedApp({ runtime }: { runtime: DashboardRuntime }) {
   const [migrationResult, setMigrationResult] = useState<HostedImportResult | null>(null)
   const connected = Boolean(connection.tenant && connection.workspace && (connection.token || localOnboarding))
   const readySources = useMemo(() => sources.filter((source) => (source.progress?.state || source.state) === 'ready'), [sources])
+  const selectedSource = useMemo(() => sources.find((source) => source.id === selectedSourceId) || null, [selectedSourceId, sources])
+  const selectedSourceState = selectedSource ? selectedSource.progress?.state || selectedSource.state : ''
+  const selectedConversation = selectedSource ? conversationsBySource[selectedSource.id] || [] : []
   const hasProcessingSources = useMemo(
     () => sources.some((source) => !terminalSourceStates.has((source.progress?.state || source.state).toLowerCase())),
     [sources],
@@ -172,6 +188,11 @@ export function HostedApp({ runtime }: { runtime: DashboardRuntime }) {
       window.clearInterval(interval)
     }
   }, [connected, connection, hasProcessingSources])
+
+  useEffect(() => {
+    if (selectedSourceId && sources.some((source) => source.id === selectedSourceId)) return
+    setSelectedSourceId((readySources[0] || sources[0])?.id || '')
+  }, [readySources, selectedSourceId, sources])
 
   async function refreshSources(active = connection): Promise<void> {
     const values = await listHostedSources(active)
@@ -250,32 +271,45 @@ export function HostedApp({ runtime }: { runtime: DashboardRuntime }) {
     } finally { setBusy(false) }
   }
 
-  async function runMemorySearch(event: FormEvent<HTMLFormElement>): Promise<void> {
-    event.preventDefault()
-    const form = new FormData(event.currentTarget)
-    setBusy(true)
-    try {
-      const result = await searchHostedMemories(connection, String(form.get('query') || ''))
-      setMemories(result.items || [])
-      setStatus(result.items?.length ? `${result.items.length} matching memories found.` : 'No durable memories matched this search.')
-    } catch (error) { setStatus(error instanceof Error ? error.message : 'Search failed.') }
-    finally { setBusy(false) }
-  }
-
   async function runSourceQuery(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault()
+    if (!selectedSource || selectedSourceState !== 'ready') return
     const form = new FormData(event.currentTarget)
+    const query = String(form.get('query') || '').trim()
+    if (!query) return
+    const sourceID = selectedSource.id
+    const userTurn: ConversationTurn = { id: crypto.randomUUID(), role: 'user', text: query }
+    setConversationsBySource((current) => ({ ...current, [sourceID]: [...(current[sourceID] || []), userTurn] }))
+    event.currentTarget.reset()
     setBusy(true)
     try {
-      const result = await queryHostedSources(connection, readySources.map((source) => source.id), String(form.get('query') || ''))
-      setEvidence(result.evidence || [])
-		setSemanticContext(result.context?.semantic || null)
-		setStatus(result.answerable
-			? `${result.evidence?.length || 0} reconstructed source contexts are ready.`
-			: result.evidence_available
-				? 'Related source context was found, but it is not sufficient to answer this question.'
-				: 'The ready sources do not contain enough authorized evidence.')
-    } catch (error) { setStatus(error instanceof Error ? error.message : 'Source query failed.') }
+      const [sourceRequest, memoryRequest] = await Promise.allSettled([
+        queryHostedSources(connection, [selectedSource.id], query),
+        searchHostedMemories(connection, query),
+      ])
+      const sourceResult = sourceRequest.status === 'fulfilled' ? sourceRequest.value : null
+      const memoryResult = memoryRequest.status === 'fulfilled' ? memoryRequest.value : null
+      const nextEvidence = sourceResult?.evidence || []
+      const nextMemories = memoryResult?.items || []
+      setEvidence(nextEvidence)
+      setMemories(nextMemories)
+      const assistantTurn: ConversationTurn = {
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        answerable: sourceResult?.answerable || false,
+        evidence: nextEvidence,
+        memories: nextMemories,
+        semanticContext: sourceResult?.context?.semantic || null,
+        sourceError: sourceRequest.status === 'rejected' ? (sourceRequest.reason instanceof Error ? sourceRequest.reason.message : 'Source recall failed.') : undefined,
+        memoryError: memoryRequest.status === 'rejected' ? (memoryRequest.reason instanceof Error ? memoryRequest.reason.message : 'Memory recall is unavailable.') : undefined,
+      }
+      setConversationsBySource((current) => ({ ...current, [sourceID]: [...(current[sourceID] || []), assistantTurn] }))
+      setStatus(sourceResult?.answerable
+        ? `${nextEvidence.length} source contexts and ${nextMemories.length} relevant memories are ready.`
+        : sourceResult?.evidence_available
+          ? 'Related source context was found, but it is not sufficient to answer this question.'
+          : 'This source does not contain enough authorized evidence for that question.')
+    } catch (error) { setStatus(error instanceof Error ? error.message : 'Conversation recall failed.') }
     finally { setBusy(false) }
   }
 
@@ -430,47 +464,37 @@ export function HostedApp({ runtime }: { runtime: DashboardRuntime }) {
           </div>
         </section> : null}
 
-        {activeArea === 'library' ? <section className="productSection" aria-labelledby="library-title">
-          <SectionHeading eyebrow="Private source custody" title="Library" description="Upload lawful copies, follow their indexing state, and ask only ready sources." action={<button type="button" className="productSecondary" disabled={busy} onClick={() => void refreshSources()}>Refresh sources</button>} />
-          <div className="libraryLayout">
-            <article className="uploadStudio"><p className="productEyebrow">Add to Library</p><h2>Upload a private source</h2><p>PDF, EPUB, Markdown, or text. The browser verifies the file before private custody begins.</p>
-              <form className="productForm" onSubmit={uploadSource}>
-                <label className="fileDrop">Source file<input type="file" accept=".pdf,.epub,.md,.markdown,.txt" required onChange={(event) => setUploadFile(event.target.files?.[0] || null)} /><span>{uploadFile ? `${uploadFile.name} · ${(uploadFile.size / 1048576).toFixed(1)} MB` : 'Choose one file'}</span></label>
-                <label>Rights basis<select value={uploadRights} onChange={(event) => setUploadRights(event.target.value as HostedRightsBasis)}><option value="lawfully_acquired_private_use">Lawfully acquired private copy</option><option value="author_owned">I am the author or rights holder</option><option value="licensed">Licensed for this use</option><option value="public_domain_or_open">Public domain or open license</option></select></label>
-                <button className="productPrimary" disabled={busy || !uploadFile}>{busy ? 'Preparing source…' : 'Upload privately'}</button>
-              </form>{uploadPhase ? <p className="productStatus inline" role="status">{uploadPhase}</p> : null}
+        {activeArea === 'library' ? <section className="productSection librarySection" aria-labelledby="library-title">
+          <SectionHeading eyebrow="Private reading room" title="Library" description="Choose one indexed source, then keep its questions, source evidence, and reviewed memory context together." action={<div className="productActions"><button type="button" onClick={() => setShowUpload((value) => !value)}>{showUpload ? 'Close upload' : 'Add source'}</button><button type="button" className="productSecondary" disabled={busy} onClick={() => void refreshSources()}>Refresh</button></div>} />
+          {showUpload ? <article className="libraryUploadPanel"><div><p className="productEyebrow">Add to Library</p><h2>Upload a private source</h2><p>PDF, EPUB, Markdown, or text. Indexing stays inside this deployment.</p></div><form className="productForm" onSubmit={uploadSource}><label className="fileDrop">Source file<input type="file" accept=".pdf,.epub,.md,.markdown,.txt" required onChange={(event) => setUploadFile(event.target.files?.[0] || null)} /><span>{uploadFile ? `${uploadFile.name} · ${(uploadFile.size / 1048576).toFixed(1)} MB` : 'Choose one file'}</span></label><label>Rights basis<select value={uploadRights} onChange={(event) => setUploadRights(event.target.value as HostedRightsBasis)}><option value="lawfully_acquired_private_use">Lawfully acquired private copy</option><option value="author_owned">I am the author or rights holder</option><option value="licensed">Licensed for this use</option><option value="public_domain_or_open">Public domain or open license</option></select></label><button className="productPrimary" disabled={busy || !uploadFile}>{busy ? 'Preparing source…' : 'Upload privately'}</button></form>{uploadPhase ? <p className="productStatus inline" role="status">{uploadPhase}</p> : null}</article> : null}
+          <div className="libraryWorkspace">
+            <aside className="librarySourceRail" aria-label="Your sources">
+              <div className="sourceRailHeader"><div><p className="productEyebrow">Your sources</p><h2>Indexed library</h2></div><span>{readySources.length}/{sources.length} ready</span></div>
+              {sources.length === 0 ? <div className="productEmpty compact"><p>Add a book or document to begin.</p></div> : <div className="sourceRailList">{sources.map((source) => { const state = source.progress?.state || source.state; return <article className={selectedSourceId === source.id ? 'sourceRailItem selected' : 'sourceRailItem'} key={source.id}><button type="button" className="sourceSelect" aria-pressed={selectedSourceId === source.id} onClick={() => { setSelectedSourceId(source.id); setProposal(null); setShowMemoryReview(false) }}><span className="sourceType" aria-hidden="true">{source.filename.split('.').pop()?.slice(0, 4) || 'file'}</span><span className="sourceIdentity"><strong>{source.filename}</strong><small>{source.progress?.stage ? formatLabel(source.progress.stage) : source.media_type}</small></span><StateBadge value={state} /></button><div className="sourceActions">{source.failure?.retryable ? <button type="button" onClick={() => void retryHostedSource(connection, source.id).then(() => refreshSources())}>Retry</button> : null}<button type="button" className="danger" onClick={() => window.confirm(`Delete ${source.filename}?`) && void deleteHostedSource(connection, source.id).then(() => refreshSources())}>Delete</button></div></article> })}</div>}
+            </aside>
+            <article className="libraryConversation">
+              {selectedSource ? <><header className="conversationHeader"><div><p className="productEyebrow">Conversation with</p><h2>{selectedSource.filename}</h2><p>Answers stay scoped to this source. Relevant durable memory appears separately as enrichment.</p></div><StateBadge value={selectedSourceState} /></header>
+                <div className="conversationBody" aria-live="polite">
+                  {selectedConversation.length === 0 ? <div className="conversationWelcome"><span aria-hidden="true">am</span><div><h3>{selectedSourceState === 'ready' ? 'Ask about this source' : `${formatLabel(selectedSourceState)} source`}</h3><p>{selectedSourceState === 'ready' ? 'I will reconstruct the strongest surrounding passages and recall related reviewed memories without mixing their provenance.' : 'Conversation becomes available when indexing reaches Ready.'}</p></div></div> : selectedConversation.map((turn) => turn.role === 'user' ? <div className="chatTurn userTurn" key={turn.id}><span>You</span><p>{turn.text}</p></div> : <div className="chatTurn assistantTurn" key={turn.id}><div className="assistantIdentity"><span aria-hidden="true">am</span><strong>Agent Memory</strong></div>{turn.sourceError ? <p className="conversationError">{turn.sourceError}</p> : turn.evidence?.length ? <><p className="assistantSummary">{turn.answerable ? `I found ${turn.evidence.length} reconstructed source context${turn.evidence.length === 1 ? '' : 's'} that can support an answer.` : 'I found related context, but not enough evidence for a confident answer.'}</p>{turn.semanticContext?.planner_used ? <p className="semanticTrace">Understood as {formatLabel(turn.semanticContext.intent || 'question')} · {turn.semanticContext.language || 'unknown language'} · {turn.semanticContext.subject || 'unspecified subject'}{turn.semanticContext.reranker_used ? ' · Locally reranked' : ''}</p> : null}<div className="conversationEvidence">{turn.evidence.map((item) => <article key={`${turn.id}:${item.citation_id}`}><div className="evidenceHeading"><span>{item.locator?.display || 'Source context'}</span><small>{item.included_citation_ids?.length || 1} citation{(item.included_citation_ids?.length || 1) === 1 ? '' : 's'}</small></div><p>{item.text}</p><details><summary>Source lineage</summary><code>{(item.included_citation_ids || [item.citation_id]).join(' · ')}</code></details></article>)}</div></> : <p className="conversationEmptyAnswer">This source does not contain enough authorized evidence for that question.</p>}
+                    <section className="memoryContext"><div><p className="productEyebrow">Memory context</p><small>Previously reviewed durable knowledge · not a source citation</small></div>{turn.memoryError ? <p>{turn.memoryError}</p> : turn.memories?.length ? <div>{turn.memories.slice(0, 4).map((memory) => <article key={`${turn.id}:${memory.id}`}><StateBadge value={memory.type} /><p>{memory.content}</p></article>)}</div> : <p>No relevant durable memory was found.</p>}</section>
+                    {turn.evidence?.length ? <button type="button" className="memoryReviewButton" onClick={() => { setEvidence(turn.evidence || []); setShowMemoryReview(true) }}>Keep as memory</button> : null}
+                  </div>)}
+                  {busy ? <div className="conversationThinking"><span aria-hidden="true" /><p>Reconstructing source context and recalling memory…</p></div> : null}
+                  {showMemoryReview ? <section className="inlineMemoryReview"><div><p className="productEyebrow">Human review</p><h3>Keep as memory</h3><p>Nothing becomes durable until you accept it.</p></div><form className="productForm" onSubmit={createProposal}><label>Proposed memory<textarea name="content" rows={4} maxLength={2000} required /></label><label>Memory type<select name="type" defaultValue="semantic"><option value="semantic">Semantic</option><option value="procedural">Procedural</option><option value="episodic">Episodic</option><option value="outcome">Outcome</option></select></label><button className="productPrimary">Create review proposal</button></form>{proposal ? <div className="proposalReview"><div className="collectionHeading"><h3>Review before accepting</h3><StateBadge value={proposal.status} /></div><textarea aria-label="Proposal content" value={proposal.content} onChange={(event) => setProposal({ ...proposal, content: event.target.value })} /><div className="productActions"><button type="button" onClick={() => void changeProposal('edit')}>Save edit</button><button className="productPrimary" type="button" onClick={() => void changeProposal('accept')}>Accept memory</button><button className="danger" type="button" onClick={() => void changeProposal('reject')}>Reject</button></div></div> : null}</section> : null}
+                </div>
+                <form className="conversationComposer" onSubmit={runSourceQuery}><textarea name="query" rows={2} maxLength={4000} placeholder={selectedSourceState === 'ready' ? `Ask about ${selectedSource.filename}` : 'This source is not ready for conversation'} aria-label="Ask about this source" required disabled={selectedSourceState !== 'ready' || busy} /><button className="productPrimary" disabled={selectedSourceState !== 'ready' || busy}>{busy ? 'Recalling…' : 'Ask'}</button><small>Source evidence and reviewed memory stay visibly separate.</small></form>
+              </> : <div className="productEmpty"><span aria-hidden="true">＋</span><h3>Select a source</h3><p>Choose an indexed book or document from the left to open its conversation.</p></div>}
             </article>
-            <div className="sourceCollection"><div className="collectionHeading"><h2>Source custody</h2><span>{sources.length} total</span></div>
-              {sources.length === 0 ? <div className="productEmpty"><span aria-hidden="true">＋</span><h3>Your library is empty</h3><p>Choose a source on the left. Its processing and retention state will appear here.</p></div> : <div className="sourceList">{sources.map((source) => {
-                const state = source.progress?.state || source.state
-                return <article className="sourceRow" key={source.id}><div className="sourceType" aria-hidden="true">{source.filename.split('.').pop()?.slice(0, 4) || 'file'}</div><div className="sourceIdentity"><h3>{source.filename}</h3><p>{source.media_type}{source.progress?.stage ? ` · ${formatLabel(source.progress.stage)}` : ''}</p></div><StateBadge value={state} /><div className="sourceActions">{source.failure?.retryable ? <button type="button" onClick={() => void retryHostedSource(connection, source.id).then(() => refreshSources())}>Retry</button> : null}<button type="button" className="danger" onClick={() => window.confirm(`Delete ${source.filename}?`) && void deleteHostedSource(connection, source.id).then(() => refreshSources())}>Delete</button></div></article>
-              })}</div>}
-            </div>
-          </div>
-			<article className="askStudio"><div className="askIntro"><p className="productEyebrow">Reconstructive recall</p><h2>Ask ready sources</h2><p>Agent Memory restores the surrounding authorized context before deciding whether the source can answer.</p><span>{readySources.length} ready sources</span></div><form className="askForm" onSubmit={runSourceQuery}><textarea name="query" rows={4} maxLength={4000} placeholder="What do these sources say about…" required /><div><span className="productChoice">Locally reconstructed from cited passages</span><button className="productPrimary" disabled={busy || readySources.length === 0}>Recall source context</button></div></form></article>
-			{evidence.length ? <div className="answerLayout"><header className="reconstructionHeading"><p className="productEyebrow">Source recall</p><h2>Reconstructed source context</h2><p>These are cited source windows, not durable memories. Review them before accepting any interpretation into Memory.</p>{semanticContext?.planner_used ? <p className="semanticTrace">Understood as {formatLabel(semanticContext.intent || 'question')} · {semanticContext.language || 'unknown language'} · {semanticContext.subject || 'unspecified subject'}{semanticContext.reranker_used ? ' · Locally reranked' : ''}</p> : semanticContext?.fallbacks?.length ? <p className="semanticTrace fallback">Deterministic recall fallback · local understanding unavailable</p> : null}</header><section className="evidenceList" aria-label="Reconstructed cited source context">{evidence.map((item) => { const citationCount = item.included_citation_ids?.length || 1; return <article key={`${item.source_id}:${item.citation_id}`}><div className="evidenceHeading"><span>{item.locator?.display || 'Source context'}</span><div className="evidenceMeta"><small>{citationCount} supporting citation{citationCount === 1 ? '' : 's'}</small>{item.window_clipped ? <small className="contextWarning">Context clipped at a safe limit</small> : null}</div></div><p>{item.text}</p><details><summary>Source lineage</summary><code>{(item.included_citation_ids || [item.citation_id]).join(' · ')}</code></details></article> })}</section><button type="button" className="productSecondary" onClick={() => setActiveArea('memory')}>Review as memory</button></div> : null}
-        </section> : null}
-
-        {activeArea === 'memory' ? <section className="productSection" aria-labelledby="memory-title">
-          <SectionHeading eyebrow="Durable knowledge" title="Memory" description="Find what the agent retains and approve new memory only when the evidence is strong." />
-          <article className="searchStudio"><h2>Search durable memories</h2><form className="productSearch" onSubmit={runMemorySearch}><input name="query" maxLength={4000} placeholder="Search an idea, decision, or procedure" required /><button className="productPrimary" disabled={busy}>Search</button></form></article>
-          {memories.length === 0 ? <div className="productEmpty"><span aria-hidden="true">⌕</span><h3>No memories loaded</h3><p>Search for a concept to inspect durable memory in this workspace.</p></div> : <div className="memoryResults">{memories.map((memory) => <article key={memory.id}><div><StateBadge value={memory.type} /><small>{memory.updated_at ? new Date(memory.updated_at).toLocaleDateString() : 'Durable memory'}</small></div><p>{memory.content}</p></article>)}</div>}
-          <article className="proposalStudio"><div><p className="productEyebrow">Human review</p><h2>Review derived memory</h2><p>{evidence.length ? `${evidence.length} cited passages are ready to support a proposal.` : 'Ask your Library first. A proposal needs cited evidence.'}</p></div>{evidence.length ? <form className="productForm" onSubmit={createProposal}><label>Proposed memory<textarea name="content" rows={4} maxLength={2000} required /></label><label>Memory type<select name="type" defaultValue="semantic"><option value="semantic">Semantic</option><option value="procedural">Procedural</option><option value="episodic">Episodic</option><option value="outcome">Outcome</option></select></label><button className="productPrimary">Create review proposal</button></form> : <button type="button" className="productSecondary" onClick={() => setActiveArea('library')}>Ask Library</button>}
-            {proposal ? <div className="proposalReview"><div className="collectionHeading"><h3>Review before accepting</h3><StateBadge value={proposal.status} /></div><textarea aria-label="Proposal content" value={proposal.content} onChange={(event) => setProposal({ ...proposal, content: event.target.value })} /><div className="productActions"><button type="button" onClick={() => void changeProposal('edit')}>Save edit</button><button className="productPrimary" type="button" onClick={() => void changeProposal('accept')}>Accept memory</button><button className="danger" type="button" onClick={() => void changeProposal('reject')}>Reject</button></div></div> : null}
-          </article>
-        </section> : null}
-
-        {activeArea === 'data' ? <section className="productSection" aria-labelledby="data-title">
-          <SectionHeading eyebrow="Portability and rights" title="Data" description="Understand retained data, create exports, and move a standalone workspace by explicit copy." action={<button type="button" className="productSecondary" disabled={busy} onClick={() => void loadOperations()}>Refresh privacy details</button>} />
-          <article className="productSurface"><div className="surfaceHeading"><div><p className="productEyebrow">Customer controls</p><h2>Privacy &amp; retention</h2></div></div><ProductFields value={privacy} empty="Refresh to inspect the retained data classes and deletion behavior available to this workspace." /></article>
-          <div className="dataColumns">
-            <article className="productSurface"><p className="productEyebrow">Portable copy</p><h2>Data export</h2><p>Request a hosted export, wait for preparation, then download it during its short availability window.</p><div className="productActions"><button className="productPrimary" type="button" onClick={() => void beginExport()}>Request export</button><button type="button" disabled={!exportOperation} onClick={() => void refreshExport()}>Refresh</button><button type="button" disabled={exportOperation?.state !== 'ready'} onClick={() => void saveExport()}>Download</button></div>{exportOperation ? <div className="operationState"><StateBadge value={exportOperation.state} /><span>{exportOperation.expires_at || 'Expiry pending'}</span></div> : null}</article>
-            <article className="productSurface"><p className="productEyebrow">Copy-first move</p><h2>Import standalone migration</h2><p>Import an encrypted AMPB2 copy. Browser-created copies include memories and notes, not uploaded source originals.</p><form className="productForm" onSubmit={runMigrationImport}><label>AMPB2 bundle<input type="file" accept=".ampb2,application/octet-stream" required onChange={(event) => { setMigrationFile(event.target.files?.[0] || null); setMigrationResult(null); setMigrationKey(crypto.randomUUID()) }} /></label><label>Bundle passphrase<input type="password" autoComplete="off" minLength={12} maxLength={1024} required value={migrationPassphrase} onChange={(event) => setMigrationPassphrase(event.target.value)} /></label><button className="productPrimary" disabled={busy || !migrationFile}>Import encrypted copy</button></form>{migrationResult ? <div className="operationReport"><p>Imported <strong>{migrationResult.report.imported.length}</strong> · merged <strong>{migrationResult.report.merged.length}</strong> · skipped <strong>{migrationResult.report.skipped.length}</strong> · failed <strong>{migrationResult.report.failed.length}</strong></p><div><StateBadge value={migrationResult.state} /><button type="button" onClick={() => void refreshMigration()}>Refresh import</button></div></div> : null}</article>
           </div>
         </section> : null}
 
         {activeArea === 'settings' ? <section className="productSection" aria-labelledby="settings-title">
-          <SectionHeading eyebrow="Workspace administration" title="Settings" description="Manage plan context, scoped agent access, and the hosted account lifecycle." action={<button type="button" className="productSecondary" disabled={busy} onClick={() => void loadOperations()}>Refresh settings</button>} />
+          <SectionHeading eyebrow="Workspace administration" title="Settings" description="Manage privacy, portable data, plan context, scoped agent access, and the account lifecycle." action={<button type="button" className="productSecondary" disabled={busy} onClick={() => void loadOperations()}>Refresh settings</button>} />
+          <article className="productSurface"><div className="surfaceHeading"><div><p className="productEyebrow">Customer controls</p><h2>Privacy &amp; retention</h2></div></div><ProductFields value={privacy} empty="Refresh to inspect retained data classes and deletion behavior for this workspace." /></article>
+          <div className="dataColumns">
+            <article className="productSurface"><p className="productEyebrow">Portable copy</p><h2>Data export</h2><p>Request an export, wait for preparation, then download it during its short availability window.</p><div className="productActions"><button className="productPrimary" type="button" onClick={() => void beginExport()}>Request export</button><button type="button" disabled={!exportOperation} onClick={() => void refreshExport()}>Refresh</button><button type="button" disabled={exportOperation?.state !== 'ready'} onClick={() => void saveExport()}>Download</button></div>{exportOperation ? <div className="operationState"><StateBadge value={exportOperation.state} /><span>{exportOperation.expires_at || 'Expiry pending'}</span></div> : null}</article>
+            <article className="productSurface"><p className="productEyebrow">Copy-first move</p><h2>Import standalone migration</h2><p>Import an encrypted AMPB2 copy. Browser-created copies include memories and notes, not uploaded source originals.</p><form className="productForm" onSubmit={runMigrationImport}><label>AMPB2 bundle<input type="file" accept=".ampb2,application/octet-stream" required onChange={(event) => { setMigrationFile(event.target.files?.[0] || null); setMigrationResult(null); setMigrationKey(crypto.randomUUID()) }} /></label><label>Bundle passphrase<input type="password" autoComplete="off" minLength={12} maxLength={1024} required value={migrationPassphrase} onChange={(event) => setMigrationPassphrase(event.target.value)} /></label><button className="productPrimary" disabled={busy || !migrationFile}>Import encrypted copy</button></form>{migrationResult ? <div className="operationReport"><p>Imported <strong>{migrationResult.report.imported.length}</strong> · merged <strong>{migrationResult.report.merged.length}</strong> · skipped <strong>{migrationResult.report.skipped.length}</strong> · failed <strong>{migrationResult.report.failed.length}</strong></p><div><StateBadge value={migrationResult.state} /><button type="button" onClick={() => void refreshMigration()}>Refresh import</button></div></div> : null}</article>
+          </div>
           <article className="productSurface"><div className="surfaceHeading"><div><p className="productEyebrow">Subscription</p><h2>Plan &amp; usage</h2></div><div className="productActions"><button type="button" onClick={() => void requestHostedPlanChange(connection, 'upgrade', 'individual').then(() => setStatus('Plan change queued.'))}>Request Individual plan</button><button type="button" className="danger" onClick={() => window.confirm('Cancel the paid plan?') && void requestHostedPlanChange(connection, 'cancel', 'trial').then(() => setStatus('Cancellation queued.'))}>Cancel paid plan</button></div></div><ProductFields value={billing} empty="Refresh to inspect plan and reconciled usage available to this workspace." /></article>
           <article className="productSurface"><div className="surfaceHeading"><div><p className="productEyebrow">Scoped machine access</p><h2>Agent credentials</h2><p>Create the narrowest credential each client needs.</p></div></div>{credentialSecret ? <div className="oneTimeSecret"><div><strong>Copy this secret now</strong><p>It will disappear when dismissed or when this page reloads.</p></div><code>{credentialSecret}</code><div className="productActions"><button type="button" onClick={() => void navigator.clipboard.writeText(credentialSecret).then(() => setStatus('Credential secret copied.'))}>Copy secret</button><button type="button" onClick={() => setCredentialSecret('')}>Dismiss</button></div></div> : null}<form className="credentialForm" onSubmit={createCredential}><label>Label<input name="label" maxLength={128} required /></label><label>Scopes<input name="scopes" placeholder="memory:read,memory:write" required /></label><label>Expires at<input name="expires_at" type="datetime-local" required /></label><button className="productPrimary" disabled={!connected}>Create credential</button></form>{credentials.length ? <div className="credentialList">{credentials.map((credential) => { const id = String(credential.id || ''); return <article key={id}><div><h3>{String(credential.label || id)}</h3><p>{String(credential.scopes || 'Scoped access')} · {String(credential.state || '')}</p></div><div className="productActions"><button type="button" onClick={() => void rotateHostedCredential(connection, id, new Date(Date.now() + 30 * 86400000).toISOString()).then(() => loadOperations())}>Rotate</button><button className="danger" type="button" onClick={() => void revokeHostedCredential(connection, id).then(() => loadOperations())}>Revoke</button></div></article> })}</div> : <div className="productEmpty compact"><p>No agent credentials are loaded.</p></div>}</article>
           <article className="dangerZone"><div><p className="productEyebrow">Irreversible account action</p><h2>Delete hosted account</h2><p>Starts the verified hosted deletion lifecycle. It never affects a standalone SQLite workspace.</p></div><button type="button" className="danger" onClick={() => window.confirm('Delete this hosted account and all tenant data?') && void deleteHostedAccount(connection).then((operation) => setStatus(`Account deletion ${operation.state}.`))}>Delete account</button></article>

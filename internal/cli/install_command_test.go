@@ -92,6 +92,11 @@ func TestInstallCommandBasic(t *testing.T) {
 		`AGENT_MEMORY_QUERY_PLANNER_ENDPOINT="http://127.0.0.1:11434"`,
 		`AGENT_MEMORY_QUERY_PLANNER_MODEL="qwen3:14b"`,
 		`AGENT_MEMORY_QUERY_PLANNER_TIMEOUT="15s"`,
+		`AGENT_MEMORY_QUERY_PLANNER_WARMUP_ENABLED="true"`,
+		`AGENT_MEMORY_QUERY_PLANNER_WARMUP_TIMEOUT="30s"`,
+		`AGENT_MEMORY_QUERY_PLANNER_KEEP_ALIVE="30m"`,
+		`AGENT_MEMORY_QUERY_PLANNER_CACHE_TTL="10m"`,
+		`AGENT_MEMORY_QUERY_PLANNER_CACHE_CAPACITY="256"`,
 	} {
 		if !strings.Contains(envContent, expected) {
 			t.Fatalf("expected planner setting %s in env file, got: %s", expected, envContent)

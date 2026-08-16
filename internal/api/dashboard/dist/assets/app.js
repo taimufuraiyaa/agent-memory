@@ -42225,10 +42225,8 @@ const terminalSourceStates = /* @__PURE__ */ new Set(["ready", "failed", "reject
 const sourcePollIntervalMs = 2e3;
 const areas = [
   { id: "home", label: "Home", hint: "Workspace overview" },
-  { id: "library", label: "Library", hint: "Sources and questions" },
-  { id: "memory", label: "Memory", hint: "Search and review" },
-  { id: "data", label: "Data", hint: "Privacy and migration" },
-  { id: "settings", label: "Settings", hint: "Plan and access" }
+  { id: "library", label: "Library", hint: "Read and converse" },
+  { id: "settings", label: "Settings", hint: "Data, plan, and access" }
 ];
 function formatLabel(value) {
   const spaced = value.replaceAll("_", " ").replace(/([a-z])([A-Z])/g, "$1 $2");
@@ -42284,9 +42282,12 @@ function HostedApp({ runtime }) {
   const [connection, setConnection] = reactExports.useState(emptyConnection);
   const [activeArea, setActiveArea] = reactExports.useState("home");
   const [sources, setSources] = reactExports.useState([]);
+  const [selectedSourceId, setSelectedSourceId] = reactExports.useState("");
+  const [conversationsBySource, setConversationsBySource] = reactExports.useState({});
+  const [showUpload, setShowUpload] = reactExports.useState(false);
+  const [showMemoryReview, setShowMemoryReview] = reactExports.useState(false);
   const [memories, setMemories] = reactExports.useState([]);
   const [evidence, setEvidence] = reactExports.useState([]);
-  const [semanticContext, setSemanticContext] = reactExports.useState(null);
   const [status, setStatus] = reactExports.useState(localOnboarding ? "Checking this private installation…" : "Enter your connection details to begin.");
   const [localSessionState, setLocalSessionState] = reactExports.useState(localOnboarding ? "loading" : "signup_required");
   const [busy, setBusy] = reactExports.useState(false);
@@ -42308,6 +42309,9 @@ function HostedApp({ runtime }) {
     var _a3;
     return (((_a3 = source.progress) == null ? void 0 : _a3.state) || source.state) === "ready";
   }), [sources]);
+  const selectedSource = reactExports.useMemo(() => sources.find((source) => source.id === selectedSourceId) || null, [selectedSourceId, sources]);
+  const selectedSourceState = selectedSource ? ((_a2 = selectedSource.progress) == null ? void 0 : _a2.state) || selectedSource.state : "";
+  const selectedConversation = selectedSource ? conversationsBySource[selectedSource.id] || [] : [];
   const hasProcessingSources = reactExports.useMemo(
     () => sources.some((source) => {
       var _a3;
@@ -42348,6 +42352,11 @@ function HostedApp({ runtime }) {
       window.clearInterval(interval2);
     };
   }, [connected, connection, hasProcessingSources]);
+  reactExports.useEffect(() => {
+    var _a3;
+    if (selectedSourceId && sources.some((source) => source.id === selectedSourceId)) return;
+    setSelectedSourceId(((_a3 = readySources[0] || sources[0]) == null ? void 0 : _a3.id) || "");
+  }, [readySources, selectedSourceId, sources]);
   async function refreshSources(active = connection) {
     const values = await listHostedSources(active);
     setSources(values);
@@ -42425,33 +42434,43 @@ function HostedApp({ runtime }) {
       setBusy(false);
     }
   }
-  async function runMemorySearch(event) {
+  async function runSourceQuery(event) {
     var _a3;
     event.preventDefault();
+    if (!selectedSource || selectedSourceState !== "ready") return;
     const form = new FormData(event.currentTarget);
+    const query = String(form.get("query") || "").trim();
+    if (!query) return;
+    const sourceID = selectedSource.id;
+    const userTurn = { id: crypto.randomUUID(), role: "user", text: query };
+    setConversationsBySource((current) => ({ ...current, [sourceID]: [...current[sourceID] || [], userTurn] }));
+    event.currentTarget.reset();
     setBusy(true);
     try {
-      const result = await searchHostedMemories(connection, String(form.get("query") || ""));
-      setMemories(result.items || []);
-      setStatus(((_a3 = result.items) == null ? void 0 : _a3.length) ? `${result.items.length} matching memories found.` : "No durable memories matched this search.");
+      const [sourceRequest, memoryRequest] = await Promise.allSettled([
+        queryHostedSources(connection, [selectedSource.id], query),
+        searchHostedMemories(connection, query)
+      ]);
+      const sourceResult = sourceRequest.status === "fulfilled" ? sourceRequest.value : null;
+      const memoryResult = memoryRequest.status === "fulfilled" ? memoryRequest.value : null;
+      const nextEvidence = (sourceResult == null ? void 0 : sourceResult.evidence) || [];
+      const nextMemories = (memoryResult == null ? void 0 : memoryResult.items) || [];
+      setEvidence(nextEvidence);
+      setMemories(nextMemories);
+      const assistantTurn = {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        answerable: (sourceResult == null ? void 0 : sourceResult.answerable) || false,
+        evidence: nextEvidence,
+        memories: nextMemories,
+        semanticContext: ((_a3 = sourceResult == null ? void 0 : sourceResult.context) == null ? void 0 : _a3.semantic) || null,
+        sourceError: sourceRequest.status === "rejected" ? sourceRequest.reason instanceof Error ? sourceRequest.reason.message : "Source recall failed." : void 0,
+        memoryError: memoryRequest.status === "rejected" ? memoryRequest.reason instanceof Error ? memoryRequest.reason.message : "Memory recall is unavailable." : void 0
+      };
+      setConversationsBySource((current) => ({ ...current, [sourceID]: [...current[sourceID] || [], assistantTurn] }));
+      setStatus((sourceResult == null ? void 0 : sourceResult.answerable) ? `${nextEvidence.length} source contexts and ${nextMemories.length} relevant memories are ready.` : (sourceResult == null ? void 0 : sourceResult.evidence_available) ? "Related source context was found, but it is not sufficient to answer this question." : "This source does not contain enough authorized evidence for that question.");
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Search failed.");
-    } finally {
-      setBusy(false);
-    }
-  }
-  async function runSourceQuery(event) {
-    var _a3, _b2;
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    setBusy(true);
-    try {
-      const result = await queryHostedSources(connection, readySources.map((source) => source.id), String(form.get("query") || ""));
-      setEvidence(result.evidence || []);
-      setSemanticContext(((_a3 = result.context) == null ? void 0 : _a3.semantic) || null);
-      setStatus(result.answerable ? `${((_b2 = result.evidence) == null ? void 0 : _b2.length) || 0} reconstructed source contexts are ready.` : result.evidence_available ? "Related source context was found, but it is not sufficient to answer this question." : "The ready sources do not contain enough authorized evidence.");
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Source query failed.");
+      setStatus(error instanceof Error ? error.message : "Conversation recall failed.");
     } finally {
       setBusy(false);
     }
@@ -42701,196 +42720,214 @@ function HostedApp({ runtime }) {
           ] })
         ] })
       ] }) : null,
-      activeArea === "library" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "productSection", "aria-labelledby": "library-title", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionHeading, { eyebrow: "Private source custody", title: "Library", description: "Upload lawful copies, follow their indexing state, and ask only ready sources.", action: /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "productSecondary", disabled: busy, onClick: () => void refreshSources(), children: "Refresh sources" }) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "libraryLayout", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "uploadStudio", children: [
+      activeArea === "library" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "productSection librarySection", "aria-labelledby": "library-title", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionHeading, { eyebrow: "Private reading room", title: "Library", description: "Choose one indexed source, then keep its questions, source evidence, and reviewed memory context together.", action: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "productActions", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => setShowUpload((value) => !value), children: showUpload ? "Close upload" : "Add source" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "productSecondary", disabled: busy, onClick: () => void refreshSources(), children: "Refresh" })
+        ] }) }),
+        showUpload ? /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "libraryUploadPanel", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "productEyebrow", children: "Add to Library" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { children: "Upload a private source" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "PDF, EPUB, Markdown, or text. The browser verifies the file before private custody begins." }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("form", { className: "productForm", onSubmit: uploadSource, children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "fileDrop", children: [
-                "Source file",
-                /* @__PURE__ */ jsxRuntimeExports.jsx("input", { type: "file", accept: ".pdf,.epub,.md,.markdown,.txt", required: true, onChange: (event) => {
-                  var _a3;
-                  return setUploadFile(((_a3 = event.target.files) == null ? void 0 : _a3[0]) || null);
-                } }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: uploadFile ? `${uploadFile.name} · ${(uploadFile.size / 1048576).toFixed(1)} MB` : "Choose one file" })
-              ] }),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [
-                "Rights basis",
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("select", { value: uploadRights, onChange: (event) => setUploadRights(event.target.value), children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "lawfully_acquired_private_use", children: "Lawfully acquired private copy" }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "author_owned", children: "I am the author or rights holder" }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "licensed", children: "Licensed for this use" }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "public_domain_or_open", children: "Public domain or open license" })
-                ] })
-              ] }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "productPrimary", disabled: busy || !uploadFile, children: busy ? "Preparing source…" : "Upload privately" })
-            ] }),
-            uploadPhase ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "productStatus inline", role: "status", children: uploadPhase }) : null
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "PDF, EPUB, Markdown, or text. Indexing stays inside this deployment." })
           ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "sourceCollection", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "collectionHeading", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { children: "Source custody" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
-                sources.length,
-                " total"
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("form", { className: "productForm", onSubmit: uploadSource, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "fileDrop", children: [
+              "Source file",
+              /* @__PURE__ */ jsxRuntimeExports.jsx("input", { type: "file", accept: ".pdf,.epub,.md,.markdown,.txt", required: true, onChange: (event) => {
+                var _a3;
+                return setUploadFile(((_a3 = event.target.files) == null ? void 0 : _a3[0]) || null);
+              } }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: uploadFile ? `${uploadFile.name} · ${(uploadFile.size / 1048576).toFixed(1)} MB` : "Choose one file" })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [
+              "Rights basis",
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("select", { value: uploadRights, onChange: (event) => setUploadRights(event.target.value), children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "lawfully_acquired_private_use", children: "Lawfully acquired private copy" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "author_owned", children: "I am the author or rights holder" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "licensed", children: "Licensed for this use" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "public_domain_or_open", children: "Public domain or open license" })
               ] })
             ] }),
-            sources.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "productEmpty", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { "aria-hidden": "true", children: "＋" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: "Your library is empty" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Choose a source on the left. Its processing and retention state will appear here." })
-            ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "sourceList", children: sources.map((source) => {
+            /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "productPrimary", disabled: busy || !uploadFile, children: busy ? "Preparing source…" : "Upload privately" })
+          ] }),
+          uploadPhase ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "productStatus inline", role: "status", children: uploadPhase }) : null
+        ] }) : null,
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "libraryWorkspace", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("aside", { className: "librarySourceRail", "aria-label": "Your sources", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "sourceRailHeader", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "productEyebrow", children: "Your sources" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { children: "Indexed library" })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+                readySources.length,
+                "/",
+                sources.length,
+                " ready"
+              ] })
+            ] }),
+            sources.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "productEmpty compact", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Add a book or document to begin." }) }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "sourceRailList", children: sources.map((source) => {
               var _a3, _b2, _c2, _d2;
               const state2 = ((_a3 = source.progress) == null ? void 0 : _a3.state) || source.state;
-              return /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "sourceRow", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "sourceType", "aria-hidden": "true", children: ((_b2 = source.filename.split(".").pop()) == null ? void 0 : _b2.slice(0, 4)) || "file" }),
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "sourceIdentity", children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: source.filename }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [
-                    source.media_type,
-                    ((_c2 = source.progress) == null ? void 0 : _c2.stage) ? ` · ${formatLabel(source.progress.stage)}` : ""
-                  ] })
+              return /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: selectedSourceId === source.id ? "sourceRailItem selected" : "sourceRailItem", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "sourceSelect", "aria-pressed": selectedSourceId === source.id, onClick: () => {
+                  setSelectedSourceId(source.id);
+                  setProposal(null);
+                  setShowMemoryReview(false);
+                }, children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sourceType", "aria-hidden": "true", children: ((_b2 = source.filename.split(".").pop()) == null ? void 0 : _b2.slice(0, 4)) || "file" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "sourceIdentity", children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: source.filename }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("small", { children: ((_c2 = source.progress) == null ? void 0 : _c2.stage) ? formatLabel(source.progress.stage) : source.media_type })
+                  ] }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(StateBadge, { value: state2 })
                 ] }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx(StateBadge, { value: state2 }),
                 /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "sourceActions", children: [
                   ((_d2 = source.failure) == null ? void 0 : _d2.retryable) ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => void retryHostedSource(connection, source.id).then(() => refreshSources()), children: "Retry" }) : null,
                   /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "danger", onClick: () => window.confirm(`Delete ${source.filename}?`) && void deleteHostedSource(connection, source.id).then(() => refreshSources()), children: "Delete" })
                 ] })
               ] }, source.id);
             }) })
-          ] })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "askStudio", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "askIntro", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "productEyebrow", children: "Reconstructive recall" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { children: "Ask ready sources" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Agent Memory restores the surrounding authorized context before deciding whether the source can answer." }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
-              readySources.length,
-              " ready sources"
-            ] })
           ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("form", { className: "askForm", onSubmit: runSourceQuery, children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("textarea", { name: "query", rows: 4, maxLength: 4e3, placeholder: "What do these sources say about…", required: true }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "productChoice", children: "Locally reconstructed from cited passages" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "productPrimary", disabled: busy || readySources.length === 0, children: "Recall source context" })
-            ] })
-          ] })
-        ] }),
-        evidence.length ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "answerLayout", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("header", { className: "reconstructionHeading", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "productEyebrow", children: "Source recall" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { children: "Reconstructed source context" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "These are cited source windows, not durable memories. Review them before accepting any interpretation into Memory." }),
-            (semanticContext == null ? void 0 : semanticContext.planner_used) ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "semanticTrace", children: [
-              "Understood as ",
-              formatLabel(semanticContext.intent || "question"),
-              " · ",
-              semanticContext.language || "unknown language",
-              " · ",
-              semanticContext.subject || "unspecified subject",
-              semanticContext.reranker_used ? " · Locally reranked" : ""
-            ] }) : ((_a2 = semanticContext == null ? void 0 : semanticContext.fallbacks) == null ? void 0 : _a2.length) ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "semanticTrace fallback", children: "Deterministic recall fallback · local understanding unavailable" }) : null
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("section", { className: "evidenceList", "aria-label": "Reconstructed cited source context", children: evidence.map((item) => {
-            var _a3, _b2;
-            const citationCount = ((_a3 = item.included_citation_ids) == null ? void 0 : _a3.length) || 1;
-            return /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "evidenceHeading", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: ((_b2 = item.locator) == null ? void 0 : _b2.display) || "Source context" }),
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "evidenceMeta", children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsxs("small", { children: [
-                    citationCount,
-                    " supporting citation",
-                    citationCount === 1 ? "" : "s"
-                  ] }),
-                  item.window_clipped ? /* @__PURE__ */ jsxRuntimeExports.jsx("small", { className: "contextWarning", children: "Context clipped at a safe limit" }) : null
-                ] })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("article", { className: "libraryConversation", children: selectedSource ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("header", { className: "conversationHeader", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "productEyebrow", children: "Conversation with" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { children: selectedSource.filename }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Answers stay scoped to this source. Relevant durable memory appears separately as enrichment." })
               ] }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: item.text }),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: "Source lineage" }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: (item.included_citation_ids || [item.citation_id]).join(" · ") })
-              ] })
-            ] }, `${item.source_id}:${item.citation_id}`);
-          }) }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "productSecondary", onClick: () => setActiveArea("memory"), children: "Review as memory" })
-        ] }) : null
-      ] }) : null,
-      activeArea === "memory" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "productSection", "aria-labelledby": "memory-title", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionHeading, { eyebrow: "Durable knowledge", title: "Memory", description: "Find what the agent retains and approve new memory only when the evidence is strong." }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "searchStudio", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { children: "Search durable memories" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("form", { className: "productSearch", onSubmit: runMemorySearch, children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("input", { name: "query", maxLength: 4e3, placeholder: "Search an idea, decision, or procedure", required: true }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "productPrimary", disabled: busy, children: "Search" })
-          ] })
-        ] }),
-        memories.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "productEmpty", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { "aria-hidden": "true", children: "⌕" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: "No memories loaded" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Search for a concept to inspect durable memory in this workspace." })
-        ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "memoryResults", children: memories.map((memory) => /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(StateBadge, { value: memory.type }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("small", { children: memory.updated_at ? new Date(memory.updated_at).toLocaleDateString() : "Durable memory" })
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: memory.content })
-        ] }, memory.id)) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "proposalStudio", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "productEyebrow", children: "Human review" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { children: "Review derived memory" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: evidence.length ? `${evidence.length} cited passages are ready to support a proposal.` : "Ask your Library first. A proposal needs cited evidence." })
-          ] }),
-          evidence.length ? /* @__PURE__ */ jsxRuntimeExports.jsxs("form", { className: "productForm", onSubmit: createProposal, children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [
-              "Proposed memory",
-              /* @__PURE__ */ jsxRuntimeExports.jsx("textarea", { name: "content", rows: 4, maxLength: 2e3, required: true })
+              /* @__PURE__ */ jsxRuntimeExports.jsx(StateBadge, { value: selectedSourceState })
             ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [
-              "Memory type",
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("select", { name: "type", defaultValue: "semantic", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "semantic", children: "Semantic" }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "procedural", children: "Procedural" }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "episodic", children: "Episodic" }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "outcome", children: "Outcome" })
-              ] })
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "conversationBody", "aria-live": "polite", children: [
+              selectedConversation.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "conversationWelcome", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { "aria-hidden": "true", children: "am" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: selectedSourceState === "ready" ? "Ask about this source" : `${formatLabel(selectedSourceState)} source` }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: selectedSourceState === "ready" ? "I will reconstruct the strongest surrounding passages and recall related reviewed memories without mixing their provenance." : "Conversation becomes available when indexing reaches Ready." })
+                ] })
+              ] }) : selectedConversation.map((turn) => {
+                var _a3, _b2, _c2, _d2;
+                return turn.role === "user" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "chatTurn userTurn", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "You" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: turn.text })
+                ] }, turn.id) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "chatTurn assistantTurn", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "assistantIdentity", children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { "aria-hidden": "true", children: "am" }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "Agent Memory" })
+                  ] }),
+                  turn.sourceError ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "conversationError", children: turn.sourceError }) : ((_a3 = turn.evidence) == null ? void 0 : _a3.length) ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "assistantSummary", children: turn.answerable ? `I found ${turn.evidence.length} reconstructed source context${turn.evidence.length === 1 ? "" : "s"} that can support an answer.` : "I found related context, but not enough evidence for a confident answer." }),
+                    ((_b2 = turn.semanticContext) == null ? void 0 : _b2.planner_used) ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "semanticTrace", children: [
+                      "Understood as ",
+                      formatLabel(turn.semanticContext.intent || "question"),
+                      " · ",
+                      turn.semanticContext.language || "unknown language",
+                      " · ",
+                      turn.semanticContext.subject || "unspecified subject",
+                      turn.semanticContext.reranker_used ? " · Locally reranked" : ""
+                    ] }) : null,
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "conversationEvidence", children: turn.evidence.map((item) => {
+                      var _a4, _b3, _c3;
+                      return /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { children: [
+                        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "evidenceHeading", children: [
+                          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: ((_a4 = item.locator) == null ? void 0 : _a4.display) || "Source context" }),
+                          /* @__PURE__ */ jsxRuntimeExports.jsxs("small", { children: [
+                            ((_b3 = item.included_citation_ids) == null ? void 0 : _b3.length) || 1,
+                            " citation",
+                            (((_c3 = item.included_citation_ids) == null ? void 0 : _c3.length) || 1) === 1 ? "" : "s"
+                          ] })
+                        ] }),
+                        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: item.text }),
+                        /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { children: [
+                          /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { children: "Source lineage" }),
+                          /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: (item.included_citation_ids || [item.citation_id]).join(" · ") })
+                        ] })
+                      ] }, `${turn.id}:${item.citation_id}`);
+                    }) })
+                  ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "conversationEmptyAnswer", children: "This source does not contain enough authorized evidence for that question." }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "memoryContext", children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "productEyebrow", children: "Memory context" }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("small", { children: "Previously reviewed durable knowledge · not a source citation" })
+                    ] }),
+                    turn.memoryError ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: turn.memoryError }) : ((_c2 = turn.memories) == null ? void 0 : _c2.length) ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { children: turn.memories.slice(0, 4).map((memory) => /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsx(StateBadge, { value: memory.type }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: memory.content })
+                    ] }, `${turn.id}:${memory.id}`)) }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "No relevant durable memory was found." })
+                  ] }),
+                  ((_d2 = turn.evidence) == null ? void 0 : _d2.length) ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "memoryReviewButton", onClick: () => {
+                    setEvidence(turn.evidence || []);
+                    setShowMemoryReview(true);
+                  }, children: "Keep as memory" }) : null
+                ] }, turn.id);
+              }),
+              busy ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "conversationThinking", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { "aria-hidden": "true" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Reconstructing source context and recalling memory…" })
+              ] }) : null,
+              showMemoryReview ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "inlineMemoryReview", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "productEyebrow", children: "Human review" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: "Keep as memory" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Nothing becomes durable until you accept it." })
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("form", { className: "productForm", onSubmit: createProposal, children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [
+                    "Proposed memory",
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("textarea", { name: "content", rows: 4, maxLength: 2e3, required: true })
+                  ] }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { children: [
+                    "Memory type",
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("select", { name: "type", defaultValue: "semantic", children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "semantic", children: "Semantic" }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "procedural", children: "Procedural" }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "episodic", children: "Episodic" }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "outcome", children: "Outcome" })
+                    ] })
+                  ] }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "productPrimary", children: "Create review proposal" })
+                ] }),
+                proposal ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "proposalReview", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "collectionHeading", children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: "Review before accepting" }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx(StateBadge, { value: proposal.status })
+                  ] }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("textarea", { "aria-label": "Proposal content", value: proposal.content, onChange: (event) => setProposal({ ...proposal, content: event.target.value }) }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "productActions", children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => void changeProposal("edit"), children: "Save edit" }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "productPrimary", type: "button", onClick: () => void changeProposal("accept"), children: "Accept memory" }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "danger", type: "button", onClick: () => void changeProposal("reject"), children: "Reject" })
+                  ] })
+                ] }) : null
+              ] }) : null
             ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "productPrimary", children: "Create review proposal" })
-          ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "productSecondary", onClick: () => setActiveArea("library"), children: "Ask Library" }),
-          proposal ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "proposalReview", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "collectionHeading", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: "Review before accepting" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx(StateBadge, { value: proposal.status })
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("textarea", { "aria-label": "Proposal content", value: proposal.content, onChange: (event) => setProposal({ ...proposal, content: event.target.value }) }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "productActions", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => void changeProposal("edit"), children: "Save edit" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "productPrimary", type: "button", onClick: () => void changeProposal("accept"), children: "Accept memory" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "danger", type: "button", onClick: () => void changeProposal("reject"), children: "Reject" })
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("form", { className: "conversationComposer", onSubmit: runSourceQuery, children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("textarea", { name: "query", rows: 2, maxLength: 4e3, placeholder: selectedSourceState === "ready" ? `Ask about ${selectedSource.filename}` : "This source is not ready for conversation", "aria-label": "Ask about this source", required: true, disabled: selectedSourceState !== "ready" || busy }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "productPrimary", disabled: selectedSourceState !== "ready" || busy, children: busy ? "Recalling…" : "Ask" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("small", { children: "Source evidence and reviewed memory stay visibly separate." })
             ] })
-          ] }) : null
+          ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "productEmpty", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { "aria-hidden": "true", children: "＋" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { children: "Select a source" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Choose an indexed book or document from the left to open its conversation." })
+          ] }) })
         ] })
       ] }) : null,
-      activeArea === "data" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "productSection", "aria-labelledby": "data-title", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionHeading, { eyebrow: "Portability and rights", title: "Data", description: "Understand retained data, create exports, and move a standalone workspace by explicit copy.", action: /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "productSecondary", disabled: busy, onClick: () => void loadOperations(), children: "Refresh privacy details" }) }),
+      activeArea === "settings" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "productSection", "aria-labelledby": "settings-title", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionHeading, { eyebrow: "Workspace administration", title: "Settings", description: "Manage privacy, portable data, plan context, scoped agent access, and the account lifecycle.", action: /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "productSecondary", disabled: busy, onClick: () => void loadOperations(), children: "Refresh settings" }) }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "productSurface", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "surfaceHeading", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "productEyebrow", children: "Customer controls" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { children: "Privacy & retention" })
           ] }) }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(ProductFields, { value: privacy, empty: "Refresh to inspect the retained data classes and deletion behavior available to this workspace." })
+          /* @__PURE__ */ jsxRuntimeExports.jsx(ProductFields, { value: privacy, empty: "Refresh to inspect retained data classes and deletion behavior for this workspace." })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "dataColumns", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "productSurface", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "productEyebrow", children: "Portable copy" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { children: "Data export" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Request a hosted export, wait for preparation, then download it during its short availability window." }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Request an export, wait for preparation, then download it during its short availability window." }),
             /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "productActions", children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "productPrimary", type: "button", onClick: () => void beginExport(), children: "Request export" }),
               /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: !exportOperation, onClick: () => void refreshExport(), children: "Refresh" }),
@@ -42938,10 +42975,7 @@ function HostedApp({ runtime }) {
               ] })
             ] }) : null
           ] })
-        ] })
-      ] }) : null,
-      activeArea === "settings" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "productSection", "aria-labelledby": "settings-title", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionHeading, { eyebrow: "Workspace administration", title: "Settings", description: "Manage plan context, scoped agent access, and the hosted account lifecycle.", action: /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "productSecondary", disabled: busy, onClick: () => void loadOperations(), children: "Refresh settings" }) }),
+        ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "productSurface", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "surfaceHeading", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
