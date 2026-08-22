@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   createNote,
+  deleteNotePermanently,
   getNote,
   listNoteBacklinks,
   listNoteRevisions,
@@ -22,12 +23,12 @@ import { MarkdownView } from './MarkdownView'
 import { LibraryWorkspace, type ImportedBookNoteInput } from './LibraryWorkspace'
 import './notebook.css'
 
-type Destination = 'notes' | 'library' | 'search' | 'ask' | 'activity'
+type Destination = 'notes' | 'library' | 'search' | 'activity' | 'trash'
 type EditorMode = 'edit' | 'preview' | 'split'
-type ContextTab = 'ask' | 'backlinks' | 'outline' | 'properties' | 'history'
+type ContextTab = 'backlinks' | 'outline' | 'properties' | 'history'
 type SaveState = 'idle' | 'dirty' | 'saving' | 'saved' | 'error'
 type AskScope = 'active' | 'workspace' | 'all'
-type RailIconName = 'notes' | 'library' | 'search' | 'ask' | 'activity' | 'system' | 'sun' | 'moon'
+type RailIconName = 'notes' | 'library' | 'search' | 'activity' | 'trash' | 'system' | 'sun' | 'moon'
 
 type NotebookWorkspaceProps = {
   workspace: string
@@ -59,7 +60,7 @@ export function NotebookWorkspace({
   const [openTabs, setOpenTabs] = useState<NoteDocument[]>([])
   const [query, setQuery] = useState('')
   const [editorMode, setEditorMode] = useState<EditorMode>('edit')
-  const [contextTab, setContextTab] = useState<ContextTab>('ask')
+  const [contextTab, setContextTab] = useState<ContextTab>('backlinks')
   const [contextOpen, setContextOpen] = useState(() => startsAboveBreakpoint(1240))
   const [explorerOpen, setExplorerOpen] = useState(() => startsAboveBreakpoint(1024))
   const [saveState, setSaveState] = useState<SaveState>('idle')
@@ -73,6 +74,7 @@ export function NotebookWorkspace({
   const [askAnswer, setAskAnswer] = useState('')
   const [askEvidence, setAskEvidence] = useState<MemoryEntry[]>([])
   const [askBusy, setAskBusy] = useState(false)
+  const [selectedTrashIDs, setSelectedTrashIDs] = useState<Set<string>>(() => new Set())
   const [paletteOpen, setPaletteOpen] = useState(false)
   const editorRef = useRef<HTMLTextAreaElement>(null)
   const activeNoteRef = useRef<NoteDocument | null>(null)
@@ -88,13 +90,23 @@ export function NotebookWorkspace({
   useEffect(() => {
     setActiveNote(null)
     setOpenTabs([])
+    setSelectedTrashIDs(new Set())
     setError('')
     void refreshNotes().catch((reason: unknown) => setError(messageOf(reason)))
   }, [refreshNotes])
 
   useEffect(() => {
+    const available = new Set(trash.map((note) => note.id))
+    setSelectedTrashIDs((current) => new Set([...current].filter((noteID) => available.has(noteID))))
+  }, [trash])
+
+  useEffect(() => {
     activeNoteRef.current = activeNote
   }, [activeNote])
+
+  useEffect(() => {
+    if (askScope === 'active' && !activeNote) setAskScope('workspace')
+  }, [activeNote, askScope])
 
   useEffect(() => {
     const tablet = window.matchMedia('(max-width: 1024px)')
@@ -255,7 +267,9 @@ export function NotebookWorkspace({
       }
       if (modifier && event.shiftKey && event.key.toLowerCase() === 'a') {
         event.preventDefault()
-        setDestination('ask')
+        activeNoteRef.current = null
+        setActiveNote(null)
+        setDestination('notes')
       }
       if (modifier && event.key.toLowerCase() === 'w' && activeNoteRef.current) {
         event.preventDefault()
@@ -319,8 +333,21 @@ export function NotebookWorkspace({
       await restoreNote({ workspace, note_id: note.id })
       await refreshNotes()
       await openNote(note.id)
+      setDestination('notes')
     } catch (reason) {
       setError(messageOf(reason))
+    }
+  }
+
+  async function deleteFromTrash(notesToDelete: NoteDocument[], actionLabel: string) {
+    if (!notesToDelete.length || !window.confirm(`${actionLabel} This cannot be undone.`)) return
+    setError('')
+    try {
+      await Promise.all(notesToDelete.map((note) => deleteNotePermanently({ workspace, note_id: note.id })))
+    } catch (reason) {
+      setError(messageOf(reason))
+    } finally {
+      await refreshNotes().catch((reason: unknown) => setError(messageOf(reason)))
     }
   }
 
@@ -429,14 +456,13 @@ export function NotebookWorkspace({
 
   async function saveAnswerAsNote() {
     if (!askAnswer || !workspace) return
-    if (!window.confirm('Save this grounded answer and its sources as a new note?')) return
     const title = askText.trim().slice(0, 72) || 'AI research'
     try {
       const response = await createNote({
         workspace,
-        path: `AI/${safePathTitle(title)}.md`,
+        path: nextAskNotePath(title, [...notes, ...trash]),
         title,
-        body: `# ${title}\n\n${askAnswer}\n\n## Sources\n\n${formatEvidenceLinks(askEvidence)}`,
+        body: `# ${title}\n\n## Question\n\n${askText.trim()}\n\n## Answer\n\n${askAnswer}\n\n## Sources\n\n${formatEvidenceLinks(askEvidence)}`,
         properties: { source: 'agent-memory ask' },
         author_kind: 'agent_assisted',
       })
@@ -448,15 +474,6 @@ export function NotebookWorkspace({
     }
   }
 
-  async function appendAnswerToActiveNote() {
-    if (!activeNote || !askAnswer) return
-    if (!window.confirm(`Append this grounded answer and its sources to “${activeNote.title}”?`)) return
-    patchActiveNote({
-      body: `${activeNote.body.trimEnd()}\n\n## AI research\n\n${askAnswer}\n\n${formatEvidenceLinks(askEvidence)}\n`,
-    })
-    setDestination('notes')
-  }
-
   const filteredNotes = useMemo(() => {
     const normalized = query.trim().toLowerCase()
     if (!normalized) return notes
@@ -466,7 +483,7 @@ export function NotebookWorkspace({
   const outline = useMemo(() => parseOutline(activeNote?.body ?? ''), [activeNote?.body])
   const outgoingLinks = useMemo(() => parseInternalLinks(activeNote?.body ?? ''), [activeNote?.body])
   const statusText = noteStatusText(activeNote, saveState)
-  const contextVisible = contextOpen && destination === 'notes'
+  const contextVisible = contextOpen && destination === 'notes' && Boolean(activeNote)
 
   return (
     <section className={`notebookShell ${explorerOpen ? 'railExpanded' : 'railCollapsed'} ${contextVisible ? 'contextVisible' : 'contextHidden'}`}>
@@ -475,8 +492,8 @@ export function NotebookWorkspace({
         <RailButton label="Notes" active={destination === 'notes'} onClick={() => setDestination('notes')} icon="notes" />
         <RailButton label="Library" active={destination === 'library'} onClick={() => setDestination('library')} icon="library" />
         <RailButton label="Search" active={destination === 'search'} onClick={() => setDestination('search')} icon="search" />
-        <RailButton label="Ask" active={destination === 'ask'} onClick={() => setDestination('ask')} icon="ask" />
         <RailButton label="Activity" active={destination === 'activity'} onClick={() => setDestination('activity')} icon="activity" />
+        <RailButton label="Trash" active={destination === 'trash'} onClick={() => setDestination('trash')} icon="trash" />
         <div className="notebookRailSpacer" />
         <RailButton label="System" active={false} onClick={onOpenSystem} icon="system" />
         <RailButton label={theme === 'dark' ? 'Light theme' : 'Dark theme'} active={false} onClick={onThemeChange} icon={theme === 'dark' ? 'sun' : 'moon'} />
@@ -485,9 +502,20 @@ export function NotebookWorkspace({
       {explorerOpen ? (
         <aside className="notebookExplorer">
           <div className="notebookWorkspacePicker">
-            <select value={workspace} onChange={(event) => onWorkspaceChange(event.target.value)} aria-label="Notebook workspace">
-              {projects.map((project) => <option key={project.name} value={project.name}>{project.name}</option>)}
-            </select>
+            {destination === 'notes' && !activeNote ? (
+              <AskScopePicker
+                workspace={workspace}
+                projects={projects}
+                scope={askScope}
+                canUseActive={Boolean(activeNote)}
+                onScopeChange={setAskScope}
+                onWorkspaceChange={onWorkspaceChange}
+              />
+            ) : (
+              <select value={workspace} onChange={(event) => onWorkspaceChange(event.target.value)} aria-label="Notebook workspace">
+                {projects.map((project) => <option key={project.name} value={project.name}>{project.name}</option>)}
+              </select>
+            )}
             <button type="button" onClick={() => void createNewNote()} title="New note (Cmd/Ctrl+N)">+</button>
           </div>
           <label className="notebookFilter">
@@ -514,18 +542,6 @@ export function NotebookWorkspace({
             ))}
             {filteredNotes.length === 0 ? <p className="notebookHint">Create your first note. It will become available to both you and your agents.</p> : null}
           </nav>
-          {trash.length ? (
-            <>
-              <div className="notebookSectionLabel"><span>Trash</span><span>{trash.length}</span></div>
-              <div className="noteTree">
-                {trash.map((note) => (
-                  <button key={note.id} type="button" className="noteTreeItem muted" onClick={() => void restoreFromTrash(note)}>
-                    <span className="noteTreeIcon">×</span><span><strong>{note.title}</strong><small>Restore note</small></span>
-                  </button>
-                ))}
-              </div>
-            </>
-          ) : null}
         </aside>
       ) : null}
 
@@ -541,7 +557,8 @@ export function NotebookWorkspace({
             ))}
           </div>
           <button type="button" className="notebookIconButton" onClick={() => setPaletteOpen(true)} aria-label="Open command palette">⌘</button>
-          {destination === 'notes' ? <button type="button" className="notebookIconButton" onClick={() => setContextOpen((open) => !open)} aria-label="Toggle context panel">◫</button> : null}
+          {destination === 'notes' && !activeNote ? <button type="button" className="notebookIconButton" onClick={() => void saveAnswerAsNote()} disabled={!askAnswer} aria-label="Save conversation as note" title="Save conversation as note">▣</button> : null}
+          {destination === 'notes' && activeNote ? <button type="button" className="notebookIconButton" onClick={() => setContextOpen((open) => !open)} aria-label="Toggle context panel">◫</button> : null}
         </header>
 
         {destination === 'notes' ? (
@@ -584,7 +601,18 @@ export function NotebookWorkspace({
                 ) : null}
               </div>
             </article>
-          ) : <NotebookWelcome onCreate={() => void createNewNote()} onAsk={() => setDestination('ask')} />
+          ) : (
+            <AskWorkspace
+              value={askText}
+              answer={askAnswer}
+              evidence={askEvidence}
+              busy={askBusy}
+              theme={theme}
+              onChange={setAskText}
+              onSubmit={() => void runAsk()}
+              onOpenEvidence={(noteID) => void openNote(noteID)}
+            />
+          )
         ) : null}
 
         {destination === 'library' ? <LibraryWorkspace workspace={workspace} onBookImported={createImportedBookNote} onOpenBookNote={openImportedBookNote} /> : null}
@@ -632,25 +660,15 @@ export function NotebookWorkspace({
           </section>
         ) : null}
 
-        {destination === 'ask' ? (
-          <AskWorkspace
-            value={askText}
-            scope={askScope}
-            answer={askAnswer}
-            evidence={askEvidence}
-            busy={askBusy}
-            theme={theme}
-            onChange={setAskText}
-            onScopeChange={setAskScope}
-            onSubmit={() => void runAsk()}
-            onSaveNew={() => void saveAnswerAsNote()}
-            onAppend={() => void appendAnswerToActiveNote()}
-            canAppend={Boolean(activeNote)}
-            canUseActive={Boolean(activeNote)}
-            onOpenEvidence={(noteID) => {
-              void openNote(noteID)
-              setDestination('notes')
-            }}
+        {destination === 'trash' ? (
+          <TrashWorkspace
+            notes={trash}
+            selectedIDs={selectedTrashIDs}
+            onSelectionChange={setSelectedTrashIDs}
+            onRestore={(note) => void restoreFromTrash(note)}
+            onDelete={(note) => void deleteFromTrash([note], `Permanently delete “${note.title}”?`)}
+            onDeleteSelected={() => void deleteFromTrash(trash.filter((note) => selectedTrashIDs.has(note.id)), `Permanently delete ${selectedTrashIDs.size} selected note${selectedTrashIDs.size === 1 ? '' : 's'}?`)}
+            onEmpty={() => void deleteFromTrash(trash, `Permanently delete all ${trash.length} trashed note${trash.length === 1 ? '' : 's'}?`)}
           />
         ) : null}
 
@@ -678,17 +696,10 @@ export function NotebookWorkspace({
       {contextVisible ? (
         <aside className="notebookContext">
           <div className="contextTabs" role="tablist" aria-label="Note context">
-            {(['ask', 'backlinks', 'outline', 'properties', 'history'] as ContextTab[]).map((tab) => (
+            {(['backlinks', 'outline', 'properties', 'history'] as ContextTab[]).map((tab) => (
               <button key={tab} type="button" className={contextTab === tab ? 'active' : ''} onClick={() => setContextTab(tab)}>{capitalize(tab)}</button>
             ))}
           </div>
-          {contextTab === 'ask' ? (
-            <div className="contextBody">
-              <h2>Ask about this note</h2>
-              <textarea aria-label="Ask agent-memory" value={askText} onChange={(event) => setAskText(event.target.value)} placeholder="What decisions did we make?" />
-              <button type="button" className="primaryNotebookButton" onClick={() => { setDestination('ask'); void runAsk() }}>Ask agent-memory</button>
-            </div>
-          ) : null}
           {contextTab === 'backlinks' ? (
             <div className="contextBody">
               <h2>Backlinks</h2>
@@ -729,7 +740,8 @@ export function NotebookWorkspace({
             <button type="button" onClick={() => { setPaletteOpen(false); void createNewNote() }}>New note <kbd>⌘N</kbd></button>
             <button type="button" onClick={() => { setPaletteOpen(false); setDestination('library') }}>Open Library</button>
             <button type="button" onClick={() => { setPaletteOpen(false); setDestination('search') }}>Search knowledge <kbd>⌘⇧F</kbd></button>
-            <button type="button" onClick={() => { setPaletteOpen(false); setDestination('ask') }}>Ask agent-memory</button>
+            <button type="button" onClick={() => { setPaletteOpen(false); activeNoteRef.current = null; setActiveNote(null); setDestination('notes') }}>Ask agent-memory</button>
+            <button type="button" onClick={() => { setPaletteOpen(false); setDestination('trash') }}>Open Trash</button>
             <button type="button" onClick={() => { setPaletteOpen(false); onOpenSystem() }}>Open System</button>
           </section>
         </div>
@@ -752,8 +764,8 @@ function RailIcon({ name }: { name: RailIconName }) {
     notes: <><path d="M6 3h9l3 3v15H6z" /><path d="M15 3v4h4M9 11h6M9 15h6" /></>,
     library: <><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" /></>,
     search: <><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></>,
-    ask: <><path d="M21 12a8 8 0 0 1-8 8H6l-4 2 1.5-4A9 9 0 1 1 21 12z" /><path d="M9.5 9a2.5 2.5 0 0 1 4.8.9c0 1.8-2.3 2-2.3 3.6M12 17h.01" /></>,
     activity: <path d="M3 12h4l2.5-7 5 14 2.5-7h4" />,
+    trash: <><path d="M4 7h16M9 7V4h6v3m-8 0 1 13h8l1-13" /><path d="M10 11v5m4-5v5" /></>,
     system: <><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3A1.7 1.7 0 0 0 10 3V2.8h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1z" /></>,
     sun: <><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></>,
     moon: <path d="M20.5 15.5A8.5 8.5 0 0 1 8.5 3.5a8.5 8.5 0 1 0 12 12z" />,
@@ -762,32 +774,52 @@ function RailIcon({ name }: { name: RailIconName }) {
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>
 }
 
-function NotebookWelcome({ onCreate, onAsk }: { onCreate: () => void; onAsk: () => void }) {
+function AskScopePicker(props: {
+  workspace: string
+  projects: ProjectListItem[]
+  scope: AskScope
+  canUseActive: boolean
+  onScopeChange: (scope: AskScope) => void
+  onWorkspaceChange: (workspace: string) => void
+}) {
+  const label = props.scope === 'active' ? 'Active note' : props.scope === 'all' ? 'All workspaces' : props.workspace
+  const select = (scope: AskScope, workspace?: string) => (event: React.MouseEvent<HTMLButtonElement>) => {
+    props.onScopeChange(scope)
+    if (workspace && workspace !== props.workspace) props.onWorkspaceChange(workspace)
+    event.currentTarget.closest('details')?.removeAttribute('open')
+  }
+
   return (
-    <section className="notebookWelcome">
-      <p className="eyebrow">Your shared second brain</p>
-      <h1>Write what matters.<br />Let your agents remember it.</h1>
-      <p>Notes you create here become grounded knowledge for search, recall, and future work.</p>
-      <div><button type="button" className="primaryNotebookButton" onClick={onCreate}>Create a note</button><button type="button" onClick={onAsk}>Ask this workspace</button></div>
-      <dl><div><dt>Markdown</dt><dd>Write naturally with headings, tasks, tables, code, and links.</dd></div><div><dt>Mermaid</dt><dd>Turn fenced diagrams into readable system and process maps.</dd></div><div><dt>Shared recall</dt><dd>Human notes and agent memories contribute with visible provenance.</dd></div></dl>
-    </section>
+    <details className="askScopePicker">
+      <summary aria-label="Ask search scope"><span>{label}</span><span aria-hidden="true">⌄</span></summary>
+      <div className="askScopeMenu" role="radiogroup" aria-label="Ask search scope options">
+        <button type="button" role="radio" aria-checked={props.scope === 'active'} disabled={!props.canUseActive} onClick={select('active')}>
+          <input type="checkbox" checked={props.scope === 'active'} readOnly tabIndex={-1} aria-hidden="true" />
+          <span>Active note</span>
+        </button>
+        {props.projects.map((project) => (
+          <button key={project.name} type="button" role="radio" aria-checked={props.scope === 'workspace' && project.name === props.workspace} onClick={select('workspace', project.name)}>
+            <input type="checkbox" checked={props.scope === 'workspace' && project.name === props.workspace} readOnly tabIndex={-1} aria-hidden="true" />
+            <span>{project.name}</span>
+          </button>
+        ))}
+        <button type="button" role="radio" aria-checked={props.scope === 'all'} onClick={select('all')}>
+          <input type="checkbox" checked={props.scope === 'all'} readOnly tabIndex={-1} aria-hidden="true" />
+          <span>All workspaces</span>
+        </button>
+      </div>
+    </details>
   )
 }
 
 function AskWorkspace(props: {
   value: string
-  scope: AskScope
   answer: string
   evidence: MemoryEntry[]
   busy: boolean
   theme: 'light' | 'dark'
-  canAppend: boolean
-  canUseActive: boolean
   onChange: (value: string) => void
-  onScopeChange: (scope: AskScope) => void
   onSubmit: () => void
-  onSaveNew: () => void
-  onAppend: () => void
   onOpenEvidence: (noteID: string) => void
 }) {
   return (
@@ -811,19 +843,50 @@ function AskWorkspace(props: {
               <p>{memory.content.slice(0, 180)}</p>
             </div>
           ))}</div>
-          <div className="askAnswerActions"><button type="button" onClick={props.onSaveNew}>Save as new note</button><button type="button" onClick={props.onAppend} disabled={!props.canAppend}>Append to active note</button></div>
         </article>
       ) : null}
-      <div className="askScope">
-        <label>Search scope
-          <select value={props.scope} onChange={(event) => props.onScopeChange(event.target.value as AskScope)}>
-            <option value="active" disabled={!props.canUseActive}>Active note</option>
-            <option value="workspace">Current workspace</option>
-            <option value="all">All workspaces</option>
-          </select>
-        </label>
-      </div>
       <div className="askComposer"><textarea aria-label="Ask agent-memory" value={props.value} onChange={(event) => props.onChange(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); props.onSubmit() } }} placeholder="Ask about a decision, project, person, or past session…" /><button type="button" disabled={props.busy || !props.value.trim()} onClick={props.onSubmit}>{props.busy ? 'Thinking…' : 'Ask'}</button></div>
+    </section>
+  )
+}
+
+function TrashWorkspace(props: {
+  notes: NoteDocument[]
+  selectedIDs: Set<string>
+  onSelectionChange: (selectedIDs: Set<string>) => void
+  onRestore: (note: NoteDocument) => void
+  onDelete: (note: NoteDocument) => void
+  onDeleteSelected: () => void
+  onEmpty: () => void
+}) {
+  const toggle = (noteID: string) => {
+    const next = new Set(props.selectedIDs)
+    if (next.has(noteID)) next.delete(noteID)
+    else next.add(noteID)
+    props.onSelectionChange(next)
+  }
+
+  return (
+    <section className="trashWorkspace">
+      <header className="trashHeader">
+        <div><p className="eyebrow">Recover or remove</p><h1>Trash</h1><p>Deleted notes stay recoverable until you remove them permanently.</p></div>
+        <div className="trashHeaderActions">
+          <button type="button" disabled={!props.selectedIDs.size} onClick={props.onDeleteSelected} aria-label="Delete selected notes permanently">Delete selected</button>
+          <button type="button" className="dangerTextButton" disabled={!props.notes.length} onClick={props.onEmpty} aria-label="Empty trash">Empty trash</button>
+        </div>
+      </header>
+      {props.notes.length ? (
+        <div className="trashList">
+          {props.notes.map((note) => (
+            <article key={note.id} className={props.selectedIDs.has(note.id) ? 'trashItem selected' : 'trashItem'}>
+              <label><input type="checkbox" checked={props.selectedIDs.has(note.id)} onChange={() => toggle(note.id)} /><span className="visuallyHidden">Select {note.title}</span></label>
+              <div><strong>{note.title}</strong><small>{note.path}</small></div>
+              <button type="button" onClick={() => props.onRestore(note)}>Restore</button>
+              <button type="button" className="trashDeleteButton" onClick={() => props.onDelete(note)} aria-label={`Delete ${note.title} permanently`} title={`Delete ${note.title} permanently`}>×</button>
+            </article>
+          ))}
+        </div>
+      ) : <p className="trashEmpty">Trash is empty.</p>}
     </section>
   )
 }
@@ -848,6 +911,18 @@ function nextImportedBookPath(title: string, notes: NoteDocument[]) {
     const label = suffix === 1 ? safeTitle : `${safeTitle} (${suffix})`
     const path = `Library/${label}.md`
     if (!activePaths.has(path.toLowerCase())) return path
+    suffix += 1
+  }
+}
+
+function nextAskNotePath(title: string, notes: NoteDocument[]) {
+  const safeTitle = safePathTitle(title) || 'AI research'
+  const paths = new Set(notes.map((note) => note.path.toLowerCase()))
+  let suffix = 1
+  while (true) {
+    const label = suffix === 1 ? safeTitle : `${safeTitle} (${suffix})`
+    const path = `AI/${label}.md`
+    if (!paths.has(path.toLowerCase())) return path
     suffix += 1
   }
 }

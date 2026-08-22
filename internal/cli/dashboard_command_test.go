@@ -82,11 +82,53 @@ func TestBuildDashboardProcessArgsOmitsWorkspaceWhenEmpty(t *testing.T) {
 		dbPath:   "/tmp/dashboard.db",
 		modelDir: "/tmp/models",
 	}
-	args := buildDashboardProcessArgs(cfg, ":3210", "", "")
+	args := buildDashboardProcessArgs(cfg, ":3210", "", "", false)
 	for i := 0; i < len(args); i++ {
 		if args[i] == "--workspace" {
 			t.Fatalf("expected dashboard start args to omit --workspace when empty: %v", args)
 		}
+	}
+}
+
+func TestBuildDashboardProcessArgsForwardsHotReload(t *testing.T) {
+	cfg := runtimeConfig{dbPath: "/tmp/dashboard.db", modelDir: "/tmp/models"}
+	args := buildDashboardProcessArgs(cfg, ":3210", "", "", true)
+	for _, arg := range args {
+		if arg == "--hot-reload" {
+			return
+		}
+	}
+	t.Fatalf("expected child dashboard args to enable hot reload: %v", args)
+}
+
+func TestDashboardHotReloadFlagIsAvailable(t *testing.T) {
+	cmd := newDashboardCommand()
+	flag := cmd.Flags().Lookup("hot-reload")
+	if flag == nil {
+		t.Fatal("expected dashboard --hot-reload flag")
+	}
+	if flag.DefValue != "false" {
+		t.Fatalf("expected hot reload to default off, got %q", flag.DefValue)
+	}
+}
+
+func TestDashboardAddressDefaultsToPort3100(t *testing.T) {
+	cmd := newDashboardCommand()
+	flag := cmd.Flags().Lookup("addr")
+	if flag == nil {
+		t.Fatal("expected dashboard --addr flag")
+	}
+	if flag.DefValue != ":3100" {
+		t.Fatalf("expected dashboard address to default to :3100, got %q", flag.DefValue)
+	}
+}
+
+func TestDashboardHotReloadBypassesEmbeddedAssets(t *testing.T) {
+	if shouldServeEmbeddedDashboard(true) {
+		t.Fatal("hot reload must bypass embedded dashboard assets")
+	}
+	if !shouldServeEmbeddedDashboard(false) {
+		t.Fatal("default dashboard mode must prefer embedded assets")
 	}
 }
 

@@ -205,6 +205,10 @@ func TestInstallOrCopyBinaryBuildsAbsoluteSourceOutsideClientWorkspace(t *testin
 	if info, err := os.Stat(installed); err != nil || info.IsDir() {
 		t.Fatalf("expected installed binary at %s: %v", installed, err)
 	}
+	alias := filepath.Join(binDir, binNameWithExt("am"))
+	if info, err := os.Stat(alias); err != nil || info.IsDir() {
+		t.Fatalf("expected concise executable at %s: %v", alias, err)
+	}
 	leftovers, err := filepath.Glob(filepath.Join(binDir, ".agent-memory-install.*"))
 	if err != nil {
 		t.Fatalf("scan install artifacts: %v", err)

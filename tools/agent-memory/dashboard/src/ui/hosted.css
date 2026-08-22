@@ -196,7 +196,7 @@ body.light .hostedProduct {
 .libraryLayout { display: grid; grid-template-columns: minmax(280px, .72fr) minmax(0, 1.28fr); gap: clamp(24px, 5vw, 58px); align-items: start; }
 .librarySection { gap: 22px; }
 .librarySection .productSectionHeading { padding-bottom: 20px; }
-.libraryWorkspace { min-height: min(720px, calc(100dvh - 260px)); display: grid; grid-template-columns: minmax(250px, 310px) minmax(0, 1fr); overflow: hidden; border: 1px solid var(--product-line); border-radius: 18px 4px 18px 4px; background: var(--product-surface-soft); }
+.hostedProduct .libraryWorkspace { min-height: min(720px, calc(100dvh - 260px)); display: grid; grid-template-columns: minmax(250px, 310px) minmax(0, 1fr); overflow: hidden; border: 1px solid var(--product-line); border-radius: 18px 4px 18px 4px; background: var(--product-surface-soft); }
 .librarySourceRail { min-width: 0; display: flex; flex-direction: column; border-right: 1px solid var(--product-line); background: var(--product-surface); }
 .sourceRailHeader { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; padding: 22px 18px 16px; border-bottom: 1px solid var(--product-line); }
 .sourceRailHeader h2 { margin-top: 5px; font-size: 18px; }
@@ -435,7 +435,7 @@ body.light .hostedProduct {
   .askForm > div { align-items: flex-start; flex-direction: column; }
   .productSearch { grid-template-columns: 1fr; }
   .productStatus { right: 12px; bottom: 12px; max-width: calc(100vw - 24px); }
-  .libraryWorkspace { grid-template-columns: 1fr; }
+  .hostedProduct .libraryWorkspace { grid-template-columns: 1fr; }
   .librarySourceRail { max-height: 300px; border-right: 0; border-bottom: 1px solid var(--product-line); }
   .sourceRailItem .sourceActions { opacity: 1; }
   .conversationBody { min-height: 460px; }

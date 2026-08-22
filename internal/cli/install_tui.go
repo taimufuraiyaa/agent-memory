@@ -177,6 +177,8 @@ type installSelectionModel struct {
 	cancelled     bool
 	width         int
 	height        int
+	filtering     bool
+	filterQuery   string
 }
 
 func newInstallSelectionModel(components []installComponent) installSelectionModel {
@@ -224,6 +226,41 @@ func (m installSelectionModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	pressed := key.String()
+	if m.phase != installPhaseReview {
+		if m.filtering {
+			switch pressed {
+			case "esc":
+				m.filtering = false
+				m.filterQuery = ""
+				return m, nil
+			case "enter":
+				m.filtering = false
+				return m, nil
+			case "backspace":
+				runes := []rune(m.filterQuery)
+				if len(runes) > 0 {
+					m.filterQuery = string(runes[:len(runes)-1])
+				}
+				m.normalizeFilteredCursor()
+				return m, nil
+			case "up", "k", "down", "j", " ", "space":
+				// List actions remain available while the query is active.
+			default:
+				if key.Text != "" {
+					m.filterQuery += key.Text
+					m.normalizeFilteredCursor()
+				}
+				return m, nil
+			}
+		} else if pressed == "esc" && m.filterQuery != "" {
+			m.filterQuery = ""
+			return m, nil
+		} else if pressed == "/" {
+			m.filtering = true
+			m.filterQuery = ""
+			return m, nil
+		}
+	}
 	if m.phase == installPhaseReview {
 		switch pressed {
 		case "enter":
@@ -244,20 +281,21 @@ func (m installSelectionModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 	if m.phase == installPhaseModel {
+		visible := m.visibleModelIndexes()
 		switch pressed {
 		case "up", "k":
-			if m.modelCursor > 0 {
-				m.modelCursor--
-			}
+			m.modelCursor = previousVisibleIndex(visible, m.modelCursor)
 		case "down", "j":
-			if m.modelCursor < len(m.models)-1 {
-				m.modelCursor++
-			}
+			m.modelCursor = nextVisibleIndex(visible, m.modelCursor)
 		case " ", "space":
-			m.selectedModel = m.models[m.modelCursor].Model
+			if containsIndex(visible, m.modelCursor) {
+				m.selectedModel = m.models[m.modelCursor].Model
+			}
 		case "enter":
-			m.selectedModel = m.models[m.modelCursor].Model
-			m.phase = installPhaseReview
+			if containsIndex(visible, m.modelCursor) {
+				m.selectedModel = m.models[m.modelCursor].Model
+				m.phase = installPhaseReview
+			}
 		case "esc", "b", "backspace":
 			m.phase = installPhaseComponents
 		case "q", "ctrl+c":
@@ -266,24 +304,23 @@ func (m installSelectionModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
+	visible := m.visibleComponentIndexes()
 	switch pressed {
 	case "up", "k":
-		if m.cursor > 0 {
-			m.cursor--
-		}
+		m.cursor = previousVisibleIndex(visible, m.cursor)
 	case "down", "j":
-		if m.cursor < len(m.components)-1 {
-			m.cursor++
-		}
+		m.cursor = nextVisibleIndex(visible, m.cursor)
 	case " ", "space":
-		if !m.components[m.cursor].Required {
+		if containsIndex(visible, m.cursor) && !m.components[m.cursor].Required {
 			m.components[m.cursor].Selected = !m.components[m.cursor].Selected
 		}
 	case "enter":
-		if m.plannerSelected() {
-			m.phase = installPhaseModel
-		} else {
-			m.phase = installPhaseReview
+		if containsIndex(visible, m.cursor) {
+			if m.plannerSelected() {
+				m.phase = installPhaseModel
+			} else {
+				m.phase = installPhaseReview
+			}
 		}
 	case "esc", "q", "ctrl+c":
 		m.cancelled = true
@@ -301,7 +338,7 @@ func (m installSelectionModel) View() tea.View {
 	case installPhaseModel:
 		body = m.renderModelRows(width, compact)
 		summary = fmt.Sprintf("CHOICES %d  │  SELECTED %s", len(m.models), displayModel(m.selectedModel))
-		footer = "↑/↓ Navigate  │  Space Select  │  Enter Continue  │  Esc Back  │  Q Quit"
+		footer = "↑/↓ Navigate  │  Space Select  │  / Filter  │  Enter Continue  │  Esc Back  │  Q Quit"
 	case installPhaseReview:
 		body = m.renderReviewRows(width)
 		summary = fmt.Sprintf("READY TO INSTALL  │  %d ITEMS SELECTED", m.selectedComponentCount())
@@ -309,7 +346,15 @@ func (m installSelectionModel) View() tea.View {
 	default:
 		body = m.renderComponentRows(width, compact)
 		summary = fmt.Sprintf("SELECTED %d/%d  │  INSTALLED %d", m.selectedComponentCount(), len(m.components), m.installedComponentCount())
-		footer = "↑/↓ Navigate  │  Space Toggle  │  Enter Continue  │  Q/Esc Quit"
+		footer = "↑/↓ Navigate  │  Space Toggle  │  / Filter  │  Enter Continue  │  Q/Esc Quit"
+	}
+	if m.filtering || m.filterQuery != "" {
+		summary += fmt.Sprintf("  │  FILTER /%s", m.filterQuery)
+	}
+	if m.filtering {
+		footer = "Type Filter  │  ↑/↓ Navigate  │  Space Choose  │  Enter Keep  │  Esc Clear"
+	} else if m.filterQuery != "" {
+		footer = "↑/↓ Navigate  │  Space Choose  │  / New Filter  │  Enter Continue  │  Esc Clear"
 	}
 
 	content := m.renderFrame(width, height, summary, body, footer)
@@ -380,7 +425,12 @@ func (m installSelectionModel) renderFrame(width, height int, summary string, bo
 func (m installSelectionModel) renderComponentRows(width int, compact bool) []string {
 	inner := width - 4
 	rows := make([]string, 0, len(m.components)*2)
-	for index, component := range m.components {
+	visible := m.visibleComponentIndexes()
+	if len(visible) == 0 {
+		return []string{"  " + installerMutedStyle.Render("No options match /"+m.filterQuery)}
+	}
+	for _, index := range visible {
+		component := m.components[index]
 		cursor := " "
 		if index == m.cursor {
 			cursor = "›"
@@ -407,7 +457,12 @@ func (m installSelectionModel) renderComponentRows(width int, compact bool) []st
 func (m installSelectionModel) renderModelRows(width int, compact bool) []string {
 	inner := width - 4
 	rows := make([]string, 0, len(m.models)*2)
-	for index, option := range m.models {
+	visible := m.visibleModelIndexes()
+	if len(visible) == 0 {
+		return []string{"  " + installerMutedStyle.Render("No options match /"+m.filterQuery)}
+	}
+	for _, index := range visible {
+		option := m.models[index]
 		cursor := " "
 		if index == m.modelCursor {
 			cursor = "›"
@@ -433,6 +488,88 @@ func (m installSelectionModel) renderModelRows(width int, compact bool) []string
 		}
 	}
 	return rows
+}
+
+func (m installSelectionModel) visibleComponentIndexes() []int {
+	indexes := make([]int, 0, len(m.components))
+	for index, component := range m.components {
+		state := ""
+		if component.Required {
+			state = "required"
+		} else if component.Installed {
+			state = "installed"
+		}
+		if matchesInstallFilter(m.filterQuery, component.Label, component.Description, component.Disk, state) {
+			indexes = append(indexes, index)
+		}
+	}
+	return indexes
+}
+
+func (m installSelectionModel) visibleModelIndexes() []int {
+	indexes := make([]int, 0, len(m.models))
+	for index, option := range m.models {
+		state := ""
+		if option.Recommended {
+			state = "recommended"
+		}
+		if option.Installed {
+			state += " installed"
+		}
+		if matchesInstallFilter(m.filterQuery, option.Label, option.Description, option.Model, option.Disk, state) {
+			indexes = append(indexes, index)
+		}
+	}
+	return indexes
+}
+
+func matchesInstallFilter(query string, values ...string) bool {
+	if query == "" {
+		return true
+	}
+	query = strings.ToLower(query)
+	return strings.Contains(strings.ToLower(strings.Join(values, " ")), query)
+}
+
+func (m *installSelectionModel) normalizeFilteredCursor() {
+	if m.phase == installPhaseModel {
+		visible := m.visibleModelIndexes()
+		if len(visible) > 0 && !containsIndex(visible, m.modelCursor) {
+			m.modelCursor = visible[0]
+		}
+		return
+	}
+	visible := m.visibleComponentIndexes()
+	if len(visible) > 0 && !containsIndex(visible, m.cursor) {
+		m.cursor = visible[0]
+	}
+}
+
+func containsIndex(indexes []int, target int) bool {
+	for _, index := range indexes {
+		if index == target {
+			return true
+		}
+	}
+	return false
+}
+
+func previousVisibleIndex(indexes []int, current int) int {
+	for position, index := range indexes {
+		if index == current && position > 0 {
+			return indexes[position-1]
+		}
+	}
+	return current
+}
+
+func nextVisibleIndex(indexes []int, current int) int {
+	for position, index := range indexes {
+		if index == current && position+1 < len(indexes) {
+			return indexes[position+1]
+		}
+	}
+	return current
 }
 
 func (m installSelectionModel) renderReviewRows(width int) []string {

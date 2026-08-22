@@ -7,6 +7,7 @@ const notebookSource = await readFile(new URL('../src/ui/NotebookWorkspace.tsx',
 const librarySource = await readFile(new URL('../src/ui/LibraryWorkspace.tsx', import.meta.url), 'utf8').catch(() => '')
 const apiSource = await readFile(new URL('../src/lib/api.ts', import.meta.url), 'utf8')
 const stylesSource = await readFile(new URL('../src/ui/notebook.css', import.meta.url), 'utf8').catch(() => '')
+const hostedStylesSource = await readFile(new URL('../src/ui/hosted.css', import.meta.url), 'utf8').catch(() => '')
 
 test('notes are the default destination with a one-release rollback flag and technical surfaces remain reachable', () => {
   assert.match(appSource, /notebookEnabled \? 'notes' : 'overview'/)
@@ -95,6 +96,29 @@ test('notes can be moved to recoverable trash from the explorer', () => {
   assert.match(stylesSource, /\.noteTreeRemove:focus-visible/)
 })
 
+test('Notes owns the Ask empty state and conversation save action', () => {
+  assert.doesNotMatch(notebookSource, /type Destination = [^\n]*'ask'/)
+  assert.doesNotMatch(notebookSource, /<RailButton label="Ask"/)
+  assert.match(notebookSource, /destination === 'notes' && !activeNote/)
+  assert.match(notebookSource, /<AskWorkspace/)
+  assert.match(notebookSource, /aria-label="Save conversation as note"/)
+  assert.match(notebookSource, /disabled=\{!askAnswer\}/)
+  assert.match(notebookSource, /path: nextAskNotePath\(title, \[\.\.\.notes, \.\.\.trash\]\)/)
+  assert.match(notebookSource, /## Question\\n\\n\$\{askText\.trim\(\)\}\\n\\n## Answer/)
+  assert.doesNotMatch(notebookSource, /Save as new note/)
+})
+
+test('Trash is a dedicated destination with recoverable and permanent deletion', () => {
+  assert.match(notebookSource, /type Destination = [^\n]*'trash'/)
+  assert.match(notebookSource, /<RailButton label="Trash"/)
+  assert.match(notebookSource, /<TrashWorkspace/)
+  assert.match(notebookSource, /deleteNotePermanently/)
+  assert.match(notebookSource, /aria-label="Empty trash"/)
+  assert.match(notebookSource, /aria-label="Delete selected notes permanently"/)
+  assert.match(notebookSource, /aria-label=\{`Delete \$\{note\.title\} permanently`\}/)
+  assert.doesNotMatch(notebookSource, /<div className="notebookSectionLabel"><span>Trash<\/span>/)
+})
+
 test('the first Markdown line is the note title', () => {
   const source = /function noteTitleFromBody\(body: string, fallback: string\) \{([\s\S]*?)\n\}/.exec(notebookSource)
   assert.ok(source, 'noteTitleFromBody source should exist')
@@ -111,9 +135,21 @@ test('the first Markdown line is the note title', () => {
 
 test('Ask results stay in a bounded document flow without covering the composer', () => {
   assert.match(stylesSource, /\.askWorkspace\s*\{[^}]*display:\s*flex;[^}]*flex-direction:\s*column;[^}]*overflow-x:\s*hidden;/s)
-  assert.match(stylesSource, /\.askAnswer,\s*\.askScope,\s*\.askComposer\s*\{[^}]*width:\s*100%;[^}]*max-width:\s*820px;[^}]*min-width:\s*0;[^}]*box-sizing:\s*border-box;/s)
+  assert.match(stylesSource, /\.askAnswer,\s*\.askComposer\s*\{[^}]*width:\s*100%;[^}]*max-width:\s*820px;[^}]*min-width:\s*0;[^}]*box-sizing:\s*border-box;/s)
   assert.match(stylesSource, /\.askAnswer \.md\s*\{[^}]*overflow-wrap:\s*anywhere;/s)
   assert.doesNotMatch(stylesSource, /\.askComposer\s*\{[^}]*position:\s*sticky;/s)
+})
+
+test('Ask scope is consolidated into the top project picker', () => {
+  assert.match(notebookSource, /destination === 'notes' && !activeNote \? \(/)
+  assert.match(notebookSource, /<AskScopePicker/)
+  assert.match(notebookSource, /role="radio"/)
+  assert.match(notebookSource, /type="checkbox"/)
+  assert.match(notebookSource, /onWorkspaceChange\(workspace\)/)
+  assert.match(notebookSource, /Active note/)
+  assert.match(notebookSource, /All workspaces/)
+  assert.doesNotMatch(notebookSource, /<label>Search scope/)
+  assert.doesNotMatch(stylesSource, /(?:^|\n)\.askScope\s*\{/)
 })
 
 test('notebook layout has responsive explorer and context behavior', () => {
@@ -137,7 +173,7 @@ test('sidebar destinations use icons when collapsed and add names below icons wh
 test('notebook grid reserves tracks only for mounted panels and widens the Library canvas', () => {
   assert.match(notebookSource, /const contextVisible = contextOpen && destination === 'notes'/)
   assert.match(notebookSource, /contextVisible \? 'contextVisible' : 'contextHidden'/)
-  assert.match(notebookSource, /destination === 'notes' \? <button[^\n]*Toggle context panel/)
+  assert.match(notebookSource, /destination === 'notes' && activeNote \? <button[^\n]*Toggle context panel/)
   assert.match(notebookSource, /\{contextVisible \? \(/)
 
   assert.match(stylesSource, /\.notebookShell\.contextVisible/)
@@ -145,6 +181,12 @@ test('notebook grid reserves tracks only for mounted panels and widens the Libra
   assert.match(stylesSource, /--library-content-width: 1180px/)
   assert.match(stylesSource, /width: min\(100%, var\(--library-content-width\)\)/)
   assert.doesNotMatch(stylesSource, /\.libraryCard \{\s*max-width: 960px/)
+})
+
+test('hosted Library layout rules cannot override the notebook Library workspace', () => {
+  assert.match(hostedStylesSource, /\.hostedProduct \.libraryWorkspace\s*\{/)
+  assert.doesNotMatch(hostedStylesSource, /(?:^|\n)\.libraryWorkspace\s*\{/)
+  assert.match(hostedStylesSource, /@media \(max-width: 760px\)[\s\S]*\.hostedProduct \.libraryWorkspace\s*\{/)
 })
 
 test('Library reading room keeps the index right-aligned and chat composer anchored', () => {

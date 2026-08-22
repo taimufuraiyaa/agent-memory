@@ -214,6 +214,114 @@ func TestInstallSelectionExplainsKeysDiskCostAndInstalledState(t *testing.T) {
 	}
 }
 
+func TestInstallTUIComponentFilterNarrowsNavigatesAndTogglesSourceOption(t *testing.T) {
+	model := newInstallSelectionModel(defaultInstallComponents(installDetection{}))
+	for _, key := range []rune{'/', 'p', 'l', 'a', 'n', 'n', 'e', 'r'} {
+		updated, _ := model.Update(tea.KeyPressMsg(tea.Key{Text: string(key), Code: key}))
+		model = updated.(installSelectionModel)
+	}
+	plain := ansi.Strip(model.View().Content)
+	if !strings.Contains(plain, "/planner") || !strings.Contains(plain, "Local LLM planner") || strings.Contains(plain, "ONNX Runtime") {
+		t.Fatalf("filtered component view:\n%s", plain)
+	}
+	updated, _ := model.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
+	model = updated.(installSelectionModel)
+	if model.phase != installPhaseComponents {
+		t.Fatalf("enter while filtering changed phase: %+v", model)
+	}
+	if plain = ansi.Strip(model.View().Content); !strings.Contains(plain, "FILTER /planner") {
+		t.Fatalf("enter did not retain filter:\n%s", plain)
+	}
+	updated, _ = model.Update(tea.KeyPressMsg(tea.Key{Code: ' '}))
+	model = updated.(installSelectionModel)
+	if model.components[installComponentPlannerIndex].Selected {
+		t.Fatalf("space did not toggle filtered source option: %+v", model.components[installComponentPlannerIndex])
+	}
+}
+
+func TestInstallTUIFilterNavigatesAcrossVisibleMatches(t *testing.T) {
+	model := newInstallSelectionModel(defaultInstallComponents(installDetection{}))
+	for _, key := range []rune{'/', 'l', 'o', 'c', 'a', 'l'} {
+		updated, _ := model.Update(tea.KeyPressMsg(tea.Key{Text: string(key), Code: key}))
+		model = updated.(installSelectionModel)
+	}
+	if model.cursor != 1 {
+		t.Fatalf("initial matching cursor=%d want=1", model.cursor)
+	}
+	updated, _ := model.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyDown}))
+	model = updated.(installSelectionModel)
+	if model.cursor != 2 {
+		t.Fatalf("next matching cursor=%d want=2", model.cursor)
+	}
+}
+
+func TestInstallTUIFilterSupportsBackspaceEscapeAndNoMatches(t *testing.T) {
+	model := newInstallSelectionModel(defaultInstallComponents(installDetection{}))
+	for _, key := range []rune{'/', 'z', 'z'} {
+		updated, _ := model.Update(tea.KeyPressMsg(tea.Key{Text: string(key), Code: key}))
+		model = updated.(installSelectionModel)
+	}
+	if plain := ansi.Strip(model.View().Content); !strings.Contains(plain, "No options match") {
+		t.Fatalf("missing empty-result message:\n%s", plain)
+	}
+	updated, command := model.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyDown}))
+	model = updated.(installSelectionModel)
+	if command != nil || model.cancelled {
+		t.Fatalf("no-match navigation was not a no-op: model=%+v command=%v", model, command)
+	}
+	updated, _ = model.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
+	model = updated.(installSelectionModel)
+	updated, _ = model.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
+	model = updated.(installSelectionModel)
+	if model.phase != installPhaseComponents {
+		t.Fatalf("no-match enter changed phase: %+v", model)
+	}
+	model.filtering = true
+	updated, _ = model.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyBackspace}))
+	model = updated.(installSelectionModel)
+	if model.filterQuery != "z" {
+		t.Fatalf("filter query after backspace=%q", model.filterQuery)
+	}
+	updated, command = model.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEsc}))
+	model = updated.(installSelectionModel)
+	if model.filtering || model.filterQuery != "" || model.cancelled || command != nil {
+		t.Fatalf("escape did not only clear filter: model=%+v command=%v", model, command)
+	}
+
+	for _, key := range []rune{'/', 'c', 'o', 'r', 'e'} {
+		updated, _ = model.Update(tea.KeyPressMsg(tea.Key{Text: string(key), Code: key}))
+		model = updated.(installSelectionModel)
+	}
+	updated, _ = model.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
+	model = updated.(installSelectionModel)
+	updated, command = model.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEsc}))
+	model = updated.(installSelectionModel)
+	if model.filterQuery != "" || model.cancelled || command != nil {
+		t.Fatalf("escape did not clear retained filter: model=%+v command=%v", model, command)
+	}
+}
+
+func TestInstallTUIModelFilterMatchesMetadataAndSelectsVisibleModel(t *testing.T) {
+	model := newInstallSelectionModel(defaultInstallComponents(installDetection{}))
+	updated, _ := model.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
+	model = updated.(installSelectionModel)
+	for _, key := range []rune{'/', 'h', 'i', 'g', 'h', 'e', 'r'} {
+		updated, _ = model.Update(tea.KeyPressMsg(tea.Key{Text: string(key), Code: key}))
+		model = updated.(installSelectionModel)
+	}
+	plain := ansi.Strip(model.View().Content)
+	if !strings.Contains(plain, "Qwen3 14B") || strings.Contains(plain, "Qwen3 8B") {
+		t.Fatalf("filtered model view:\n%s", plain)
+	}
+	updated, _ = model.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
+	model = updated.(installSelectionModel)
+	updated, _ = model.Update(tea.KeyPressMsg(tea.Key{Code: ' '}))
+	model = updated.(installSelectionModel)
+	if model.selectedModel != "qwen3:14b" {
+		t.Fatalf("selected filtered model=%q", model.selectedModel)
+	}
+}
+
 func TestInstallSelectionMapsComponentsToLegacyFlags(t *testing.T) {
 	components := defaultInstallComponents(installDetection{})
 	for index := range components {

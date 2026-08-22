@@ -198,7 +198,6 @@ configure environment variables, and initialize the current directory as a proje
 			// Env file setup
 			if writeEnvFile {
 				vars := map[string]string{
-					"AGENT_MEMORY_UPGRADE_YES":     "1",
 					"AGENT_MEMORY_OBSERVE_ENABLED": "1",
 					"AGENT_MEMORY_ENABLED":         "1",
 				}
@@ -407,6 +406,9 @@ func installOrCopyBinary(out, errOut io.Writer, binDir, src string) (string, err
 		if err := os.Chmod(finalBin, 0o755); err != nil {
 			return "", err
 		}
+		if err := synchronizeConciseExecutable(finalBin); err != nil {
+			return "", err
+		}
 		return finalBin, nil
 	}
 
@@ -420,12 +422,18 @@ func installOrCopyBinary(out, errOut io.Writer, binDir, src string) (string, err
 	// Skip copy if already running from target path
 	if absExe, err := filepath.Abs(exe); err == nil {
 		if absFinal, err := filepath.Abs(finalBin); err == nil && absExe == absFinal {
+			if err := synchronizeConciseExecutable(finalBin); err != nil {
+				return "", err
+			}
 			return finalBin, nil
 		}
 	}
 
 	if err := replaceFileAtomic(finalBin, exe); err != nil {
 		return "", fmt.Errorf("copy failed: %w", err)
+	}
+	if err := synchronizeConciseExecutable(finalBin); err != nil {
+		return "", err
 	}
 	return finalBin, nil
 }

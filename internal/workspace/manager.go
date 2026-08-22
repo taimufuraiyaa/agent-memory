@@ -431,6 +431,73 @@ func (m *Manager) PrepareTermIndex(ctx context.Context, projectName string) (*Te
 	return prepareTermIndexPath(ctx, project.DBPath, name)
 }
 
+// ProjectForPath returns the most specific registered workspace containing path.
+func (m *Manager) ProjectForPath(path string) (*Project, error) {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return nil, ErrProjectNotRegistered
+	}
+	absPath, err := canonicalWorkspacePath(path)
+	if err != nil {
+		return nil, err
+	}
+	registry, err := m.readRegistry()
+	if err != nil {
+		return nil, err
+	}
+	var match *Project
+	for index := range registry.Projects {
+		project := &registry.Projects[index]
+		root := strings.TrimSpace(project.WorkspaceRoot)
+		if root == "" {
+			continue
+		}
+		absRoot, err := canonicalWorkspacePath(root)
+		if err != nil {
+			continue
+		}
+		absRoot = filepath.Clean(absRoot)
+		rel, err := filepath.Rel(absRoot, absPath)
+		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			continue
+		}
+		if match == nil || len(absRoot) > len(filepath.Clean(match.WorkspaceRoot)) {
+			copy := *project
+			copy.WorkspaceRoot = absRoot
+			match = &copy
+		}
+	}
+	if match == nil {
+		return nil, ErrProjectNotRegistered
+	}
+	return match, nil
+}
+
+func canonicalWorkspacePath(path string) (string, error) {
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+	absPath = filepath.Clean(absPath)
+	for existing := absPath; ; existing = filepath.Dir(existing) {
+		resolved, resolveErr := filepath.EvalSymlinks(existing)
+		if resolveErr == nil {
+			remainder, relErr := filepath.Rel(existing, absPath)
+			if relErr != nil {
+				return "", relErr
+			}
+			return filepath.Clean(filepath.Join(resolved, remainder)), nil
+		}
+		if !errors.Is(resolveErr, os.ErrNotExist) {
+			return "", resolveErr
+		}
+		parent := filepath.Dir(existing)
+		if parent == existing {
+			return absPath, nil
+		}
+	}
+}
+
 // PrepareAllTermIndexes prepares every registered project independently.
 func (m *Manager) PrepareAllTermIndexes(ctx context.Context) (map[string]*TermIndexSetupResult, map[string]string, error) {
 	reg, err := m.readRegistry()

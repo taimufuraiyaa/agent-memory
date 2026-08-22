@@ -53,24 +53,29 @@ func validateTextOrJSONFormat(s string) (string, error) {
 	}
 }
 
-func envBool(key string) bool {
-	v := strings.TrimSpace(os.Getenv(key))
-	if v == "" {
-		return false
-	}
-	switch strings.ToLower(v) {
-	case "1", "true", "yes", "y", "on":
-		return true
-	default:
-		return false
-	}
-}
-
 func binNameWithExt(name string) string {
 	if runtime.GOOS == "windows" && !strings.HasSuffix(strings.ToLower(name), ".exe") {
 		return name + ".exe"
 	}
 	return name
+}
+
+func canonicalUpgradeTarget(path string) string {
+	if strings.EqualFold(filepath.Base(path), binNameWithExt("am")) {
+		return filepath.Join(filepath.Dir(path), binNameWithExt("agent-memory"))
+	}
+	return path
+}
+
+func synchronizeConciseExecutable(canonicalPath string) error {
+	if !strings.EqualFold(filepath.Base(canonicalPath), binNameWithExt("agent-memory")) {
+		return nil
+	}
+	aliasPath := filepath.Join(filepath.Dir(canonicalPath), binNameWithExt("am"))
+	if err := replaceFileAtomic(aliasPath, canonicalPath); err != nil {
+		return fmt.Errorf("publish concise executable %s: %w", aliasPath, err)
+	}
+	return nil
 }
 
 func runAndCapture(cmd *exec.Cmd) (string, string, error) {
@@ -367,10 +372,11 @@ func newUpgradeCommand() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "upgrade",
-		Short: "Upgrade agent-memory binary and push hippocampus hooks to the current project",
+		Short: "Upgrade the current project, or every project with --all",
 		Long: `Upgrade the agent-memory binary and write the hippocampus hook files
 (.kiro/hooks/memory-recall-gate.json and .kiro/hooks/memory-consolidation-gate.json)
-into the current project directory.
+into the registered project containing the current directory. Use --all to
+upgrade every registered project.
 
 Hooks are always written by default. Use --no-hooks to skip them.
 Use --hooks-only to push hooks without touching the binary (useful for existing projects).`,
@@ -479,7 +485,7 @@ Use --hooks-only to push hooks without touching the binary (useful for existing 
 				if err != nil {
 					return err
 				}
-				target = exe
+				target = canonicalUpgradeTarget(exe)
 			}
 
 			if strings.TrimSpace(srcDir) == "" {
@@ -503,7 +509,7 @@ Use --hooks-only to push hooks without touching the binary (useful for existing 
 				Method:        method,
 				SourceDir:     srcDir,
 				TargetPath:    target,
-				TuningCommand: "agent-memory tuning",
+				TuningCommand: "am tuning",
 			}
 
 			// Warn when --to signals a specific version but we fall back to a local checkout
@@ -536,11 +542,15 @@ Use --hooks-only to push hooks without touching the binary (useful for existing 
 				return nil
 			}
 
-			if !yes && envBool("AGENT_MEMORY_UPGRADE_YES") {
-				yes = true
-			}
-			if !yes {
-				return errors.New("upgrade requires --yes / -y (or set AGENT_MEMORY_UPGRADE_YES=1, or use --dry-run)")
+			if !all {
+				dataDir := defaultAgentMemoryDataDir()
+				mgr, err := workspace.NewManager(dataDir)
+				if err != nil {
+					return err
+				}
+				if _, err := mgr.ProjectForPath(cwd); err != nil {
+					return fmt.Errorf("current directory %s is not a registered project in %s (run from a registered project or use --all): %w", cwd, dataDir, err)
+				}
 			}
 
 			installedFrom := ""
@@ -574,11 +584,14 @@ Use --hooks-only to push hooks without touching the binary (useful for existing 
 			if err := replaceFileAtomic(target, installedFrom); err != nil {
 				return fmt.Errorf("replace failed: %w", err)
 			}
+			if err := synchronizeConciseExecutable(target); err != nil {
+				return err
+			}
 			res.Replaced = true
 			if method == "go-build" {
 				_ = os.Remove(installedFrom)
 			}
-			prepared, failures, prepareErr := prepareRegisteredTermIndexes(cmd.Context(), defaultAgentMemoryDataDir())
+			prepared, failures, prepareErr := prepareUpgradeTermIndexes(cmd.Context(), defaultAgentMemoryDataDir(), cwd, all)
 			if prepareErr != nil {
 				failures = map[string]string{"_registry": prepareErr.Error()}
 			}
@@ -698,7 +711,7 @@ Use --hooks-only to push hooks without touching the binary (useful for existing 
 	cmd.Flags().StringVar(&to, "to", "latest", "Go version specifier (e.g. latest, v1.2.3)")
 	cmd.Flags().StringVar(&target, "target", "", "Target path to replace (default: current executable)")
 	cmd.Flags().StringVar(&srcDir, "src", "", "Build from local source checkout (repo root containing go.mod and cmd/agent-memory)")
-	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "Confirm replacing the target binary")
+	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "Accepted for compatibility; upgrades no longer require confirmation")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Show what would happen without replacing anything")
 	cmd.Flags().BoolVar(&hooksOnly, "hooks-only", false, "Only write hippocampus hook files, skip binary upgrade")
 	cmd.Flags().BoolVar(&noHooks, "no-hooks", false, "Skip writing hippocampus hook files")
@@ -715,6 +728,25 @@ func prepareRegisteredTermIndexes(ctx context.Context, dataDir string) (map[stri
 		return nil, nil, err
 	}
 	return mgr.PrepareAllTermIndexes(ctx)
+}
+
+func prepareUpgradeTermIndexes(ctx context.Context, dataDir, cwd string, all bool) (map[string]*workspace.TermIndexSetupResult, map[string]string, error) {
+	if all {
+		return prepareRegisteredTermIndexes(ctx, dataDir)
+	}
+	mgr, err := workspace.NewManager(dataDir)
+	if err != nil {
+		return nil, nil, err
+	}
+	project, err := mgr.ProjectForPath(cwd)
+	if err != nil {
+		return nil, nil, err
+	}
+	result, err := mgr.PrepareTermIndex(ctx, project.Name)
+	if err != nil {
+		return map[string]*workspace.TermIndexSetupResult{}, map[string]string{project.Name: err.Error()}, nil
+	}
+	return map[string]*workspace.TermIndexSetupResult{project.Name: result}, map[string]string{}, nil
 }
 
 func ensureEnvVarIfPresent(key, value string) (string, bool, error) {

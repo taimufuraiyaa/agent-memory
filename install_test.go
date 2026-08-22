@@ -53,6 +53,45 @@ func TestReleaseBuildUsesTrimpath(t *testing.T) {
 	}
 }
 
+func TestBuildAndReleaseArtifactsIncludeConciseExecutable(t *testing.T) {
+	makefileBytes, err := os.ReadFile("Makefile")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Count(string(makefileBytes), "cp $(BIN_DIR)/$(APP) $(BIN_DIR)/am") != 2 {
+		t.Fatal("development and embedded builds must publish bin/am")
+	}
+	releaseBytes, err := os.ReadFile(".github/workflows/release.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(releaseBytes), "tar -czf agent-memory_${{ github.ref_name }}_${{ matrix.target.goos }}_${{ matrix.target.goarch }}.tar.gz agent-memory am") {
+		t.Fatal("release archive must contain agent-memory and am")
+	}
+}
+
+func TestPublishConciseExecutableCopiesCanonicalBinary(t *testing.T) {
+	binDir := t.TempDir()
+	canonical := filepath.Join(binDir, binNameWithExt())
+	if err := os.WriteFile(canonical, []byte("same-cli"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	alias, err := publishConciseExecutable(canonical)
+	if err != nil {
+		t.Fatalf("publish concise executable: %v", err)
+	}
+	if filepath.Base(alias) != conciseBinNameWithExt() {
+		t.Fatalf("alias path=%q", alias)
+	}
+	content, err := os.ReadFile(alias)
+	if err != nil {
+		t.Fatalf("read concise executable: %v", err)
+	}
+	if string(content) != "same-cli" {
+		t.Fatalf("concise executable content=%q", content)
+	}
+}
+
 func TestMergeEnvFileAddsAdaptiveTuningGuidance(t *testing.T) {
 	merged, err := mergeEnvFile("/tmp/agent-memory.env", map[string]string{
 		"AGENT_MEMORY_ENABLED":         "1",

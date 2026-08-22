@@ -23,6 +23,10 @@ export default defineConfig({
         target: apiTarget,
         changeOrigin: true,
       },
+      '/dashboard/runtime.json': {
+        target: apiTarget,
+        changeOrigin: true,
+      },
     },
   },
   build: {

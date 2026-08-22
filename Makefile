@@ -26,6 +26,7 @@ setup: ## Install development dependencies and tools
 build: ## Build the agent-memory binary
 	mkdir -p $(BIN_DIR)
 	go build -trimpath -o $(BIN_DIR)/$(APP) ./cmd/agent-memory
+	cp $(BIN_DIR)/$(APP) $(BIN_DIR)/am
 
 build-dashboard: ## Build dashboard assets for embedding
 	@echo "Building dashboard assets..."
@@ -46,10 +47,11 @@ build-with-dashboard: embed-dashboard ## Build agent-memory with embedded dashbo
 	@echo "Building agent-memory with embedded dashboard..."
 	mkdir -p $(BIN_DIR)
 	go build -trimpath -o $(BIN_DIR)/$(APP) ./cmd/agent-memory
+	cp $(BIN_DIR)/$(APP) $(BIN_DIR)/am
 	@echo "✓ Build complete with embedded dashboard"
 
 install-dev: build ## Build and install locally for development
-	go install ./cmd/agent-memory
+	go install ./cmd/agent-memory ./cmd/am
 
 test: ## Run all tests
 	go test ./...

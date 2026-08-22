@@ -2,6 +2,8 @@ package workspace
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -28,6 +30,51 @@ func TestValidateProjectName(t *testing.T) {
 	}
 	if _, err := ValidateProjectName("archived"); err == nil {
 		t.Fatalf("expected reserved-name error")
+	}
+}
+
+func TestProjectForPathSelectsDeepestRegisteredWorkspace(t *testing.T) {
+	base := t.TempDir()
+	outer := filepath.Join(base, "project")
+	inner := filepath.Join(outer, "packages", "nested")
+	prefixCollision := filepath.Join(base, "project-copy")
+	for _, dir := range []string{inner, prefixCollision} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatalf("create workspace root: %v", err)
+		}
+	}
+	mgr, err := NewManager(filepath.Join(base, "data"))
+	if err != nil {
+		t.Fatalf("new manager: %v", err)
+	}
+	registry := Registry{Projects: []Project{
+		{Name: "outer", DBPath: filepath.Join(base, "outer.db"), WorkspaceRoot: outer},
+		{Name: "nested", DBPath: filepath.Join(base, "nested.db"), WorkspaceRoot: inner},
+	}}
+	encoded, err := json.Marshal(registry)
+	if err != nil {
+		t.Fatalf("marshal registry: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(mgr.BaseDir, "workspaces.json"), encoded, 0o600); err != nil {
+		t.Fatalf("write registry: %v", err)
+	}
+
+	project, err := mgr.ProjectForPath(filepath.Join(inner, "src"))
+	if err != nil {
+		t.Fatalf("resolve nested project: %v", err)
+	}
+	if project.Name != "nested" {
+		t.Fatalf("resolved project %q, want nested", project.Name)
+	}
+	project, err = mgr.ProjectForPath(outer)
+	if err != nil {
+		t.Fatalf("resolve exact project root: %v", err)
+	}
+	if project.Name != "outer" {
+		t.Fatalf("resolved project %q, want outer", project.Name)
+	}
+	if _, err := mgr.ProjectForPath(prefixCollision); !errors.Is(err, ErrProjectNotRegistered) {
+		t.Fatalf("prefix collision resolved as a project: %v", err)
 	}
 }
 

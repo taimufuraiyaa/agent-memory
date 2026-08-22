@@ -12,6 +12,7 @@ import (
 
 	"github.com/taimufuraiyaa/agent-memory/internal/core"
 	"github.com/taimufuraiyaa/agent-memory/internal/storage/sqlite"
+	"github.com/taimufuraiyaa/agent-memory/internal/workspace"
 )
 
 func TestReplaceFileAtomicKeepsDestinationContinuouslyAvailable(t *testing.T) {
@@ -55,6 +56,31 @@ func TestReplaceFileAtomicKeepsDestinationContinuouslyAvailable(t *testing.T) {
 	watcher.Wait()
 	if missing.Load() {
 		t.Fatal("destination disappeared during replacement")
+	}
+}
+
+func TestCanonicalUpgradeTargetAndAliasSynchronization(t *testing.T) {
+	binDir := t.TempDir()
+	canonical := filepath.Join(binDir, binNameWithExt("agent-memory"))
+	alias := filepath.Join(binDir, binNameWithExt("am"))
+	if got := canonicalUpgradeTarget(alias); got != canonical {
+		t.Fatalf("canonical target for alias=%q want=%q", got, canonical)
+	}
+	if got := canonicalUpgradeTarget(canonical); got != canonical {
+		t.Fatalf("canonical target changed: %q", got)
+	}
+	if err := os.WriteFile(canonical, []byte("new-version"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := synchronizeConciseExecutable(canonical); err != nil {
+		t.Fatalf("synchronize concise executable: %v", err)
+	}
+	content, err := os.ReadFile(alias)
+	if err != nil {
+		t.Fatalf("read concise executable: %v", err)
+	}
+	if string(content) != "new-version" {
+		t.Fatalf("concise executable content=%q", content)
 	}
 }
 
@@ -161,7 +187,7 @@ fi
 	}
 }
 
-func TestUpgradeWithoutConfirmationDoesNotBuild(t *testing.T) {
+func TestUpgradeWithoutConfirmationBuilds(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("fake go executable uses a POSIX shell")
 	}
@@ -177,25 +203,100 @@ func TestUpgradeWithoutConfirmationDoesNotBuild(t *testing.T) {
 	buildMarker := filepath.Join(t.TempDir(), "go-invoked")
 	fakeGoDir := t.TempDir()
 	fakeGo := filepath.Join(fakeGoDir, "go")
-	if err := os.WriteFile(fakeGo, []byte("#!/bin/sh\n: > \"$FAKE_GO_MARKER\"\nexit 1\n"), 0o755); err != nil {
+	if err := os.WriteFile(fakeGo, []byte(`#!/bin/sh
+set -eu
+: > "$FAKE_GO_MARKER"
+out=""
+while [ "$#" -gt 0 ]; do
+	if [ "$1" = "-o" ]; then
+		shift
+		out="$1"
+	fi
+	shift
+done
+if [ -n "$out" ]; then
+	: > "$out"
+	chmod +x "$out"
+fi
+`), 0o755); err != nil {
 		t.Fatalf("write fake go: %v", err)
 	}
 	t.Setenv("FAKE_GO_MARKER", buildMarker)
 	t.Setenv("PATH", fakeGoDir+string(os.PathListSeparator)+os.Getenv("PATH"))
-	t.Setenv("AGENT_MEMORY_UPGRADE_YES", "")
-
+	homeDir := t.TempDir()
+	projectRoot := filepath.Join(homeDir, "current-project")
+	dataDir := filepath.Join(homeDir, ".agent-memory")
+	if err := os.MkdirAll(projectRoot, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(dataDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	registry := `{"projects":[{"name":"current-project","db_path":"` + filepath.Join(dataDir, "current-project.db") + `","workspace_root":"` + projectRoot + `"}]}`
+	if err := os.WriteFile(filepath.Join(dataDir, "workspaces.json"), []byte(registry), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", homeDir)
+	if err := os.Chdir(projectRoot); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(repositoryCWD) })
+	mgr, err := workspace.NewManager(dataDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if project, err := mgr.ProjectForPath(projectRoot); err != nil || project.Name != "current-project" {
+		t.Fatalf("test registry did not resolve current project: project=%v err=%v", project, err)
+	}
 	cmd := newUpgradeCommand()
+	target := filepath.Join(t.TempDir(), binNameWithExt("agent-memory"))
 	cmd.SetArgs([]string{
 		"--src", repositoryRoot,
-		"--target", filepath.Join(t.TempDir(), binNameWithExt("agent-memory")),
+		"--target", target,
 		"--no-hooks",
+		"--no-dashboard",
 	})
 	err = cmd.ExecuteContext(context.Background())
-	if err == nil || !strings.Contains(err.Error(), "upgrade requires --yes") {
-		t.Fatalf("expected confirmation error, got %v", err)
+	if err != nil {
+		t.Fatalf("upgrade without confirmation: %v", err)
 	}
-	if _, err := os.Stat(buildMarker); !os.IsNotExist(err) {
-		t.Fatalf("unconfirmed upgrade invoked the Go builder: %v", err)
+	if _, err := os.Stat(buildMarker); err != nil {
+		t.Fatalf("upgrade did not invoke the Go builder: %v", err)
+	}
+	if _, err := os.Stat(target); err != nil {
+		t.Fatalf("upgrade did not replace target: %v", err)
+	}
+}
+
+func TestPrepareUpgradeTermIndexesScopesToCurrentProject(t *testing.T) {
+	base := t.TempDir()
+	currentRoot := filepath.Join(base, "current")
+	otherRoot := filepath.Join(base, "other")
+	for _, root := range []string{currentRoot, otherRoot} {
+		if err := os.MkdirAll(root, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	dataDir := filepath.Join(base, "data")
+	if err := os.MkdirAll(dataDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	registry := `{"projects":[` +
+		`{"name":"current","db_path":"` + filepath.Join(dataDir, "current.db") + `","workspace_root":"` + currentRoot + `"},` +
+		`{"name":"other","db_path":"` + filepath.Join(dataDir, "other.db") + `","workspace_root":"` + otherRoot + `"}]}`
+	if err := os.WriteFile(filepath.Join(dataDir, "workspaces.json"), []byte(registry), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	prepared, failures, err := prepareUpgradeTermIndexes(context.Background(), dataDir, filepath.Join(currentRoot, "subdir"), false)
+	if err != nil {
+		t.Fatalf("prepare current term index: %v", err)
+	}
+	if prepared["current"] == nil || len(prepared) != 1 || len(failures) != 0 {
+		t.Fatalf("current project scope: prepared=%v failures=%v", prepared, failures)
+	}
+	if _, err := os.Stat(filepath.Join(dataDir, "other.db")); !os.IsNotExist(err) {
+		t.Fatalf("plain upgrade touched other project database: %v", err)
 	}
 }
 

@@ -67,8 +67,8 @@ brew install --HEAD taimufuraiyaa/agent-memory/agent-memory
 
 #### Option B: CLI Binary Installation
 ```bash
-go install ./cmd/agent-memory
-agent-memory install
+go install ./cmd/agent-memory ./cmd/am
+am install
 ```
 
 On an interactive terminal, `agent-memory install` opens a component checklist:
@@ -131,7 +131,17 @@ agent-memory init --project-name my-project
 - Applies database migrations, backfills locators, and publishes a ready project Bloom snapshot after optional study ingestion.
 - Automatically writes rule files (e.g., Cursor rules at `.cursor/rules/agent-memory.mdc`, Trae rules, etc.) to prompt the agent to use `agent-memory`.
 
-`agent-memory reinstall` and `agent-memory init --reuse` run the same idempotent term-index preparation for existing projects. A normal `agent-memory upgrade` prepares every registered project and reports per-project successes or failures; one damaged database does not prevent healthy projects from upgrading, and the damaged project remains fail-open. `upgrade --dry-run` and `upgrade --hooks-only` do not touch project databases.
+`am` is the concise executable name for `agent-memory`; installers publish both
+names and keep them synchronized. `agent-memory reinstall` and `agent-memory
+init --reuse` run the same idempotent term-index preparation for existing
+projects.
+
+Run `am upgrade` inside a registered project (or any of its subdirectories) to
+upgrade that project. Run `am upgrade --all` to upgrade every registered
+project. Neither command requires `-y`; the legacy confirmation flag remains
+accepted for compatibility. One damaged project does not prevent healthy
+projects from upgrading in `--all` mode. `upgrade --dry-run` and
+`upgrade --hooks-only` do not touch project databases.
 
 ---
 
@@ -210,14 +220,28 @@ The dashboard is served locally by the Go binary (no separate servers required) 
 agent-memory dashboard
 
 # Run headlessly in the background
-agent-memory dashboard --start --addr 127.0.0.1:3210
+agent-memory dashboard --start
 agent-memory dashboard --stop
 ```
 
+During UI development, opt into the Vite development server and hot module
+replacement while the Go binary serves the real local API:
+
+```bash
+agent-memory dashboard --hot-reload
+
+# The development server can also run in the background.
+agent-memory dashboard --hot-reload --start
+```
+
+Hot-reload mode requires npm and a source checkout containing
+`tools/agent-memory/dashboard`. It is opt-in; normal dashboard startup still
+uses the embedded UI and has no npm runtime dependency.
+
 For a source checkout, build the embedded dashboard and binary once with
-`make build-with-dashboard`, then run `./bin/agent-memory dashboard --addr
-127.0.0.1:3210`. The production binary serves `/dashboard/` itself; npm is not
-needed at runtime.
+`make build-with-dashboard`, then run `./bin/agent-memory dashboard`. The
+dashboard listens on port 3100 by default, and the production binary serves
+`/dashboard/` itself; npm is not needed at runtime.
 
 The standalone command and the hosted URL now use one embedded React webapp.
 The server publishes a small, no-store runtime manifest that selects either
