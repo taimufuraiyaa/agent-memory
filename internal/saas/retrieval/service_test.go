@@ -9,10 +9,27 @@ import (
 	"time"
 
 	"github.com/taimufuraiyaa/agent-memory/internal/core"
+	"github.com/taimufuraiyaa/agent-memory/internal/saas/auth"
 	"github.com/taimufuraiyaa/agent-memory/internal/saas/modelgateway"
 	"github.com/taimufuraiyaa/agent-memory/internal/saas/search"
 	"github.com/taimufuraiyaa/agent-memory/internal/saas/semantic"
 )
+
+func sourceReadContext() context.Context {
+	return auth.WithRequestContext(context.Background(), auth.RequestContext{TenantID: "tenant", Capabilities: map[string]struct{}{"source:read": {}}})
+}
+
+func TestServiceRequiresSourceReadCapability(t *testing.T) {
+	service, err := NewService(retrievalRepositoryFixture{}, vectorSearcherFixture{}, &retrievalModelFixture{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := auth.WithRequestContext(context.Background(), auth.RequestContext{TenantID: "tenant", Capabilities: map[string]struct{}{"memory:read": {}}})
+	_, err = service.Query(ctx, Query{TenantID: "tenant", AuthorizedSourceIDs: []string{"source"}, Text: "question", Provider: "local", Model: "model"})
+	if err == nil || !strings.Contains(err.Error(), "source:read") {
+		t.Fatalf("expected source:read denial, got %v", err)
+	}
+}
 
 type retrievalRepositoryFixture struct {
 	lexical  []Candidate
@@ -93,7 +110,7 @@ func TestServiceMixesSignalsClampsNegativeVectorAndReauthorizesSerialization(t *
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := service.Query(context.Background(), Query{TenantID: "tenant", AuthorizedSourceIDs: []string{"allowed"}, Text: "question", Limit: 5, ContextTokenBudget: 10, Generate: true, Provider: "private", Model: "model"})
+	result, err := service.Query(sourceReadContext(), Query{TenantID: "tenant", AuthorizedSourceIDs: []string{"allowed"}, Text: "question", Limit: 5, ContextTokenBudget: 10, Generate: true, Provider: "private", Model: "model"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,7 +132,7 @@ func TestServiceReturnsEvidenceWhenEmbeddingOrGenerationFails(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := service.Query(context.Background(), Query{TenantID: "tenant", AuthorizedSourceIDs: []string{"source"}, Text: "question", Generate: true, Provider: "private", Model: "model"})
+	result, err := service.Query(sourceReadContext(), Query{TenantID: "tenant", AuthorizedSourceIDs: []string{"source"}, Text: "question", Generate: true, Provider: "private", Model: "model"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -130,7 +147,7 @@ func TestServiceKeepsNoEvidenceUnanswerableAndDoesNotGenerate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := service.Query(context.Background(), Query{TenantID: "tenant", AuthorizedSourceIDs: []string{"source"}, Text: "unknown", Generate: true, Provider: "private", Model: "model"})
+	result, err := service.Query(sourceReadContext(), Query{TenantID: "tenant", AuthorizedSourceIDs: []string{"source"}, Text: "unknown", Generate: true, Provider: "private", Model: "model"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -186,7 +203,7 @@ func TestServiceReconstructsDefinitionFromAdjacentPassagesAndDemotesTableOfConte
 		t.Fatal(err)
 	}
 
-	result, err := service.Query(context.Background(), Query{TenantID: "tenant", AuthorizedSourceIDs: []string{"source"}, Text: "What is latency?", Limit: 10, ContextTokenBudget: 1200, Provider: "local", Model: "model"})
+	result, err := service.Query(sourceReadContext(), Query{TenantID: "tenant", AuthorizedSourceIDs: []string{"source"}, Text: "What is latency?", Limit: 10, ContextTokenBudget: 1200, Provider: "local", Model: "model"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -217,7 +234,7 @@ func TestServiceKeepsHeadingOnlyContextInspectableButUnanswerable(t *testing.T) 
 		t.Fatal(err)
 	}
 
-	result, err := service.Query(context.Background(), Query{TenantID: "tenant", AuthorizedSourceIDs: []string{"source"}, Text: "What is latency?", Generate: true, Provider: "local", Model: "model"})
+	result, err := service.Query(sourceReadContext(), Query{TenantID: "tenant", AuthorizedSourceIDs: []string{"source"}, Text: "What is latency?", Generate: true, Provider: "local", Model: "model"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -244,7 +261,7 @@ func TestServiceCollapsesOverlappingAnchorsIntoOneStructuralWindow(t *testing.T)
 		t.Fatal(err)
 	}
 
-	result, err := service.Query(context.Background(), Query{TenantID: "tenant", AuthorizedSourceIDs: []string{"source"}, Text: "What is latency?", Provider: "local", Model: "model"})
+	result, err := service.Query(sourceReadContext(), Query{TenantID: "tenant", AuthorizedSourceIDs: []string{"source"}, Text: "What is latency?", Provider: "local", Model: "model"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -342,7 +359,7 @@ func TestServiceUsesVietnameseQueryPlanAndReranksCompleteWindows(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result, err := service.Query(context.Background(), Query{TenantID: "tenant", AuthorizedSourceIDs: []string{"source"}, Text: "Throughput là gì?", Limit: 10, Provider: "local", Model: "model"})
+	result, err := service.Query(sourceReadContext(), Query{TenantID: "tenant", AuthorizedSourceIDs: []string{"source"}, Text: "Throughput là gì?", Limit: 10, Provider: "local", Model: "model"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -354,6 +371,18 @@ func TestServiceUsesVietnameseQueryPlanAndReranksCompleteWindows(t *testing.T) {
 	}
 	if result.Evidence[0].RelevanceScore != 0.98 {
 		t.Fatalf("reranked evidence=%+v", result.Evidence[0])
+	}
+}
+
+func TestPaginateEvidenceReturnsBoundedPageAndContinuation(t *testing.T) {
+	evidence := []Evidence{{PassageID: "one"}, {PassageID: "two"}, {PassageID: "three"}, {PassageID: "four"}}
+	page, pagination := paginateEvidence(evidence, 0, 3)
+	if len(page) != 3 || !pagination.HasMore || pagination.NextOffset == nil || *pagination.NextOffset != 3 {
+		t.Fatalf("unexpected first page: evidence=%+v pagination=%+v", page, pagination)
+	}
+	last, pagination := paginateEvidence(evidence, 3, 3)
+	if len(last) != 1 || pagination.HasMore || pagination.NextOffset != nil || last[0].PassageID != "four" {
+		t.Fatalf("unexpected last page: evidence=%+v pagination=%+v", last, pagination)
 	}
 }
 
@@ -377,7 +406,7 @@ func TestServiceGroundsDefinitionPlanToSubjectBeforeOptionalReranking(t *testing
 		t.Fatal(err)
 	}
 
-	result, err := service.Query(context.Background(), Query{TenantID: "tenant", AuthorizedSourceIDs: []string{"source"}, Text: "Throughput là gì?", Limit: 10, Provider: "local", Model: "model"})
+	result, err := service.Query(sourceReadContext(), Query{TenantID: "tenant", AuthorizedSourceIDs: []string{"source"}, Text: "Throughput là gì?", Limit: 10, Provider: "local", Model: "model"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -397,7 +426,7 @@ func TestServiceFallsBackWhenLocalSemanticRolesFail(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := service.Query(context.Background(), Query{TenantID: "tenant", AuthorizedSourceIDs: []string{"source"}, Text: "What is latency?", Provider: "local", Model: "model"})
+	result, err := service.Query(sourceReadContext(), Query{TenantID: "tenant", AuthorizedSourceIDs: []string{"source"}, Text: "What is latency?", Provider: "local", Model: "model"})
 	if err != nil {
 		t.Fatal(err)
 	}

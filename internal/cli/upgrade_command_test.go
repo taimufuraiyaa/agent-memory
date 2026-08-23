@@ -110,6 +110,38 @@ touch npm-ci-success
 	}
 }
 
+func TestRunDashboardNPMCIDisablesLifecycleScripts(t *testing.T) {
+	dst := t.TempDir()
+	t.Setenv("PATH", fakeNPMScriptDir(t, `#!/bin/sh
+set -eu
+test "$1" = "ci"
+test "$2" = "--ignore-scripts"
+touch npm-args-safe
+`)+string(os.PathListSeparator)+os.Getenv("PATH"))
+	if err := runDashboardNPMCI(dst); err != nil {
+		t.Fatalf("runDashboardNPMCI: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dst, "npm-args-safe")); err != nil {
+		t.Fatalf("npm did not receive safe arguments: %v", err)
+	}
+}
+
+func TestValidateUpgradeSourceRequiresCanonicalModule(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "cmd", "agent-memory"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "cmd", "agent-memory", "main.go"), []byte("package main\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module attacker.example/lookalike\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := validateUpgradeSource(root); err == nil {
+		t.Fatal("expected lookalike source module to fail")
+	}
+}
+
 func TestUpgradeDryRunDoesNotBuildOrWriteIntegrations(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("fake go executable uses a POSIX shell")

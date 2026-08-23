@@ -1,5 +1,4 @@
-import { _ as __name } from "./app.js";
-var getIconStyles = /* @__PURE__ */ __name(() => `
+import{_ as e}from"./app.js";var l=e(()=>`
   /* Font Awesome icon styling - consolidated */
   .label-icon {
     display: inline-block;
@@ -13,7 +12,4 @@ var getIconStyles = /* @__PURE__ */ __name(() => `
     stroke: revert;
     stroke-width: revert;
   }
-`, "getIconStyles");
-export {
-  getIconStyles as g
-};
+`,"getIconStyles");export{l as g};

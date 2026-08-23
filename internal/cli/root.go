@@ -125,6 +125,10 @@ func NewRootCommand() *cobra.Command {
 	cmd.AddCommand(newAuditCommand())
 	cmd.AddCommand(newImportJSONLCommand())
 	cmd.AddCommand(newHostedCommand())
+	cmd.AddCommand(newDevelopmentCommand("start"))
+	cmd.AddCommand(newDevelopmentCommand("stop"))
+	cmd.AddCommand(newDevelopmentCommand("restart"))
+	cmd.AddCommand(newDevelopmentCommand("build"))
 	return cmd
 }
 

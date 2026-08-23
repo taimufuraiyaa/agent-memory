@@ -42,6 +42,8 @@ type upgradeResult struct {
 	TermIndexErrors  map[string]string                           `json:"term_index_errors,omitempty"`
 }
 
+const canonicalUpgradeModule = "github.com/taimufuraiyaa/agent-memory"
+
 func validateTextOrJSONFormat(s string) (string, error) {
 	switch strings.ToLower(strings.TrimSpace(s)) {
 	case "", "text":
@@ -145,6 +147,33 @@ func findSourceRoot(start string) string {
 		}
 	}
 	return ""
+}
+
+func validateUpgradeSource(root string) error {
+	root = strings.TrimSpace(root)
+	if root == "" {
+		return errors.New("upgrade source dir is required")
+	}
+	goMod, err := os.ReadFile(filepath.Join(root, "go.mod"))
+	if err != nil {
+		return fmt.Errorf("read upgrade source go.mod: %w", err)
+	}
+	module := ""
+	for _, line := range strings.Split(string(goMod), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) == 2 && fields[0] == "module" {
+			module = fields[1]
+			break
+		}
+	}
+	if module != canonicalUpgradeModule {
+		return fmt.Errorf("upgrade source module %q is not %q", module, canonicalUpgradeModule)
+	}
+	mainPath := filepath.Join(root, "cmd", "agent-memory", "main.go")
+	if !fileExists(mainPath) {
+		return fmt.Errorf("upgrade source entrypoint missing: %s", mainPath)
+	}
+	return nil
 }
 
 func fileExists(path string) bool {
@@ -322,7 +351,7 @@ func runDashboardNPMCI(dstDir string) error {
 		return errors.New("dashboard dir is required")
 	}
 	run := func() (string, error) {
-		ci := exec.Command("npm", "ci")
+		ci := exec.Command("npm", "ci", "--ignore-scripts")
 		ci.Dir = dstDir
 		_, errOut, err := runAndCapture(ci)
 		if err == nil {
@@ -474,7 +503,10 @@ Use --hooks-only to push hooks without touching the binary (useful for existing 
 
 			v := collectVersionInfo()
 			if strings.TrimSpace(module) == "" {
-				module = "github.com/taimufuraiyaa/agent-memory/cmd/agent-memory"
+				module = canonicalUpgradeModule + "/cmd/agent-memory"
+			}
+			if module != canonicalUpgradeModule+"/cmd/agent-memory" {
+				return fmt.Errorf("upgrade module %q is not supported", module)
 			}
 			if strings.TrimSpace(to) == "" {
 				to = "latest"
@@ -493,8 +525,10 @@ Use --hooks-only to push hooks without touching the binary (useful for existing 
 					srcDir = v
 				}
 			}
-			if strings.TrimSpace(srcDir) == "" {
-				srcDir = findSourceRoot(cwd)
+			if strings.TrimSpace(srcDir) != "" {
+				if err := validateUpgradeSource(srcDir); err != nil {
+					return err
+				}
 			}
 
 			method := "go-install"
@@ -764,6 +798,7 @@ func ensureEnvVarAtPath(envPath, key, value string) (bool, error) {
 		return false, err
 	}
 	content := strings.ReplaceAll(string(b), "\r\n", "\n")
+	content, sanitized := sanitizeLegacyEnvShellBlock(content)
 	lines := strings.Split(content, "\n")
 
 	found := false
@@ -778,7 +813,10 @@ func ensureEnvVarAtPath(envPath, key, value string) (bool, error) {
 		}
 	}
 	if found {
-		return false, nil
+		if !sanitized {
+			return false, nil
+		}
+		return true, os.WriteFile(envPath, []byte(content), 0o644)
 	}
 
 	newLine := formatEnvAssignmentLine(key, value)
@@ -807,11 +845,31 @@ func parseEnvAssignmentLine(line string) (string, string, bool) {
 	}
 	k := strings.TrimSpace(parts[0])
 	v := strings.TrimSpace(parts[1])
-	if k == "" {
+	if !isValidEnvVariableName(k) {
 		return "", "", false
 	}
 	v = strings.Trim(v, `"'`)
 	return k, v, true
+}
+
+func isValidEnvVariableName(name string) bool {
+	if name == "" {
+		return false
+	}
+	for i := 0; i < len(name); i++ {
+		c := name[i]
+		letter := c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z'
+		if i == 0 {
+			if !letter && c != '_' {
+				return false
+			}
+			continue
+		}
+		if !letter && c != '_' && (c < '0' || c > '9') {
+			return false
+		}
+	}
+	return true
 }
 
 func formatEnvAssignmentLine(k, v string) string {

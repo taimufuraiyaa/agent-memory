@@ -3,7 +3,9 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 
+	"github.com/taimufuraiyaa/agent-memory/internal/engine"
 	"github.com/taimufuraiyaa/agent-memory/internal/workspace"
 )
 
@@ -21,7 +23,6 @@ func projectsInitHandler(svc *Service) http.HandlerFunc {
 			Reuse       bool   `json:"reuse"`
 			Force       bool   `json:"force"`
 			NoRule      bool   `json:"no_rule"`
-			RulePath    string `json:"rule_path"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
@@ -39,7 +40,6 @@ func projectsInitHandler(svc *Service) http.HandlerFunc {
 			Reuse:       req.Reuse,
 			Force:       req.Force,
 			NoRule:      req.NoRule,
-			RulePath:    req.RulePath,
 		})
 		if err != nil {
 			writeErr(w, http.StatusBadRequest, "runtime", err.Error())
@@ -101,6 +101,80 @@ func projectsListHandler(svc *Service) http.HandlerFunc {
 			return
 		}
 		writeOK(w, http.StatusOK, map[string]any{"projects": out})
+	}
+}
+
+// projectsStudyHandler implements POST /api/v1/projects/study.
+// Sources are always derived from the registered workspace root; browser
+// callers cannot extend the scan to arbitrary host paths.
+func projectsStudyHandler(svc *Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeErr(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+			return
+		}
+		var req struct {
+			Workspace string `json:"workspace"`
+			Depth     string `json:"depth"`
+			DryRun    bool   `json:"dry_run"`
+			MaxFiles  int    `json:"max_files"`
+			Offset    int    `json:"offset"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
+			return
+		}
+		req.Workspace = strings.TrimSpace(req.Workspace)
+		req.Depth = strings.TrimSpace(req.Depth)
+		if req.Workspace == "" {
+			writeErr(w, http.StatusBadRequest, "bad_request", "workspace is required")
+			return
+		}
+		if req.Depth != "shallow" && req.Depth != "medium" && req.Depth != "deep" {
+			writeErr(w, http.StatusBadRequest, "bad_request", "depth must be shallow, medium, or deep")
+			return
+		}
+		if req.MaxFiles <= 0 || req.MaxFiles > engine.DefaultMaxFiles {
+			writeErr(w, http.StatusBadRequest, "bad_request", "max_files must be between 1 and the safe study limit")
+			return
+		}
+		if req.Offset < 0 || req.Offset > engine.MaxStudyOffset {
+			writeErr(w, http.StatusBadRequest, "bad_request", "offset must be between 0 and the safe study offset limit")
+			return
+		}
+
+		mgr, err := workspace.NewManager(svc.BaseDir)
+		if err != nil {
+			writeErr(w, http.StatusBadRequest, "runtime", err.Error())
+			return
+		}
+		project, err := mgr.Project(req.Workspace)
+		if err != nil {
+			writeErr(w, http.StatusBadRequest, "runtime", err.Error())
+			return
+		}
+		if strings.TrimSpace(project.WorkspaceRoot) == "" {
+			writeErr(w, http.StatusBadRequest, "runtime", "project has no registered root; re-register it before studying")
+			return
+		}
+		assets, err := svc.resolve(r.Context(), req.Workspace)
+		if err != nil {
+			writeErr(w, http.StatusBadRequest, "runtime", err.Error())
+			return
+		}
+		result, err := engine.NewStudyEngine(assets.Writer).IngestWithOptions(r.Context(), engine.StudyOptions{
+			Workspace: req.Workspace,
+			Sources:   workspace.DefaultStudySources(project.WorkspaceRoot),
+			Depth:     req.Depth,
+			DryRun:    req.DryRun,
+			MaxFiles:  req.MaxFiles,
+			Offset:    req.Offset,
+		})
+		if err != nil {
+			writeErr(w, http.StatusBadRequest, "runtime", err.Error())
+			return
+		}
+		writeOK(w, http.StatusOK, result)
 	}
 }
 

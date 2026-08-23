@@ -1,11 +1,15 @@
 import { StrictMode } from 'react'
 import ReactDOM from 'react-dom/client'
-import { App } from './ui/App'
-import { HostedApp } from './ui/HostedApp'
+import { MantineProvider } from '@mantine/core'
+import '@mantine/core/styles.css'
 import { RightsAttestationGate } from './ui/RightsAttestationGate'
 import { loadDashboardRuntime } from './lib/runtime'
+import { createStandaloneKnowledgeGateway } from './lib/adapters/standaloneKnowledgeGateway'
+import { WorkspaceApp } from './ui/WorkspaceApp'
+import { HostedWorkspaceBootstrap } from './ui/HostedWorkspaceBootstrap'
+import { agentMemoryTheme } from './ui/theme'
 import './ui/styles.css'
-import './ui/hosted.css'
+import './ui/connection.css'
 
 type PreloadRecoveryState = {
   attempted: boolean
@@ -258,22 +262,30 @@ function RuntimeUnavailable({ message }: { message: string }) {
 
 async function bootstrap(): Promise<void> {
   const root = ReactDOM.createRoot(document.getElementById('root')!)
+  const render = (content: React.ReactNode) => root.render(
+    <StrictMode>
+      <MantineProvider theme={agentMemoryTheme} forceColorScheme="dark">
+        {content}
+      </MantineProvider>
+    </StrictMode>,
+  )
   try {
     const runtime = await loadDashboardRuntime()
-    root.render(
-      <StrictMode>
-        {runtime.mode === 'hosted' ? (
-          <HostedApp runtime={runtime} />
-        ) : (
-          <RightsAttestationGate>
-            <App />
-          </RightsAttestationGate>
-        )}
-      </StrictMode>,
+    const gateway = runtime.mode === 'standalone' ? createStandaloneKnowledgeGateway() : null
+    render(
+      runtime.mode === 'hosted' ? (
+        <HostedWorkspaceBootstrap runtime={runtime} />
+      ) : gateway ? (
+        <RightsAttestationGate>
+          <WorkspaceApp runtime={runtime} gateway={gateway} />
+        </RightsAttestationGate>
+      ) : (
+        <RuntimeUnavailable message="No knowledge gateway is available for this runtime." />
+      ),
     )
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Runtime discovery failed.'
-    root.render(<StrictMode><RuntimeUnavailable message={message} /></StrictMode>)
+    render(<RuntimeUnavailable message={message} />)
   }
 }
 

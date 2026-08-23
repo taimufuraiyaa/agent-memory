@@ -1,0 +1,4 @@
+# Dashboard bundles are reproducible build artifacts. Treat them as generated
+# binary diffs so whitespace inside vendored JavaScript strings is not linted.
+internal/api/dashboard/dist/assets/*.js -diff linguist-generated=true
+internal/api/dashboard/dist/assets/*.css -diff linguist-generated=true

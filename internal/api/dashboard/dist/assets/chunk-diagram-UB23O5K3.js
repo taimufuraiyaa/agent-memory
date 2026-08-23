@@ -1,315 +1,41 @@
-import { p as populateCommonDb } from "./chunk-chunk-JWPE2WC7.js";
-import { s as setAccDescription, g as getAccDescription, o as getDiagramTitle, n as setDiagramTitle, a as getAccTitle, b as setAccTitle, _ as __name, D as selectSvgElement, p as clear, A as cleanAndMerge, y as getConfig, B as defaultConfig_default, l as log, E as getThemeVariables3, e as configureSvgSize } from "./app.js";
-import { p as parse } from "./chunk-cynefin-VYW2F7L2.js";
-var defaultOptions = {
-  showLegend: true,
-  ticks: 5,
-  max: null,
-  min: 0,
-  graticule: "circle"
-};
-var MAX_TICKS = 32;
-var defaultRadarData = {
-  axes: [],
-  curves: [],
-  options: defaultOptions
-};
-var data = structuredClone(defaultRadarData);
-var DEFAULT_RADAR_CONFIG = defaultConfig_default.radar;
-var getConfig2 = /* @__PURE__ */ __name(() => {
-  const config = cleanAndMerge({
-    ...DEFAULT_RADAR_CONFIG,
-    ...getConfig().radar
-  });
-  return config;
-}, "getConfig");
-var getAxes = /* @__PURE__ */ __name(() => data.axes, "getAxes");
-var getCurves = /* @__PURE__ */ __name(() => data.curves, "getCurves");
-var getOptions = /* @__PURE__ */ __name(() => data.options, "getOptions");
-var setAxes = /* @__PURE__ */ __name((axes) => {
-  data.axes = axes.map((axis) => {
-    return {
-      name: axis.name,
-      label: axis.label ?? axis.name
-    };
-  });
-}, "setAxes");
-var setCurves = /* @__PURE__ */ __name((curves) => {
-  data.curves = curves.map((curve) => {
-    return {
-      name: curve.name,
-      label: curve.label ?? curve.name,
-      entries: computeCurveEntries(curve.entries)
-    };
-  });
-}, "setCurves");
-var computeCurveEntries = /* @__PURE__ */ __name((entries) => {
-  if (entries[0].axis == void 0) {
-    return entries.map((entry) => entry.value);
-  }
-  const axes = getAxes();
-  if (axes.length === 0) {
-    throw new Error("Axes must be populated before curves for reference entries");
-  }
-  return axes.map((axis) => {
-    const entry = entries.find((entry2) => {
-      var _a;
-      return ((_a = entry2.axis) == null ? void 0 : _a.$refText) === axis.name;
-    });
-    if (entry === void 0) {
-      throw new Error("Missing entry for axis " + axis.label);
-    }
-    return entry.value;
-  });
-}, "computeCurveEntries");
-var setOptions = /* @__PURE__ */ __name((options) => {
-  var _a, _b, _c, _d, _e;
-  const optionMap = options.reduce(
-    (acc, option) => {
-      acc[option.name] = option;
-      return acc;
-    },
-    {}
-  );
-  data.options = {
-    showLegend: ((_a = optionMap.showLegend) == null ? void 0 : _a.value) ?? defaultOptions.showLegend,
-    ticks: ((_b = optionMap.ticks) == null ? void 0 : _b.value) ?? defaultOptions.ticks,
-    max: ((_c = optionMap.max) == null ? void 0 : _c.value) ?? defaultOptions.max,
-    min: ((_d = optionMap.min) == null ? void 0 : _d.value) ?? defaultOptions.min,
-    graticule: ((_e = optionMap.graticule) == null ? void 0 : _e.value) ?? defaultOptions.graticule
-  };
-  if (data.options.ticks > MAX_TICKS) {
-    log.warn(
-      `Radar diagram ticks (${data.options.ticks}) exceeds maximum allowed (${MAX_TICKS}). Using ${MAX_TICKS} instead.`
-    );
-    data.options.ticks = MAX_TICKS;
-  }
-}, "setOptions");
-var clear2 = /* @__PURE__ */ __name(() => {
-  clear();
-  data = structuredClone(defaultRadarData);
-}, "clear");
-var db = {
-  getAxes,
-  getCurves,
-  getOptions,
-  setAxes,
-  setCurves,
-  setOptions,
-  getConfig: getConfig2,
-  clear: clear2,
-  setAccTitle,
-  getAccTitle,
-  setDiagramTitle,
-  getDiagramTitle,
-  getAccDescription,
-  setAccDescription
-};
-var populate = /* @__PURE__ */ __name((ast) => {
-  populateCommonDb(ast, db);
-  const { axes, curves, options } = ast;
-  db.setAxes(axes);
-  db.setCurves(curves);
-  db.setOptions(options);
-}, "populate");
-var parser = {
-  parse: /* @__PURE__ */ __name(async (input) => {
-    const ast = await parse("radar", input);
-    log.debug(ast);
-    populate(ast);
-  }, "parse")
-};
-var draw = /* @__PURE__ */ __name((_text, id, _version, diagram2) => {
-  const db2 = diagram2.db;
-  const axes = db2.getAxes();
-  const curves = db2.getCurves();
-  const options = db2.getOptions();
-  const config = db2.getConfig();
-  const title = db2.getDiagramTitle();
-  const svg = selectSvgElement(id);
-  const g = drawFrame(svg, config);
-  const maxValue = options.max ?? Math.max(...curves.map((curve) => Math.max(...curve.entries)));
-  const minValue = options.min;
-  const radius = Math.min(config.width, config.height) / 2;
-  drawGraticule(g, axes, radius, options.ticks, options.graticule);
-  drawAxes(g, axes, radius, config);
-  drawCurves(g, axes, curves, minValue, maxValue, options.graticule, config);
-  drawLegend(g, curves, options.showLegend, config);
-  g.append("text").attr("class", "radarTitle").text(title).attr("x", 0).attr("y", -config.height / 2 - config.marginTop);
-}, "draw");
-var drawFrame = /* @__PURE__ */ __name((svg, config) => {
-  const totalWidth = config.width + config.marginLeft + config.marginRight;
-  const totalHeight = config.height + config.marginTop + config.marginBottom;
-  const center = {
-    x: config.marginLeft + config.width / 2,
-    y: config.marginTop + config.height / 2
-  };
-  configureSvgSize(svg, totalHeight, totalWidth, config.useMaxWidth ?? true);
-  svg.attr("viewBox", `0 0 ${totalWidth} ${totalHeight}`).attr("overflow", "visible");
-  return svg.append("g").attr("transform", `translate(${center.x}, ${center.y})`);
-}, "drawFrame");
-var drawGraticule = /* @__PURE__ */ __name((g, axes, radius, ticks, graticule) => {
-  if (graticule === "circle") {
-    for (let i = 0; i < ticks; i++) {
-      const r = radius * (i + 1) / ticks;
-      g.append("circle").attr("r", r).attr("class", "radarGraticule");
-    }
-  } else if (graticule === "polygon") {
-    const numAxes = axes.length;
-    for (let i = 0; i < ticks; i++) {
-      const r = radius * (i + 1) / ticks;
-      const points = axes.map((_, j) => {
-        const angle = 2 * j * Math.PI / numAxes - Math.PI / 2;
-        const x = r * Math.cos(angle);
-        const y = r * Math.sin(angle);
-        return `${x},${y}`;
-      }).join(" ");
-      g.append("polygon").attr("points", points).attr("class", "radarGraticule");
-    }
-  }
-}, "drawGraticule");
-var drawAxes = /* @__PURE__ */ __name((g, axes, radius, config) => {
-  const numAxes = axes.length;
-  for (let i = 0; i < numAxes; i++) {
-    const label = axes[i].label;
-    const angle = 2 * i * Math.PI / numAxes - Math.PI / 2;
-    const cosA = Math.cos(angle);
-    const sinA = Math.sin(angle);
-    g.append("line").attr("x1", 0).attr("y1", 0).attr("x2", radius * config.axisScaleFactor * cosA).attr("y2", radius * config.axisScaleFactor * sinA).attr("class", "radarAxisLine");
-    const textAnchor = cosA > 0.01 ? "start" : cosA < -0.01 ? "end" : "middle";
-    const dominantBaseline = sinA > 0.01 ? "hanging" : sinA < -0.01 ? "auto" : "central";
-    const labelPad = 4;
-    g.append("text").text(label).attr("x", radius * config.axisLabelFactor * cosA + labelPad * cosA).attr("y", radius * config.axisLabelFactor * sinA + labelPad * sinA).attr("text-anchor", textAnchor).attr("dominant-baseline", dominantBaseline).attr("class", "radarAxisLabel");
-  }
-}, "drawAxes");
-function drawCurves(g, axes, curves, minValue, maxValue, graticule, config) {
-  const numAxes = axes.length;
-  const radius = Math.min(config.width, config.height) / 2;
-  curves.forEach((curve, index) => {
-    if (curve.entries.length !== numAxes) {
-      return;
-    }
-    const points = curve.entries.map((entry, i) => {
-      const angle = 2 * Math.PI * i / numAxes - Math.PI / 2;
-      const r = relativeRadius(entry, minValue, maxValue, radius);
-      const x = r * Math.cos(angle);
-      const y = r * Math.sin(angle);
-      return { x, y };
-    });
-    if (graticule === "circle") {
-      g.append("path").attr("d", closedRoundCurve(points, config.curveTension)).attr("class", `radarCurve-${index}`);
-    } else if (graticule === "polygon") {
-      g.append("polygon").attr("points", points.map((p) => `${p.x},${p.y}`).join(" ")).attr("class", `radarCurve-${index}`);
-    }
-  });
-}
-__name(drawCurves, "drawCurves");
-function relativeRadius(value, minValue, maxValue, radius) {
-  const clippedValue = Math.min(Math.max(value, minValue), maxValue);
-  return radius * (clippedValue - minValue) / (maxValue - minValue);
-}
-__name(relativeRadius, "relativeRadius");
-function closedRoundCurve(points, tension) {
-  const numPoints = points.length;
-  let d = `M${points[0].x},${points[0].y}`;
-  for (let i = 0; i < numPoints; i++) {
-    const p0 = points[(i - 1 + numPoints) % numPoints];
-    const p1 = points[i];
-    const p2 = points[(i + 1) % numPoints];
-    const p3 = points[(i + 2) % numPoints];
-    const cp1 = {
-      x: p1.x + (p2.x - p0.x) * tension,
-      y: p1.y + (p2.y - p0.y) * tension
-    };
-    const cp2 = {
-      x: p2.x - (p3.x - p1.x) * tension,
-      y: p2.y - (p3.y - p1.y) * tension
-    };
-    d += ` C${cp1.x},${cp1.y} ${cp2.x},${cp2.y} ${p2.x},${p2.y}`;
-  }
-  return `${d} Z`;
-}
-__name(closedRoundCurve, "closedRoundCurve");
-function drawLegend(g, curves, showLegend, config) {
-  if (!showLegend) {
-    return;
-  }
-  const legendX = (config.width / 2 + config.marginRight) * 3 / 4;
-  const legendY = -(config.height / 2 + config.marginTop) * 3 / 4;
-  const lineHeight = 20;
-  curves.forEach((curve, index) => {
-    const itemGroup = g.append("g").attr("transform", `translate(${legendX}, ${legendY + index * lineHeight})`);
-    itemGroup.append("rect").attr("width", 12).attr("height", 12).attr("class", `radarLegendBox-${index}`);
-    itemGroup.append("text").attr("x", 16).attr("y", 0).attr("class", "radarLegendText").text(curve.label);
-  });
-}
-__name(drawLegend, "drawLegend");
-var renderer = { draw };
-var genIndexStyles = /* @__PURE__ */ __name((themeVariables, radarOptions) => {
-  let sections = "";
-  for (let i = 0; i < themeVariables.THEME_COLOR_LIMIT; i++) {
-    const indexColor = themeVariables[`cScale${i}`];
-    sections += `
-		.radarCurve-${i} {
-			color: ${indexColor};
-			fill: ${indexColor};
-			fill-opacity: ${radarOptions.curveOpacity};
-			stroke: ${indexColor};
-			stroke-width: ${radarOptions.curveStrokeWidth};
+import{p as I}from"./chunk-chunk-JWPE2WC7.js";import{s as _,g as E,o as D,n as F,a as P,b as z,_ as c,D as G,p as B,A as w,y as C,B as W,l as b,E as V,e as H}from"./app.js";import{p as j}from"./chunk-cynefin-VYW2F7L2.js";var m={showLegend:!0,ticks:5,max:null,min:0,graticule:"circle"},y=32,A={axes:[],curves:[],options:m},x=structuredClone(A),U=W.radar,X=c(()=>w({...U,...C().radar}),"getConfig"),M=c(()=>x.axes,"getAxes"),K=c(()=>x.curves,"getCurves"),N=c(()=>x.options,"getOptions"),Y=c(a=>{x.axes=a.map(t=>({name:t.name,label:t.label??t.name}))},"setAxes"),Z=c(a=>{x.curves=a.map(t=>({name:t.name,label:t.label??t.name,entries:q(t.entries)}))},"setCurves"),q=c(a=>{if(a[0].axis==null)return a.map(e=>e.value);const t=M();if(t.length===0)throw new Error("Axes must be populated before curves for reference entries");return t.map(e=>{const r=a.find(s=>{var n;return((n=s.axis)==null?void 0:n.$refText)===e.name});if(r===void 0)throw new Error("Missing entry for axis "+e.label);return r.value})},"computeCurveEntries"),J=c(a=>{var e,r,s,n,l;const t=a.reduce((o,i)=>(o[i.name]=i,o),{});x.options={showLegend:((e=t.showLegend)==null?void 0:e.value)??m.showLegend,ticks:((r=t.ticks)==null?void 0:r.value)??m.ticks,max:((s=t.max)==null?void 0:s.value)??m.max,min:((n=t.min)==null?void 0:n.value)??m.min,graticule:((l=t.graticule)==null?void 0:l.value)??m.graticule},x.options.ticks>y&&(b.warn(`Radar diagram ticks (${x.options.ticks}) exceeds maximum allowed (${y}). Using ${y} instead.`),x.options.ticks=y)},"setOptions"),Q=c(()=>{B(),x=structuredClone(A)},"clear"),$={getAxes:M,getCurves:K,getOptions:N,setAxes:Y,setCurves:Z,setOptions:J,getConfig:X,clear:Q,setAccTitle:z,getAccTitle:P,setDiagramTitle:F,getDiagramTitle:D,getAccDescription:E,setAccDescription:_},tt=c(a=>{I(a,$);const{axes:t,curves:e,options:r}=a;$.setAxes(t),$.setCurves(e),$.setOptions(r)},"populate"),et={parse:c(async a=>{const t=await j("radar",a);b.debug(t),tt(t)},"parse")},at=c((a,t,e,r)=>{const s=r.db,n=s.getAxes(),l=s.getCurves(),o=s.getOptions(),i=s.getConfig(),d=s.getDiagramTitle(),p=G(t),u=rt(p,i),g=o.max??Math.max(...l.map(f=>Math.max(...f.entries))),h=o.min,v=Math.min(i.width,i.height)/2;st(u,n,v,o.ticks,o.graticule),nt(u,n,v,i),L(u,n,l,h,g,o.graticule,i),k(u,l,o.showLegend,i),u.append("text").attr("class","radarTitle").text(d).attr("x",0).attr("y",-i.height/2-i.marginTop)},"draw"),rt=c((a,t)=>{const e=t.width+t.marginLeft+t.marginRight,r=t.height+t.marginTop+t.marginBottom,s={x:t.marginLeft+t.width/2,y:t.marginTop+t.height/2};return H(a,r,e,t.useMaxWidth??!0),a.attr("viewBox",`0 0 ${e} ${r}`).attr("overflow","visible"),a.append("g").attr("transform",`translate(${s.x}, ${s.y})`)},"drawFrame"),st=c((a,t,e,r,s)=>{if(s==="circle")for(let n=0;n<r;n++){const l=e*(n+1)/r;a.append("circle").attr("r",l).attr("class","radarGraticule")}else if(s==="polygon"){const n=t.length;for(let l=0;l<r;l++){const o=e*(l+1)/r,i=t.map((d,p)=>{const u=2*p*Math.PI/n-Math.PI/2,g=o*Math.cos(u),h=o*Math.sin(u);return`${g},${h}`}).join(" ");a.append("polygon").attr("points",i).attr("class","radarGraticule")}}},"drawGraticule"),nt=c((a,t,e,r)=>{const s=t.length;for(let n=0;n<s;n++){const l=t[n].label,o=2*n*Math.PI/s-Math.PI/2,i=Math.cos(o),d=Math.sin(o);a.append("line").attr("x1",0).attr("y1",0).attr("x2",e*r.axisScaleFactor*i).attr("y2",e*r.axisScaleFactor*d).attr("class","radarAxisLine");const p=i>.01?"start":i<-.01?"end":"middle",u=d>.01?"hanging":d<-.01?"auto":"central",g=4;a.append("text").text(l).attr("x",e*r.axisLabelFactor*i+g*i).attr("y",e*r.axisLabelFactor*d+g*d).attr("text-anchor",p).attr("dominant-baseline",u).attr("class","radarAxisLabel")}},"drawAxes");function L(a,t,e,r,s,n,l){const o=t.length,i=Math.min(l.width,l.height)/2;e.forEach((d,p)=>{if(d.entries.length!==o)return;const u=d.entries.map((g,h)=>{const v=2*Math.PI*h/o-Math.PI/2,f=T(g,r,s,i),O=f*Math.cos(v),R=f*Math.sin(v);return{x:O,y:R}});n==="circle"?a.append("path").attr("d",S(u,l.curveTension)).attr("class",`radarCurve-${p}`):n==="polygon"&&a.append("polygon").attr("points",u.map(g=>`${g.x},${g.y}`).join(" ")).attr("class",`radarCurve-${p}`)})}c(L,"drawCurves");function T(a,t,e,r){const s=Math.min(Math.max(a,t),e);return r*(s-t)/(e-t)}c(T,"relativeRadius");function S(a,t){const e=a.length;let r=`M${a[0].x},${a[0].y}`;for(let s=0;s<e;s++){const n=a[(s-1+e)%e],l=a[s],o=a[(s+1)%e],i=a[(s+2)%e],d={x:l.x+(o.x-n.x)*t,y:l.y+(o.y-n.y)*t},p={x:o.x-(i.x-l.x)*t,y:o.y-(i.y-l.y)*t};r+=` C${d.x},${d.y} ${p.x},${p.y} ${o.x},${o.y}`}return`${r} Z`}c(S,"closedRoundCurve");function k(a,t,e,r){if(!e)return;const s=(r.width/2+r.marginRight)*3/4,n=-(r.height/2+r.marginTop)*3/4,l=20;t.forEach((o,i)=>{const d=a.append("g").attr("transform",`translate(${s}, ${n+i*l})`);d.append("rect").attr("width",12).attr("height",12).attr("class",`radarLegendBox-${i}`),d.append("text").attr("x",16).attr("y",0).attr("class","radarLegendText").text(o.label)})}c(k,"drawLegend");var ot={draw:at},it=c((a,t)=>{let e="";for(let r=0;r<a.THEME_COLOR_LIMIT;r++){const s=a[`cScale${r}`];e+=`
+		.radarCurve-${r} {
+			color: ${s};
+			fill: ${s};
+			fill-opacity: ${t.curveOpacity};
+			stroke: ${s};
+			stroke-width: ${t.curveStrokeWidth};
 		}
-		.radarLegendBox-${i} {
-			fill: ${indexColor};
-			fill-opacity: ${radarOptions.curveOpacity};
-			stroke: ${indexColor};
+		.radarLegendBox-${r} {
+			fill: ${s};
+			fill-opacity: ${t.curveOpacity};
+			stroke: ${s};
 		}
-		`;
-  }
-  return sections;
-}, "genIndexStyles");
-var buildRadarStyleOptions = /* @__PURE__ */ __name((radar) => {
-  const defaultThemeVariables = getThemeVariables3();
-  const currentConfig = getConfig();
-  const themeVariables = cleanAndMerge(defaultThemeVariables, currentConfig.themeVariables);
-  const radarOptions = cleanAndMerge(themeVariables.radar, radar);
-  return { themeVariables, radarOptions };
-}, "buildRadarStyleOptions");
-var styles = /* @__PURE__ */ __name(({ radar } = {}) => {
-  const { themeVariables, radarOptions } = buildRadarStyleOptions(radar);
-  return `
+		`}return e},"genIndexStyles"),lt=c(a=>{const t=V(),e=C(),r=w(t,e.themeVariables),s=w(r.radar,a);return{themeVariables:r,radarOptions:s}},"buildRadarStyleOptions"),ct=c(({radar:a}={})=>{const{themeVariables:t,radarOptions:e}=lt(a);return`
 	.radarTitle {
-		font-size: ${themeVariables.fontSize};
-		color: ${themeVariables.titleColor};
+		font-size: ${t.fontSize};
+		color: ${t.titleColor};
 		dominant-baseline: hanging;
 		text-anchor: middle;
 	}
 	.radarAxisLine {
-		stroke: ${radarOptions.axisColor};
-		stroke-width: ${radarOptions.axisStrokeWidth};
+		stroke: ${e.axisColor};
+		stroke-width: ${e.axisStrokeWidth};
 	}
 	.radarAxisLabel {
-		font-size: ${radarOptions.axisLabelFontSize}px;
-		color: ${radarOptions.axisColor};
+		font-size: ${e.axisLabelFontSize}px;
+		color: ${e.axisColor};
 	}
 	.radarGraticule {
-		fill: ${radarOptions.graticuleColor};
-		fill-opacity: ${radarOptions.graticuleOpacity};
-		stroke: ${radarOptions.graticuleColor};
-		stroke-width: ${radarOptions.graticuleStrokeWidth};
+		fill: ${e.graticuleColor};
+		fill-opacity: ${e.graticuleOpacity};
+		stroke: ${e.graticuleColor};
+		stroke-width: ${e.graticuleStrokeWidth};
 	}
 	.radarLegendText {
 		text-anchor: start;
-		font-size: ${radarOptions.legendFontSize}px;
+		font-size: ${e.legendFontSize}px;
 		dominant-baseline: hanging;
 	}
-	${genIndexStyles(themeVariables, radarOptions)}
-	`;
-}, "styles");
-var diagram = {
-  parser,
-  db,
-  renderer,
-  styles
-};
-export {
-  diagram
-};
+	${it(t,e)}
+	`},"styles"),gt={parser:et,db:$,renderer:ot,styles:ct};export{gt as diagram};

@@ -108,9 +108,9 @@ func TestEmbeddedDashboardIncludesResponsiveNavigation(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, marker := range [][]byte{
-		[]byte(".navMenuTrigger"),
-		[]byte("@media (max-width: 2160px)"),
-		[]byte("max-width: calc(100vw - 24px)"),
+		[]byte(".workspaceMobileScope"),
+		[]byte(".workspaceAddSource"),
+		[]byte("@media(max-width:520px)"),
 	} {
 		if !bytes.Contains(stylesheet, marker) {
 			t.Fatalf("embedded stylesheet is missing responsive navigation marker %q", marker)
@@ -118,7 +118,7 @@ func TestEmbeddedDashboardIncludesResponsiveNavigation(t *testing.T) {
 	}
 }
 
-func TestEmbeddedDashboardIsNotebookFirstAndSelfContained(t *testing.T) {
+func TestEmbeddedDashboardIsUnifiedWorkspaceAndSelfContained(t *testing.T) {
 	fsys, err := GetEmbeddedFS()
 	if err != nil {
 		t.Fatal(err)
@@ -137,9 +137,9 @@ func TestEmbeddedDashboardIsNotebookFirstAndSelfContained(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, marker := range [][]byte{[]byte("NotebookWorkspace"), []byte("Human note"), []byte("Write what matters.")} {
+	for _, marker := range [][]byte{[]byte("Ask this project"), []byte("Search extracted memories"), []byte("Browse memories")} {
 		if !bytes.Contains(app, marker) {
-			t.Fatalf("embedded app is missing notebook marker %q", marker)
+			t.Fatalf("embedded app is missing unified workspace marker %q", marker)
 		}
 	}
 }

@@ -45,7 +45,7 @@ type serveStatus struct {
 	StartedAt time.Time `json:"started_at,omitempty"`
 }
 
-const defaultServeAddr = ":3211"
+const defaultServeAddr = "127.0.0.1:3211"
 
 func servePIDPath(cfg runtimeConfig) string {
 	base := filepath.Dir(cfg.dbPath)
@@ -172,6 +172,11 @@ func newServeCommand() *cobra.Command {
 			if (start && stop) || (start && status) || (stop && status) {
 				return errors.New("only one of --start, --stop, or --status can be set")
 			}
+			if !stop && !status {
+				if err := validateLocalListenAddr(addr); err != nil {
+					return err
+				}
+			}
 
 			pidPath := strings.TrimSpace(pidFile)
 			if pidPath == "" {
@@ -286,7 +291,7 @@ func newServeCommand() *cobra.Command {
 			}
 			server := &http.Server{
 				Addr:    addr,
-				Handler: api.InstrumentedHandler(api.NewMux(svc)),
+				Handler: api.LocalRequestBoundary(api.InstrumentedHandler(api.NewMux(svc))),
 			}
 			defer func() { _ = svc.Close() }()
 			ln, err := net.Listen("tcp", addr)

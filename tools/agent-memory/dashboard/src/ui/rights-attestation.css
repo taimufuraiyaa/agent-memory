@@ -45,13 +45,13 @@
 .rightsAttestationDialog footer p {
   margin: 0 0 7px;
   color: #9eabb9;
-  font-size: 12px;
+  font-size: clamp(11px, 1.2vw, 12px);
   letter-spacing: 0.04em;
 }
 
 .rightsAttestationDialog h1 {
   margin: 0;
-  font-size: clamp(24px, 4vw, 34px);
+  font-size: clamp(22px, 3.4vw, 34px);
   line-height: 1.12;
 }
 
@@ -61,7 +61,30 @@
   border-left: 3px solid #d9f99d;
   background: rgba(217, 249, 157, 0.06);
   color: #dbe4eb;
+  font-size: clamp(13px, 1.45vw, 16px);
   line-height: 1.6;
+}
+
+.rightsAttestationSelectAll {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: 11px;
+  align-items: center;
+  margin: -5px 0 10px;
+  padding: 10px 13px;
+  border-radius: 10px;
+  background: rgba(217, 249, 157, 0.08);
+  color: #d9f99d;
+  font-size: clamp(12px, 1.35vw, 14px);
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.rightsAttestationSelectAll input {
+  width: 17px;
+  height: 17px;
+  margin: 0;
+  accent-color: #b8e96f;
 }
 
 .rightsAttestationStatements {
@@ -79,7 +102,7 @@
   border-radius: 11px;
   background: rgba(255, 255, 255, 0.018);
   color: #cbd5df;
-  font-size: 13px;
+  font-size: clamp(12px, 1.35vw, 14px);
   line-height: 1.5;
 }
 
@@ -111,6 +134,7 @@
   padding: 11px 16px;
   background: #d9f99d;
   color: #17210e;
+  font-size: clamp(13px, 1.35vw, 15px);
   font-weight: 750;
   cursor: pointer;
 }

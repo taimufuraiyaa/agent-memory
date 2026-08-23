@@ -9,6 +9,7 @@ import (
 	"github.com/taimufuraiyaa/agent-memory/internal/library"
 	"github.com/taimufuraiyaa/agent-memory/internal/storage/sqlite"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -68,6 +69,32 @@ func TestEPUBMalformedContainerDoesNotPublishPartialDocument(t *testing.T) {
 	_, err := (ingestion.EPUBAdapter{ParserVersion: "v1", NormalizationVersion: "v1"}).Extract("edition", "asset", []byte("not a zip"))
 	if err == nil {
 		t.Fatal("malformed EPUB accepted")
+	}
+}
+
+func TestEPUBRejectsHighExpansionRatio(t *testing.T) {
+	var b bytes.Buffer
+	w := zip.NewWriter(&b)
+	files := map[string]string{
+		"META-INF/container.xml": `<container><rootfiles><rootfile full-path="OEBPS/content.opf"/></rootfiles></container>`,
+		"OEBPS/content.opf":      `<package><metadata><title>Bomb</title></metadata><manifest><item id="c1" href="c1.xhtml"/></manifest><spine><itemref idref="c1"/></spine></package>`,
+		"OEBPS/c1.xhtml":         `<html><body><p>` + strings.Repeat("A", 2<<20) + `</p></body></html>`,
+	}
+	for name, value := range files {
+		entry, err := w.Create(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := entry.Write([]byte(value)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	_, err := (ingestion.EPUBAdapter{ParserVersion: "v1", NormalizationVersion: "v1"}).Extract("edition", "asset", b.Bytes())
+	if err == nil || !strings.Contains(err.Error(), "expansion") {
+		t.Fatalf("expected expansion-ratio rejection, got %v", err)
 	}
 }
 func syntheticEPUB(t *testing.T) []byte {

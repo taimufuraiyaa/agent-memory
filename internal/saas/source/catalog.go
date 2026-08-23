@@ -77,10 +77,124 @@ type SourceView struct {
 	UpdatedAt      time.Time         `json:"updated_at"`
 }
 
+type SourceStatusRecord struct {
+	ID                  string
+	State               string
+	SafeErrorCode       string
+	HasRetainedOriginal bool
+	UpdatedAt           time.Time
+}
+
+type SourceStatusView struct {
+	ID        string         `json:"id"`
+	State     string         `json:"state"`
+	Progress  SourceProgress `json:"progress"`
+	Failure   SourceFailure  `json:"failure"`
+	UpdatedAt time.Time      `json:"updated_at"`
+}
+
+type ProcessingTaskRecord struct {
+	ID                  string
+	Kind                string
+	SubjectID           string
+	Title               string
+	State               string
+	SafeErrorCode       string
+	HasRetainedOriginal bool
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
+}
+
+type ProcessingTaskView struct {
+	ID        string         `json:"id"`
+	Kind      string         `json:"kind"`
+	SubjectID string         `json:"subject_id"`
+	Title     string         `json:"title"`
+	State     string         `json:"state"`
+	Progress  SourceProgress `json:"progress"`
+	Failure   SourceFailure  `json:"failure"`
+	CreatedAt time.Time      `json:"created_at"`
+	UpdatedAt time.Time      `json:"updated_at"`
+}
+
 type CatalogRepository interface {
 	ListSources(context.Context, string, string) ([]SourceRecord, error)
+	ListSourceStatuses(context.Context, string, string) ([]SourceStatusRecord, error)
+	ListProcessingTasks(context.Context, string, string) ([]ProcessingTaskRecord, error)
 	GetSource(context.Context, string, string) (SourceRecord, error)
 	RetrySource(context.Context, string, string, time.Time) error
+}
+
+func (s *CatalogService) ListProcessingTasks(ctx context.Context, workspaceID string) ([]ProcessingTaskView, error) {
+	request, ok := auth.FromContext(ctx)
+	if !ok || !request.Can("source:read") || s == nil || s.repository == nil {
+		return nil, auth.ErrTenantUnavailable
+	}
+	records, err := s.repository.ListProcessingTasks(ctx, request.TenantID, strings.TrimSpace(workspaceID))
+	if err != nil {
+		return nil, err
+	}
+	result := make([]ProcessingTaskView, 0, len(records))
+	for _, record := range records {
+		title := strings.TrimSpace(record.Title)
+		if title == "" {
+			title = "Private source"
+		}
+		state, progress := processingTaskState(record.Kind, record.State)
+		failure := SourceFailure{}
+		if state == "failed" {
+			if record.Kind == "source_ingestion" {
+				failure = safeFailure(record.SafeErrorCode, record.HasRetainedOriginal)
+			} else {
+				failure = SourceFailure{Code: "deletion_failed", Message: "This source could not be completely deleted yet.", Action: "Try again later or contact support with the request ID."}
+			}
+		}
+		result = append(result, ProcessingTaskView{ID: record.ID, Kind: record.Kind, SubjectID: record.SubjectID, Title: title, State: state, Progress: progress, Failure: failure, CreatedAt: record.CreatedAt, UpdatedAt: record.UpdatedAt})
+	}
+	return result, nil
+}
+
+func processingTaskState(kind, state string) (string, SourceProgress) {
+	if kind == "source_deletion" {
+		switch state {
+		case "completed":
+			return "completed", SourceProgress{State: "completed", Label: "Deleted", Percent: 100}
+		case "failed", "held":
+			return "failed", SourceProgress{State: "failed", Label: "Needs attention", Percent: 0}
+		default:
+			return "running", SourceProgress{State: "running", Label: "Deleting", Percent: 50}
+		}
+	}
+	progress := progressForState(state)
+	switch state {
+	case "pending", "uploading":
+		return "queued", progress
+	case "validating", "processing", "indexing":
+		return "running", progress
+	case "ready":
+		return "completed", progress
+	default:
+		return "failed", progress
+	}
+}
+
+func (s *CatalogService) ListStatuses(ctx context.Context, workspaceID string) ([]SourceStatusView, error) {
+	request, ok := auth.FromContext(ctx)
+	if !ok || !request.Can("source:read") || s == nil || s.repository == nil {
+		return nil, auth.ErrTenantUnavailable
+	}
+	records, err := s.repository.ListSourceStatuses(ctx, request.TenantID, strings.TrimSpace(workspaceID))
+	if err != nil {
+		return nil, err
+	}
+	result := make([]SourceStatusView, 0, len(records))
+	for _, record := range records {
+		result = append(result, SourceStatusView{
+			ID: record.ID, State: record.State, Progress: progressForState(record.State),
+			Failure: safeFailure(record.SafeErrorCode, record.HasRetainedOriginal), UpdatedAt: record.UpdatedAt,
+		})
+	}
+	return result, nil
 }
 
 type CatalogService struct {
@@ -106,6 +220,9 @@ func (s *CatalogService) List(ctx context.Context, workspaceID string) ([]Source
 	}
 	result := make([]SourceView, 0, len(records))
 	for _, record := range records {
+		if record.State == "deleted" {
+			continue
+		}
 		result = append(result, sourceView(record))
 	}
 	return result, nil

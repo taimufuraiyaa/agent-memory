@@ -27,7 +27,12 @@ import (
 	sourceservice "github.com/taimufuraiyaa/agent-memory/internal/saas/source"
 )
 
-const MaxBundleBytes = 250 << 20
+const (
+	MaxBundleBytes        = 64 << 20
+	MaxImportItems        = 10_000
+	MaxSourceObjects      = 256
+	MaxDecodedSourceBytes = 32 << 20
+)
 
 type ItemResult struct {
 	Type       string `json:"type"`
@@ -69,9 +74,17 @@ func (s *Service) Import(ctx context.Context, workspaceID, idempotencyKey, passp
 	if !s.configured() || !ok || !request.Can("memory:write") || !request.Can("source:write") || len(encrypted) == 0 || len(encrypted) > MaxBundleBytes || len(idempotencyKey) < 16 || len(idempotencyKey) > 128 {
 		return Result{}, errors.New("portable import is invalid")
 	}
+	unlock, err := s.lockTenant(ctx, request.TenantID)
+	if err != nil {
+		return Result{}, err
+	}
+	defer unlock()
 	plain, err := exportservice.DecryptPortable(passphrase, encrypted)
 	if err != nil {
 		return Result{}, err
+	}
+	if len(plain) > MaxBundleBytes {
+		return Result{}, errors.New("portable bundle plaintext exceeds the import limit")
 	}
 	var bundle exportservice.Bundle
 	if err = json.Unmarshal(plain, &bundle); err != nil {
@@ -80,10 +93,14 @@ func (s *Service) Import(ctx context.Context, workspaceID, idempotencyKey, passp
 	if bundle.Format != "agent-memory-portable" || bundle.Version != "2.0" || bundle.MinReaderVersion > "2.0" || bundle.SourceBytesIncluded != (len(bundle.SourceObjects) > 0) {
 		return Result{}, errors.New("unsupported portable bundle schema")
 	}
+	if err = validateBundleShape(bundle); err != nil {
+		return Result{}, err
+	}
 	if err = bundle.VerifyManifest(); err != nil {
 		return Result{}, err
 	}
-	if err = validateBundle(bundle); err != nil {
+	decodedSources, err := validateBundle(bundle)
+	if err != nil {
 		return Result{}, err
 	}
 	if len(bundle.SourceObjects) > 0 {
@@ -96,11 +113,6 @@ func (s *Service) Import(ctx context.Context, workspaceID, idempotencyKey, passp
 	}
 	sum := sha256.Sum256(encrypted)
 	bundleHash := hex.EncodeToString(sum[:])
-	unlock, err := s.lockBundle(ctx, request.TenantID, bundleHash)
-	if err != nil {
-		return Result{}, err
-	}
-	defer unlock()
 	operation, duplicate, err := s.start(ctx, request, workspaceID, idempotencyKey, bundleHash, bundle)
 	if err != nil {
 		return Result{}, err
@@ -170,7 +182,7 @@ func (s *Service) Import(ctx context.Context, workspaceID, idempotencyKey, passp
 		} else if done {
 			continue
 		}
-		state, resultID, reason := s.importSource(ctx, workspaceID, bundle, object)
+		state, resultID, reason := s.importSource(ctx, workspaceID, bundle, object, decodedSources[object.SourceID])
 		if err := s.recordItem(ctx, request.TenantID, operation.ID, "source", object.SourceID, state, resultID, reason); err != nil {
 			return operation, err
 		}
@@ -266,11 +278,7 @@ func (s *Service) start(ctx context.Context, request auth.RequestContext, worksp
 	return result, false, tx.Commit(ctx)
 }
 
-func (s *Service) importSource(ctx context.Context, workspace string, bundle exportservice.Bundle, object exportservice.SourceObject) (string, string, string) {
-	body, err := base64.StdEncoding.DecodeString(object.BytesBase64)
-	if err != nil {
-		return "failed", "", "source_bytes_invalid"
-	}
+func (s *Service) importSource(ctx context.Context, workspace string, bundle exportservice.Bundle, object exportservice.SourceObject, body []byte) (string, string, string) {
 	rights := "lawfully_acquired_private_use"
 	for _, source := range bundle.Sources {
 		if stringValue(source, "id") == object.SourceID && stringValue(source, "rights_basis") != "" {
@@ -289,14 +297,30 @@ func (s *Service) importSource(ctx context.Context, workspace string, bundle exp
 	return "imported", grant.SourceID, ""
 }
 
-func validateBundle(bundle exportservice.Bundle) error {
+func validateBundleShape(bundle exportservice.Bundle) error {
+	count := len(bundle.Memories) + len(bundle.Notes) + len(bundle.Sources) + len(bundle.SourceVersions) + len(bundle.Lineage) + len(bundle.Attestations) + len(bundle.Policies)
+	if count > MaxImportItems {
+		return errors.New("portable bundle exceeds the item limit")
+	}
+	if len(bundle.SourceObjects) > MaxSourceObjects {
+		return errors.New("portable bundle exceeds the source-object limit")
+	}
+	return nil
+}
+
+func validateBundle(bundle exportservice.Bundle) (map[string][]byte, error) {
+	if err := validateBundleShape(bundle); err != nil {
+		return nil, err
+	}
 	seen := make(map[string]struct{})
+	decoded := make(map[string][]byte, len(bundle.SourceObjects))
+	decodedBytes := int64(0)
 	for _, value := range bundle.Memories {
 		id := stringValue(value, "id")
 		content := stringValue(value, "content")
 		kind := core.MemoryType(stringValue(value, "type"))
 		if id == "" || content == "" || len(content) > 2000 || !validMemoryType(kind) || duplicateItem(seen, "memory", id) {
-			return errors.New("portable bundle memory schema is invalid")
+			return nil, errors.New("portable bundle memory schema is invalid")
 		}
 	}
 	for _, value := range bundle.Notes {
@@ -304,11 +328,11 @@ func validateBundle(bundle exportservice.Bundle) error {
 		path := stringValue(value, "path")
 		body, bodyOK := value["body"].(string)
 		if id == "" || path == "" || !bodyOK || len(body) > 1<<20 || duplicateItem(seen, "note", id) {
-			return errors.New("portable bundle note schema is invalid")
+			return nil, errors.New("portable bundle note schema is invalid")
 		}
 		if raw, exists := value["properties"]; exists {
 			if _, ok := raw.(map[string]any); !ok {
-				return errors.New("portable bundle note properties are invalid")
+				return nil, errors.New("portable bundle note properties are invalid")
 			}
 		}
 	}
@@ -317,32 +341,34 @@ func validateBundle(bundle exportservice.Bundle) error {
 		id := stringValue(value, "id")
 		rights := stringValue(value, "rights_basis")
 		if id == "" || duplicateItem(seen, "source-record", id) || (rights != "" && !validRightsBasis(rights)) {
-			return errors.New("portable bundle source schema is invalid")
+			return nil, errors.New("portable bundle source schema is invalid")
 		}
 		sourceRecords[id] = struct{}{}
 	}
 	for _, object := range bundle.SourceObjects {
 		if object.SourceID == "" || strings.TrimSpace(object.Filename) == "" || object.SizeBytes < 1 || object.SizeBytes > MaxBundleBytes || duplicateItem(seen, "source-object", object.SourceID) {
-			return errors.New("portable bundle source object schema is invalid")
+			return nil, errors.New("portable bundle source object schema is invalid")
 		}
 		if _, ok := sourceRecords[object.SourceID]; !ok {
-			return errors.New("portable bundle source object has no source record")
+			return nil, errors.New("portable bundle source object has no source record")
 		}
 		switch object.MediaType {
 		case "application/pdf", "application/epub+zip", "text/markdown", "text/plain":
 		default:
-			return errors.New("portable bundle source media type is invalid")
+			return nil, errors.New("portable bundle source media type is invalid")
 		}
 		body, err := base64.StdEncoding.DecodeString(object.BytesBase64)
-		if err != nil || int64(len(body)) != object.SizeBytes {
-			return errors.New("portable bundle source bytes are invalid")
+		decodedBytes += int64(len(body))
+		if err != nil || int64(len(body)) != object.SizeBytes || decodedBytes > MaxDecodedSourceBytes {
+			return nil, errors.New("portable bundle source bytes are invalid or exceed the decoded-byte limit")
 		}
 		sum := sha256.Sum256(body)
 		if hex.EncodeToString(sum[:]) != strings.ToLower(strings.TrimSpace(object.ChecksumSHA256)) {
-			return errors.New("portable bundle source checksum mismatch")
+			return nil, errors.New("portable bundle source checksum mismatch")
 		}
+		decoded[object.SourceID] = body
 	}
-	return nil
+	return decoded, nil
 }
 
 func validMemoryType(kind core.MemoryType) bool {
@@ -491,12 +517,16 @@ func (s *Service) begin(ctx context.Context, tenant string) (pgx.Tx, error) {
 	return tx, nil
 }
 
-func (s *Service) lockBundle(ctx context.Context, tenant, hash string) (func(), error) {
+func tenantImportLockKey(tenant string) string {
+	return "portable-import|" + tenant
+}
+
+func (s *Service) lockTenant(ctx context.Context, tenant string) (func(), error) {
 	connection, err := s.pool.Acquire(ctx)
 	if err != nil {
 		return nil, err
 	}
-	key := tenant + "|" + hash
+	key := tenantImportLockKey(tenant)
 	if _, err = connection.Exec(ctx, `SELECT pg_advisory_lock(hashtextextended($1,0))`, key); err != nil {
 		connection.Release()
 		return nil, err

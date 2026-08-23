@@ -19,6 +19,12 @@ export default defineConfig({
         target: apiTarget,
         changeOrigin: true,
       },
+      '/v1': {
+        target: apiTarget,
+        // Preserve the browser-facing Host so API same-origin checks compare
+        // localhost:3100 Origin and Host consistently during hot reload.
+        changeOrigin: false,
+      },
       '/health': {
         target: apiTarget,
         changeOrigin: true,
@@ -33,7 +39,7 @@ export default defineConfig({
     outDir: 'dist',
     emptyOutDir: true,
     sourcemap: false,
-    minify: false,
+    minify: 'esbuild',
     rollupOptions: {
       output: {
         entryFileNames: 'assets/app.js',

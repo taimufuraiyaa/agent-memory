@@ -13,6 +13,15 @@ import (
 	"strings"
 )
 
+const (
+	maxEPUBFiles           = 2048
+	maxEPUBEntryBytes      = 16 << 20
+	maxEPUBExpandedBytes   = 128 << 20
+	maxEPUBExpansionRatio  = 200
+	maxEPUBSpineItems      = 1024
+	maxEPUBNormalizedBytes = 64 << 20
+)
+
 type EPUBMetadata struct {
 	Title      string `json:"title"`
 	Language   string `json:"language"`
@@ -34,9 +43,16 @@ func (a EPUBAdapter) Extract(editionID, assetID string, source []byte) (EPUBExtr
 	if err != nil {
 		return EPUBExtraction{}, err
 	}
+	if err := validateEPUBArchive(reader.File); err != nil {
+		return EPUBExtraction{}, err
+	}
 	files := map[string]*zip.File{}
 	for _, f := range reader.File {
-		files[path.Clean(f.Name)] = f
+		name := path.Clean(f.Name)
+		if _, exists := files[name]; exists {
+			return EPUBExtraction{}, fmt.Errorf("epub contains duplicate entry %q", name)
+		}
+		files[name] = f
 	}
 	container, ok := files["META-INF/container.xml"]
 	if !ok {
@@ -80,6 +96,9 @@ func (a EPUBAdapter) Extract(editionID, assetID string, source []byte) (EPUBExtr
 	if err := xml.Unmarshal(opfBytes, &pkg); err != nil {
 		return EPUBExtraction{}, fmt.Errorf("invalid epub package: %w", err)
 	}
+	if len(pkg.Spine) > maxEPUBSpineItems {
+		return EPUBExtraction{}, fmt.Errorf("epub exceeds the %d-item spine limit", maxEPUBSpineItems)
+	}
 	manifest := map[string]string{}
 	for _, item := range pkg.Manifest {
 		manifest[item.ID] = path.Join(path.Dir(opfPath), item.Href)
@@ -102,6 +121,9 @@ func (a EPUBAdapter) Extract(editionID, assetID string, source []byte) (EPUBExtr
 		text, title, err := xhtmlText(content)
 		if err != nil {
 			return EPUBExtraction{}, fmt.Errorf("invalid spine xhtml: %w", err)
+		}
+		if offset+len(text) > maxEPUBNormalizedBytes {
+			return EPUBExtraction{}, errors.New("epub exceeds aggregate normalized-text limit")
 		}
 		if title == "" {
 			title = item.IDRef
@@ -133,7 +155,36 @@ func readZip(f *zip.File) ([]byte, error) {
 		return nil, err
 	}
 	defer r.Close()
-	return io.ReadAll(r)
+	data, err := io.ReadAll(io.LimitReader(r, maxEPUBEntryBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(data) > maxEPUBEntryBytes {
+		return nil, fmt.Errorf("epub entry %q exceeds expanded-byte limit", f.Name)
+	}
+	return data, nil
+}
+
+func validateEPUBArchive(files []*zip.File) error {
+	if len(files) > maxEPUBFiles {
+		return fmt.Errorf("epub exceeds the %d-entry limit", maxEPUBFiles)
+	}
+	var expanded uint64
+	for _, file := range files {
+		uncompressed := file.UncompressedSize64
+		if uncompressed > maxEPUBEntryBytes {
+			return fmt.Errorf("epub entry %q exceeds expanded-byte limit", file.Name)
+		}
+		expanded += uncompressed
+		if expanded > maxEPUBExpandedBytes {
+			return errors.New("epub exceeds aggregate expanded-byte limit")
+		}
+		compressed := file.CompressedSize64
+		if uncompressed > 1<<20 && (compressed == 0 || uncompressed > compressed*maxEPUBExpansionRatio) {
+			return fmt.Errorf("epub entry %q exceeds expansion-ratio limit", file.Name)
+		}
+	}
+	return nil
 }
 func xhtmlText(data []byte) (string, string, error) {
 	decoder := xml.NewDecoder(bytes.NewReader(data))

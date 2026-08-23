@@ -3,13 +3,13 @@ import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 
 const panelSource = await readFile(new URL('../src/ui/DeploymentPanel.tsx', import.meta.url), 'utf8')
-const appSource = await readFile(new URL('../src/ui/App.tsx', import.meta.url), 'utf8')
+const appSource = await readFile(new URL('../src/ui/workspace/SettingsView.tsx', import.meta.url), 'utf8')
 const apiSource = await readFile(new URL('../src/lib/api.ts', import.meta.url), 'utf8')
 const stylesSource = await readFile(new URL('../src/ui/deployment.css', import.meta.url), 'utf8')
 
 test('infrastructure settings are internal and installation-scoped', () => {
   assert.match(appSource, /label: 'Infrastructure'/)
-  assert.match(appSource, /surface: 'deployment'/)
+  assert.match(appSource, /id: 'infrastructure'/)
   assert.match(appSource, /<DeploymentPanel \/>/)
   assert.match(panelSource, /internal operator/i)
   assert.match(panelSource, /self-managed/i)

@@ -77,7 +77,7 @@ export function RightsAttestationGate({ children, getStatus = getRightsAttestati
   }
 
   const { policy } = attestation
-  const allAccepted = acceptedStatementIDs.size === policy.statements.length
+  const allAccepted = policy.statements.length > 0 && acceptedStatementIDs.size === policy.statements.length
 
   return (
     <div className="rightsAttestationBackdrop">
@@ -91,12 +91,22 @@ export function RightsAttestationGate({ children, getStatus = getRightsAttestati
         </header>
 
         <p id="rights-attestation-summary" className="rightsAttestationPrimary">{policy.primary_confirmation}</p>
+        <label className="rightsAttestationSelectAll">
+          <input
+            type="checkbox"
+            autoFocus
+            checked={allAccepted}
+            onChange={(event) => {
+              setAcceptedStatementIDs(event.target.checked ? new Set(policy.statements.map((statement) => statement.id)) : new Set())
+            }}
+          />
+          <span>Select all confirmations</span>
+        </label>
         <div className="rightsAttestationStatements">
-          {policy.statements.map((statement, index) => (
+          {policy.statements.map((statement) => (
             <label key={statement.id}>
               <input
                 type="checkbox"
-                autoFocus={index === 0}
                 checked={acceptedStatementIDs.has(statement.id)}
                 onChange={(event) => {
                   const next = new Set(acceptedStatementIDs)
@@ -113,7 +123,7 @@ export function RightsAttestationGate({ children, getStatus = getRightsAttestati
         {error ? <p className="rightsAttestationError" role="alert">{error}</p> : null}
         <footer>
           <p>This is your representation, not copyright verification by Agent Memory.</p>
-          <button type="button" disabled={submitting || acceptedStatementIDs.size !== policy.statements.length} onClick={() => void acceptCurrentPolicy()}>
+          <button type="button" disabled={submitting || !allAccepted} onClick={() => void acceptCurrentPolicy()}>
             {submitting ? 'Recording confirmation…' : 'Confirm and continue'}
           </button>
         </footer>

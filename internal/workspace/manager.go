@@ -306,6 +306,9 @@ func (m *Manager) Init(ctx context.Context, opt InitOptions) (*InitResult, error
 			if strings.TrimSpace(rulePath) == "" {
 				rulePath = filepath.Join(opt.CWD, ".cursor", "rules", "agent-memory.mdc")
 			}
+			if err := validateRulePath(opt.CWD, rulePath); err != nil {
+				return nil, err
+			}
 			for _, t := range targets {
 				switch t {
 				case "cursor":
@@ -386,7 +389,7 @@ func (m *Manager) Init(ctx context.Context, opt InitOptions) (*InitResult, error
 			if err != nil {
 				return nil, err
 			}
-			sources := defaultStudySources(opt.CWD)
+			sources := DefaultStudySources(opt.CWD)
 			study := engine.NewStudyEngine(engine.NewWritePipelineWithEmbedder(store, provider))
 			sr, err := study.IngestWithOptions(ctx, engine.StudyOptions{
 				Workspace: name,
@@ -412,6 +415,52 @@ func (m *Manager) Init(ctx context.Context, opt InitOptions) (*InitResult, error
 	}
 	out, _ := v.(*InitResult)
 	return out, nil
+}
+
+func validateRulePath(root, target string) error {
+	rootAbs, err := filepath.Abs(root)
+	if err != nil {
+		return fmt.Errorf("resolve workspace root: %w", err)
+	}
+	targetAbs, err := filepath.Abs(target)
+	if err != nil {
+		return fmt.Errorf("resolve rule path: %w", err)
+	}
+	if info, statErr := os.Lstat(targetAbs); statErr == nil {
+		if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+			return errors.New("rule target must be a regular non-symlink file")
+		}
+	} else if !os.IsNotExist(statErr) {
+		return fmt.Errorf("inspect rule target: %w", statErr)
+	}
+	if rel, relErr := filepath.Rel(rootAbs, targetAbs); relErr != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return errors.New("rule path must stay within the workspace")
+	}
+	resolvedRoot, err := filepath.EvalSymlinks(rootAbs)
+	if err != nil {
+		return fmt.Errorf("resolve workspace symlinks: %w", err)
+	}
+	ancestor := filepath.Dir(targetAbs)
+	for {
+		if _, statErr := os.Lstat(ancestor); statErr == nil {
+			break
+		} else if !os.IsNotExist(statErr) {
+			return fmt.Errorf("inspect rule path: %w", statErr)
+		}
+		parent := filepath.Dir(ancestor)
+		if parent == ancestor {
+			return errors.New("rule path has no existing parent")
+		}
+		ancestor = parent
+	}
+	resolvedAncestor, err := filepath.EvalSymlinks(ancestor)
+	if err != nil {
+		return fmt.Errorf("resolve rule parent symlinks: %w", err)
+	}
+	if rel, relErr := filepath.Rel(resolvedRoot, resolvedAncestor); relErr != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return errors.New("rule path must not escape through a symlink")
+	}
+	return nil
 }
 
 // PrepareTermIndex migrates, backfills, and rebuilds one registered project.
@@ -1299,7 +1348,9 @@ func rewriteRuleWorkspace(path, from, to string) error {
 	return os.WriteFile(path, []byte(cur), 0o644)
 }
 
-func defaultStudySources(cwd string) []string {
+// DefaultStudySources returns the conventional project files and directories
+// used by bootstrap study. Callers must supply an already trusted project root.
+func DefaultStudySources(cwd string) []string {
 	candidates := []string{
 		filepath.Join(cwd, "README.md"),
 		filepath.Join(cwd, "docs"),

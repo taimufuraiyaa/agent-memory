@@ -283,6 +283,9 @@ func stopProcess(pid int) error {
 }
 
 func validateDashboardStartAddr(addr string) error {
+	if err := validateLocalListenAddr(addr); err != nil {
+		return err
+	}
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
 		if strings.HasPrefix(addr, ":") && len(addr) > 1 && addr != ":0" {
@@ -293,6 +296,22 @@ func validateDashboardStartAddr(addr string) error {
 	}
 	if port == "0" {
 		return errors.New("addr cannot use port 0 with --start (pick a fixed port)")
+	}
+	return nil
+}
+
+func validateLocalListenAddr(addr string) error {
+	host, _, err := net.SplitHostPort(strings.TrimSpace(addr))
+	if err != nil {
+		return fmt.Errorf("invalid addr %q: %w", addr, err)
+	}
+	host = strings.Trim(host, "[]")
+	if strings.EqualFold(host, "localhost") {
+		return nil
+	}
+	ip := net.ParseIP(host)
+	if ip == nil || !ip.IsLoopback() {
+		return fmt.Errorf("addr %q is not loopback; standalone services only listen on localhost", addr)
 	}
 	return nil
 }
@@ -693,9 +712,12 @@ func newDashboardCommand() *cobra.Command {
 				return err
 			}
 			defer func() { _ = svc.Close() }()
+			if err := validateLocalListenAddr(addr); err != nil {
+				return err
+			}
 			server := &http.Server{
 				Addr:    addr,
-				Handler: api.NewMux(svc),
+				Handler: api.LocalRequestBoundary(api.NewMux(svc)),
 			}
 
 			ln, err := net.Listen("tcp", addr)
@@ -797,7 +819,7 @@ func newDashboardCommand() *cobra.Command {
 	}
 	addCommonFlags(cmd, &flags)
 	_ = cmd.Flags().MarkHidden("workspace")
-	cmd.Flags().StringVar(&addr, "addr", ":3100", "HTTP listen address")
+	cmd.Flags().StringVar(&addr, "addr", "127.0.0.1:3100", "HTTP listen address")
 	cmd.Flags().BoolVar(&noOpen, "no-open", false, "Do not open a browser; just print the URL")
 	cmd.Flags().BoolVar(&start, "start", false, "Start dashboard server in the background and exit")
 	cmd.Flags().BoolVar(&stop, "stop", false, "Stop the background dashboard server (started via --start)")

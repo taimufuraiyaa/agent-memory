@@ -9,8 +9,57 @@ export type HostedSource = {
   media_type: string
   state: string
   progress?: { state?: string; stage?: string; percent?: number }
-  failure?: { code?: string; retryable?: boolean }
+  failure?: { code?: string; retry_allowed?: boolean }
   retention_state?: string
+}
+
+export type HostedSourceStatus = Pick<HostedSource, 'id' | 'state' | 'progress' | 'failure'> & { updated_at: string }
+
+export type HostedProcessingTask = {
+  id: string
+  kind: 'source_ingestion' | 'source_deletion'
+  subject_id: string
+  title: string
+  state: 'queued' | 'running' | 'completed' | 'failed'
+  progress: { state: string; label: string; percent: number }
+  failure?: { code?: string; message?: string; action?: string; retry_allowed: boolean }
+  created_at: string
+  updated_at: string
+}
+
+export type HostedProject = {
+  name: string
+  db_path: string
+  workspace_root?: string
+  size_bytes: number
+  memory_count: number
+  last_activity: string
+}
+
+export type HostedProjectStudyResult = {
+  sources_scanned: number
+  scanned_files: number
+  skipped: number
+  extracted: number
+  written_ids?: string[]
+  errors?: Array<{ path: string; reason: string }>
+  dry_run: boolean
+	offset: number
+	page_files: number
+	next_offset: number
+	has_more: boolean
+}
+
+export type HostedRetrievalRequest = {
+  id: string
+  workspace: string
+  request_type: 'search' | 'recall'
+  query: string
+  score: number
+  reason: string
+  useful_count: number
+  total_count: number
+  created_at: string
 }
 
 export type HostedMemory = {
@@ -19,7 +68,15 @@ export type HostedMemory = {
   content: string
   source_kind?: string
   updated_at?: string
+  workspace?: string
+  confidence?: number
+  pinned?: boolean
+  score?: number
+  match_reason?: string
+  source?: { file_path?: string; note_path?: string; type?: string }
 }
+
+export type HostedProjectMemoryResult = { memory: HostedMemory; score: number; explanation?: string }
 
 export type HostedEvidence = {
   source_id: string
@@ -132,6 +189,44 @@ export function listHostedSources(connection: HostedConnection): Promise<HostedS
   return hostedRequest(connection, `/v1/sources?workspace_id=${encodeURIComponent(connection.workspace)}`)
 }
 
+export function listHostedSourceStatuses(connection: HostedConnection): Promise<HostedSourceStatus[]> {
+  return hostedRequest(connection, `/v1/source-statuses?workspace_id=${encodeURIComponent(connection.workspace)}`)
+}
+
+export function listHostedProcessingTasks(connection: HostedConnection): Promise<HostedProcessingTask[]> {
+  return hostedRequest(connection, `/v1/processing-tasks?workspace_id=${encodeURIComponent(connection.workspace)}`)
+}
+
+export function listHostedProjects(connection: HostedConnection): Promise<{ projects: HostedProject[] }> {
+  return hostedRequest(connection, '/v1/local-projects')
+}
+
+export function studyHostedProject(connection: HostedConnection, input: { workspace: string; depth: 'shallow' | 'medium' | 'deep'; dry_run: boolean; max_files: number; offset: number }): Promise<HostedProjectStudyResult> {
+  return hostedRequest(connection, '/v1/local-projects/study', { method: 'POST', body: JSON.stringify(input) })
+}
+
+export function searchHostedProjectMemories(connection: HostedConnection, input: { workspace: string; query: string; limit: number; cursor?: string }): Promise<{ items: HostedProjectMemoryResult[]; next_cursor?: string }> {
+  return hostedRequest(connection, '/v1/local-projects/search', { method: 'POST', body: JSON.stringify(input) })
+}
+
+export function browseHostedProjectMemories(connection: HostedConnection, input: { workspace: string; mode: 'recent' | 'pinned' | 'type'; limit: number; cursor?: string }): Promise<{ items: HostedMemory[]; next_cursor?: string }> {
+  const query = new URLSearchParams({ workspace: input.workspace, mode: input.mode, limit: String(input.limit) })
+  if (input.cursor) query.set('cursor', input.cursor)
+  return hostedRequest(connection, `/v1/local-projects/memories?${query.toString()}`)
+}
+
+export function getHostedProjectMemory(connection: HostedConnection, workspace: string, memoryID: string): Promise<HostedMemory> {
+  return hostedRequest(connection, `/v1/local-projects/memories/${encodeURIComponent(memoryID)}?workspace=${encodeURIComponent(workspace)}`)
+}
+
+export function listHostedRetrievalFeedback(connection: HostedConnection, workspace: string): Promise<{ feedback: HostedRetrievalRequest[] }> {
+  return hostedRequest(connection, `/v1/local-project-feedback?workspace=${encodeURIComponent(workspace)}`)
+}
+
+export function submitHostedRetrievalFeedback(connection: HostedConnection, input: { workspace: string; request_id: string; score: number; reason: string; useful_count?: number; total_count?: number }): Promise<unknown> {
+  return hostedRequest(connection, '/v1/local-project-feedback', { method: 'POST', body: JSON.stringify(input) })
+}
+
 export function getHostedRightsAttestationStatus(connection: HostedConnection): Promise<HostedRightsAttestationStatus> {
   return hostedRequest(connection, '/v1/attestations/rights')
 }
@@ -152,8 +247,8 @@ export function searchHostedMemories(connection: HostedConnection, query: string
   return hostedRequest(connection, '/v1/search', { method: 'POST', body: JSON.stringify({ workspace_id: connection.workspace, query, limit: 20 }) })
 }
 
-export function queryHostedSources(connection: HostedConnection, sourceIDs: string[], query: string): Promise<{ answerable: boolean; evidence_available: boolean; synthesis?: string; evidence: HostedEvidence[]; context?: { strategy?: string; reconstructed_windows?: number; semantic?: HostedSemanticContext } }> {
-  return hostedRequest(connection, '/v1/source-queries', { method: 'POST', body: JSON.stringify({ source_ids: sourceIDs, query, generate: false, provider: 'local-minilm-scaffold', model: 'local-hash-v1' }) })
+export function queryHostedSources(connection: HostedConnection, sourceIDs: string[], query: string, limit: number, offset: number): Promise<{ answerable: boolean; evidence_available: boolean; synthesis?: string; evidence: HostedEvidence[]; pagination: { offset: number; limit: number; has_more: boolean; next_offset?: number }; context?: { strategy?: string; reconstructed_windows?: number; semantic?: HostedSemanticContext } }> {
+  return hostedRequest(connection, '/v1/source-queries', { method: 'POST', body: JSON.stringify({ source_ids: sourceIDs, query, limit, offset, generate: false, provider: 'local-minilm-scaffold', model: 'local-hash-v1' }) })
 }
 
 export function createHostedProposal(connection: HostedConnection, input: { content: string; type: string; evidence: HostedEvidence[] }): Promise<{ id: string; content: string; status: string }> {

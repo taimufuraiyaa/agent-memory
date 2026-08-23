@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
+	"net/url"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -280,6 +282,7 @@ func NewMux(svc *Service) *http.ServeMux {
 	mux.HandleFunc("/api/v1/projects/init", projectsInitHandler(svc))
 	mux.HandleFunc("/api/v1/projects/rename", projectsRenameHandler(svc))
 	mux.HandleFunc("/api/v1/projects/list", projectsListHandler(svc))
+	mux.HandleFunc("/api/v1/projects/study", projectsStudyHandler(svc))
 	mux.HandleFunc("/api/v1/projects/delete", projectsDeleteHandler(svc))
 	mux.HandleFunc("/api/v1/memories/export", memoriesExportHandler(svc))
 	mux.HandleFunc("/api/v1/memories/import", memoriesImportHandler(svc))
@@ -336,6 +339,45 @@ func NewMux(svc *Service) *http.ServeMux {
 	mux.Handle("/dashboard/", serveDashboard())
 
 	return mux
+}
+
+// LocalRequestBoundary prevents browser and DNS-rebinding attackers from
+// bridging the unauthenticated standalone API to local data.
+func LocalRequestBoundary(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !isLoopbackRequestHost(r.Host) {
+			http.Error(w, "forbidden host", http.StatusForbidden)
+			return
+		}
+		if r.Method != http.MethodGet && r.Method != http.MethodHead && r.Method != http.MethodOptions {
+			if origin := strings.TrimSpace(r.Header.Get("Origin")); origin != "" && !isLoopbackOrigin(origin) {
+				http.Error(w, "cross-site request forbidden", http.StatusForbidden)
+				return
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func isLoopbackRequestHost(value string) bool {
+	host := value
+	if parsed, _, err := net.SplitHostPort(value); err == nil {
+		host = parsed
+	}
+	host = strings.Trim(host, "[]")
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
+func isLoopbackOrigin(value string) bool {
+	parsed, err := url.Parse(value)
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+		return false
+	}
+	return isLoopbackRequestHost(parsed.Host)
 }
 
 // InstrumentedHandler wraps the given handler with Prometheus HTTP instrumentation

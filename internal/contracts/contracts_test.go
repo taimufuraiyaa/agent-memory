@@ -180,6 +180,7 @@ func TestOpenAPIContractDeclaresHostedBoundaries(t *testing.T) {
 		"/v1/attestations/rights",
 		"/v1/memories",
 		"/v1/search",
+		"/v1/source-statuses",
 		"/v1/sources/uploads",
 		"/v1/operations/{operation_id}",
 	} {

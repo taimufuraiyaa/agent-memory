@@ -33,6 +33,82 @@ func (r *PostgresRepository) ListSources(ctx context.Context, tenantID, workspac
 	return result, rows.Err()
 }
 
+func (r *PostgresRepository) ListSourceStatuses(ctx context.Context, tenantID, workspaceID string) ([]SourceStatusRecord, error) {
+	tx, err := r.begin(ctx, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	rows, err := tx.Query(ctx, `SELECT
+		s.id::text,s.state,
+		COALESCE(NULLIF(j.safe_error_code,''),u.safe_error_code,''),
+		COALESCE(v.vault_object_key,'')<>'',s.updated_at
+		FROM saas_sources s
+		LEFT JOIN saas_source_versions v ON v.tenant_id=s.tenant_id AND v.source_id=s.id AND v.version=s.active_version
+		LEFT JOIN LATERAL (
+			SELECT safe_error_code FROM saas_upload_grants
+			WHERE tenant_id=s.tenant_id AND source_id=s.id ORDER BY created_at DESC LIMIT 1
+		) u ON true
+		LEFT JOIN LATERAL (
+			SELECT safe_error_code FROM saas_jobs
+			WHERE tenant_id=s.tenant_id AND subject_type='source' AND subject_id=s.id ORDER BY created_at DESC LIMIT 1
+		) j ON true
+		WHERE s.tenant_id=$1
+		AND (NULLIF($2,'') IS NULL OR s.workspace_id=NULLIF($2,'')::uuid)
+		ORDER BY s.created_at DESC,s.id DESC`, tenantID, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := []SourceStatusRecord{}
+	for rows.Next() {
+		var record SourceStatusRecord
+		if err := rows.Scan(&record.ID, &record.State, &record.SafeErrorCode, &record.HasRetainedOriginal, &record.UpdatedAt); err != nil {
+			return nil, err
+		}
+		result = append(result, record)
+	}
+	return result, rows.Err()
+}
+
+func (r *PostgresRepository) ListProcessingTasks(ctx context.Context, tenantID, workspaceID string) ([]ProcessingTaskRecord, error) {
+	tx, err := r.begin(ctx, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	rows, err := tx.Query(ctx, `SELECT id,kind,subject_id,title,state,safe_error_code,has_retained_original,created_at,updated_at FROM (
+		SELECT 'source:'||s.id::text AS id,'source_ingestion' AS kind,s.id::text AS subject_id,
+		COALESCE(u.filename,'') AS title,s.state,
+		COALESCE(NULLIF(j.safe_error_code,''),u.safe_error_code,'') AS safe_error_code,
+		COALESCE(v.vault_object_key,'')<>'' AS has_retained_original,s.created_at,s.updated_at
+		FROM saas_sources s
+		LEFT JOIN saas_source_versions v ON v.tenant_id=s.tenant_id AND v.source_id=s.id AND v.version=s.active_version
+		LEFT JOIN LATERAL (SELECT filename,safe_error_code FROM saas_upload_grants WHERE tenant_id=s.tenant_id AND source_id=s.id ORDER BY created_at DESC LIMIT 1) u ON true
+		LEFT JOIN LATERAL (SELECT safe_error_code FROM saas_jobs WHERE tenant_id=s.tenant_id AND subject_type='source' AND subject_id=s.id ORDER BY created_at DESC LIMIT 1) j ON true
+		WHERE s.tenant_id=$1 AND s.state NOT IN ('deleting','deleted') AND (NULLIF($2,'') IS NULL OR s.workspace_id=NULLIF($2,'')::uuid)
+		UNION ALL
+		SELECT 'deletion:'||d.id::text,'source_deletion',d.target_id::text,COALESCE(u.filename,''),d.state,d.safe_error_code,false,d.requested_at,d.updated_at
+		FROM saas_deletion_operations d
+		JOIN saas_sources s ON s.tenant_id=d.tenant_id AND s.id=d.target_id
+		LEFT JOIN LATERAL (SELECT filename FROM saas_upload_grants WHERE tenant_id=s.tenant_id AND source_id=s.id ORDER BY created_at DESC LIMIT 1) u ON true
+		WHERE d.tenant_id=$1 AND d.target_type='source' AND (NULLIF($2,'') IS NULL OR s.workspace_id=NULLIF($2,'')::uuid)
+	) tasks ORDER BY updated_at DESC,id DESC LIMIT 100`, tenantID, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := []ProcessingTaskRecord{}
+	for rows.Next() {
+		var record ProcessingTaskRecord
+		if err := rows.Scan(&record.ID, &record.Kind, &record.SubjectID, &record.Title, &record.State, &record.SafeErrorCode, &record.HasRetainedOriginal, &record.CreatedAt, &record.UpdatedAt); err != nil {
+			return nil, err
+		}
+		result = append(result, record)
+	}
+	return result, rows.Err()
+}
+
 func (r *PostgresRepository) GetSource(ctx context.Context, tenantID, sourceID string) (SourceRecord, error) {
 	tx, err := r.begin(ctx, tenantID)
 	if err != nil {
@@ -69,7 +145,7 @@ const sourceCatalogQuery = `SELECT
 		SELECT safe_error_code FROM saas_jobs
 		WHERE tenant_id=s.tenant_id AND subject_type='source' AND subject_id=s.id ORDER BY created_at DESC LIMIT 1
 	) j ON true
-	WHERE s.tenant_id=$1`
+	WHERE s.tenant_id=$1 AND s.state<>'deleted'`
 
 type sourceScanner interface{ Scan(...any) error }
 

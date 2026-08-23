@@ -118,8 +118,8 @@ func TestDashboardAddressDefaultsToPort3100(t *testing.T) {
 	if flag == nil {
 		t.Fatal("expected dashboard --addr flag")
 	}
-	if flag.DefValue != ":3100" {
-		t.Fatalf("expected dashboard address to default to :3100, got %q", flag.DefValue)
+	if flag.DefValue != "127.0.0.1:3100" {
+		t.Fatalf("expected dashboard address to default to loopback port 3100, got %q", flag.DefValue)
 	}
 }
 

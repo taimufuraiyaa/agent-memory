@@ -5,13 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/url"
 	"os"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/minio/minio-go/v7"
-	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/nats-io/nats.go"
 	"github.com/taimufuraiyaa/agent-memory/internal/attestation"
 	baseobservability "github.com/taimufuraiyaa/agent-memory/internal/observability"
@@ -43,10 +40,6 @@ import (
 
 type readinessPinger interface {
 	Ping(context.Context) error
-}
-
-type readinessBucketChecker interface {
-	BucketExists(context.Context, string) (bool, error)
 }
 
 type readinessQueue interface {
@@ -85,17 +78,6 @@ func run(cfg config.Config) error {
 		return fmt.Errorf("ping hosted PostgreSQL: %w", err)
 	}
 	observer.RecordComponent("database", "connect", "success", 0)
-	objectEndpoint, err := url.Parse(cfg.ObjectEndpoint)
-	if err != nil || objectEndpoint.Host == "" {
-		return errors.New("object readiness endpoint is invalid")
-	}
-	readinessObjects, err := minio.New(objectEndpoint.Host, &minio.Options{
-		Creds:  credentials.NewStaticV4(cfg.ObjectAccessKey, cfg.ObjectSecretKey, ""),
-		Secure: objectEndpoint.Scheme == "https",
-	})
-	if err != nil {
-		return fmt.Errorf("open object readiness client: %w", err)
-	}
 	queueConnection, err := nats.Connect(cfg.QueueURL,
 		nats.Name("agent-memory-api-readiness"),
 		nats.Timeout(2*time.Second),
@@ -158,16 +140,21 @@ func run(cfg config.Config) error {
 	deletionRepository := deletion.NewPostgresRepository(pool, retentionRegistry)
 	launchControls := launch.NewService(pool, nil)
 	var localOwner *control.LocalOwnerService
+	var localProjects api.LocalProjectService
 	if cfg.LocalOnboardingEnabled {
 		localOwner, err = control.NewLocalOwnerServiceWithInitializer(accounts, cfg.DevSubject, launchControls, nil)
 		if err != nil {
 			return fmt.Errorf("initialize local owner onboarding: %w", err)
 		}
+		localProjects, err = newLocalProjectService()
+		if err != nil {
+			return fmt.Errorf("initialize local project registry: %w", err)
+		}
 	}
 	sourceUploads.SetRolloutGate(launchControls)
 	handler, err := api.NewHandler(api.Dependencies{
 		Readiness: func(ctx context.Context) error {
-			return checkDependencies(ctx, pool, readinessObjects, queueConnection)
+			return checkDependencies(ctx, pool, queueConnection)
 		},
 		Authenticator:     requestAuthenticator,
 		Profiles:          profiles,
@@ -194,6 +181,7 @@ func run(cfg config.Config) error {
 		Telemetry:         observer,
 		LocalOwner:        localOwner,
 		LocalSessionToken: cfg.DevAuthToken,
+		LocalProjects:     localProjects,
 	})
 	if err != nil {
 		return err
@@ -233,16 +221,12 @@ func semanticRetrievalOptions(cfg config.Config) ([]retrieval.Option, error) {
 	return options, nil
 }
 
-func checkDependencies(ctx context.Context, database readinessPinger, objects readinessBucketChecker, queue readinessQueue) error {
-	if database == nil || objects == nil || queue == nil {
+func checkDependencies(ctx context.Context, database readinessPinger, queue readinessQueue) error {
+	if database == nil || queue == nil {
 		return errors.New("readiness dependencies are incomplete")
 	}
 	if err := database.Ping(ctx); err != nil {
 		return errors.New("database is unavailable")
-	}
-	exists, err := objects.BucketExists(ctx, "agent-memory-quarantine")
-	if err != nil || !exists {
-		return errors.New("object storage is unavailable")
 	}
 	if err := queue.FlushWithContext(ctx); err != nil {
 		return errors.New("queue is unavailable")

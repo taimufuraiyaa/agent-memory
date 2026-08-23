@@ -1,14 +1,52 @@
 package engine
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/taimufuraiyaa/agent-memory/internal/storage/sqlite"
 )
+
+func TestSafeTruncateDoesNotSplitUTF8Rune(t *testing.T) {
+	got := safeTruncate("aaaa€bbbb", 5)
+	if !utf8.ValidString(got) {
+		t.Fatalf("safeTruncate emitted invalid UTF-8: %q", got)
+	}
+	if got != "aaaa" {
+		t.Fatalf("expected complete rune boundary, got %q", got)
+	}
+}
+
+func TestStudyEngineWritesValidUTF8WhenSummaryBudgetCutsRune(t *testing.T) {
+	root := t.TempDir()
+	content := strings.Repeat("a", 599) + "€ trailing"
+	if err := os.WriteFile(filepath.Join(root, "unicode.md"), []byte(content), 0o644); err != nil {
+		t.Fatalf("write unicode source: %v", err)
+	}
+	store, err := sqlite.Open(context.Background(), filepath.Join(t.TempDir(), "unicode.db"))
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	result, err := NewStudyEngine(NewWritePipeline(store)).IngestWithOptions(context.Background(), StudyOptions{
+		Workspace: "unicode-project",
+		Sources:   []string{root},
+		Depth:     "shallow",
+		MaxFiles:  1,
+	})
+	if err != nil {
+		t.Fatalf("study unicode source: %v", err)
+	}
+	if len(result.Errors) != 0 || len(result.WrittenIDs) != 1 {
+		t.Fatalf("expected one valid write without errors, got %+v", result)
+	}
+}
 
 func TestStudyEngineDryRunAndWrite(t *testing.T) {
 	root := t.TempDir()
@@ -89,6 +127,91 @@ func TestStudyEngineOptionsIgnoreAndMaxFiles(t *testing.T) {
 	}
 	if out.ScannedFiles != 1 {
 		t.Fatalf("expected max-files to cap scanned files at 1, got %d", out.ScannedFiles)
+	}
+}
+
+func TestStudyEnginePagesEligibleFilesWithoutRepeatingTheFirstPage(t *testing.T) {
+	root := t.TempDir()
+	for _, name := range []string{"a.md", "b.md", "c.md"} {
+		if err := os.WriteFile(filepath.Join(root, name), []byte("# "+name+"\npage content"), 0o644); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+
+	engine := NewStudyEngine(nil)
+	first, err := engine.IngestWithOptions(context.Background(), StudyOptions{
+		Sources:  []string{root},
+		Depth:    "shallow",
+		DryRun:   true,
+		MaxFiles: 2,
+	})
+	if err != nil {
+		t.Fatalf("study first page: %v", err)
+	}
+	if first.Offset != 0 || first.PageFiles != 2 || first.NextOffset != 2 || !first.HasMore {
+		t.Fatalf("unexpected first page metadata: %+v", first)
+	}
+	if first.ScannedFiles != 2 || first.Extracted != 2 {
+		t.Fatalf("unexpected first page counts: %+v", first)
+	}
+
+	second, err := engine.IngestWithOptions(context.Background(), StudyOptions{
+		Sources:  []string{root},
+		Depth:    "shallow",
+		DryRun:   true,
+		MaxFiles: 2,
+		Offset:   first.NextOffset,
+	})
+	if err != nil {
+		t.Fatalf("study second page: %v", err)
+	}
+	if second.Offset != 2 || second.PageFiles != 1 || second.NextOffset != 3 || second.HasMore {
+		t.Fatalf("unexpected second page metadata: %+v", second)
+	}
+	if second.ScannedFiles != 1 || second.Extracted != 1 {
+		t.Fatalf("expected only the final file on page two, got %+v", second)
+	}
+}
+
+func TestStudyEngineSkippedEligibleFileAdvancesPageOffset(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "a.md"), []byte(strings.Repeat("a", 64)), 0o644); err != nil {
+		t.Fatalf("write oversized page item: %v", err)
+	}
+	for _, name := range []string{"b.md", "c.md"} {
+		if err := os.WriteFile(filepath.Join(root, name), []byte("ok"), 0o644); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+
+	engine := NewStudyEngine(nil)
+	first, err := engine.IngestWithOptions(context.Background(), StudyOptions{
+		Sources:     []string{root},
+		Depth:       "shallow",
+		DryRun:      true,
+		MaxFiles:    2,
+		MaxFileSize: 16,
+	})
+	if err != nil {
+		t.Fatalf("study first page: %v", err)
+	}
+	if first.PageFiles != 2 || first.NextOffset != 2 || first.Skipped != 1 || first.ScannedFiles != 1 || !first.HasMore {
+		t.Fatalf("unexpected mixed first page: %+v", first)
+	}
+
+	second, err := engine.IngestWithOptions(context.Background(), StudyOptions{
+		Sources:     []string{root},
+		Depth:       "shallow",
+		DryRun:      true,
+		MaxFiles:    2,
+		MaxFileSize: 16,
+		Offset:      first.NextOffset,
+	})
+	if err != nil {
+		t.Fatalf("study second page: %v", err)
+	}
+	if second.PageFiles != 1 || second.NextOffset != 3 || second.Skipped != 0 || second.ScannedFiles != 1 || second.HasMore {
+		t.Fatalf("skipped file was repeated or final page was wrong: %+v", second)
 	}
 }
 
@@ -218,6 +341,75 @@ func TestStudyEngineBoundedIngestion_GitignoreBinaryOversizeAndErrors(t *testing
 	}
 	if !foundBinary {
 		t.Fatalf("expected error for binary.txt, errors: %+v", out.Errors)
+	}
+}
+
+func TestStudyEngineIgnoresGeneratedDashboardBundlesButReportsLargeSource(t *testing.T) {
+	root := t.TempDir()
+	assetsDir := filepath.Join(root, "internal", "api", "dashboard", "dist", "assets")
+	if err := os.MkdirAll(assetsDir, 0o755); err != nil {
+		t.Fatalf("mkdir dashboard assets: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "src"), 0o755); err != nil {
+		t.Fatalf("mkdir src: %v", err)
+	}
+
+	largeData := bytes.Repeat([]byte("a"), 300*1024)
+	for _, name := range []string{"app.js", "chunk-vendor.js"} {
+		if err := os.WriteFile(filepath.Join(assetsDir, name), largeData, 0o644); err != nil {
+			t.Fatalf("write generated bundle %s: %v", name, err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(assetsDir, "source.js"), []byte("export const source = true;\n"), 0o644); err != nil {
+		t.Fatalf("write ordinary dashboard source: %v", err)
+	}
+	largeSource := filepath.Join(root, "src", "large.go")
+	if err := os.WriteFile(largeSource, largeData, 0o644); err != nil {
+		t.Fatalf("write large source: %v", err)
+	}
+
+	engine := NewStudyEngine(nil)
+	out, err := engine.IngestWithOptions(context.Background(), StudyOptions{
+		Workspace: "ws",
+		Sources:   []string{root},
+		Depth:     "medium",
+		DryRun:    true,
+		MaxFiles:  10,
+	})
+	if err != nil {
+		t.Fatalf("ingest: %v", err)
+	}
+
+	if out.PageFiles != 2 {
+		t.Fatalf("expected ordinary source.js and large.go to be eligible, got %d page files", out.PageFiles)
+	}
+	if out.ScannedFiles != 1 || out.Extracted != 1 || out.Skipped != 1 {
+		t.Fatalf("unexpected result counts: %+v", out)
+	}
+	if len(out.Errors) != 1 || out.Errors[0].Path != largeSource || !strings.Contains(out.Errors[0].Reason, "too large") {
+		t.Fatalf("expected only the handwritten large source error, got %+v", out.Errors)
+	}
+}
+
+func TestIsGeneratedDashboardBundle(t *testing.T) {
+	tests := []struct {
+		path string
+		want bool
+	}{
+		{path: "/repo/internal/api/dashboard/assets/app.js", want: true},
+		{path: `/repo/internal/api/dashboard/assets/chunk-katex.js`, want: true},
+		{path: `C:\repo\internal\api\dashboard\assets\chunk-vendor.js`, want: true},
+		{path: "/repo/internal/api/dashboard/dist/assets/app.js", want: true},
+		{path: `/repo/internal/api/dashboard/dist/assets/chunk-katex.js`, want: true},
+		{path: `C:\repo\internal\api\dashboard\dist\assets\chunk-vendor.js`, want: true},
+		{path: "/repo/internal/api/dashboard/assets/source.js", want: false},
+		{path: "/repo/src/chunk-vendor.js", want: false},
+		{path: "/repo/internal/api/dashboard/asset/app.js", want: false},
+	}
+	for _, tt := range tests {
+		if got := isGeneratedDashboardBundle(tt.path); got != tt.want {
+			t.Errorf("isGeneratedDashboardBundle(%q) = %t, want %t", tt.path, got, tt.want)
+		}
 	}
 }
 

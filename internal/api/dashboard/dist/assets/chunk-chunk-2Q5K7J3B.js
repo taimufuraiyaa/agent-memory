@@ -1,17 +1,1 @@
-var _a;
-import { _ as __name } from "./app.js";
-var ImperativeState = (_a = class {
-  /**
-   * @param init - Function that creates the default state.
-   */
-  constructor(init) {
-    this.init = init;
-    this.records = this.init();
-  }
-  reset() {
-    this.records = this.init();
-  }
-}, __name(_a, "ImperativeState"), _a);
-export {
-  ImperativeState as I
-};
+import{_ as s}from"./app.js";var t,e=(t=class{constructor(i){this.init=i,this.records=this.init()}reset(){this.records=this.init()}},s(t,"ImperativeState"),t);export{e as I};

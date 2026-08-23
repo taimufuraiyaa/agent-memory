@@ -1,0 +1,25 @@
+services:
+  api:
+    environment:
+      AGENT_MEMORY_LOCAL_PROJECTS_DIR: ${HOME}/.agent-memory
+    volumes:
+      - ${HOME}/.agent-memory:${HOME}/.agent-memory
+      - ${HOME}/timebooks:${HOME}/timebooks:ro
+
+  frontend:
+    image: node:22-alpine
+    working_dir: /app
+    command: ["sh", "-ec", "npm ci && npm run dev -- --host 0.0.0.0 --port 3100 --strictPort"]
+    environment:
+      VITE_API_TARGET: http://api:8080
+    volumes:
+      - ../../tools/agent-memory/dashboard:/app
+      - dashboard-node-modules:/app/node_modules
+    ports:
+      - "127.0.0.1:3100:3100"
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  dashboard-node-modules:

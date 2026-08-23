@@ -283,9 +283,29 @@ export type RetrievalPolicy = {
 export type ProjectListItem = {
   name: string
   db_path: string
+  workspace_root?: string
   size_bytes: number
   memory_count: number
   last_activity: string
+}
+
+export type ProjectStudyError = {
+  path: string
+  reason: string
+}
+
+export type ProjectStudyResult = {
+  sources_scanned: number
+  scanned_files: number
+  skipped: number
+  extracted: number
+  written_ids?: string[]
+  errors?: ProjectStudyError[]
+  dry_run: boolean
+  offset: number
+  page_files: number
+  next_offset: number
+  has_more: boolean
 }
 
 export type CountMap = Record<string, number>
@@ -709,6 +729,16 @@ export async function downloadPortableMigration(workspace: string, passphrase: s
 
 export function listProjects(): Promise<{ projects: ProjectListItem[] }> {
   return api('/api/v1/projects/list', { method: 'GET' })
+}
+
+export function studyProject(input: {
+  workspace: string
+  depth: 'shallow' | 'medium' | 'deep'
+  dry_run: boolean
+  max_files: number
+  offset: number
+}): Promise<ProjectStudyResult> {
+  return api('/api/v1/projects/study', { method: 'POST', body: JSON.stringify(input) })
 }
 
 export function listClientProfiles(): Promise<{ profiles: ClientProfile[] }> {

@@ -212,6 +212,33 @@ Missing, dirty, rebuilding, corrupt, incompatible, generation-mismatched, satura
 
 ---
 
+## Containerized Development
+
+From anywhere inside an Agent Memory source checkout, use the concise lifecycle
+commands to run the hosted backend stack and the Vite frontend in containers:
+
+```bash
+# Start backend services and the frontend with hot reload.
+am start
+
+# Stop and remove all related containers. Named data volumes are preserved.
+am stop
+
+# Restart the API, wait for infrastructure health, then recreate dependents.
+am restart
+
+# Rebuild the API, wait for infrastructure health, then recreate dependents.
+am build
+```
+
+The hot-reload frontend is available at `http://localhost:3100`. These commands
+use `deploy/saas/compose.yaml` together with
+`deploy/saas/compose.dev.yaml`; they are development-source commands and must be
+run inside this repository. Production binaries continue serving the embedded
+dashboard without Node.js.
+
+---
+
 ## Local HTTP Dashboard
 The dashboard is served locally by the Go binary (no separate servers required) and matches the core API engine path exactly:
 

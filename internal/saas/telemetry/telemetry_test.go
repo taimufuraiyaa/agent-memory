@@ -109,6 +109,28 @@ func TestMiddlewareEmitsContentFreeLogMetricsAndTraceFields(t *testing.T) {
 	}
 }
 
+func TestMiddlewareSuppressesSuccessfulHealthRequestLogsButKeepsFailures(t *testing.T) {
+	var logs bytes.Buffer
+	observer := New("api", slog.New(slog.NewJSONHandler(&logs, nil)))
+	healthy := observer.Wrap(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	healthy.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/health", nil))
+	healthy.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/health/ready", nil))
+	if logs.Len() != 0 {
+		t.Fatalf("successful health checks wrote request logs: %s", logs.String())
+	}
+
+	unhealthy := observer.Wrap(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	unhealthy.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/health/ready", nil))
+	if !strings.Contains(logs.String(), `"status":503`) {
+		t.Fatalf("failed health check was not logged: %s", logs.String())
+	}
+}
+
 func TestErrorClassNeverContainsErrorText(t *testing.T) {
 	class := ErrorClass(errors.New("private filename and source fragment"))
 	if class != "operation_failed" || strings.Contains(class, "private") {

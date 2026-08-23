@@ -90,6 +90,7 @@ type Dependencies struct {
 	Telemetry         HTTPObserver
 	LocalOwner        LocalOwnerService
 	LocalSessionToken string
+	LocalProjects     LocalProjectService
 }
 
 func NewHandler(deps Dependencies) (http.Handler, error) {
@@ -139,6 +140,17 @@ func NewHandler(deps Dependencies) (http.Handler, error) {
 	protected.HandleFunc("GET /v1/exports/{export_id}/download", downloadExport(deps.Exports))
 	protected.HandleFunc("POST /v1/sources/uploads", issueSourceUpload(deps.SourceUploads))
 	protected.HandleFunc("GET /v1/sources", listSources(deps.SourceCatalog))
+	protected.HandleFunc("GET /v1/source-statuses", listSourceStatuses(deps.SourceCatalog))
+	protected.HandleFunc("GET /v1/processing-tasks", listProcessingTasks(deps.SourceCatalog))
+	if deps.LocalOwner != nil && deps.LocalProjects != nil {
+		protected.Handle("GET /v1/local-projects", localProjectBoundary("memory:read", listLocalProjects(deps.LocalProjects)))
+		protected.Handle("POST /v1/local-projects/study", localProjectBoundary("memory:write", studyLocalProject(deps.LocalProjects)))
+		protected.Handle("POST /v1/local-projects/search", localProjectBoundary("memory:read", searchLocalProject(deps.LocalProjects)))
+		protected.Handle("GET /v1/local-projects/memories", localProjectBoundary("memory:read", browseLocalProject(deps.LocalProjects)))
+		protected.Handle("GET /v1/local-projects/memories/{memory_id}", localProjectBoundary("memory:read", getLocalProjectMemory(deps.LocalProjects)))
+		protected.Handle("GET /v1/local-project-feedback", localProjectBoundary("memory:read", listLocalProjectFeedback(deps.LocalProjects)))
+		protected.Handle("POST /v1/local-project-feedback", localProjectBoundary("memory:write", recordLocalProjectFeedback(deps.LocalProjects)))
+	}
 	protected.HandleFunc("GET /v1/sources/{source_id}", getSource(deps.SourceCatalog))
 	protected.HandleFunc("POST /v1/sources/{source_id}/retry", retrySource(deps.SourceCatalog))
 	protected.HandleFunc("POST /v1/source-queries", querySources(deps.SourceQueries, deps.Audit))
@@ -301,6 +313,7 @@ func querySources(service SourceQueryService, auditor *audit.Service) http.Handl
 		SourceIDs          []string `json:"source_ids"`
 		Query              string   `json:"query"`
 		Limit              int      `json:"limit"`
+		Offset             int      `json:"offset"`
 		ContextTokenBudget int      `json:"context_token_budget"`
 		Generate           bool     `json:"generate"`
 		Provider           string   `json:"provider"`
@@ -308,12 +321,16 @@ func querySources(service SourceQueryService, auditor *audit.Service) http.Handl
 	}
 	return func(w http.ResponseWriter, r *http.Request) {
 		request, _ := auth.FromContext(r.Context())
+		if !request.Can("source:read") {
+			writeError(w, http.StatusForbidden, request.RequestID, "insufficient_scope", "The source query requires source:read.")
+			return
+		}
 		var body input
 		if decodeJSON(r, &body) != nil {
 			writeError(w, http.StatusBadRequest, request.RequestID, "invalid_request", "The source query is invalid.")
 			return
 		}
-		result, err := service.Query(r.Context(), retrieval.Query{TenantID: request.TenantID, AuthorizedSourceIDs: body.SourceIDs, Text: body.Query, Limit: body.Limit, ContextTokenBudget: body.ContextTokenBudget, Generate: body.Generate, Provider: body.Provider, Model: body.Model})
+		result, err := service.Query(r.Context(), retrieval.Query{TenantID: request.TenantID, AuthorizedSourceIDs: body.SourceIDs, Text: body.Query, Limit: body.Limit, Offset: body.Offset, ContextTokenBudget: body.ContextTokenBudget, Generate: body.Generate, Provider: body.Provider, Model: body.Model})
 		if err != nil {
 			_ = auditor.Record(r.Context(), request, "retrieval", "retrieval.query", "denied", "source_set", "authorized-selection", "evidence_unavailable", map[string]any{"source_count": len(body.SourceIDs)})
 			writeError(w, http.StatusNotFound, request.RequestID, "resource_not_found", "The requested source evidence is unavailable.")
@@ -408,6 +425,30 @@ func listSources(service *sourceservice.CatalogService) http.HandlerFunc {
 			return
 		}
 		writeSuccess(w, http.StatusOK, request.RequestID, sources)
+	}
+}
+
+func listSourceStatuses(service *sourceservice.CatalogService) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		request, _ := auth.FromContext(r.Context())
+		statuses, err := service.ListStatuses(r.Context(), r.URL.Query().Get("workspace_id"))
+		if err != nil {
+			writeError(w, http.StatusNotFound, request.RequestID, "resource_not_found", "The source status collection was not found.")
+			return
+		}
+		writeSuccess(w, http.StatusOK, request.RequestID, statuses)
+	}
+}
+
+func listProcessingTasks(service *sourceservice.CatalogService) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		request, _ := auth.FromContext(r.Context())
+		tasks, err := service.ListProcessingTasks(r.Context(), r.URL.Query().Get("workspace_id"))
+		if err != nil {
+			writeError(w, http.StatusNotFound, request.RequestID, "resource_not_found", "The processing task collection was not found.")
+			return
+		}
+		writeSuccess(w, http.StatusOK, request.RequestID, tasks)
 	}
 }
 

@@ -1,0 +1,47 @@
+.hostedProduct {
+  --product-bg: #111411;
+  --product-surface-raised: #202621;
+  --product-line: #303831;
+  --product-line-strong: #465148;
+  --product-text: #f2f1eb;
+  --product-muted: #a5ada5;
+  --product-subtle: #778078;
+  --product-accent: #9ac2a6;
+  --product-accent-strong: #b5d6be;
+  --product-accent-ink: #132018;
+  min-height: 100dvh;
+  height: 100dvh;
+  overflow: auto;
+  color: var(--product-text);
+  background: var(--product-bg);
+  font: 15px/1.55 "Avenir Next", Avenir, Aptos, "Segoe UI Variable", "Segoe UI", sans-serif;
+}
+.hostedProduct *, .hostedProduct *::before, .hostedProduct *::after { box-sizing: border-box; }
+.hostedProduct button, .hostedProduct input { font: inherit; }
+.hostedProduct button { min-height: 42px; padding: 9px 15px; border: 1px solid var(--product-line-strong); border-radius: 8px; color: var(--product-text); background: transparent; cursor: pointer; font-weight: 650; }
+.hostedProduct button:hover:not(:disabled) { border-color: var(--product-accent); background: var(--product-surface-raised); }
+.hostedProduct button:disabled { opacity: .42; cursor: not-allowed; }
+.hostedProduct :focus-visible { outline: 3px solid var(--product-accent); outline-offset: 3px; }
+.hostedProduct .productPrimary { border-color: var(--product-accent); color: var(--product-accent-ink); background: var(--product-accent); }
+.hostedProduct .productPrimary:hover:not(:disabled) { border-color: var(--product-accent-strong); background: var(--product-accent-strong); }
+.productBrand { display: flex; align-items: center; gap: 11px; }
+.productBrand > span { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 9px 4px; color: var(--product-accent-ink); background: var(--product-accent); font-size: 12px; font-weight: 800; }
+.productEyebrow { margin: 0; color: var(--product-accent); font-size: 11px; font-weight: 700; letter-spacing: .08em; }
+.productEntry { overflow: auto; }
+.entryHeader { min-height: 72px; display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 14px clamp(20px, 5vw, 70px); border-bottom: 1px solid var(--product-line); }
+.entryHeader > p { color: var(--product-subtle); font-size: 12px; }
+.entryCanvas { width: min(1180px, calc(100% - 40px)); min-height: calc(100dvh - 73px); display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(340px, .8fr); gap: clamp(44px, 9vw, 120px); align-items: center; margin: 0 auto; padding: 64px 0 90px; }
+.entryStory h1 { max-width: 9ch; margin: 14px 0 20px; font-size: clamp(52px, 8vw, 102px); line-height: .9; letter-spacing: -.07em; }
+.entryLead { max-width: 48ch; color: var(--product-muted); font-size: 18px; }
+.connectionCard { padding: clamp(28px, 5vw, 46px); border-radius: 4px 28px; background: var(--product-surface-raised); box-shadow: 0 28px 74px rgb(0 0 0 / 20%); }
+.connectionCard h2 { margin: 7px 0 24px; font-size: 28px; }
+.productForm { display: grid; gap: 15px; }
+.productForm label { display: grid; gap: 7px; color: var(--product-muted); font-size: 12px; font-weight: 650; }
+.hostedProduct input { width: 100%; min-height: 44px; padding: 9px 11px; border: 1px solid var(--product-line); border-radius: 7px; color: var(--product-text); background: #151915; }
+.productForm label.localOwnerConfirmation { display: flex; align-items: flex-start; gap: 10px; line-height: 1.5; }
+.localOwnerConfirmation input { flex: 0 0 17px; width: 17px; min-height: 17px; margin-top: 1px; padding: 0; }
+.productStatus.inline { position: static; color: var(--product-muted); }
+.runtimeUnavailable { max-width: 620px; margin: 12vh auto; padding: 32px; border: 1px solid var(--border); border-radius: 16px; background: var(--bg-card); }
+@media (max-width: 900px) { .entryCanvas { grid-template-columns: 1fr; } }
+@media (max-width: 760px) { .entryHeader > p { display: none; } .entryCanvas { width: min(100% - 28px, 1180px); padding-top: 42px; } .entryStory h1 { font-size: clamp(50px, 17vw, 72px); } }
+@media (prefers-reduced-motion: reduce) { .hostedProduct *, .hostedProduct *::before, .hostedProduct *::after { transition-duration: .01ms !important; animation-duration: .01ms !important; } }

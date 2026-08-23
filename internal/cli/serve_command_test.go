@@ -73,11 +73,24 @@ func TestServePIDPathIsGlobalEvenWhenStartedFromWorkspace(t *testing.T) {
 }
 
 func TestServeAndDoctorUseSameCanonicalPort(t *testing.T) {
-	if defaultServeAddr != ":3211" {
+	if defaultServeAddr != "127.0.0.1:3211" {
 		t.Fatalf("serve addr=%q", defaultServeAddr)
 	}
 	if defaultServiceURL != "http://127.0.0.1:3211" {
 		t.Fatalf("doctor URL=%q", defaultServiceURL)
+	}
+}
+
+func TestValidateLocalListenAddrRejectsNonLoopback(t *testing.T) {
+	for _, addr := range []string{":3211", "0.0.0.0:3211", "[::]:3211", "192.0.2.10:3211"} {
+		if err := validateLocalListenAddr(addr); err == nil {
+			t.Fatalf("expected non-loopback address %q to fail", addr)
+		}
+	}
+	for _, addr := range []string{"127.0.0.1:3211", "localhost:3211", "[::1]:3211"} {
+		if err := validateLocalListenAddr(addr); err != nil {
+			t.Fatalf("expected loopback address %q to pass: %v", addr, err)
+		}
 	}
 }
 

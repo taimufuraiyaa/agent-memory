@@ -1,17 +1,1 @@
-import { _ as __name } from "./app.js";
-function populateCommonDb(ast, db) {
-  var _a, _b, _c;
-  if (ast.accDescr) {
-    (_a = db.setAccDescription) == null ? void 0 : _a.call(db, ast.accDescr);
-  }
-  if (ast.accTitle) {
-    (_b = db.setAccTitle) == null ? void 0 : _b.call(db, ast.accTitle);
-  }
-  if (ast.title) {
-    (_c = db.setDiagramTitle) == null ? void 0 : _c.call(db, ast.title);
-  }
-}
-__name(populateCommonDb, "populateCommonDb");
-export {
-  populateCommonDb as p
-};
+import{_ as l}from"./app.js";function m(e,c){var i,t,o;e.accDescr&&((i=c.setAccDescription)==null||i.call(c,e.accDescr)),e.accTitle&&((t=c.setAccTitle)==null||t.call(c,e.accTitle)),e.title&&((o=c.setDiagramTitle)==null||o.call(c,e.title))}l(m,"populateCommonDb");export{m as p};

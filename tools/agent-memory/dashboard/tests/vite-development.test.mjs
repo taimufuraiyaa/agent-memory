@@ -7,3 +7,7 @@ const viteConfig = await readFile(new URL('../vite.config.ts', import.meta.url),
 test('Vite proxies the backend-owned runtime manifest during hot reload', () => {
   assert.match(viteConfig, /['"]\/dashboard\/runtime\.json['"]\s*:\s*\{/)
 })
+
+test('Vite proxies hosted API routes during container hot reload', () => {
+  assert.match(viteConfig, /['"]\/v1['"]\s*:\s*\{[^}]*changeOrigin:\s*false/s)
+})

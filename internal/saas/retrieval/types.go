@@ -13,6 +13,7 @@ type Query struct {
 	AuthorizedSourceIDs []string
 	Text                string
 	Limit               int
+	Offset              int
 	ContextTokenBudget  int
 	Generate            bool
 	Provider            string
@@ -78,6 +79,14 @@ type Result struct {
 	Generated         bool            `json:"generated"`
 	Synthesis         string          `json:"synthesis,omitempty"`
 	FailureCode       string          `json:"failure_code,omitempty"`
+	Pagination        Pagination      `json:"pagination"`
+}
+
+type Pagination struct {
+	Offset     int  `json:"offset"`
+	Limit      int  `json:"limit"`
+	HasMore    bool `json:"has_more"`
+	NextOffset *int `json:"next_offset,omitempty"`
 }
 
 type Candidate struct {

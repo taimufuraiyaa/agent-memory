@@ -1,211 +1,24 @@
-var _a;
-import { p as populateCommonDb } from "./chunk-chunk-JWPE2WC7.js";
-import { _ as __name, A as cleanAndMerge, D as selectSvgElement, e as configureSvgSize, l as log, b as setAccTitle, a as getAccTitle, n as setDiagramTitle, o as getDiagramTitle, g as getAccDescription, s as setAccDescription, y as getConfig, B as defaultConfig_default, p as clear } from "./app.js";
-import { p as parse } from "./chunk-cynefin-VYW2F7L2.js";
-var DEFAULT_PACKET_CONFIG = defaultConfig_default.packet;
-var PacketDB = (_a = class {
-  constructor() {
-    this.packet = [];
-    this.setAccTitle = setAccTitle;
-    this.getAccTitle = getAccTitle;
-    this.setDiagramTitle = setDiagramTitle;
-    this.getDiagramTitle = getDiagramTitle;
-    this.getAccDescription = getAccDescription;
-    this.setAccDescription = setAccDescription;
-  }
-  getConfig() {
-    const config = cleanAndMerge({
-      ...DEFAULT_PACKET_CONFIG,
-      ...getConfig().packet
-    });
-    if (config.showBits) {
-      config.paddingY += 10;
-    }
-    return config;
-  }
-  getPacket() {
-    return this.packet;
-  }
-  pushWord(word) {
-    if (word.length > 0) {
-      this.packet.push(word);
-    }
-  }
-  clear() {
-    clear();
-    this.packet = [];
-  }
-}, __name(_a, "PacketDB"), _a);
-var maxPacketSize = 1e4;
-var populate = /* @__PURE__ */ __name((ast, db) => {
-  populateCommonDb(ast, db);
-  let lastBit = -1;
-  let word = [];
-  let row = 1;
-  const { bitsPerRow } = db.getConfig();
-  for (let { start, end, bits, label } of ast.blocks) {
-    if (start !== void 0 && end !== void 0 && end < start) {
-      throw new Error(`Packet block ${start} - ${end} is invalid. End must be greater than start.`);
-    }
-    start ?? (start = lastBit + 1);
-    if (start !== lastBit + 1) {
-      throw new Error(
-        `Packet block ${start} - ${end ?? start} is not contiguous. It should start from ${lastBit + 1}.`
-      );
-    }
-    if (bits === 0) {
-      throw new Error(`Packet block ${start} is invalid. Cannot have a zero bit field.`);
-    }
-    end ?? (end = start + (bits ?? 1) - 1);
-    bits ?? (bits = end - start + 1);
-    lastBit = end;
-    log.debug(`Packet block ${start} - ${lastBit} with label ${label}`);
-    while (word.length <= bitsPerRow + 1 && db.getPacket().length < maxPacketSize) {
-      const [block, nextBlock] = getNextFittingBlock({ start, end, bits, label }, row, bitsPerRow);
-      word.push(block);
-      if (block.end + 1 === row * bitsPerRow) {
-        db.pushWord(word);
-        word = [];
-        row++;
-      }
-      if (!nextBlock) {
-        break;
-      }
-      ({ start, end, bits, label } = nextBlock);
-    }
-  }
-  db.pushWord(word);
-}, "populate");
-var getNextFittingBlock = /* @__PURE__ */ __name((block, row, bitsPerRow) => {
-  if (block.start === void 0) {
-    throw new Error("start should have been set during first phase");
-  }
-  if (block.end === void 0) {
-    throw new Error("end should have been set during first phase");
-  }
-  if (block.start > block.end) {
-    throw new Error(`Block start ${block.start} is greater than block end ${block.end}.`);
-  }
-  if (block.end + 1 <= row * bitsPerRow) {
-    return [block, void 0];
-  }
-  const rowEnd = row * bitsPerRow - 1;
-  const rowStart = row * bitsPerRow;
-  return [
-    {
-      start: block.start,
-      end: rowEnd,
-      label: block.label,
-      bits: rowEnd - block.start
-    },
-    {
-      start: rowStart,
-      end: block.end,
-      label: block.label,
-      bits: block.end - rowStart
-    }
-  ];
-}, "getNextFittingBlock");
-var parser = {
-  // @ts-expect-error - PacketDB is not assignable to DiagramDB
-  parser: { yy: void 0 },
-  parse: /* @__PURE__ */ __name(async (input) => {
-    var _a2;
-    const ast = await parse("packet", input);
-    const db = (_a2 = parser.parser) == null ? void 0 : _a2.yy;
-    if (!(db instanceof PacketDB)) {
-      throw new Error(
-        "parser.parser?.yy was not a PacketDB. This is due to a bug within Mermaid, please report this issue at https://github.com/mermaid-js/mermaid/issues."
-      );
-    }
-    log.debug(ast);
-    populate(ast, db);
-  }, "parse")
-};
-var draw = /* @__PURE__ */ __name((_text, id, _version, diagram2) => {
-  const db = diagram2.db;
-  const config = db.getConfig();
-  const { rowHeight, paddingY, bitWidth, bitsPerRow } = config;
-  const words = db.getPacket();
-  const title = db.getDiagramTitle();
-  const totalRowHeight = rowHeight + paddingY;
-  const svgHeight = totalRowHeight * (words.length + 1) - (title ? 0 : rowHeight);
-  const svgWidth = bitWidth * bitsPerRow + 2;
-  const svg = selectSvgElement(id);
-  svg.attr("viewBox", `0 0 ${svgWidth} ${svgHeight}`);
-  configureSvgSize(svg, svgHeight, svgWidth, config.useMaxWidth);
-  for (const [word, packet] of words.entries()) {
-    drawWord(svg, packet, word, config);
-  }
-  svg.append("text").text(title).attr("x", svgWidth / 2).attr("y", svgHeight - totalRowHeight / 2).attr("dominant-baseline", "middle").attr("text-anchor", "middle").attr("class", "packetTitle");
-}, "draw");
-var drawWord = /* @__PURE__ */ __name((svg, word, rowNumber, { rowHeight, paddingX, paddingY, bitWidth, bitsPerRow, showBits }) => {
-  const group = svg.append("g");
-  const wordY = rowNumber * (rowHeight + paddingY) + paddingY;
-  for (const block of word) {
-    const blockX = block.start % bitsPerRow * bitWidth + 1;
-    const width = (block.end - block.start + 1) * bitWidth - paddingX;
-    group.append("rect").attr("x", blockX).attr("y", wordY).attr("width", width).attr("height", rowHeight).attr("class", "packetBlock");
-    group.append("text").attr("x", blockX + width / 2).attr("y", wordY + rowHeight / 2).attr("class", "packetLabel").attr("dominant-baseline", "middle").attr("text-anchor", "middle").text(block.label);
-    if (!showBits) {
-      continue;
-    }
-    const isSingleBlock = block.end === block.start;
-    const bitNumberY = wordY - 2;
-    group.append("text").attr("x", blockX + (isSingleBlock ? width / 2 : 0)).attr("y", bitNumberY).attr("class", "packetByte start").attr("dominant-baseline", "auto").attr("text-anchor", isSingleBlock ? "middle" : "start").text(block.start);
-    if (!isSingleBlock) {
-      group.append("text").attr("x", blockX + width).attr("y", bitNumberY).attr("class", "packetByte end").attr("dominant-baseline", "auto").attr("text-anchor", "end").text(block.end);
-    }
-  }
-}, "drawWord");
-var renderer = { draw };
-var defaultPacketStyleOptions = {
-  byteFontSize: "10px",
-  startByteColor: "black",
-  endByteColor: "black",
-  labelColor: "black",
-  labelFontSize: "12px",
-  titleColor: "black",
-  titleFontSize: "14px",
-  blockStrokeColor: "black",
-  blockStrokeWidth: "1",
-  blockFillColor: "#efefef"
-};
-var styles = /* @__PURE__ */ __name(({ packet } = {}) => {
-  const options = cleanAndMerge(defaultPacketStyleOptions, packet);
-  return `
+import{p as $}from"./chunk-chunk-JWPE2WC7.js";import{_ as b,A as m,D as C,e as S,l as w,b as D,a as T,n as P,o as z,g as A,s as E,y as F,B as W,p as _}from"./app.js";import{p as N}from"./chunk-cynefin-VYW2F7L2.js";var L=W.packet,u,v=(u=class{constructor(){this.packet=[],this.setAccTitle=D,this.getAccTitle=T,this.setDiagramTitle=P,this.getDiagramTitle=z,this.getAccDescription=A,this.setAccDescription=E}getConfig(){const t=m({...L,...F().packet});return t.showBits&&(t.paddingY+=10),t}getPacket(){return this.packet}pushWord(t){t.length>0&&this.packet.push(t)}clear(){_(),this.packet=[]}},b(u,"PacketDB"),u),M=1e4,Y=b((e,t)=>{$(e,t);let s=-1,r=[],n=1;const{bitsPerRow:l}=t.getConfig();for(let{start:a,end:i,bits:d,label:c}of e.blocks){if(a!==void 0&&i!==void 0&&i<a)throw new Error(`Packet block ${a} - ${i} is invalid. End must be greater than start.`);if(a??(a=s+1),a!==s+1)throw new Error(`Packet block ${a} - ${i??a} is not contiguous. It should start from ${s+1}.`);if(d===0)throw new Error(`Packet block ${a} is invalid. Cannot have a zero bit field.`);for(i??(i=a+(d??1)-1),d??(d=i-a+1),s=i,w.debug(`Packet block ${a} - ${s} with label ${c}`);r.length<=l+1&&t.getPacket().length<M;){const[p,o]=I({start:a,end:i,bits:d,label:c},n,l);if(r.push(p),p.end+1===n*l&&(t.pushWord(r),r=[],n++),!o)break;({start:a,end:i,bits:d,label:c}=o)}}t.pushWord(r)},"populate"),I=b((e,t,s)=>{if(e.start===void 0)throw new Error("start should have been set during first phase");if(e.end===void 0)throw new Error("end should have been set during first phase");if(e.start>e.end)throw new Error(`Block start ${e.start} is greater than block end ${e.end}.`);if(e.end+1<=t*s)return[e,void 0];const r=t*s-1,n=t*s;return[{start:e.start,end:r,label:e.label,bits:r-e.start},{start:n,end:e.end,label:e.label,bits:e.end-n}]},"getNextFittingBlock"),x={parser:{yy:void 0},parse:b(async e=>{var r;const t=await N("packet",e),s=(r=x.parser)==null?void 0:r.yy;if(!(s instanceof v))throw new Error("parser.parser?.yy was not a PacketDB. This is due to a bug within Mermaid, please report this issue at https://github.com/mermaid-js/mermaid/issues.");w.debug(t),Y(t,s)},"parse")},O=b((e,t,s,r)=>{const n=r.db,l=n.getConfig(),{rowHeight:a,paddingY:i,bitWidth:d,bitsPerRow:c}=l,p=n.getPacket(),o=n.getDiagramTitle(),h=a+i,g=h*(p.length+1)-(o?0:a),k=d*c+2,f=C(t);f.attr("viewBox",`0 0 ${k} ${g}`),S(f,g,k,l.useMaxWidth);for(const[y,B]of p.entries())j(f,B,y,l);f.append("text").text(o).attr("x",k/2).attr("y",g-h/2).attr("dominant-baseline","middle").attr("text-anchor","middle").attr("class","packetTitle")},"draw"),j=b((e,t,s,{rowHeight:r,paddingX:n,paddingY:l,bitWidth:a,bitsPerRow:i,showBits:d})=>{const c=e.append("g"),p=s*(r+l)+l;for(const o of t){const h=o.start%i*a+1,g=(o.end-o.start+1)*a-n;if(c.append("rect").attr("x",h).attr("y",p).attr("width",g).attr("height",r).attr("class","packetBlock"),c.append("text").attr("x",h+g/2).attr("y",p+r/2).attr("class","packetLabel").attr("dominant-baseline","middle").attr("text-anchor","middle").text(o.label),!d)continue;const k=o.end===o.start,f=p-2;c.append("text").attr("x",h+(k?g/2:0)).attr("y",f).attr("class","packetByte start").attr("dominant-baseline","auto").attr("text-anchor",k?"middle":"start").text(o.start),k||c.append("text").attr("x",h+g).attr("y",f).attr("class","packetByte end").attr("dominant-baseline","auto").attr("text-anchor","end").text(o.end)}},"drawWord"),G={draw:O},H={byteFontSize:"10px",startByteColor:"black",endByteColor:"black",labelColor:"black",labelFontSize:"12px",titleColor:"black",titleFontSize:"14px",blockStrokeColor:"black",blockStrokeWidth:"1",blockFillColor:"#efefef"},K=b(({packet:e}={})=>{const t=m(H,e);return`
 	.packetByte {
-		font-size: ${options.byteFontSize};
+		font-size: ${t.byteFontSize};
 	}
 	.packetByte.start {
-		fill: ${options.startByteColor};
+		fill: ${t.startByteColor};
 	}
 	.packetByte.end {
-		fill: ${options.endByteColor};
+		fill: ${t.endByteColor};
 	}
 	.packetLabel {
-		fill: ${options.labelColor};
-		font-size: ${options.labelFontSize};
+		fill: ${t.labelColor};
+		font-size: ${t.labelFontSize};
 	}
 	.packetTitle {
-		fill: ${options.titleColor};
-		font-size: ${options.titleFontSize};
+		fill: ${t.titleColor};
+		font-size: ${t.titleFontSize};
 	}
 	.packetBlock {
-		stroke: ${options.blockStrokeColor};
-		stroke-width: ${options.blockStrokeWidth};
-		fill: ${options.blockFillColor};
+		stroke: ${t.blockStrokeColor};
+		stroke-width: ${t.blockStrokeWidth};
+		fill: ${t.blockFillColor};
 	}
-	`;
-}, "styles");
-var diagram = {
-  parser,
-  get db() {
-    return new PacketDB();
-  },
-  renderer,
-  styles
-};
-export {
-  diagram
-};
+	`},"styles"),q={parser:x,get db(){return new v},renderer:G,styles:K};export{q as diagram};

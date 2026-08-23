@@ -17,6 +17,9 @@ import (
 // A value of 0 in the user-supplied options means "use this default."
 var DefaultMaxFiles = 200
 
+// MaxStudyOffset bounds synchronous offset traversal for paged study requests.
+const MaxStudyOffset = 1_000_000
+
 // DefaultMaxFileSize is the maximum file size (in bytes) study will read.
 // Larger files are skipped and reported as errors.
 var DefaultMaxFileSize int64 = 256 * 1024 // 256 KB
@@ -35,6 +38,10 @@ type StudyResult struct {
 	WrittenIDs     []string     `json:"written_ids,omitempty"`
 	Errors         []StudyError `json:"errors,omitempty"`
 	DryRun         bool         `json:"dry_run"`
+	Offset         int          `json:"offset"`
+	PageFiles      int          `json:"page_files"`
+	NextOffset     int          `json:"next_offset"`
+	HasMore        bool         `json:"has_more"`
 }
 
 type StudyOptions struct {
@@ -43,6 +50,7 @@ type StudyOptions struct {
 	Depth       string
 	DryRun      bool
 	MaxFiles    int
+	Offset      int
 	MaxFileSize int64
 	Ignore      []string
 }
@@ -54,6 +62,26 @@ type StudyEngine struct {
 func NewStudyEngine(pipeline *WritePipeline) *StudyEngine { return &StudyEngine{pipeline: pipeline} }
 
 var errStudyMaxFiles = errors.New("study max files reached")
+
+type studyPage struct {
+	offset   int
+	limit    int
+	seen     int
+	selected int
+}
+
+func (page *studyPage) selectEligible() (bool, error) {
+	if page.seen < page.offset {
+		page.seen++
+		return false, nil
+	}
+	if page.selected >= page.limit {
+		return false, errStudyMaxFiles
+	}
+	page.seen++
+	page.selected++
+	return true, nil
+}
 
 // gitignoreCache holds parsed ignore patterns keyed by directory path.
 type gitignoreCache struct {
@@ -171,7 +199,7 @@ func safeTruncate(text string, budget int) string {
 		return text
 	}
 	// Work within the budget window.
-	window := text[:budget]
+	window := core.TruncateUTF8(text, budget)
 
 	// Find the last safe boundary before budget.
 	// Priority: end of a fenced code block (closing ```), end of frontmatter
@@ -276,7 +304,10 @@ func (s *StudyEngine) Ingest(ctx context.Context, workspace, root string, dryRun
 }
 
 func (s *StudyEngine) IngestWithOptions(ctx context.Context, opts StudyOptions) (*StudyResult, error) {
-	res := &StudyResult{DryRun: opts.DryRun, WrittenIDs: []string{}}
+	res := &StudyResult{DryRun: opts.DryRun, WrittenIDs: []string{}, Offset: opts.Offset, NextOffset: opts.Offset}
+	if opts.Offset < 0 || opts.Offset > MaxStudyOffset {
+		return res, fmt.Errorf("study offset must be between 0 and %d", MaxStudyOffset)
+	}
 
 	// Apply defaults.
 	if opts.MaxFiles <= 0 {
@@ -291,6 +322,11 @@ func (s *StudyEngine) IngestWithOptions(ctx context.Context, opts StudyOptions) 
 	}
 
 	cache := &gitignoreCache{}
+	page := &studyPage{offset: opts.Offset, limit: opts.MaxFiles}
+	defer func() {
+		res.PageFiles = page.selected
+		res.NextOffset = opts.Offset + page.selected
+	}()
 
 	for _, source := range opts.Sources {
 		source = strings.TrimSpace(source)
@@ -305,14 +341,12 @@ func (s *StudyEngine) IngestWithOptions(ctx context.Context, opts StudyOptions) 
 			continue
 		}
 		if !info.IsDir() {
-			if err := s.processFile(ctx, opts, cache, source, res); err != nil {
+			if err := s.processFile(ctx, opts, cache, source, res, page); err != nil {
 				if errors.Is(err, errStudyMaxFiles) {
+					res.HasMore = true
 					break
 				}
 				return res, err
-			}
-			if opts.MaxFiles > 0 && res.ScannedFiles >= opts.MaxFiles {
-				break
 			}
 			continue
 		}
@@ -353,9 +387,10 @@ func (s *StudyEngine) IngestWithOptions(ctx context.Context, opts StudyOptions) 
 				}
 			}
 
-			return s.processFile(ctx, opts, cache, path, res)
+			return s.processFile(ctx, opts, cache, path, res, page)
 		})
 		if errors.Is(walkErr, errStudyMaxFiles) {
+			res.HasMore = true
 			break
 		}
 		if walkErr != nil {
@@ -364,7 +399,9 @@ func (s *StudyEngine) IngestWithOptions(ctx context.Context, opts StudyOptions) 
 	}
 
 	// If no files succeeded and we have errors, propagate.
-	if res.ScannedFiles == 0 && len(res.Errors) > 0 {
+	res.PageFiles = page.selected
+	res.NextOffset = opts.Offset + page.selected
+	if res.PageFiles == 0 && len(res.Errors) > 0 {
 		return res, fmt.Errorf("study: no files indexed (%d error(s))", len(res.Errors))
 	}
 	return res, nil
@@ -373,6 +410,9 @@ func (s *StudyEngine) IngestWithOptions(ctx context.Context, opts StudyOptions) 
 func shouldIgnoreStudyPath(path string, d os.DirEntry, ignore []string) bool {
 	name := d.Name()
 	if d.IsDir() && (name == ".git" || name == "node_modules" || name == "bin" || strings.HasPrefix(name, ".")) {
+		return true
+	}
+	if !d.IsDir() && isGeneratedDashboardBundle(path) {
 		return true
 	}
 	if len(ignore) == 0 {
@@ -394,12 +434,24 @@ func shouldIgnoreStudyPath(path string, d os.DirEntry, ignore []string) bool {
 	return false
 }
 
-func (s *StudyEngine) processFile(ctx context.Context, opts StudyOptions, cache *gitignoreCache, path string, res *StudyResult) error {
-	if opts.MaxFiles > 0 && res.ScannedFiles >= opts.MaxFiles {
-		return errStudyMaxFiles
+func isGeneratedDashboardBundle(path string) bool {
+	slashed := strings.ReplaceAll(filepath.ToSlash(path), "\\", "/")
+	normalized := "/" + strings.TrimPrefix(slashed, "/")
+	if !strings.Contains(normalized, "/dashboard/assets/") &&
+		!strings.Contains(normalized, "/dashboard/dist/assets/") {
+		return false
 	}
+	name := filepath.Base(slashed)
+	return name == "app.js" || (strings.HasPrefix(name, "chunk-") && strings.HasSuffix(name, ".js"))
+}
+
+func (s *StudyEngine) processFile(ctx context.Context, opts StudyOptions, cache *gitignoreCache, path string, res *StudyResult, page *studyPage) error {
 	if !isStudyFile(path) {
 		return nil
+	}
+	selected, err := page.selectEligible()
+	if err != nil || !selected {
+		return err
 	}
 
 	// Check file size before reading.

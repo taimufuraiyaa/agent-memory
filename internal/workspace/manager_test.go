@@ -146,6 +146,53 @@ func TestManagerInitListRenameDelete(t *testing.T) {
 	}
 }
 
+func TestManagerInitRejectsRulePathOutsideWorkspace(t *testing.T) {
+	base := t.TempDir()
+	cwd := filepath.Join(base, "project")
+	if err := os.MkdirAll(cwd, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mgr, err := NewManager(filepath.Join(base, "data"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	outside := filepath.Join(base, "outside.mdc")
+	_, err = mgr.Init(context.Background(), InitOptions{CWD: cwd, ProjectName: "escaped", RulePath: outside})
+	if err == nil {
+		t.Fatal("expected out-of-workspace rule path to fail")
+	}
+	if _, statErr := os.Stat(outside); !os.IsNotExist(statErr) {
+		t.Fatalf("outside rule file was created: %v", statErr)
+	}
+}
+
+func TestManagerInitRejectsRulePathThroughSymlink(t *testing.T) {
+	base := t.TempDir()
+	cwd := filepath.Join(base, "project")
+	outside := filepath.Join(base, "outside")
+	if err := os.MkdirAll(cwd, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(outside, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(cwd, ".cursor")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	mgr, err := NewManager(filepath.Join(base, "data"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(cwd, ".cursor", "rules", "agent-memory.mdc")
+	_, err = mgr.Init(context.Background(), InitOptions{CWD: cwd, ProjectName: "symlinked", RulePath: target})
+	if err == nil {
+		t.Fatal("expected symlinked rule parent to fail")
+	}
+	if _, statErr := os.Stat(filepath.Join(outside, "rules", "agent-memory.mdc")); !os.IsNotExist(statErr) {
+		t.Fatalf("rule escaped through symlink: %v", statErr)
+	}
+}
+
 func TestManagerInitMultipleIDERules(t *testing.T) {
 	base := t.TempDir()
 	cwd := t.TempDir()

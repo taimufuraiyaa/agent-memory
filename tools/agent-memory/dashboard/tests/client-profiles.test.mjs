@@ -3,13 +3,13 @@ import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 
 const panelSource = await readFile(new URL('../src/ui/ClientsPanel.tsx', import.meta.url), 'utf8')
-const appSource = await readFile(new URL('../src/ui/App.tsx', import.meta.url), 'utf8')
+const appSource = await readFile(new URL('../src/ui/workspace/SettingsView.tsx', import.meta.url), 'utf8')
 const apiSource = await readFile(new URL('../src/lib/api.ts', import.meta.url), 'utf8')
 const stylesSource = await readFile(new URL('../src/ui/clients.css', import.meta.url), 'utf8')
 
 test('clients surface is installation-scoped and reachable from shared navigation', () => {
   assert.match(appSource, /label: 'Clients'/)
-  assert.match(appSource, /surface: 'clients'/)
+  assert.match(appSource, /id: 'clients'/)
   assert.match(appSource, /<ClientsPanel \/>/)
   assert.match(panelSource, /across every workspace/)
   assert.doesNotMatch(panelSource, /workspace=/)

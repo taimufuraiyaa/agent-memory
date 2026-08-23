@@ -60,7 +60,7 @@ func TestHostedDashboardServesSharedReactAssets(t *testing.T) {
 		}
 		if asset == "/dashboard/assets/app.js" {
 			script := string(assetBody)
-			for _, required := range []string{"NotebookWorkspace", "Human note", "Write what matters."} {
+			for _, required := range []string{"Ask this project", "Search extracted memories", "Browse memories"} {
 				if !strings.Contains(script, required) {
 					t.Fatalf("shared dashboard script is missing %q", required)
 				}

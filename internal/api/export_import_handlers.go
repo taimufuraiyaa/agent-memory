@@ -2,11 +2,20 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
 	"net/http"
 	"strings"
 
 	"github.com/taimufuraiyaa/agent-memory/internal/engine"
 	"github.com/taimufuraiyaa/agent-memory/internal/storage/sqlite"
+)
+
+const (
+	standaloneImportBodyLimit    = 16 << 20
+	standaloneImportMemoryLimit  = 10_000
+	standaloneImportContentLimit = 12 << 20
 )
 
 // memoriesExportHandler implements GET /api/v1/memories/export.
@@ -48,15 +57,23 @@ func memoriesImportHandler(svc *Service) http.HandlerFunc {
 			writeErr(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
 			return
 		}
+		var req engine.ExportBundle
+		if status, err := decodeStandaloneImport(w, r, &req); err != nil {
+			code := "bad_request"
+			if status == http.StatusRequestEntityTooLarge {
+				code = "payload_too_large"
+			}
+			writeErr(w, status, code, err.Error())
+			return
+		}
+		if err := validateStandaloneImportBundle(req); err != nil {
+			writeErr(w, http.StatusBadRequest, "validation", err.Error())
+			return
+		}
 		ws := workspaceFromRequest(r, svc.Workspace)
 		assets, err := svc.resolve(r.Context(), ws)
 		if err != nil {
 			writeWorkspaceResolveError(w, err)
-			return
-		}
-		var req engine.ExportBundle
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
 			return
 		}
 		if req.Version == "" {
@@ -94,6 +111,36 @@ func memoriesImportHandler(svc *Service) http.HandlerFunc {
 			"skipped":  skipped,
 		})
 	}
+}
+
+func decodeStandaloneImport(w http.ResponseWriter, r *http.Request, out *engine.ExportBundle) (int, error) {
+	r.Body = http.MaxBytesReader(w, r.Body, standaloneImportBodyLimit)
+	decoder := json.NewDecoder(r.Body)
+	if err := decoder.Decode(out); err != nil {
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			return http.StatusRequestEntityTooLarge, errors.New("memory import exceeds the request limit")
+		}
+		return http.StatusBadRequest, err
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		return http.StatusBadRequest, errors.New("memory import must contain one JSON object")
+	}
+	return http.StatusOK, nil
+}
+
+func validateStandaloneImportBundle(bundle engine.ExportBundle) error {
+	if len(bundle.Memories) > standaloneImportMemoryLimit {
+		return fmt.Errorf("memory import exceeds the %d-record limit", standaloneImportMemoryLimit)
+	}
+	contentBytes := 0
+	for _, memory := range bundle.Memories {
+		contentBytes += len(memory.Content)
+		if contentBytes > standaloneImportContentLimit {
+			return errors.New("memory import exceeds the aggregate content limit")
+		}
+	}
+	return nil
 }
 
 // memoriesReconstructHandler implements POST /api/v1/memories/reconstruct.

@@ -135,18 +135,25 @@ func (o *Observer) Wrap(next http.Handler) http.Handler {
 		} else {
 			span.SetStatus(codes.Ok, "")
 		}
-		o.logger.InfoContext(ctx, "request completed",
-			"request_id", request.RequestID,
-			"trace_id", request.TraceID,
-			"tenant_id", request.TenantID,
-			"service", o.service,
-			"operation", operation,
-			"method", r.Method,
-			"status", response.status,
-			"outcome", outcome,
-			"duration_ms", elapsed.Milliseconds(),
-		)
+		if shouldLogRequest(r, response.status) {
+			o.logger.InfoContext(ctx, "request completed",
+				"request_id", request.RequestID,
+				"trace_id", request.TraceID,
+				"tenant_id", request.TenantID,
+				"service", o.service,
+				"operation", operation,
+				"method", r.Method,
+				"status", response.status,
+				"outcome", outcome,
+				"duration_ms", elapsed.Milliseconds(),
+			)
+		}
 	})
+}
+
+func shouldLogRequest(r *http.Request, status int) bool {
+	isHealthCheck := r.Method == http.MethodGet && (r.URL.Path == "/health" || strings.HasPrefix(r.URL.Path, "/health/"))
+	return !isHealthCheck || status >= http.StatusBadRequest
 }
 
 func (o *Observer) EvidenceHandler() http.Handler {

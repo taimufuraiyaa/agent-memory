@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/taimufuraiyaa/agent-memory/internal/core"
+	"github.com/taimufuraiyaa/agent-memory/internal/saas/auth"
 	"github.com/taimufuraiyaa/agent-memory/internal/saas/modelgateway"
 	"github.com/taimufuraiyaa/agent-memory/internal/saas/semantic"
 )
@@ -67,8 +68,12 @@ func NewService(repository Repository, vectors VectorSearcher, models ModelGatew
 }
 
 func (s *Service) Query(ctx context.Context, request Query) (Result, error) {
+	caller, ok := auth.FromContext(ctx)
+	if !ok || !caller.Can("source:read") {
+		return Result{}, errors.New("source:read capability is required")
+	}
 	request.Text = strings.TrimSpace(request.Text)
-	if request.TenantID == "" || len(request.AuthorizedSourceIDs) == 0 || request.Text == "" || request.Provider == "" || request.Model == "" {
+	if request.TenantID == "" || caller.TenantID != request.TenantID || len(request.AuthorizedSourceIDs) == 0 || request.Text == "" || request.Provider == "" || request.Model == "" {
 		return Result{}, errors.New("tenant, authorized sources, query, provider, and model are required")
 	}
 	if request.Limit <= 0 {
@@ -76,6 +81,13 @@ func (s *Service) Query(ctx context.Context, request Query) (Result, error) {
 	}
 	if request.Limit > 50 {
 		return Result{}, errors.New("retrieval limit exceeds 50")
+	}
+	if request.Offset < 0 || request.Offset >= 50 || request.Offset+request.Limit > 50 {
+		return Result{}, errors.New("retrieval offset exceeds the bounded result window")
+	}
+	retrievalLimit := request.Offset + request.Limit + 1
+	if retrievalLimit > 50 {
+		retrievalLimit = 50
 	}
 	if request.ContextTokenBudget <= 0 {
 		request.ContextTokenBudget = 1200
@@ -107,7 +119,7 @@ func (s *Service) Query(ctx context.Context, request Query) (Result, error) {
 			queryPlan = &plan
 		}
 	}
-	candidateLimit := request.Limit * 10
+	candidateLimit := retrievalLimit * 10
 	if candidateLimit > 150 {
 		candidateLimit = 150
 	}
@@ -182,7 +194,7 @@ func (s *Service) Query(ctx context.Context, request Query) (Result, error) {
 		}
 		return ranked[i].Score > ranked[j].Score
 	})
-	reconstructed, err := reconstructEvidence(ctx, s.repository, request.TenantID, request.AuthorizedSourceIDs, ranked, semanticQuery, request.Limit)
+	reconstructed, err := reconstructEvidence(ctx, s.repository, request.TenantID, request.AuthorizedSourceIDs, ranked, semanticQuery, retrievalLimit)
 	if err != nil {
 		return Result{}, err
 	}
@@ -203,7 +215,14 @@ func (s *Service) Query(ctx context.Context, request Query) (Result, error) {
 		}
 	}
 	reconstructed = supportedWindows(reconstructed)
-	bounded, metadata, prompt := compileContext(reconstructed, request.ContextTokenBudget, request.Text)
+	page, pagination := paginateEvidence(reconstructed, request.Offset, request.Limit)
+	bounded, metadata, prompt := compileContext(page, request.ContextTokenBudget, request.Text)
+	returnedEnd := request.Offset + len(bounded)
+	pagination.HasMore = len(bounded) > 0 && returnedEnd < len(reconstructed)
+	pagination.NextOffset = nil
+	if pagination.HasMore {
+		pagination.NextOffset = &returnedEnd
+	}
 	metadata.Strategy = contextStrategy
 	metadata.CandidateCount = len(ranked)
 	metadata.ReconstructedWindows = len(reconstructed)
@@ -212,7 +231,7 @@ func (s *Service) Query(ctx context.Context, request Query) (Result, error) {
 	for _, evidence := range bounded {
 		answerable = answerable || evidence.AnswerSupport
 	}
-	result := Result{Answerable: answerable, EvidenceAvailable: len(bounded) > 0, Evidence: bounded, Context: metadata}
+	result := Result{Answerable: answerable, EvidenceAvailable: len(bounded) > 0, Evidence: bounded, Context: metadata, Pagination: pagination}
 	if !result.Answerable || !request.Generate {
 		return result, nil
 	}
@@ -228,6 +247,23 @@ func (s *Service) Query(ctx context.Context, request Query) (Result, error) {
 	result.Synthesis = generated.Text
 	result.FailureCode = generated.FailureCode
 	return result, nil
+}
+
+func paginateEvidence(evidence []Evidence, offset, limit int) ([]Evidence, Pagination) {
+	page := Pagination{Offset: offset, Limit: limit}
+	if offset >= len(evidence) {
+		return []Evidence{}, page
+	}
+	end := offset + limit
+	if end > len(evidence) {
+		end = len(evidence)
+	}
+	page.HasMore = end < len(evidence)
+	if page.HasMore {
+		next := end
+		page.NextOffset = &next
+	}
+	return evidence[offset:end], page
 }
 
 func applyPlanExclusions(evidence []Evidence, plan semantic.QueryPlan) []Evidence {

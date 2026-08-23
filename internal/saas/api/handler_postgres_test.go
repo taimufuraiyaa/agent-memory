@@ -477,6 +477,51 @@ func TestHostedHTTPFlowIsAuthenticatedAndTenantIsolated(t *testing.T) {
 	if bytes.Contains(encodedSources, []byte("private/vault/secret-key")) {
 		t.Fatal("source details leaked the vault object key")
 	}
+	response = requestHTTP(t, server.URL+"/v1/source-statuses?workspace_id="+one.WorkspaceID, "token-one", one.TenantID, "GET", nil, nil)
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("source status list status=%d body=%s", response.StatusCode, readBody(response))
+	}
+	var sourceStatusEnvelope struct {
+		Data []map[string]any `json:"data"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&sourceStatusEnvelope); err != nil {
+		t.Fatal(err)
+	}
+	_ = response.Body.Close()
+	if len(sourceStatusEnvelope.Data) != 2 {
+		t.Fatalf("source statuses=%+v", sourceStatusEnvelope.Data)
+	}
+	for _, field := range []string{"filename", "media_type", "rights_basis", "attestation", "provenance", "retention_state", "workspace_id", "created_at"} {
+		if _, exists := sourceStatusEnvelope.Data[0][field]; exists {
+			t.Fatalf("source status leaked catalog-only field %q: %+v", field, sourceStatusEnvelope.Data[0])
+		}
+	}
+	response = requestHTTP(t, server.URL+"/v1/processing-tasks?workspace_id="+one.WorkspaceID, "token-one", one.TenantID, "GET", nil, nil)
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("processing task list status=%d body=%s", response.StatusCode, readBody(response))
+	}
+	var processingTaskEnvelope struct {
+		Data []sourceservice.ProcessingTaskView `json:"data"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&processingTaskEnvelope); err != nil {
+		t.Fatal(err)
+	}
+	_ = response.Body.Close()
+	if len(processingTaskEnvelope.Data) != 2 || processingTaskEnvelope.Data[0].Kind != "source_ingestion" {
+		t.Fatalf("processing tasks=%+v", processingTaskEnvelope.Data)
+	}
+	response = requestHTTP(t, server.URL+"/v1/processing-tasks?workspace_id="+one.WorkspaceID, "token-two", two.TenantID, "GET", nil, nil)
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("cross-tenant processing task status=%d body=%s", response.StatusCode, readBody(response))
+	}
+	processingTaskEnvelope.Data = nil
+	if err := json.NewDecoder(response.Body).Decode(&processingTaskEnvelope); err != nil {
+		t.Fatal(err)
+	}
+	_ = response.Body.Close()
+	if len(processingTaskEnvelope.Data) != 0 {
+		t.Fatalf("cross-tenant processing tasks leaked: %+v", processingTaskEnvelope.Data)
+	}
 	response = requestHTTP(t, server.URL+"/v1/sources/"+sourceID, "token-two", two.TenantID, "GET", nil, nil)
 	if response.StatusCode != http.StatusNotFound {
 		t.Fatalf("cross-tenant source detail status=%d body=%s", response.StatusCode, readBody(response))
