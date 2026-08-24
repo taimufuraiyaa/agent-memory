@@ -1,9 +1,7 @@
 # agent-memory
 A persistent, multi-tier memory layer for AI coding agents (Cursor, Claude Code, Codex, Cline, custom). It retains knowledge across sessions, learns from outcomes, and reduces repeated research/token consumption through hybrid storage and lifecycle management.
 
-<img width="3014" height="1818" alt="CleanShot 2026-05-29 at 01 57 34@2x" src="https://github.com/user-attachments/assets/62a00b34-912a-44bd-a621-fd5f07b79e23" />
-<img width="2292" height="1766" alt="CleanShot 2026-05-29 at 01 28 36@2x" src="https://github.com/user-attachments/assets/bf0c19b6-c75d-4ee0-8dd8-c72033e2dedf" />
-<img width="2978" height="1794" alt="CleanShot 2026-05-29 at 01 47 06@2x" src="https://github.com/user-attachments/assets/61f29202-54bc-496d-b249-d592f0809d13" />
+<img width="2544" height="1290" alt="CleanShot 2026-08-24 at 12 25 48@2x" src="https://github.com/user-attachments/assets/d02949b6-ed89-4763-82aa-33d8ad9f6cd3" />
 
 ## Status
 - **Core Implementation**: Complete, optimized, and ready to run.
