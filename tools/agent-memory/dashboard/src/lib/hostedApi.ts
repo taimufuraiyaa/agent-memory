@@ -227,6 +227,29 @@ export function submitHostedRetrievalFeedback(connection: HostedConnection, inpu
   return hostedRequest(connection, '/v1/local-project-feedback', { method: 'POST', body: JSON.stringify(input) })
 }
 
+export function listHostedProjectSolutions(connection: HostedConnection, workspace: string): Promise<{ episodes: import('./api').SolutionEpisodeRecord[] }> {
+  return hostedRequest(connection, `/v1/local-project-solutions?workspace=${encodeURIComponent(workspace)}&limit=100`)
+}
+
+export function getHostedProjectSolution(connection: HostedConnection, workspace: string, episodeID: string): Promise<{ detail: import('./api').SolutionEpisodeDetailRecord }> {
+  return hostedRequest(connection, `/v1/local-project-solutions?workspace=${encodeURIComponent(workspace)}&episode_id=${encodeURIComponent(episodeID)}`)
+}
+
+export function reviewHostedProjectSolution(connection: HostedConnection, input: {
+  workspace: string
+  episode_id: string
+  action: 'pin' | 'misleading' | 'redact' | 'correct' | 'supersede' | 'delete'
+  step_id?: string
+  reason?: string
+  reason_class?: string
+  summary?: string
+  successor_episode_id?: string
+  idempotency_key?: string
+  pinned?: boolean
+}): Promise<unknown> {
+  return hostedRequest(connection, '/v1/local-project-solutions/review', { method: 'POST', body: JSON.stringify(input) })
+}
+
 export function getHostedRightsAttestationStatus(connection: HostedConnection): Promise<HostedRightsAttestationStatus> {
   return hostedRequest(connection, '/v1/attestations/rights')
 }

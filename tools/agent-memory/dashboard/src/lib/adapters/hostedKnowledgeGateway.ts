@@ -4,13 +4,16 @@ import {
   getHostedBilling,
   getHostedPrivacy,
   getHostedProjectMemory,
+  getHostedProjectSolution,
   importHostedBundle,
   listHostedProcessingTasks,
   listHostedProjects,
   listHostedRetrievalFeedback,
+  listHostedProjectSolutions,
   listHostedSources,
   queryHostedSources,
   retryHostedSource,
+  reviewHostedProjectSolution,
   searchHostedMemories,
   searchHostedProjectMemories,
   studyHostedProject,
@@ -31,6 +34,7 @@ import type {
   SourceSummary,
   WorkspaceSummary,
 } from '../knowledgeGateway'
+import { solutionActivityItem, solutionDetail } from './solutionEpisodeAdapter'
 
 function hostedMemoryResult(memory: HostedMemory, workspaceId: string, score?: number, explanation?: string): KnowledgeResult {
   return {
@@ -175,8 +179,8 @@ export function createHostedKnowledgeGateway(connection: HostedConnection): Know
     async retryNoteIndex() { throw new Error('Notes are unavailable in this runtime.') },
     async listActivity(scope) {
       if (isRegisteredProject(scope.workspaceId)) {
-        const response = await listHostedRetrievalFeedback(connection, scope.workspaceId)
-        return { items: response.feedback.map<ActivityItem>((request) => ({
+        const [response, solutions] = await Promise.all([listHostedRetrievalFeedback(connection, scope.workspaceId), listHostedProjectSolutions(connection, scope.workspaceId)])
+        return { items: [...solutions.episodes.map(solutionActivityItem), ...response.feedback.map<ActivityItem>((request) => ({
           id: request.id,
           workspaceId: scope.workspaceId,
           kind: request.score >= 0 ? 'feedback' : 'retrieval',
@@ -192,7 +196,7 @@ export function createHostedKnowledgeGateway(connection: HostedConnection): Know
             usefulCount: request.useful_count,
             totalCount: request.total_count,
           },
-        })) }
+        }))].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)) }
       }
       const tasks = await listHostedProcessingTasks({ ...connection, workspace: scope.workspaceId })
       return { items: tasks.map<ActivityItem>((task) => ({ id: task.id, workspaceId: scope.workspaceId, kind: task.kind === 'source_deletion' ? 'deletion' : 'upload', title: task.title, state: task.state, updatedAt: task.updated_at, progress: task.progress.percent, failure: task.failure ? { message: task.failure.message || task.failure.code || 'Task failed.', retryAllowed: task.failure.retry_allowed } : undefined })) }
@@ -201,11 +205,15 @@ export function createHostedKnowledgeGateway(connection: HostedConnection): Know
       if (isRegisteredProject(scope.workspaceId)) throw new Error('This retrieval activity cannot be retried.')
       await retryHostedSource({ ...connection, workspace: scope.workspaceId }, activityId)
     },
-    async getSolutionEpisode() {
-      throw new Error('Solution episode inspection requires registered-project routing.')
+    async getSolutionEpisode(scope, episodeId) {
+	  if (!isRegisteredProject(scope.workspaceId)) throw new Error('Solution episodes are available only for registered projects.')
+	  return solutionDetail((await getHostedProjectSolution(connection, scope.workspaceId, episodeId)).detail)
     },
-    async reviewSolutionEpisode() {
-      throw new Error('Solution episode review requires registered-project routing.')
+    async reviewSolutionEpisode(scope, input) {
+	  if (!isRegisteredProject(scope.workspaceId)) throw new Error('Solution episode review is available only for registered projects.')
+	  await reviewHostedProjectSolution(connection, { workspace: scope.workspaceId, episode_id: input.episodeId, action: input.action,
+		step_id: input.stepId, reason: input.reason, reason_class: input.reasonClass, summary: input.summary,
+		successor_episode_id: input.successorEpisodeId, idempotency_key: input.idempotencyKey, pinned: input.pinned })
     },
     async submitFeedback(scope, requestId, score, reason) {
       if (!isRegisteredProject(scope.workspaceId)) throw new Error('Hosted feedback uses the memory feedback control.')

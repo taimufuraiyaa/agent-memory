@@ -125,7 +125,7 @@
   - Files: gateway types, Activity episode slice, detail panel, tests.
   - Estimated scope: Medium.
 
-- [ ] **Task 14: Add hosted lifecycle and isolation parity**
+- [x] **Task 14: Add hosted lifecycle and isolation parity**
   - Acceptance: Tenant/workspace/principal authorization covers every episode record, handoff, finalization, recall, export, and deletion operation; local-owner routing accepts only registered project identities.
   - Verify: two-tenant, two-principal, unknown-project, arbitrary-path, timing-signal, and capability tests in hosted and local APIs.
   - Dependencies: Tasks 6, 9, 12, and 13.
