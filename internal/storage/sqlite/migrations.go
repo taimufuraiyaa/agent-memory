@@ -23,6 +23,7 @@ var schemaMigrations = []migrationStep{
 	{3, "session-column-and-order-indexes", migrateSessionColumnAndIndexes},
 	{4, "source-attestation-provenance", migrateSourceAttestationProvenance},
 	{5, "solution-path-episodes", migrateSolutionPathEpisodes},
+	{6, "solution-working-state", migrateSolutionWorkingState},
 }
 
 var migrateMu sync.Mutex
@@ -202,6 +203,31 @@ func migrateSolutionPathEpisodes(ctx context.Context, s *Store) error {
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_solution_step_references_target
 			ON solution_step_references(kind, target_id)`,
+	}
+	for _, statement := range statements {
+		if _, err := s.db.ExecContext(ctx, statement); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func migrateSolutionWorkingState(ctx context.Context, s *Store) error {
+	statements := []string{
+		`CREATE TABLE IF NOT EXISTS solution_working_state (
+			episode_id TEXT PRIMARY KEY,
+			workspace TEXT NOT NULL,
+			session_id TEXT NOT NULL,
+			principal_id TEXT NOT NULL,
+			state_json TEXT NOT NULL,
+			generation INTEGER NOT NULL,
+			sensitivity TEXT NOT NULL,
+			updated_at TEXT NOT NULL,
+			expires_at TEXT NOT NULL,
+			FOREIGN KEY(episode_id) REFERENCES solution_episodes(id) ON DELETE CASCADE
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_solution_working_state_expiry ON solution_working_state(expires_at)`,
+		`CREATE INDEX IF NOT EXISTS idx_solution_working_state_owner ON solution_working_state(workspace, principal_id, episode_id)`,
 	}
 	for _, statement := range statements {
 		if _, err := s.db.ExecContext(ctx, statement); err != nil {

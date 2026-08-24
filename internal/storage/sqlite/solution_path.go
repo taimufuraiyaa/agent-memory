@@ -42,6 +42,17 @@ type SolutionStepInsert struct {
 	CreatedAt        time.Time
 }
 
+type SolutionEpisodeTransition struct {
+	EpisodeID         string
+	Workspace         string
+	PrincipalID       string
+	ExpectedVersion   int64
+	Status            core.SolutionEpisodeStatus
+	TargetPrincipalID string
+	TargetSessionID   string
+	UpdatedAt         time.Time
+}
+
 func (s *Store) CreateSolutionEpisode(ctx context.Context, in SolutionEpisodeInsert) (core.SolutionEpisode, bool, error) {
 	if s == nil || s.db == nil {
 		return core.SolutionEpisode{}, false, errors.New("solution episode store is unavailable")
@@ -106,6 +117,44 @@ func (s *Store) GetSolutionEpisode(ctx context.Context, id string) (core.Solutio
 	row := s.db.QueryRowContext(ctx, `SELECT id, workspace, session_id, principal_id, client_id,
 		goal_summary, status, capture_policy, retention_class, version, superseded_by, created_at, updated_at
 		FROM solution_episodes WHERE id = ?`, strings.TrimSpace(id))
+	episode, _, err := scanSolutionEpisode(row, false)
+	return episode, err
+}
+
+func (s *Store) TransitionSolutionEpisode(ctx context.Context, in SolutionEpisodeTransition) (core.SolutionEpisode, error) {
+	updatedAt := in.UpdatedAt.UTC()
+	if updatedAt.IsZero() {
+		updatedAt = time.Now().UTC()
+	}
+	principalID := strings.TrimSpace(in.TargetPrincipalID)
+	if principalID == "" {
+		principalID = strings.TrimSpace(in.PrincipalID)
+	}
+	sessionID := strings.TrimSpace(in.TargetSessionID)
+	if sessionID == "" {
+		episode, err := s.GetSolutionEpisode(ctx, in.EpisodeID)
+		if err != nil {
+			return core.SolutionEpisode{}, err
+		}
+		sessionID = episode.SessionID
+	}
+	row := s.db.QueryRowContext(ctx, `UPDATE solution_episodes SET
+		status = ?, principal_id = ?, session_id = ?, version = version + 1, updated_at = ?
+		WHERE id = ? AND workspace = ? AND principal_id = ? AND version = ?
+		RETURNING id, workspace, session_id, principal_id, client_id, goal_summary, status,
+		capture_policy, retention_class, version, superseded_by, created_at, updated_at`,
+		in.Status, principalID, sessionID, updatedAt.Format(time.RFC3339Nano), strings.TrimSpace(in.EpisodeID),
+		strings.TrimSpace(in.Workspace), strings.TrimSpace(in.PrincipalID), in.ExpectedVersion)
+	episode, _, err := scanSolutionEpisode(row, false)
+	return episode, err
+}
+
+func (s *Store) FindActiveSolutionEpisode(ctx context.Context, workspace, sessionID, principalID string) (core.SolutionEpisode, error) {
+	row := s.db.QueryRowContext(ctx, `SELECT id, workspace, session_id, principal_id, client_id,
+		goal_summary, status, capture_policy, retention_class, version, superseded_by, created_at, updated_at
+		FROM solution_episodes WHERE workspace = ? AND session_id = ? AND principal_id = ?
+		AND status IN (?, ?) ORDER BY updated_at DESC LIMIT 1`, strings.TrimSpace(workspace),
+		strings.TrimSpace(sessionID), strings.TrimSpace(principalID), core.SolutionEpisodeActive, core.SolutionEpisodePaused)
 	episode, _, err := scanSolutionEpisode(row, false)
 	return episode, err
 }
