@@ -69,6 +69,11 @@ func (s *SolutionService) Start(ctx context.Context, input SolutionStartInput) (
 		ClientID: input.ClientID, GoalSummary: goal, CapturePolicy: input.CapturePolicy,
 		RetentionClass: input.RetentionClass, IdempotencyKey: input.IdempotencyKey, CreatedAt: s.now().UTC(),
 	})
+	if err != nil {
+		if active, activeErr := s.store.FindActiveSolutionEpisode(ctx, input.Workspace, input.SessionID, input.PrincipalID); activeErr == nil && active.ClientID == strings.TrimSpace(input.ClientID) {
+			return core.SolutionEpisode{}, false, errors.New("an active episode already exists for this session and client")
+		}
+	}
 	if err == nil && !deduplicated {
 		s.audit(ctx, episode.Workspace, episode.SessionID, episode.PrincipalID, input.ClientID,
 			input.IdempotencyKey, "solution_start", "success", "accepted", episode.ID, nil)
@@ -132,9 +137,19 @@ type SolutionTransitionInput struct {
 	EpisodeID       string
 	ExpectedVersion int64
 	Status          core.SolutionEpisodeStatus
+	IdempotencyKey  string
 }
 
 func (s *SolutionService) Transition(ctx context.Context, input SolutionTransitionInput) (core.SolutionEpisode, error) {
+	transition := sqlite.SolutionEpisodeTransition{
+		EpisodeID: input.EpisodeID, Workspace: input.Workspace, PrincipalID: input.PrincipalID,
+		ExpectedVersion: input.ExpectedVersion, Status: input.Status, IdempotencyKey: input.IdempotencyKey,
+	}
+	if replay, found, err := s.store.ReplaySolutionEpisodeTransition(ctx, transition); err != nil {
+		return core.SolutionEpisode{}, err
+	} else if found {
+		return replay, nil
+	}
 	episode, err := s.authorizedEpisode(ctx, input.Workspace, input.PrincipalID, input.EpisodeID)
 	if err != nil {
 		return core.SolutionEpisode{}, err
@@ -145,10 +160,9 @@ func (s *SolutionService) Transition(ctx context.Context, input SolutionTransiti
 	if !validSolutionTransition(episode.Status, input.Status) {
 		return core.SolutionEpisode{}, fmt.Errorf("invalid solution episode transition from %s to %s", episode.Status, input.Status)
 	}
-	updated, err := s.store.TransitionSolutionEpisode(ctx, sqlite.SolutionEpisodeTransition{
-		EpisodeID: episode.ID, Workspace: episode.Workspace, PrincipalID: episode.PrincipalID,
-		ExpectedVersion: input.ExpectedVersion, Status: input.Status, UpdatedAt: s.now().UTC(),
-	})
+	transition.EpisodeID, transition.Workspace, transition.PrincipalID = episode.ID, episode.Workspace, episode.PrincipalID
+	transition.UpdatedAt = s.now().UTC()
+	updated, err := s.store.TransitionSolutionEpisode(ctx, transition)
 	if errors.Is(err, sql.ErrNoRows) {
 		return core.SolutionEpisode{}, errors.New("solution episode version conflict")
 	}
@@ -167,9 +181,21 @@ type SolutionHandoffInput struct {
 	ExpectedVersion   int64
 	TargetPrincipalID string
 	TargetSessionID   string
+	IdempotencyKey    string
 }
 
 func (s *SolutionService) Handoff(ctx context.Context, input SolutionHandoffInput) (core.SolutionEpisode, error) {
+	transition := sqlite.SolutionEpisodeTransition{
+		EpisodeID: input.EpisodeID, Workspace: input.Workspace, PrincipalID: input.PrincipalID,
+		ExpectedVersion: input.ExpectedVersion, Status: core.SolutionEpisodePaused,
+		TargetPrincipalID: input.TargetPrincipalID, TargetSessionID: input.TargetSessionID,
+		IdempotencyKey: input.IdempotencyKey,
+	}
+	if replay, found, err := s.store.ReplaySolutionEpisodeTransition(ctx, transition); err != nil {
+		return core.SolutionEpisode{}, err
+	} else if found {
+		return replay, nil
+	}
 	episode, err := s.authorizedEpisode(ctx, input.Workspace, input.PrincipalID, input.EpisodeID)
 	if err != nil {
 		return core.SolutionEpisode{}, err
@@ -180,11 +206,9 @@ func (s *SolutionService) Handoff(ctx context.Context, input SolutionHandoffInpu
 	if episode.Status.Terminal() || strings.TrimSpace(input.TargetPrincipalID) == "" || strings.TrimSpace(input.TargetSessionID) == "" {
 		return core.SolutionEpisode{}, errors.New("invalid solution episode handoff")
 	}
-	updated, err := s.store.TransitionSolutionEpisode(ctx, sqlite.SolutionEpisodeTransition{
-		EpisodeID: episode.ID, Workspace: episode.Workspace, PrincipalID: episode.PrincipalID,
-		ExpectedVersion: input.ExpectedVersion, Status: core.SolutionEpisodePaused,
-		TargetPrincipalID: input.TargetPrincipalID, TargetSessionID: input.TargetSessionID, UpdatedAt: s.now().UTC(),
-	})
+	transition.EpisodeID, transition.Workspace, transition.PrincipalID = episode.ID, episode.Workspace, episode.PrincipalID
+	transition.UpdatedAt = s.now().UTC()
+	updated, err := s.store.TransitionSolutionEpisode(ctx, transition)
 	if errors.Is(err, sql.ErrNoRows) {
 		return core.SolutionEpisode{}, errors.New("solution episode version conflict")
 	}
@@ -316,6 +340,11 @@ func (s *SolutionService) admit(ctx context.Context, workspace, sessionID, princ
 		Workspace: workspace, Origin: origin, Field: field, Content: content,
 	})
 	if decision.Disposition == engine.SolutionAdmissionAllow {
+		return decision.SafeContent, nil
+	}
+	if decision.Disposition == engine.SolutionAdmissionRedact {
+		s.audit(ctx, workspace, sessionID, principalID, clientID, requestID, "solution_admission",
+			string(decision.Disposition), string(decision.Reason), "", map[string]any{"field": field, "origin": origin})
 		return decision.SafeContent, nil
 	}
 	s.audit(ctx, workspace, sessionID, principalID, clientID, requestID, "solution_admission",

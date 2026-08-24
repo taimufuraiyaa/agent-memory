@@ -18,6 +18,7 @@ type SolutionAdmissionDisposition string
 
 const (
 	SolutionAdmissionAllow      SolutionAdmissionDisposition = "allow"
+	SolutionAdmissionRedact     SolutionAdmissionDisposition = "redact"
 	SolutionAdmissionQuarantine SolutionAdmissionDisposition = "quarantine"
 	SolutionAdmissionReject     SolutionAdmissionDisposition = "reject"
 )
@@ -31,6 +32,7 @@ const (
 	SolutionAdmissionInvalidOrigin   SolutionAdmissionReason = "invalid_origin"
 	SolutionAdmissionTooLarge        SolutionAdmissionReason = "too_large"
 	SolutionAdmissionRawReasoning    SolutionAdmissionReason = "raw_reasoning"
+	SolutionAdmissionPrivateContent  SolutionAdmissionReason = "private_content"
 	SolutionAdmissionSecret          SolutionAdmissionReason = "secret"
 	SolutionAdmissionPII             SolutionAdmissionReason = "pii"
 	SolutionAdmissionPromptInjection SolutionAdmissionReason = "prompt_injection"
@@ -133,6 +135,13 @@ func (p *SolutionAdmissionPolicy) Evaluate(_ context.Context, in SolutionAdmissi
 	}
 	if matchesSolutionPattern(p.rawReasoningPatterns, content) {
 		return rejectedSolutionAdmission(SolutionAdmissionRawReasoning)
+	}
+	if privateTagRE.MatchString(content) {
+		return SolutionAdmissionDecision{
+			Disposition: SolutionAdmissionRedact,
+			Reason:      SolutionAdmissionPrivateContent,
+			SafeContent: RedactSecretsAndPII(content),
+		}
 	}
 	if matchesSolutionPattern(SecretPatterns, content) {
 		return quarantinedSolutionAdmission(SolutionAdmissionSecret)

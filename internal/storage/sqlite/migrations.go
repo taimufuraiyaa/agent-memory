@@ -24,6 +24,7 @@ var schemaMigrations = []migrationStep{
 	{4, "source-attestation-provenance", migrateSourceAttestationProvenance},
 	{5, "solution-path-episodes", migrateSolutionPathEpisodes},
 	{6, "solution-working-state", migrateSolutionWorkingState},
+	{7, "solution-transition-idempotency", migrateSolutionTransitionIdempotency},
 }
 
 var migrateMu sync.Mutex
@@ -228,6 +229,31 @@ func migrateSolutionWorkingState(ctx context.Context, s *Store) error {
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_solution_working_state_expiry ON solution_working_state(expires_at)`,
 		`CREATE INDEX IF NOT EXISTS idx_solution_working_state_owner ON solution_working_state(workspace, principal_id, episode_id)`,
+	}
+	for _, statement := range statements {
+		if _, err := s.db.ExecContext(ctx, statement); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func migrateSolutionTransitionIdempotency(ctx context.Context, s *Store) error {
+	statements := []string{
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_solution_episode_one_active_session
+			ON solution_episodes(workspace, session_id, client_id)
+			WHERE status IN ('active', 'paused')`,
+		`CREATE TABLE IF NOT EXISTS solution_transition_requests (
+			episode_id TEXT NOT NULL,
+			workspace TEXT NOT NULL,
+			actor_principal_id TEXT NOT NULL,
+			idempotency_key TEXT NOT NULL,
+			request_hash TEXT NOT NULL,
+			result_json TEXT NOT NULL DEFAULT '',
+			created_at TEXT NOT NULL,
+			PRIMARY KEY(episode_id, actor_principal_id, idempotency_key),
+			FOREIGN KEY(episode_id) REFERENCES solution_episodes(id) ON DELETE CASCADE
+		)`,
 	}
 	for _, statement := range statements {
 		if _, err := s.db.ExecContext(ctx, statement); err != nil {

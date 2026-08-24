@@ -62,6 +62,20 @@ func TestSolutionAdmissionQuarantinesSecretsAndPII(t *testing.T) {
 	}
 }
 
+func TestSolutionAdmissionReturnsTypedRedactionForPrivateSegments(t *testing.T) {
+	policy := NewSolutionAdmissionPolicy()
+	decision := policy.Evaluate(context.Background(), SolutionAdmissionInput{
+		Workspace: "ws", Origin: SolutionOriginAgent, Field: SolutionFieldStepSummary,
+		Content: "Keep this safe summary. <private>temporary customer detail</private>",
+	})
+	if decision.Disposition != SolutionAdmissionRedact || decision.Reason != SolutionAdmissionPrivateContent {
+		t.Fatalf("expected typed redaction, got %+v", decision)
+	}
+	if strings.Contains(decision.SafeContent, "customer detail") || !strings.Contains(decision.SafeContent, "[REDACTED]") {
+		t.Fatalf("redaction leaked private content: %q", decision.SafeContent)
+	}
+}
+
 func TestSolutionAdmissionRejectsPromptInjection(t *testing.T) {
 	policy := NewSolutionAdmissionPolicy()
 	decision := policy.Evaluate(context.Background(), SolutionAdmissionInput{

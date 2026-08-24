@@ -50,6 +50,7 @@ type SolutionEpisodeTransition struct {
 	Status            core.SolutionEpisodeStatus
 	TargetPrincipalID string
 	TargetSessionID   string
+	IdempotencyKey    string
 	UpdatedAt         time.Time
 }
 
@@ -122,6 +123,13 @@ func (s *Store) GetSolutionEpisode(ctx context.Context, id string) (core.Solutio
 }
 
 func (s *Store) TransitionSolutionEpisode(ctx context.Context, in SolutionEpisodeTransition) (core.SolutionEpisode, error) {
+	if err := requireSolutionIdempotencyKey(in.IdempotencyKey); err != nil {
+		return core.SolutionEpisode{}, err
+	}
+	requestHash, err := hashSolutionTransition(in)
+	if err != nil {
+		return core.SolutionEpisode{}, err
+	}
 	updatedAt := in.UpdatedAt.UTC()
 	if updatedAt.IsZero() {
 		updatedAt = time.Now().UTC()
@@ -138,7 +146,41 @@ func (s *Store) TransitionSolutionEpisode(ctx context.Context, in SolutionEpisod
 		}
 		sessionID = episode.SessionID
 	}
-	row := s.db.QueryRowContext(ctx, `UPDATE solution_episodes SET
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return core.SolutionEpisode{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	result, err := tx.ExecContext(ctx, `INSERT INTO solution_transition_requests (
+		episode_id, workspace, actor_principal_id, idempotency_key, request_hash, result_json, created_at
+	) VALUES (?, ?, ?, ?, ?, '', ?) ON CONFLICT(episode_id, actor_principal_id, idempotency_key) DO NOTHING`,
+		strings.TrimSpace(in.EpisodeID), strings.TrimSpace(in.Workspace), strings.TrimSpace(in.PrincipalID),
+		strings.TrimSpace(in.IdempotencyKey), requestHash, updatedAt.Format(time.RFC3339Nano))
+	if err != nil {
+		return core.SolutionEpisode{}, err
+	}
+	inserted, _ := result.RowsAffected()
+	if inserted == 0 {
+		var existingHash, resultJSON string
+		if err := tx.QueryRowContext(ctx, `SELECT request_hash, result_json FROM solution_transition_requests
+			WHERE episode_id = ? AND workspace = ? AND actor_principal_id = ? AND idempotency_key = ?`,
+			strings.TrimSpace(in.EpisodeID), strings.TrimSpace(in.Workspace), strings.TrimSpace(in.PrincipalID),
+			strings.TrimSpace(in.IdempotencyKey)).Scan(&existingHash, &resultJSON); err != nil {
+			return core.SolutionEpisode{}, err
+		}
+		if existingHash != requestHash || resultJSON == "" {
+			return core.SolutionEpisode{}, errors.New("solution transition idempotency key conflict")
+		}
+		var replay core.SolutionEpisode
+		if err := json.Unmarshal([]byte(resultJSON), &replay); err != nil {
+			return core.SolutionEpisode{}, err
+		}
+		if err := tx.Commit(); err != nil {
+			return core.SolutionEpisode{}, err
+		}
+		return replay, nil
+	}
+	row := tx.QueryRowContext(ctx, `UPDATE solution_episodes SET
 		status = ?, principal_id = ?, session_id = ?, version = version + 1, updated_at = ?
 		WHERE id = ? AND workspace = ? AND principal_id = ? AND version = ?
 		RETURNING id, workspace, session_id, principal_id, client_id, goal_summary, status,
@@ -146,7 +188,61 @@ func (s *Store) TransitionSolutionEpisode(ctx context.Context, in SolutionEpisod
 		in.Status, principalID, sessionID, updatedAt.Format(time.RFC3339Nano), strings.TrimSpace(in.EpisodeID),
 		strings.TrimSpace(in.Workspace), strings.TrimSpace(in.PrincipalID), in.ExpectedVersion)
 	episode, _, err := scanSolutionEpisode(row, false)
-	return episode, err
+	if err != nil {
+		return core.SolutionEpisode{}, err
+	}
+	encoded, err := json.Marshal(episode)
+	if err != nil {
+		return core.SolutionEpisode{}, err
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE solution_transition_requests SET result_json = ?
+		WHERE episode_id = ? AND actor_principal_id = ? AND idempotency_key = ?`, string(encoded),
+		strings.TrimSpace(in.EpisodeID), strings.TrimSpace(in.PrincipalID), strings.TrimSpace(in.IdempotencyKey)); err != nil {
+		return core.SolutionEpisode{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return core.SolutionEpisode{}, err
+	}
+	return episode, nil
+}
+
+func (s *Store) ReplaySolutionEpisodeTransition(ctx context.Context, in SolutionEpisodeTransition) (core.SolutionEpisode, bool, error) {
+	if err := requireSolutionIdempotencyKey(in.IdempotencyKey); err != nil {
+		return core.SolutionEpisode{}, false, err
+	}
+	requestHash, err := hashSolutionTransition(in)
+	if err != nil {
+		return core.SolutionEpisode{}, false, err
+	}
+	var existingHash, resultJSON string
+	err = s.db.QueryRowContext(ctx, `SELECT request_hash, result_json FROM solution_transition_requests
+		WHERE episode_id = ? AND workspace = ? AND actor_principal_id = ? AND idempotency_key = ?`,
+		strings.TrimSpace(in.EpisodeID), strings.TrimSpace(in.Workspace), strings.TrimSpace(in.PrincipalID),
+		strings.TrimSpace(in.IdempotencyKey)).Scan(&existingHash, &resultJSON)
+	if errors.Is(err, sql.ErrNoRows) {
+		return core.SolutionEpisode{}, false, nil
+	}
+	if err != nil {
+		return core.SolutionEpisode{}, false, err
+	}
+	if existingHash != requestHash || resultJSON == "" {
+		return core.SolutionEpisode{}, false, errors.New("solution transition idempotency key conflict")
+	}
+	var episode core.SolutionEpisode
+	if err := json.Unmarshal([]byte(resultJSON), &episode); err != nil {
+		return core.SolutionEpisode{}, false, err
+	}
+	return episode, true, nil
+}
+
+func hashSolutionTransition(in SolutionEpisodeTransition) (string, error) {
+	return hashSolutionRequest(struct {
+		EpisodeID, Workspace, PrincipalID  string
+		ExpectedVersion                    int64
+		Status                             core.SolutionEpisodeStatus
+		TargetPrincipalID, TargetSessionID string
+	}{strings.TrimSpace(in.EpisodeID), strings.TrimSpace(in.Workspace), strings.TrimSpace(in.PrincipalID),
+		in.ExpectedVersion, in.Status, strings.TrimSpace(in.TargetPrincipalID), strings.TrimSpace(in.TargetSessionID)})
 }
 
 func (s *Store) FindActiveSolutionEpisode(ctx context.Context, workspace, sessionID, principalID string) (core.SolutionEpisode, error) {

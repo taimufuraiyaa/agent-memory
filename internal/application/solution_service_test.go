@@ -74,6 +74,19 @@ func TestSolutionServiceStartAppendAndCrossScopeProtection(t *testing.T) {
 	}
 }
 
+func TestSolutionServicePreventsAccidentalSecondActiveEpisode(t *testing.T) {
+	ctx := context.Background()
+	store := openSolutionServiceStore(t)
+	defer func() { _ = store.Close() }()
+	svc := NewSolutionService(store, engine.NewSolutionAdmissionPolicy())
+	if _, _, err := svc.Start(ctx, safeSolutionStart("first-active")); err != nil {
+		t.Fatalf("first start: %v", err)
+	}
+	if _, _, err := svc.Start(ctx, safeSolutionStart("second-active")); err == nil || !strings.Contains(err.Error(), "active episode") {
+		t.Fatalf("expected active episode conflict, got %v", err)
+	}
+}
+
 func TestSolutionServiceLifecycleUsesOptimisticVersions(t *testing.T) {
 	ctx := context.Background()
 	store := openSolutionServiceStore(t)
@@ -86,36 +99,59 @@ func TestSolutionServiceLifecycleUsesOptimisticVersions(t *testing.T) {
 
 	paused, err := svc.Transition(ctx, SolutionTransitionInput{
 		Workspace: "ws", PrincipalID: "principal-1", EpisodeID: episode.ID,
-		ExpectedVersion: 1, Status: core.SolutionEpisodePaused,
+		ExpectedVersion: 1, Status: core.SolutionEpisodePaused, IdempotencyKey: "pause-1",
 	})
 	if err != nil || paused.Version != 2 || paused.Status != core.SolutionEpisodePaused {
 		t.Fatalf("pause: episode=%+v err=%v", paused, err)
 	}
 	if _, err := svc.Transition(ctx, SolutionTransitionInput{
 		Workspace: "ws", PrincipalID: "principal-1", EpisodeID: episode.ID,
-		ExpectedVersion: 1, Status: core.SolutionEpisodeActive,
+		ExpectedVersion: 1, Status: core.SolutionEpisodeActive, IdempotencyKey: "stale-resume",
 	}); err == nil || !strings.Contains(err.Error(), "version conflict") {
 		t.Fatalf("expected stale transition conflict, got %v", err)
 	}
 	resumed, err := svc.Transition(ctx, SolutionTransitionInput{
 		Workspace: "ws", PrincipalID: "principal-1", EpisodeID: episode.ID,
-		ExpectedVersion: 2, Status: core.SolutionEpisodeActive,
+		ExpectedVersion: 2, Status: core.SolutionEpisodeActive, IdempotencyKey: "resume-1",
 	})
 	if err != nil || resumed.Version != 3 {
 		t.Fatalf("resume: episode=%+v err=%v", resumed, err)
 	}
 	completed, err := svc.Transition(ctx, SolutionTransitionInput{
 		Workspace: "ws", PrincipalID: "principal-1", EpisodeID: episode.ID,
-		ExpectedVersion: 3, Status: core.SolutionEpisodeCompleted,
+		ExpectedVersion: 3, Status: core.SolutionEpisodeCompleted, IdempotencyKey: "complete-1",
 	})
 	if err != nil || !completed.Status.Terminal() {
 		t.Fatalf("complete: episode=%+v err=%v", completed, err)
 	}
 	if _, err := svc.Transition(ctx, SolutionTransitionInput{
 		Workspace: "ws", PrincipalID: "principal-1", EpisodeID: episode.ID,
-		ExpectedVersion: 4, Status: core.SolutionEpisodeActive,
+		ExpectedVersion: 4, Status: core.SolutionEpisodeActive, IdempotencyKey: "terminal-resume",
 	}); err == nil {
 		t.Fatal("expected terminal episode to reject resume")
+	}
+}
+
+func TestSolutionServiceTransitionRetryReturnsOriginalResult(t *testing.T) {
+	ctx := context.Background()
+	store := openSolutionServiceStore(t)
+	defer func() { _ = store.Close() }()
+	svc := NewSolutionService(store, engine.NewSolutionAdmissionPolicy())
+	episode, _, err := svc.Start(ctx, safeSolutionStart("transition-retry"))
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	input := SolutionTransitionInput{
+		Workspace: "ws", PrincipalID: "principal-1", EpisodeID: episode.ID,
+		ExpectedVersion: 1, Status: core.SolutionEpisodePaused, IdempotencyKey: "same-transition",
+	}
+	first, err := svc.Transition(ctx, input)
+	if err != nil {
+		t.Fatalf("first transition: %v", err)
+	}
+	retry, err := svc.Transition(ctx, input)
+	if err != nil || retry.ID != first.ID || retry.Version != first.Version || retry.Status != first.Status {
+		t.Fatalf("retry transition: first=%+v retry=%+v err=%v", first, retry, err)
 	}
 }
 
@@ -131,22 +167,29 @@ func TestSolutionServiceHandoffTransfersOwnershipPaused(t *testing.T) {
 
 	handed, err := svc.Handoff(ctx, SolutionHandoffInput{
 		Workspace: "ws", PrincipalID: "principal-1", EpisodeID: episode.ID, ExpectedVersion: 1,
-		TargetPrincipalID: "principal-2", TargetSessionID: "session-2",
+		TargetPrincipalID: "principal-2", TargetSessionID: "session-2", IdempotencyKey: "handoff-1",
 	})
 	if err != nil || handed.PrincipalID != "principal-2" || handed.SessionID != "session-2" || handed.Status != core.SolutionEpisodePaused {
 		t.Fatalf("handoff: episode=%+v err=%v", handed, err)
 	}
 	if _, err := svc.Transition(ctx, SolutionTransitionInput{
 		Workspace: "ws", PrincipalID: "principal-1", EpisodeID: episode.ID,
-		ExpectedVersion: 2, Status: core.SolutionEpisodeActive,
+		ExpectedVersion: 2, Status: core.SolutionEpisodeActive, IdempotencyKey: "old-owner-resume",
 	}); err == nil {
 		t.Fatal("expected previous owner to lose transition access")
 	}
 	if _, err := svc.Transition(ctx, SolutionTransitionInput{
 		Workspace: "ws", PrincipalID: "principal-2", EpisodeID: episode.ID,
-		ExpectedVersion: 2, Status: core.SolutionEpisodeActive,
+		ExpectedVersion: 2, Status: core.SolutionEpisodeActive, IdempotencyKey: "new-owner-resume",
 	}); err != nil {
 		t.Fatalf("new owner resume: %v", err)
+	}
+	retry, err := svc.Handoff(ctx, SolutionHandoffInput{
+		Workspace: "ws", PrincipalID: "principal-1", EpisodeID: episode.ID, ExpectedVersion: 1,
+		TargetPrincipalID: "principal-2", TargetSessionID: "session-2", IdempotencyKey: "handoff-1",
+	})
+	if err != nil || retry.Version != handed.Version || retry.PrincipalID != handed.PrincipalID {
+		t.Fatalf("handoff retry: episode=%+v err=%v", retry, err)
 	}
 }
 
@@ -191,6 +234,53 @@ func TestSolutionServiceWorkingStateCASPrivacyAndExpiry(t *testing.T) {
 	removed, err := svc.CleanupExpiredWorkingState(ctx, 10)
 	if err != nil || removed != 1 {
 		t.Fatalf("cleanup: removed=%d err=%v", removed, err)
+	}
+}
+
+func TestSolutionServiceClearsWorkingStateImmediately(t *testing.T) {
+	ctx := context.Background()
+	store := openSolutionServiceStore(t)
+	defer func() { _ = store.Close() }()
+	svc := NewSolutionService(store, engine.NewSolutionAdmissionPolicy())
+	episode, _, err := svc.Start(ctx, safeSolutionStart("clear-state"))
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	if _, err := svc.Checkpoint(ctx, SolutionCheckpointInput{
+		Workspace: "ws", PrincipalID: "principal-1", EpisodeID: episode.ID,
+		GoalSummary: "Clear this state.", Sensitivity: core.SolutionSensitivityInternal,
+	}); err != nil {
+		t.Fatalf("checkpoint: %v", err)
+	}
+	if err := svc.ClearWorkingState(ctx, "ws", "principal-1", episode.ID); err != nil {
+		t.Fatalf("clear: %v", err)
+	}
+	if _, err := svc.GetWorkingState(ctx, "ws", "principal-1", episode.ID); err == nil {
+		t.Fatal("expected cleared state to be unavailable")
+	}
+}
+
+func TestValidSolutionTransitionTable(t *testing.T) {
+	statuses := []core.SolutionEpisodeStatus{
+		core.SolutionEpisodeActive, core.SolutionEpisodePaused, core.SolutionEpisodeCompleted,
+		core.SolutionEpisodePartial, core.SolutionEpisodeAbandoned, core.SolutionEpisodeCancelled,
+	}
+	for _, from := range statuses {
+		for _, to := range statuses {
+			want := false
+			if from == core.SolutionEpisodeActive {
+				want = to == core.SolutionEpisodePaused || to.Terminal()
+			}
+			if from == core.SolutionEpisodePaused {
+				want = to == core.SolutionEpisodeActive || to.Terminal()
+			}
+			if from == to {
+				want = false
+			}
+			if got := validSolutionTransition(from, to); got != want {
+				t.Errorf("transition %s -> %s: got %v want %v", from, to, got, want)
+			}
+		}
 	}
 }
 

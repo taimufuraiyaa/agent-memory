@@ -16,7 +16,7 @@
   - Files: schema migration, episode repository, repository tests, fixtures.
   - Estimated scope: Medium.
 
-- [ ] **Task 3: Enforce solution-content admission**
+- [x] **Task 3: Enforce solution-content admission**
   - Acceptance: The shared origin-aware policy bounds and classifies episode fields, rejects explicit raw chain-of-thought and secrets, supports typed redaction/quarantine, and emits content-free audit outcomes.
   - Verify: `go test ./internal/engine ./internal/application -run 'TestSolutionAdmission|TestRationaleBoundary'`
   - Dependencies: Task 1.
@@ -25,20 +25,20 @@
 
 ### Checkpoint A — Safe Foundation
 
-- [ ] Existing workspace databases migrate without changing current memory or observation behavior.
-- [ ] Concurrent and duplicate events produce stable ordering and no duplicate steps.
-- [ ] Chain-of-thought, secret, injection, oversize, and cross-workspace fixtures fail closed.
+- [x] Existing workspace databases migrate without changing current memory or observation behavior.
+- [x] Concurrent and duplicate events produce stable ordering and no duplicate steps.
+- [x] Chain-of-thought, secret, injection, oversize, and cross-workspace fixtures fail closed.
 
 ## Phase 2 — Live Continuation
 
-- [ ] **Task 4: Deliver explicit episode lifecycle service**
+- [x] **Task 4: Deliver explicit episode lifecycle service**
   - Acceptance: Start, resume, pause, handoff, complete, partial, abandon, and cancel enforce authorized transitions and optimistic episode versioning.
   - Verify: application service transition-table, idempotency, unknown-reference, and authorization tests.
   - Dependencies: Checkpoint A.
   - Files: application service, authorization adapter, tests, audit mapping.
   - Estimated scope: Medium.
 
-- [ ] **Task 5: Add expiring working state**
+- [x] **Task 5: Add expiring working state**
   - Acceptance: Bounded goal, constraints, plan, open questions, next action, and artifact references use compare-and-swap updates; expired state is immediately unreadable and cleanup is bounded.
   - Verify: controllable-clock expiry, stale-generation conflict, clear, cleanup restart, and session-privacy tests.
   - Dependencies: Tasks 2 and 4.
