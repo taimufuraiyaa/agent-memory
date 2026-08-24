@@ -134,6 +134,50 @@ Recall assembly emits separate sections for current work, prior solution paths, 
 
 Solution-path feedback is recorded independently because a path can be misleading even when one promoted procedural memory is useful. Harmful or rejected paths are suppressed from default recall and enter review without deleting historical audit lineage.
 
+## How History Knowledge Tree
+
+The Knowledge surface adds a How History view backed by stored provenance rather than UI-side similarity guesses. Activity continues to answer "what happened recently?" while How History answers "how was this knowledge produced and why should I trust it?" The episode is the root because it owns the goal, ordered path, finalization version, and lifecycle state.
+
+```mermaid
+flowchart TD
+    H["How: solution episode"] --> S["Steps: ordered safe path"]
+    H --> W["What: promoted memories and skills"]
+    H --> E["Where: evidence and source references"]
+    H --> F["Feedback: path and step review"]
+    W --> U["Existing durable memory detail"]
+    E --> R["Resolution state: verified, scoped, tombstoned, or unverified"]
+```
+
+The list contract remains compact: episode identity, goal, state, summary, validation, counts, and timestamps. Opening a root lazy-loads one bounded detail packet. The detail packet extends the existing Activity episode contract with resolved promotion targets and path feedback; it does not duplicate memory bodies in episode storage. A resolved memory child contains the existing memory identifier, type, bounded content summary, confidence, pin state, and provenance. Non-memory, pending, failed, unauthorized, or deleted targets expose only their promotion kind and state.
+
+The tree uses four stable child groups. Steps sort by server ordinal. What sorts published targets before pending or failed targets, then by promotion time. Where deduplicates the summary and step references by kind, target identity, locator, and resolution while preserving first-seen order. Feedback sorts newest first and keeps step reviews distinguishable from solution-retrieval outcomes. Standalone memories with no promotion edge are not forced into a synthetic How root; the existing memory explorer presents them as Ungrouped memories.
+
+Path feedback and memory feedback remain separate data contracts. The UI may display both within one expanded root only when their stored target identities establish the relationship. It must not imply that feedback on one promoted child validates the entire episode.
+
+### Tree Failure Modes
+
+- **Promotion target was deleted:** retain the promotion node with a deleted or unavailable label; do not resurrect memory content.
+- **Promotion is partial or failed:** show its state and bounded error class without hiding the otherwise valid episode.
+- **Evidence is tombstoned:** preserve the Where node and resolution state so historical trust can be reassessed.
+- **Feedback target is superseded:** show the historical outcome on the original version and link to the successor when available.
+- **Large episode:** load only the compact root list initially; cap detail children and paginate or disclose truncation instead of constructing an unbounded DOM tree.
+- **Hosted target is unauthorized:** return no target content and a generic unavailable state without revealing cross-scope existence.
+- **Legacy memory has no provenance:** keep it in Ungrouped memories; never assign it by semantic similarity.
+
+### Tree Performance and Scaling
+
+Episode listing continues to use the workspace/status/update indexes. Detail assembly performs bounded indexed lookups for steps, promotions, reviews, and feedback, then resolves only published memory targets in the same authorized workspace. Target resolution should batch IDs to avoid one query per child. The UI loads one root at a time, memoizes expanded detail for the current view, and uses semantic disclosure controls rather than rendering all descendant records eagerly.
+
+### Tree Alternatives and Trade-offs
+
+**Replace Activity with the tree:** rejected because operational events and knowledge provenance answer different questions; combining them makes both harder to scan.
+
+**Infer trees from semantic similarity:** rejected because similarity is not provenance and would fabricate causal relationships.
+
+**Make How a fifth memory type:** rejected because the episode lifecycle, steps, reviews, and promotions already form the authoritative aggregate.
+
+**Chosen: dedicated How History view plus Ungrouped memories:** adds a gateway/detail contract and one navigation surface, but preserves existing memory behavior, makes provenance inspectable, and supports standalone and hosted parity.
+
 ## Authorization and Privacy
 
 Workspace access does not automatically grant access to another principal's active working state. Working-state reads require the owning principal, an explicitly authorized handoff, or an operator policy with audited purpose. Completed safe solution paths follow workspace knowledge permissions after finalization.
@@ -201,6 +245,7 @@ This adds schema and client complexity but produces a provider-independent, insp
 6. Add Activity inspection, correction, redaction, and feedback.
 7. Add hosted parity, tenant isolation gates, and bounded model-assisted proposals.
 8. Evaluate retention, recall usefulness, and false promotion before enabling automatic suggestions.
+9. Add How History as a read-first provenance tree, retain Activity and ungrouped memory compatibility, then evaluate tree size and comprehension before adding bulk tree actions.
 
 Rollback disables episode capture and how-oriented recall. Additive tables remain inert; no existing memory data requires reversal.
 

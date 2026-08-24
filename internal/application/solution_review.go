@@ -21,12 +21,20 @@ type SolutionActivityEpisode struct {
 }
 
 type SolutionActivityDetail struct {
-	Episode     core.SolutionEpisode      `json:"episode"`
-	Summary     *core.SolutionSummary     `json:"summary,omitempty"`
-	Steps       []core.SolutionStep       `json:"steps"`
-	Promotions  []core.SolutionPromotion  `json:"promotions"`
-	StepReviews []core.SolutionStepReview `json:"step_reviews"`
-	Pinned      bool                      `json:"pinned"`
+	Episode          core.SolutionEpisode                   `json:"episode"`
+	Summary          *core.SolutionSummary                  `json:"summary,omitempty"`
+	Steps            []core.SolutionStep                    `json:"steps"`
+	Promotions       []core.SolutionPromotion               `json:"promotions"`
+	PromotionTargets []SolutionActivityPromotionTarget      `json:"promotion_targets"`
+	StepReviews      []core.SolutionStepReview              `json:"step_reviews"`
+	PathFeedback     []core.SolutionRetrievalFeedbackRecord `json:"path_feedback"`
+	Pinned           bool                                   `json:"pinned"`
+}
+
+type SolutionActivityPromotionTarget struct {
+	Promotion    core.SolutionPromotion `json:"promotion"`
+	Memory       *core.MemoryEntry      `json:"memory,omitempty"`
+	Availability string                 `json:"availability"`
 }
 
 func (s *SolutionService) ListActivityEpisodes(ctx context.Context, workspace string, limit int) ([]SolutionActivityEpisode, error) {
@@ -60,7 +68,7 @@ func (s *SolutionService) GetActivityEpisode(ctx context.Context, workspace, epi
 	if err != nil || episode.Workspace != strings.TrimSpace(workspace) {
 		return SolutionActivityDetail{}, errors.New("solution episode not authorized")
 	}
-	detail := SolutionActivityDetail{Episode: episode, Steps: []core.SolutionStep{}, Promotions: []core.SolutionPromotion{}, StepReviews: []core.SolutionStepReview{}}
+	detail := SolutionActivityDetail{Episode: episode, Steps: []core.SolutionStep{}, Promotions: []core.SolutionPromotion{}, PromotionTargets: []SolutionActivityPromotionTarget{}, StepReviews: []core.SolutionStepReview{}, PathFeedback: []core.SolutionRetrievalFeedbackRecord{}}
 	if summary, summaryErr := s.store.LatestSolutionSummary(ctx, episode.ID); summaryErr == nil {
 		detail.Summary = &summary
 	} else if !errors.Is(summaryErr, sql.ErrNoRows) {
@@ -72,13 +80,52 @@ func (s *SolutionService) GetActivityEpisode(ctx context.Context, workspace, epi
 	if detail.Promotions, err = s.store.ListSolutionPromotionsByEpisode(ctx, episode.ID); err != nil {
 		return SolutionActivityDetail{}, err
 	}
+	detail.PromotionTargets, err = s.resolveActivityPromotionTargets(ctx, workspace, detail.Promotions)
+	if err != nil {
+		return SolutionActivityDetail{}, err
+	}
 	if detail.StepReviews, err = s.store.ListSolutionStepReviews(ctx, workspace, episode.ID); err != nil {
 		return SolutionActivityDetail{}, err
 	}
 	if detail.Pinned, err = s.store.SolutionEpisodePinned(ctx, workspace, episode.ID); err != nil {
 		return SolutionActivityDetail{}, err
 	}
+	if detail.Summary != nil {
+		detail.PathFeedback, err = s.store.ListHowRetrievalFeedback(ctx, workspace, string(engine.HowTargetPath), detail.Summary.ID, 100)
+		if err != nil {
+			return SolutionActivityDetail{}, err
+		}
+	}
 	return detail, nil
+}
+
+func (s *SolutionService) resolveActivityPromotionTargets(ctx context.Context, workspace string, promotions []core.SolutionPromotion) ([]SolutionActivityPromotionTarget, error) {
+	ids := make([]string, 0, len(promotions))
+	for _, promotion := range promotions {
+		if promotion.Kind == core.SolutionPromotionMemory && promotion.State == core.SolutionPromotionPublished && strings.TrimSpace(promotion.TargetID) != "" {
+			ids = append(ids, promotion.TargetID)
+		}
+	}
+	memories, err := s.store.GetMemoriesByIDs(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]SolutionActivityPromotionTarget, 0, len(promotions))
+	for _, promotion := range promotions {
+		item := SolutionActivityPromotionTarget{Promotion: promotion, Availability: string(promotion.State)}
+		if promotion.Kind == core.SolutionPromotionMemory && promotion.State == core.SolutionPromotionPublished {
+			memory, ok := memories[promotion.TargetID]
+			if ok && memory.Workspace == strings.TrimSpace(workspace) {
+				copy := memory
+				item.Memory = &copy
+				item.Availability = "available"
+			} else {
+				item.Availability = "unavailable"
+			}
+		}
+		result = append(result, item)
+	}
+	return result, nil
 }
 
 type SolutionEpisodePinInput struct {

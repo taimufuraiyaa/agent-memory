@@ -48,6 +48,20 @@ func memoriesRecentHandler(svc *Service) http.HandlerFunc {
 			writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
 			return
 		}
+		if r.URL.Query().Get("ungrouped") == "true" {
+			grouped, groupErr := assets.Store.ListPublishedSolutionPromotionMemoryIDs(r.Context(), ws)
+			if groupErr != nil {
+				writeErr(w, http.StatusInternalServerError, "runtime", groupErr.Error())
+				return
+			}
+			filtered := results[:0]
+			for _, memory := range results {
+				if _, linked := grouped[memory.ID]; !linked {
+					filtered = append(filtered, memory)
+				}
+			}
+			results = filtered
+		}
 		writeOK(w, http.StatusOK, map[string]any{
 			"results":   results,
 			"workspace": ws,

@@ -58,6 +58,25 @@ func (s *Store) ListSolutionPromotionsByEpisode(ctx context.Context, episodeID s
 	return result, rows.Err()
 }
 
+func (s *Store) ListPublishedSolutionPromotionMemoryIDs(ctx context.Context, workspace string) (map[string]struct{}, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT DISTINCT p.target_id FROM solution_promotions p
+		JOIN solution_episodes e ON e.id = p.episode_id
+		WHERE e.workspace = ? AND p.kind = ? AND p.state = ? AND p.target_id != ''`, strings.TrimSpace(workspace), core.SolutionPromotionMemory, core.SolutionPromotionPublished)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := make(map[string]struct{})
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		result[id] = struct{}{}
+	}
+	return result, rows.Err()
+}
+
 func (s *Store) SolutionEpisodePinned(ctx context.Context, workspace, episodeID string) (bool, error) {
 	var pinned bool
 	err := s.db.QueryRowContext(ctx, `SELECT pinned FROM solution_episode_reviews WHERE workspace = ? AND episode_id = ?`, strings.TrimSpace(workspace), strings.TrimSpace(episodeID)).Scan(&pinned)

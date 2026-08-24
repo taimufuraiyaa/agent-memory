@@ -137,7 +137,11 @@ func (service *localProjectService) Browse(ctx context.Context, input api.LocalP
 		return nil, err
 	}
 	defer store.Close()
-	memories, err := store.ListRecentMemoriesByWorkspace(ctx, input.Workspace, input.Offset+input.Limit+1)
+	fetchLimit := input.Offset + input.Limit + 1
+	if input.Mode == "ungrouped" {
+		fetchLimit = 200
+	}
+	memories, err := store.ListRecentMemoriesByWorkspace(ctx, input.Workspace, fetchLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -145,6 +149,19 @@ func (service *localProjectService) Browse(ctx context.Context, input api.LocalP
 		filtered := memories[:0]
 		for _, memory := range memories {
 			if memory.Pinned {
+				filtered = append(filtered, memory)
+			}
+		}
+		memories = filtered
+	}
+	if input.Mode == "ungrouped" {
+		grouped, groupErr := store.ListPublishedSolutionPromotionMemoryIDs(ctx, input.Workspace)
+		if groupErr != nil {
+			return nil, groupErr
+		}
+		filtered := memories[:0]
+		for _, memory := range memories {
+			if _, linked := grouped[memory.ID]; !linked {
 				filtered = append(filtered, memory)
 			}
 		}

@@ -252,7 +252,7 @@ func browseLocalProject(service LocalProjectService) http.HandlerFunc {
 			mode = "recent"
 		}
 		limit, offset, err := localProjectPage(request.URL.Query().Get("limit"), request.URL.Query().Get("cursor"))
-		if !valid || (mode != "recent" && mode != "pinned" && mode != "type") || err != nil {
+		if !valid || (mode != "recent" && mode != "pinned" && mode != "type" && mode != "ungrouped") || err != nil {
 			writeError(response, http.StatusBadRequest, requestID(request), "invalid_project_browse", "a registered workspace name, browse mode, limit, and cursor are required")
 			return
 		}

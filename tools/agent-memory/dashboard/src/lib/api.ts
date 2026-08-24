@@ -982,10 +982,11 @@ export type RecentMemoriesResponse = {
   limit: number
 }
 
-export function listRecentMemories(input: { workspace: string; limit?: number }): Promise<RecentMemoriesResponse> {
+export function listRecentMemories(input: { workspace: string; limit?: number; ungrouped?: boolean }): Promise<RecentMemoriesResponse> {
   const qs = new URLSearchParams()
   qs.set('workspace', input.workspace)
   if (typeof input.limit === 'number') qs.set('limit', String(input.limit))
+  if (input.ungrouped) qs.set('ungrouped', 'true')
   return api(`/api/v1/memories/recent?${qs.toString()}`, { method: 'GET' })
 }
 
@@ -1103,7 +1104,13 @@ export type SolutionEpisodeDetailRecord = SolutionEpisodeRecord & {
     created_at: string
   }>
   promotions: Array<{ id: string; kind: string; memory_type?: string; target_id?: string; state: string; created_at: string }>
+  promotion_targets: Array<{
+    promotion: { id: string; kind: string; memory_type?: string; target_id?: string; state: string; created_at: string }
+    memory?: MemoryEntry
+    availability: string
+  }>
   step_reviews: Array<{ step_id: string; misleading: boolean; redacted: boolean; reason?: string; reason_class?: string; updated_at: string }>
+  path_feedback: Array<{ id: string; target_kind: string; target_id: string; outcome: 'helpful' | 'ignored' | 'rejected' | 'harmful'; created_at: string }>
 }
 
 export function listSolutionEpisodes(input: { workspace: string; limit?: number }): Promise<{ episodes: SolutionEpisodeRecord[] }> {

@@ -675,6 +675,15 @@ type SolutionStepReview struct {
 	UpdatedAt   time.Time `json:"updated_at"`
 }
 
+type SolutionRetrievalFeedbackRecord struct {
+	ID         string            `json:"id"`
+	Workspace  string            `json:"workspace"`
+	TargetKind string            `json:"target_kind"`
+	TargetID   string            `json:"target_id"`
+	Outcome    RetrievalFeedback `json:"outcome"`
+	CreatedAt  time.Time         `json:"created_at"`
+}
+
 func requireSolutionText(field, value string, maxBytes int) error {
 	if strings.TrimSpace(value) == "" {
 		return fmt.Errorf("solution %s is required", field)

@@ -209,7 +209,7 @@ export function searchHostedProjectMemories(connection: HostedConnection, input:
   return hostedRequest(connection, '/v1/local-projects/search', { method: 'POST', body: JSON.stringify(input) })
 }
 
-export function browseHostedProjectMemories(connection: HostedConnection, input: { workspace: string; mode: 'recent' | 'pinned' | 'type'; limit: number; cursor?: string }): Promise<{ items: HostedMemory[]; next_cursor?: string }> {
+export function browseHostedProjectMemories(connection: HostedConnection, input: { workspace: string; mode: 'recent' | 'pinned' | 'type' | 'ungrouped'; limit: number; cursor?: string }): Promise<{ items: HostedMemory[]; next_cursor?: string }> {
   const query = new URLSearchParams({ workspace: input.workspace, mode: input.mode, limit: String(input.limit) })
   if (input.cursor) query.set('cursor', input.cursor)
   return hostedRequest(connection, `/v1/local-projects/memories?${query.toString()}`)

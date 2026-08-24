@@ -115,6 +115,36 @@ func (s *Store) HowRetrievalFeedbackOutcome(ctx context.Context, workspace, targ
 	return outcome, err
 }
 
+func (s *Store) ListHowRetrievalFeedback(ctx context.Context, workspace, targetKind, targetID string, limit int) ([]core.SolutionRetrievalFeedbackRecord, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT id, workspace, target_kind, target_id, outcome, created_at
+		FROM solution_retrieval_feedback WHERE workspace = ? AND target_kind = ? AND target_id = ?
+		ORDER BY created_at DESC, id DESC LIMIT ?`, strings.TrimSpace(workspace), strings.TrimSpace(targetKind), strings.TrimSpace(targetID), limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := make([]core.SolutionRetrievalFeedbackRecord, 0)
+	for rows.Next() {
+		var item core.SolutionRetrievalFeedbackRecord
+		var createdAt string
+		if err := rows.Scan(&item.ID, &item.Workspace, &item.TargetKind, &item.TargetID, &item.Outcome, &createdAt); err != nil {
+			return nil, err
+		}
+		item.CreatedAt, err = time.Parse(time.RFC3339Nano, createdAt)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, item)
+	}
+	return result, rows.Err()
+}
+
 func (s *Store) PutDistilledSkillMetadata(ctx context.Context, metadata core.DistilledSkillMetadata) error {
 	if metadata.ID == "" {
 		metadata.ID = uuid.NewString()

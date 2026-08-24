@@ -5,11 +5,73 @@ import (
 	"database/sql"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/taimufuraiyaa/agent-memory/internal/core"
 	"github.com/taimufuraiyaa/agent-memory/internal/engine"
 	"github.com/taimufuraiyaa/agent-memory/internal/storage/sqlite"
 )
+
+func TestSolutionHowHistoryDetailResolvesPromotedWhatAndPathFeedback(t *testing.T) {
+	ctx := context.Background()
+	store := openSolutionServiceStore(t)
+	defer store.Close()
+	service := NewSolutionService(store, engine.NewSolutionAdmissionPolicy())
+
+	episode, _, err := service.Start(ctx, safeSolutionStart("how-history"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	step, _, err := service.AppendStep(ctx, SolutionAppendStepInput{
+		Workspace: "ws", PrincipalID: "principal-1", EpisodeID: episode.ID,
+		Kind: core.SolutionStepResult, Status: core.SolutionStepCompleted,
+		Summary: "Verified the history tree.", Source: "agent", Confidence: .9,
+		Sensitivity: core.SolutionSensitivityInternal, IdempotencyKey: "how-history-step",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	episode, err = service.Transition(ctx, SolutionTransitionInput{Workspace: "ws", PrincipalID: "principal-1", EpisodeID: episode.ID, ExpectedVersion: 2, Status: core.SolutionEpisodeCompleted, IdempotencyKey: "how-history-complete"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	summary, err := service.Finalize(ctx, SolutionFinalizeInput{Workspace: "ws", PrincipalID: "principal-1", EpisodeID: episode.ID, ExpectedVersion: episode.Version, IdempotencyKey: "how-history-finalize"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	promoted, err := service.Promote(ctx, SolutionPromoteInput{
+		Workspace: "ws", PrincipalID: "principal-1", EpisodeID: episode.ID, SummaryID: summary.ID, IdempotencyKey: "how-history-promote",
+		Targets: []SolutionPromotionTarget{{MemoryType: core.ProceduralMemory, Content: "Open How History and inspect explicit provenance.", SourceStepIDs: []string{step.ID}}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	feedbackAt := time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC)
+	if err := store.PutHowRetrievalFeedback(ctx, "ws", string(engine.HowTargetPath), summary.ID, core.FeedbackHelpful, feedbackAt); err != nil {
+		t.Fatal(err)
+	}
+
+	detail, err := service.GetActivityEpisode(ctx, "ws", episode.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(detail.PromotionTargets) != 1 || detail.PromotionTargets[0].Promotion.ID != promoted.Promotions[0].ID || detail.PromotionTargets[0].Memory == nil {
+		t.Fatalf("resolved promoted memory missing: %+v", detail.PromotionTargets)
+	}
+	if detail.PromotionTargets[0].Memory.Workspace != "ws" || detail.PromotionTargets[0].Memory.Content != "Open How History and inspect explicit provenance." || detail.PromotionTargets[0].Availability != "available" {
+		t.Fatalf("unexpected promoted memory target: %+v", detail.PromotionTargets[0])
+	}
+	if len(detail.PathFeedback) != 1 || detail.PathFeedback[0].TargetID != summary.ID || detail.PathFeedback[0].Outcome != core.FeedbackHelpful || !detail.PathFeedback[0].CreatedAt.Equal(feedbackAt) {
+		t.Fatalf("path feedback missing: %+v", detail.PathFeedback)
+	}
+	grouped, err := store.ListPublishedSolutionPromotionMemoryIDs(ctx, "ws")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := grouped[promoted.Promotions[0].TargetID]; !ok {
+		t.Fatalf("published promotion target was not classified as grouped: %+v", grouped)
+	}
+}
 
 func TestSolutionActivityInspectionAndReviewLifecycle(t *testing.T) {
 	ctx := context.Background()

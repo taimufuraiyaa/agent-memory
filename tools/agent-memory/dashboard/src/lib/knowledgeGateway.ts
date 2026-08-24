@@ -140,6 +140,8 @@ export type SolutionEpisodeDetail = SolutionEpisodeSummary & {
   risks: string[]
   nextGuidance?: string
   promotions: Array<{ id: string; kind: string; memoryType?: string; targetId?: string; state: string; createdAt: string }>
+  promotionTargets: Array<{ promotionId: string; kind: string; memoryType?: string; targetId?: string; state: string; availability: string; memory?: KnowledgeResult; createdAt: string }>
+  pathFeedback: Array<{ id: string; targetId: string; outcome: 'helpful' | 'ignored' | 'rejected' | 'harmful'; createdAt: string }>
 }
 
 export type SolutionEpisodeReviewInput = {
@@ -168,7 +170,7 @@ export interface KnowledgeGateway {
   listWorkspaces(signal?: AbortSignal): Promise<WorkspaceSummary[]>
   ask(scope: WorkspaceScope, question: string, signal?: AbortSignal): Promise<AskResponse>
   search(scope: WorkspaceScope, query: string, cursor?: string, signal?: AbortSignal): Promise<CursorPage<KnowledgeResult>>
-  browse(scope: WorkspaceScope, mode: 'recent' | 'pinned' | 'type', cursor?: string, signal?: AbortSignal): Promise<CursorPage<KnowledgeResult>>
+  browse(scope: WorkspaceScope, mode: 'recent' | 'pinned' | 'type' | 'ungrouped', cursor?: string, signal?: AbortSignal): Promise<CursorPage<KnowledgeResult>>
   getMemory(scope: WorkspaceScope, memoryId: string, signal?: AbortSignal): Promise<KnowledgeResult>
   setMemoryPinned(scope: WorkspaceScope, memoryId: string, pinned: boolean): Promise<void>
   deleteMemories(scope: WorkspaceScope, memoryIds: string[]): Promise<void>
@@ -187,6 +189,7 @@ export interface KnowledgeGateway {
   retryNoteIndex(scope: WorkspaceScope, noteId: string): Promise<void>
   listActivity(scope: WorkspaceScope, cursor?: string, signal?: AbortSignal): Promise<CursorPage<ActivityItem>>
   retryActivity(scope: WorkspaceScope, activityId: string): Promise<void>
+  listHowHistory(scope: WorkspaceScope, signal?: AbortSignal): Promise<SolutionEpisodeSummary[]>
   getSolutionEpisode(scope: WorkspaceScope, episodeId: string, signal?: AbortSignal): Promise<SolutionEpisodeDetail>
   reviewSolutionEpisode(scope: WorkspaceScope, input: SolutionEpisodeReviewInput): Promise<void>
   submitFeedback(scope: WorkspaceScope, requestId: string, score: number, reason: string): Promise<void>

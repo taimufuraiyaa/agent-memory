@@ -146,3 +146,33 @@
 - [x] Security gates cover raw-reasoning rejection, secret redaction, prompt injection, session privacy, tenant isolation, registered-root resolution, export, and deletion.
 - [x] Evaluation shows better interrupted-task resume and similar-task reuse without increased sensitive-content retention.
 - [x] Product review resolves default working-state expiry, completed-step compaction, model-assisted finalization default, and first-release editing scope.
+
+## Phase 6 — How History Knowledge Tree
+
+- [x] **Task 16: Extend the bounded episode-detail tree contract**
+  - Acceptance: Detail resolves explicitly promoted memory targets, deduplicated evidence locations, step reviews, and path-targeted feedback without guessing relationships or exposing unauthorized content.
+  - Verify: focused SQLite/application/API tests cover published, failed, deleted, tombstoned, cross-workspace, and bounded-result cases.
+  - Dependencies: Tasks 9, 12, and 14.
+  - Files: solution review storage/service contracts, local API handlers, hosted registered-project adapter, focused tests.
+  - Estimated scope: Medium.
+
+- [x] **Task 17: Add gateway parity for How History**
+  - Acceptance: Standalone and hosted gateways expose equivalent compact roots and lazy detail trees; legacy memories remain returned through current browse/search contracts.
+  - Verify: dashboard adapter tests cover normalization, missing targets, deterministic child ordering, and runtime parity.
+  - Dependencies: Task 16.
+  - Files: knowledge gateway types, API types, standalone adapter, hosted adapter, adapter tests.
+  - Estimated scope: Medium.
+
+- [x] **Task 18: Deliver the accessible How History tree UI**
+  - Acceptance: Knowledge includes How History; users can expand a How root into Steps, What, Where, and Feedback, open promoted memories, and find unrelated records under Ungrouped memories without changing Activity behavior.
+  - Verify: component tests cover empty, loading, expanded, failed-target, keyboard, and narrow-layout states; dashboard typecheck and production build pass.
+  - Dependencies: Task 17.
+  - Files: workspace route/navigation, How History component, memory explorer integration, styles, component tests.
+  - Estimated scope: Medium.
+
+### Checkpoint F — Inspectable Knowledge Lineage
+
+- [x] The tree contains only explicit stored provenance relationships.
+- [x] Standalone and hosted registered projects present equivalent How, What, Where, and Feedback semantics.
+- [x] Existing Activity, memory search/browse, selection, export, deletion, and ungrouped memory behavior remain compatible.
+- [x] Focused Go and dashboard tests, full dashboard tests, type checking, production build, `go test ./...`, and `go vet ./...` pass.

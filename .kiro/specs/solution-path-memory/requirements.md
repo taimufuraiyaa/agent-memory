@@ -35,6 +35,7 @@ The feature is successful when a later agent can answer four questions from boun
 - As an agent choosing a tool, I can recall prior capability lessons, required setup, common failures, and safer alternatives.
 - As an agent finishing work, I can finalize the episode and promote only verified, reusable knowledge.
 - As a user, I can inspect, correct, pin, export, or delete solution-path records without exposing hidden model reasoning.
+- As a user, I can browse historical solution paths as a provenance tree that separates how the result was reached, what durable knowledge was promoted, where the evidence came from, and what feedback changed its trust state.
 - As an operator, I can enforce retention, content admission, workspace isolation, and audit rules independently of the model provider.
 
 ## Functional Requirements
@@ -121,6 +122,18 @@ The feature is successful when a later agent can answer four questions from boun
 - A failed finalization must leave the episode resumable and must not partially publish promoted memories without an explicit partial result.
 - Cleanup, finalization, and promotion jobs must be restartable and idempotent.
 
+### R11 — How History and Knowledge Tree
+
+- The Knowledge surface must provide a first-class How History view for active and completed solution episodes; Activity remains the chronological operational timeline.
+- Each How root must expose the safe ordered path and four explicitly labeled branches: Steps, What, Where, and Feedback.
+- What contains only durable memories or skill artifacts connected by stored promotion provenance. The UI must never infer a parent from text similarity.
+- Where contains bounded episode evidence and step references with their resolution state. Missing or tombstoned targets remain labeled rather than silently removed.
+- Feedback contains path-targeted retrieval feedback and human episode or step reviews. Feedback on a promoted memory remains attached to that memory unless an explicit path target also exists.
+- Promotion targets must resolve to bounded display summaries when authorized. Failed, pending, deleted, or non-memory promotions remain visible as typed states without leaking target content.
+- Existing memories without a stored solution-path relationship remain available in an Ungrouped memories section and retain current search, browse, selection, export, and deletion behavior.
+- The tree must support keyboard expansion, semantic tree roles and labels, narrow-screen layouts, deterministic ordering, bounded initial payloads, and lazy detail loading.
+- Standalone and registered-project hosted gateways must return equivalent tree semantics and enforce their existing workspace and principal boundaries.
+
 ## Commands
 
 Run from the repository root unless a command says otherwise.
@@ -143,7 +156,7 @@ Run from the repository root unless a command says otherwise.
 - `internal/cli/`: episode and working-state commands plus compatible session-end integration.
 - `internal/api/` and `internal/saas/api/`: local and hosted HTTP contracts.
 - `tools/agent-memory/mcp-server/`: client-facing workflow tools.
-- `tools/agent-memory/dashboard/`: Activity episode list/detail and review controls.
+- `tools/agent-memory/dashboard/`: Activity episode list/detail, How History provenance tree, memory explorer, and review controls.
 
 ## Boundaries
 
@@ -159,6 +172,8 @@ Run from the repository root unless a command says otherwise.
 4. Expired working state is unavailable to recall and is eventually deleted, while promoted durable knowledge remains linked and valid.
 5. Adversarial tests prove raw-chain-of-thought rejection, secret scrubbing, idempotent event handling, concurrent ordering, session privacy, and cross-workspace isolation.
 6. Existing unstructured clients and all current memory types remain compatible.
+7. A user can open How History and trace an episode to its ordered safe steps, explicitly promoted knowledge, scoped evidence, and feedback without fabricated relationships.
+8. Legacy or independently written memories remain browsable under Ungrouped memories.
 
 ## Open Questions for Product Review
 

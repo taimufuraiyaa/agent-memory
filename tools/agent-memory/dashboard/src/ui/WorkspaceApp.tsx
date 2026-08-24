@@ -51,6 +51,7 @@ import { NotesView } from './workspace/NotesView'
 import { ActivityView } from './workspace/ActivityView'
 import { SettingsView } from './workspace/SettingsView'
 import { HomeView } from './workspace/HomeView'
+import { HowHistoryView } from './workspace/HowHistoryView'
 
 const primaryDestinations: Array<{ id: WorkspaceDestination; label: string; description: string; icon: Icon }> = [
   { id: 'home', label: 'Home', description: 'Workspace overview', icon: IconHome2 },
@@ -190,6 +191,7 @@ export function WorkspaceApp({ runtime, gateway }: { runtime: DashboardRuntime; 
             data={[
               { value: 'sources', label: 'Sources' },
               { value: 'memories', label: 'Memories' },
+              { value: 'history', label: 'How History' },
               { value: 'notes', label: 'Notes' },
             ]}
           /> : null}
@@ -199,11 +201,12 @@ export function WorkspaceApp({ runtime, gateway }: { runtime: DashboardRuntime; 
         {destination === 'home' && workspace ? <HomeView workspace={workspace} onAddSource={() => { navigate('knowledge', 'sources'); setImportOpen(true) }} onNavigate={(target) => { if (target === 'ask') navigate('ask'); else if (target === 'sources') navigate('knowledge', 'sources'); else if (target === 'activity') navigate('activity'); else { setMemoryInitialView(target); navigate('knowledge', 'memories') } }} /> : null}
         {destination === 'ask' && workspaceReady ? <AskView gateway={gateway} workspaceId={workspaceId} onOpenSearch={() => navigate('knowledge', 'memories')} onOpenSources={() => navigate('knowledge', 'sources')} /> : null}
         {destination === 'knowledge' && knowledgeView === 'memories' && workspaceReady ? <MemoryExplorer gateway={gateway} workspaceId={workspaceId} initialView={memoryInitialView} /> : null}
+        {destination === 'knowledge' && knowledgeView === 'history' && workspaceReady ? <HowHistoryView gateway={gateway} workspaceId={workspaceId} /> : null}
         {destination === 'knowledge' && knowledgeView === 'sources' && workspaceReady ? <SourcesView gateway={gateway} workspaceId={workspaceId} importedSource={importedSource} onNavigate={(target) => { if (target === 'ask') navigate('ask'); else { setMemoryInitialView(target); navigate('knowledge', 'memories') } }} /> : null}
         {destination === 'knowledge' && knowledgeView === 'notes' && workspaceReady ? <NotesView gateway={gateway} workspaceId={workspaceId} /> : null}
         {destination === 'activity' && workspaceReady ? <ActivityView gateway={gateway} workspaceId={workspaceId} /> : null}
         {destination === 'settings' && workspaceReady ? <SettingsView gateway={gateway} workspaceId={workspaceId} /> : null}
-        {destination !== 'home' && destination !== 'ask' && destination !== 'activity' && destination !== 'settings' && !(destination === 'knowledge' && (knowledgeView === 'memories' || knowledgeView === 'sources' || knowledgeView === 'notes')) ? <section className="workspacePlaceholder"><p>{destination === 'knowledge' ? `${knowledgeView} in ${workspace?.name || 'this workspace'}` : `${destination} for ${workspace?.name || 'this workspace'}`}</p></section> : null}
+        {destination !== 'home' && destination !== 'ask' && destination !== 'activity' && destination !== 'settings' && !(destination === 'knowledge' && (knowledgeView === 'memories' || knowledgeView === 'history' || knowledgeView === 'sources' || knowledgeView === 'notes')) ? <section className="workspacePlaceholder"><p>{destination === 'knowledge' ? `${knowledgeView} in ${workspace?.name || 'this workspace'}` : `${destination} for ${workspace?.name || 'this workspace'}`}</p></section> : null}
       </Box>
     </AppShell.Main>
     {workspaceReady ? <SourceImportDialog gateway={gateway} workspaceId={workspaceId} open={importOpen} onClose={() => setImportOpen(false)} onImported={setImportedSource} onCreateNote={() => { setImportOpen(false); navigate('knowledge', 'notes') }} /> : null}

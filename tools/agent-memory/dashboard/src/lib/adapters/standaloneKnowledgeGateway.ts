@@ -124,7 +124,7 @@ export function createStandaloneKnowledgeGateway(): KnowledgeGateway {
     async browse(scope, mode, cursor) {
       const offset = numericCursor(cursor)
       const limit = 20
-      const response = await listRecentMemories({ workspace: scope.workspaceId, limit: Math.min(200, offset + limit + 1) })
+      const response = await listRecentMemories({ workspace: scope.workspaceId, limit: mode === 'ungrouped' ? 200 : Math.min(200, offset + limit + 1), ungrouped: mode === 'ungrouped' })
       const filtered = mode === 'pinned' ? response.results.filter((memory) => memory.pinned) : response.results
       const page = filtered.slice(offset, offset + limit)
       return { items: page.map((memory) => memoryResult(memory)), nextCursor: filtered.length > offset + limit ? String(offset + limit) : undefined }
@@ -260,6 +260,10 @@ export function createStandaloneKnowledgeGateway(): KnowledgeGateway {
     },
     async retryActivity() {
       throw new Error('This activity cannot be retried from the unified timeline.')
+    },
+    async listHowHistory(scope) {
+      const response = await listSolutionEpisodes({ workspace: scope.workspaceId, limit: 100 })
+      return response.episodes.map((record) => solutionActivityItem(record).episode!)
     },
     async getSolutionEpisode(scope, episodeId) {
       return solutionDetail((await getStandaloneSolutionEpisode({ workspace: scope.workspaceId, episode_id: episodeId })).detail)

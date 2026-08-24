@@ -205,6 +205,11 @@ export function createHostedKnowledgeGateway(connection: HostedConnection): Know
       if (isRegisteredProject(scope.workspaceId)) throw new Error('This retrieval activity cannot be retried.')
       await retryHostedSource({ ...connection, workspace: scope.workspaceId }, activityId)
     },
+    async listHowHistory(scope) {
+      if (!isRegisteredProject(scope.workspaceId)) return []
+      const response = await listHostedProjectSolutions(connection, scope.workspaceId)
+      return response.episodes.map((record) => solutionActivityItem(record).episode!)
+    },
     async getSolutionEpisode(scope, episodeId) {
 	  if (!isRegisteredProject(scope.workspaceId)) throw new Error('Solution episodes are available only for registered projects.')
 	  return solutionDetail((await getHostedProjectSolution(connection, scope.workspaceId, episodeId)).detail)

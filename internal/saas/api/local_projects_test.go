@@ -279,6 +279,15 @@ func TestLocalProjectBrowseAndDetailRemainWorkspaceScoped(t *testing.T) {
 	}
 }
 
+func TestLocalProjectBrowseAcceptsUngroupedMemoryMode(t *testing.T) {
+	fixture := &localProjectFixture{memories: []core.MemoryEntry{{ID: "memory-1", Workspace: "agent-memory", Content: "Standalone knowledge"}}}
+	recorder := httptest.NewRecorder()
+	browseLocalProject(fixture)(recorder, httptest.NewRequest(http.MethodGet, "/v1/local-projects/memories?workspace=agent-memory&mode=ungrouped&limit=20&cursor=0", nil))
+	if recorder.Code != http.StatusOK || fixture.browse.Mode != "ungrouped" {
+		t.Fatalf("unexpected ungrouped browse: status=%d input=%+v body=%s", recorder.Code, fixture.browse, recorder.Body.String())
+	}
+}
+
 func TestLocalProjectRetrievalRejectsPathShapedWorkspace(t *testing.T) {
 	fixture := &localProjectFixture{}
 	for _, workspaceName := range []string{"/tmp/other", "../other"} {
