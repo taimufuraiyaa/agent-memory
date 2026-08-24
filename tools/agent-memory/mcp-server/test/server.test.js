@@ -299,6 +299,36 @@ test("proxies recall, feedback, sessions, and session end", async (t) => {
   ]);
 });
 
+test("session end forwards structured episode identity without requiring a transcript", async (t) => {
+  const requests = [];
+  const server = http.createServer((request, response) => {
+    let body = "";
+    request.on("data", (chunk) => { body += chunk; });
+    request.on("end", () => {
+      requests.push({ url: request.url, body: JSON.parse(body) });
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({ ok: true, version: "v1", data: { mode: "structured_episode", partial: false } }));
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => server.close());
+  const child = startServer({
+    AGENT_MEMORY_MCP_PROFILE: "expanded",
+    AGENT_MEMORY_URL: `http://127.0.0.1:${server.address().port}`,
+  });
+  t.after(() => child.kill());
+
+  child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 91, method: "tools/call", params: { name: "memory_session_end", arguments: {
+    workspace: "ws", session_id: "session-1", principal_id: "principal-1", terminal_status: "completed", idempotency_key: "finish-1",
+  } } })}\n`);
+  const response = await readMessage(child);
+  assert.equal(response.result.structuredContent.mode, "structured_episode");
+  assert.deepEqual(requests, [{
+    url: "/api/v1/memories/session-end",
+    body: { workspace: "ws", session_id: "session-1", principal_id: "principal-1", terminal_status: "completed", idempotency_key: "finish-1" },
+  }]);
+});
+
 test("reports HTTP transport degradation without silently changing backends", async (t) => {
   const child = startServer({
     AGENT_MEMORY_MCP_PROFILE: "expanded",

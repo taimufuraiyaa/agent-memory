@@ -107,7 +107,10 @@ const allTools = [
     transcript: { type: "string" },
     workspace: { type: "string" },
     session_id: { type: "string" },
-  }, ["transcript"]),
+    principal_id: { type: "string" },
+    terminal_status: { type: "string", enum: ["completed", "partial", "abandoned", "cancelled"] },
+    idempotency_key: { type: "string" },
+  }),
   tool("solution_start", "Start a bounded solution episode", {
     workspace: { type: "string" }, session_id: { type: "string" }, principal_id: { type: "string" }, client_id: { type: "string" },
     goal_summary: { type: "string" }, capture_policy: { type: "string", enum: ["structured", "summary_only"] },
@@ -285,6 +288,9 @@ async function callTool(name, args) {
       if (serviceMode === "hosted") {
         if (!args.session_id || !args.workspace) throw new Error("session_id and workspace are required in hosted mode");
         return requestService(`/v1/sessions/${encodeURIComponent(args.session_id)}/end`, { body: { workspace_id: args.workspace, transcript: args.transcript } });
+      }
+      if (!args.transcript && !(args.session_id && args.principal_id)) {
+        throw new Error("transcript or session_id plus principal_id are required");
       }
       return requestService("/api/v1/memories/session-end", { body: args });
     case "solution_start":
