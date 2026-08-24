@@ -30,6 +30,29 @@ var schemaMigrations = []migrationStep{
 	{10, "solution-promotions", migrateSolutionPromotions},
 	{11, "solution-tool-learning", migrateSolutionToolLearning},
 	{12, "tool-lesson-promotions", migrateToolLessonPromotions},
+	{13, "how-retrieval-feedback", migrateHowRetrievalFeedback},
+	{14, "distilled-skill-metadata", migrateDistilledSkillMetadata},
+}
+
+func migrateDistilledSkillMetadata(ctx context.Context, s *Store) error {
+	_, err := s.db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS distilled_skill_metadata (
+		id TEXT PRIMARY KEY, workspace TEXT NOT NULL, name TEXT NOT NULL, path TEXT NOT NULL,
+		memory_ids_json TEXT NOT NULL, tool_lesson_ids_json TEXT NOT NULL, episode_ids_json TEXT NOT NULL,
+		created_at TEXT NOT NULL, UNIQUE(workspace, name)
+	)`)
+	return err
+}
+
+func migrateHowRetrievalFeedback(ctx context.Context, s *Store) error {
+	_, err := s.db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS solution_retrieval_feedback (
+		id TEXT PRIMARY KEY, workspace TEXT NOT NULL, target_kind TEXT NOT NULL, target_id TEXT NOT NULL,
+		outcome TEXT NOT NULL, created_at TEXT NOT NULL
+	)`)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_solution_retrieval_feedback_target ON solution_retrieval_feedback(workspace, target_kind, target_id, created_at DESC)`)
+	return err
 }
 
 func migrateToolLessonPromotions(ctx context.Context, s *Store) error {

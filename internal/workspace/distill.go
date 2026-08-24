@@ -189,6 +189,10 @@ func (m *Manager) Distill(ctx context.Context, cwd string, opt DistillOptions) (
 	if err := os.WriteFile(provenanceFile, append(provenanceJSON, '\n'), 0o644); err != nil {
 		return nil, fmt.Errorf("failed to write skill provenance: %w", err)
 	}
+	if err := store.PutDistilledSkillMetadata(ctx, core.DistilledSkillMetadata{Workspace: name, Name: opt.SkillName, Path: skillFile,
+		MemoryIDs: selectedMemoryIDs, ToolLessonIDs: toolLessonIDs, EpisodeIDs: provenance.EpisodeIDs}); err != nil {
+		return nil, fmt.Errorf("failed to record skill provenance: %w", err)
+	}
 
 	return &DistillResult{
 		Workspace:      name,

@@ -173,4 +173,16 @@ func TestManagerDistillFiltersSkillSeedAndWritesContentFreeProvenance(t *testing
 	if len(metadata.MemoryIDs) != 1 || metadata.MemoryIDs[0] != "selected-memory" || len(metadata.ToolLessonIDs) != 1 || len(metadata.EpisodeIDs) != 1 || metadata.EpisodeIDs[0] != episode.ID || strings.Contains(string(metadataBytes), "focused suite") {
 		t.Fatalf("unexpected provenance: %s", metadataBytes)
 	}
+	store, err = sqlite.Open(context.Background(), initOut.DBPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	skills, err := store.ListDistilledSkillMetadata(context.Background(), "seed-proj", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(skills) != 1 || skills[0].Name != "focused-runner" || len(skills[0].ToolLessonIDs) != 1 || skills[0].ToolLessonIDs[0] != lesson.ID || len(skills[0].EpisodeIDs) != 1 || skills[0].EpisodeIDs[0] != episode.ID {
+		t.Fatalf("distilled skill metadata lost provenance: %+v", skills)
+	}
 }

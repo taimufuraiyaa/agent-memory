@@ -103,7 +103,7 @@
   - Files: distillation input adapter, promotion records, tests, generated-skill metadata.
   - Estimated scope: Small.
 
-- [ ] **Task 12: Deliver how-oriented retrieval and recall assembly**
+- [x] **Task 12: Deliver how-oriented retrieval and recall assembly**
   - Acceptance: Retrieval ranks validated paths, partial paths, tool lessons, procedures, skills, and authorized current state; output sections remain bounded and expose evidence quality and warnings.
   - Verify: ranking fixtures, token-budget tests, harmful suppression, current-session privacy, and retrieval feedback tests.
   - Dependencies: Tasks 8-11.
@@ -112,9 +112,9 @@
 
 ### Checkpoint D — Reuse and Skill Promotion
 
-- [ ] A similar task recalls what worked, decisive evidence, useful failed approaches, and applicable tool or skill guidance.
-- [ ] Feedback on paths remains independent from feedback on promoted memories.
-- [ ] Repeated validated tool use can produce a reviewable skill seed with full provenance.
+- [x] A similar task recalls what worked, decisive evidence, useful failed approaches, and applicable tool or skill guidance.
+- [x] Feedback on paths remains independent from feedback on promoted memories.
+- [x] Repeated validated tool use can produce a reviewable skill seed with full provenance.
 
 ## Phase 5 — Product Surface and Hosted Parity
 
