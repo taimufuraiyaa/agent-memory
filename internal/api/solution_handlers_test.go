@@ -88,6 +88,35 @@ func TestSolutionStateRejectsPriorPrincipalAfterHandoff(t *testing.T) {
 	}
 }
 
+func TestStructuredSessionEndFinalizesEpisodeThroughHTTPWithoutTranscript(t *testing.T) {
+	svc := &Service{Workspace: "ws", BaseDir: t.TempDir()}
+	server := httptest.NewServer(NewMux(svc))
+	t.Cleanup(func() { server.Close(); _ = svc.Close() })
+
+	started := postJSON(t, server.URL+"/api/v1/solutions/start", map[string]any{
+		"session_id": "session-end-http", "principal_id": "agent-http", "client_id": "codex",
+		"goal_summary": "Finalize the structured HTTP episode.", "capture_policy": "structured",
+		"retention_class": "standard", "idempotency_key": "http-start",
+	})
+	episodeID := started["episode"].(map[string]any)["id"].(string)
+	postJSON(t, server.URL+"/api/v1/solutions/steps", map[string]any{
+		"principal_id": "agent-http", "episode_id": episodeID, "kind": "result", "status": "completed",
+		"summary": "The HTTP integration passed.", "source": "agent", "confidence": .9,
+		"sensitivity": "internal", "idempotency_key": "http-step",
+	})
+
+	ended := postJSON(t, server.URL+"/api/v1/memories/session-end", map[string]any{
+		"session_id": "session-end-http", "principal_id": "agent-http", "terminal_status": "completed",
+		"idempotency_key": "http-finish",
+	})
+	if ended["mode"] != "structured_episode" || ended["partial"] != false || ended["total_extracted"] != float64(0) {
+		t.Fatalf("unexpected structured session-end response: %#v", ended)
+	}
+	if ended["episode"].(map[string]any)["status"] != "completed" || ended["summary"].(map[string]any)["episode_id"] != episodeID {
+		t.Fatalf("structured episode was not finalized: %#v", ended)
+	}
+}
+
 func TestSolutionActivityReviewHTTPContractAndWorkspaceIsolation(t *testing.T) {
 	svc := &Service{Workspace: "ws", BaseDir: t.TempDir()}
 	server := httptest.NewServer(NewMux(svc))

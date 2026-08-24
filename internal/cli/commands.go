@@ -849,6 +849,29 @@ func newSessionEndCommand() *cobra.Command {
 				}
 				return writeSuccessEnvelope(cmd.OutOrStdout(), "session-end", out)
 			}
+			if strings.TrimSpace(sessionID) != "" && strings.TrimSpace(principalID) != "" {
+				store, err := openStore(ctx, cfg)
+				if err != nil {
+					return err
+				}
+				out, structuredErr := application.RunSessionEnd(ctx, application.SessionEndInput{
+					Workspace: cfg.workspace, SessionID: sessionID, PrincipalID: principalID, Transcript: transcript,
+					TerminalStatus: core.SolutionEpisodeStatus(terminalStatus), IdempotencyKey: idempotencyKey,
+				}, store, nil)
+				closeErr := store.Close()
+				if !errors.Is(structuredErr, application.ErrSessionEndFallbackPipelineRequired) {
+					if structuredErr != nil {
+						return structuredErr
+					}
+					if closeErr != nil {
+						return closeErr
+					}
+					return writeSuccessEnvelope(cmd.OutOrStdout(), "session-end", out)
+				}
+				if closeErr != nil {
+					return closeErr
+				}
+			}
 			store, provider, err := openDeps(ctx, cfg)
 			if err != nil {
 				return err

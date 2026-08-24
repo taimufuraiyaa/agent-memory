@@ -11,6 +11,8 @@ import (
 	"github.com/taimufuraiyaa/agent-memory/internal/storage/sqlite"
 )
 
+var ErrSessionEndFallbackPipelineRequired = errors.New("session-end heuristic fallback requires a write pipeline")
+
 type SessionEndInput struct {
 	Workspace, SessionID, PrincipalID, Transcript, IdempotencyKey string
 	TerminalStatus                                                core.SolutionEpisodeStatus
@@ -34,21 +36,30 @@ type SessionEndResult struct {
 // transcript extractor. A matching structured episode is authoritative, so the
 // heuristic path is never run for the same session.
 func RunSessionEnd(ctx context.Context, input SessionEndInput, store *sqlite.Store, pipeline *engine.WritePipeline) (*SessionEndResult, error) {
-	if store == nil || pipeline == nil {
-		return nil, errors.New("store and pipeline are required")
+	if store == nil {
+		return nil, errors.New("store is required")
 	}
 	input.Workspace, input.SessionID, input.PrincipalID = strings.TrimSpace(input.Workspace), strings.TrimSpace(input.SessionID), strings.TrimSpace(input.PrincipalID)
 	if input.Workspace == "" {
 		return nil, errors.New("workspace is required")
 	}
+	if input.TerminalStatus != "" && !input.TerminalStatus.Terminal() {
+		return nil, errors.New("terminal_status must be completed, partial, abandoned, or cancelled")
+	}
 	if input.SessionID != "" && input.PrincipalID != "" {
 		episode, err := store.FindLatestSolutionEpisode(ctx, input.Workspace, input.SessionID, input.PrincipalID)
 		if err == nil {
+			if pipeline == nil {
+				pipeline = engine.NewWritePipeline(store)
+			}
 			return finalizeSessionEpisode(ctx, input, episode, store, pipeline), nil
 		}
 		if !errors.Is(err, sql.ErrNoRows) {
 			return nil, err
 		}
+	}
+	if pipeline == nil {
+		return nil, ErrSessionEndFallbackPipelineRequired
 	}
 	return runHeuristicSessionEnd(ctx, input.Workspace, input.Transcript, store, pipeline)
 }

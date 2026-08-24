@@ -68,9 +68,27 @@ func TestSessionEndStructuredFinalizationDoesNotRequireEmbeddingProvider(t *test
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := RunSessionEnd(ctx, SessionEndInput{Workspace: "ws", SessionID: episode.SessionID, PrincipalID: episode.PrincipalID}, store, engine.NewWritePipeline(store))
+	result, err := RunSessionEnd(ctx, SessionEndInput{Workspace: "ws", SessionID: episode.SessionID, PrincipalID: episode.PrincipalID}, store, nil)
 	if err != nil || result.Summary == nil || result.Mode != "structured_episode" {
 		t.Fatalf("provider-free finalization failed: result=%+v err=%v", result, err)
+	}
+}
+
+func TestSessionEndRejectsNonTerminalStructuredStatusWithoutChangingEpisode(t *testing.T) {
+	ctx := context.Background()
+	store := openSolutionServiceStore(t)
+	defer store.Close()
+	episode, _, err := NewSolutionService(store, engine.NewSolutionAdmissionPolicy()).Start(ctx, safeSolutionStart("invalid-status-start"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := RunSessionEnd(ctx, SessionEndInput{Workspace: "ws", SessionID: episode.SessionID, PrincipalID: episode.PrincipalID, TerminalStatus: core.SolutionEpisodeActive}, store, nil)
+	if err == nil || result != nil {
+		t.Fatalf("non-terminal status was silently accepted: result=%+v err=%v", result, err)
+	}
+	unchanged, err := store.GetSolutionEpisode(ctx, episode.ID)
+	if err != nil || unchanged.Status != core.SolutionEpisodeActive || unchanged.Version != episode.Version {
+		t.Fatalf("invalid session-end changed the episode: episode=%+v err=%v", unchanged, err)
 	}
 }
 
