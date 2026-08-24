@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import type { SkillInfo } from '../lib/api'
 import { MarkdownView } from './MarkdownView'
+import { ListPagination, paginateRecords } from './workspace/ListPagination'
 
 export function SkillsPanel({
   theme,
@@ -16,6 +17,8 @@ export function SkillsPanel({
   error: string
 }) {
   const [selectedSkill, setSelectedSkill] = useState<SkillInfo | null>(null)
+  const [skillPage, setSkillPage] = useState(1)
+  const pagedSkills = paginateRecords(skills, skillPage)
 
   // Auto-select first skill when skills list loads
   useEffect(() => {
@@ -32,6 +35,8 @@ export function SkillsPanel({
     }
   }, [skills])
 
+  useEffect(() => setSkillPage(1), [workspace])
+
   if (!workspace) {
     return (
       <div className="surfacePanel">
@@ -44,7 +49,7 @@ export function SkillsPanel({
   }
 
   return (
-    <div className="surfacePanel" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+    <div className="surfacePanel skillsPanel" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <div className="panelHeader" style={{ borderBottom: '1px dashed var(--border)', paddingBottom: '16px', marginBottom: '20px' }}>
         <h2 className="panelTitle">Distilled Agent Skills</h2>
         <p className="panelSubtitle">Procedural workflows, outcome learnings, and constraints packaged by the AI Agent under <code>.agents/skills/</code>.</p>
@@ -64,13 +69,13 @@ export function SkillsPanel({
           </div>
         </div>
       ) : (
-        <div style={{ display: 'flex', flex: 1, minHeight: 0, gap: '24px', alignItems: 'stretch' }}>
+        <div className="skillsBrowser">
           {/* Left Column: Skill List */}
-          <div style={{ width: '280px', flexShrink: 0, borderRight: '1px dashed var(--border)', paddingRight: '16px', display: 'flex', flexDirection: 'column', gap: '8px', overflowY: 'auto' }}>
+          <div className="skillsDirectory">
             <div style={{ fontSize: '10px', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px', letterSpacing: '0.05em' }}>
               Skills Directory ({skills.length})
             </div>
-            {skills.map((skill) => (
+            {pagedSkills.items.map((skill) => (
               <button
                 key={skill.name}
                 type="button"
@@ -97,10 +102,11 @@ export function SkillsPanel({
                 </div>
               </button>
             ))}
+            <ListPagination page={pagedSkills.page} total={skills.length} onChange={setSkillPage} label="Skills" />
           </div>
 
           {/* Right Column: Skill Content Viewer */}
-          <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', height: '100%', overflowY: 'auto' }}>
+          <div className="skillsDetail">
             {selectedSkill ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', paddingRight: '8px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px dotted var(--border)', paddingBottom: '12px' }}>

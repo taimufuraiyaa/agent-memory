@@ -6,9 +6,32 @@ const root = new URL('../src/', import.meta.url)
 const read = (path) => readFile(new URL(path, root), 'utf8')
 
 test('Activity is one workspace-scoped timeline with filters and paging', async () => {
+  const [source, contract, standalone, hosted] = await Promise.all([
+    read('ui/workspace/ActivityView.tsx'),
+    read('lib/knowledgeGateway.ts'),
+    read('lib/adapters/standaloneKnowledgeGateway.ts'),
+    read('lib/adapters/hostedKnowledgeGateway.ts'),
+  ])
+  for (const label of ['Study', 'Uploads', 'Indexing', 'Sessions', 'Episodes', 'Retrieval', 'Feedback', 'Deletion']) assert.match(source, new RegExp(label))
+  assert.match(source, /gateway\.listActivity\(\{ workspaceId \}, pageCursor, activityFilter/)
+  assert.match(source, /cursorHistory/)
+  assert.match(source, /<CursorPagination/)
+  assert.doesNotMatch(source, /Load more activity/)
+  assert.match(contract, /ACTIVITY_PAGE_SIZE = 10/)
+  for (const adapter of [standalone, hosted]) {
+    assert.match(adapter, /numericCursor\(cursor\)/)
+    assert.match(adapter, /filter === 'all'.*item\.kind === filter/s)
+    assert.match(adapter, /slice\(offset, offset \+ ACTIVITY_PAGE_SIZE\)/)
+  }
+})
+
+test('Rate retrieval opens a viewport modal instead of appending an editor', async () => {
   const source = await read('ui/workspace/ActivityView.tsx')
-  for (const label of ['Study', 'Uploads', 'Indexing', 'Sessions', 'Episodes', 'Retrieval', 'Feedback', 'Deletion', 'Load more activity']) assert.match(source, new RegExp(label))
-  assert.match(source, /gateway\.listActivity\(\{ workspaceId \}, nextCursor\)/)
+  assert.match(source, /<Modal[\s\S]*opened=\{Boolean\(feedbackId\)\}/)
+  assert.match(source, /title="Retrieval feedback"/)
+  assert.match(source, /closeButtonProps=.*Close retrieval feedback/)
+  assert.match(source, /feedbackError/)
+  assert.doesNotMatch(source, /feedbackId \? <Paper component="form"/)
 })
 
 test('episode cards open a keyboard-accessible safe-path drawer with review controls', async () => {
@@ -50,4 +73,9 @@ test('feedback cards open full retrieval details without losing Activity context
   assert.match(view, /<Drawer[\s\S]*'Feedback details'/)
   assert.match(view, /Open feedback details for \$\{item\.title\}/)
   for (const label of ['Question / task', 'Quality score', 'Feedback reason', 'Useful hits', 'Total hits', 'Request type', 'Request ID', 'Logged time']) assert.match(view, new RegExp(label))
+})
+
+test('empty and legacy-null registered-project feedback render as an empty activity list', async () => {
+  const hosted = await read('lib/adapters/hostedKnowledgeGateway.ts')
+  assert.match(hosted, /\(response\.feedback \?\? \[\]\)\.map/)
 })

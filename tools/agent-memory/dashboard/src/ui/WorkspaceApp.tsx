@@ -30,6 +30,8 @@ import {
   IconPlus,
   IconSearch,
   IconSettings,
+  IconMoon,
+  IconSun,
   IconUserCircle,
   type Icon,
 } from '@tabler/icons-react'
@@ -61,7 +63,9 @@ const primaryDestinations: Array<{ id: WorkspaceDestination; label: string; desc
   { id: 'settings', label: 'Settings', description: 'Data, access, and system', icon: IconSettings },
 ]
 
-export function WorkspaceApp({ runtime, gateway }: { runtime: DashboardRuntime; gateway: KnowledgeGateway }) {
+export type DashboardColorScheme = 'dark' | 'light'
+
+export function WorkspaceApp({ runtime, gateway, colorScheme, onColorSchemeChange }: { runtime: DashboardRuntime; gateway: KnowledgeGateway; colorScheme: DashboardColorScheme; onColorSchemeChange: (value: DashboardColorScheme) => void }) {
   const initial = useMemo(() => readWorkspaceRoute(), [])
   const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([])
   const [workspaceId, setWorkspaceId] = useState(initial.workspaceId || '')
@@ -160,6 +164,16 @@ export function WorkspaceApp({ runtime, gateway }: { runtime: DashboardRuntime; 
         />
         <TextInput className="workspaceGlobalSearch" type="search" aria-label="Global workspace search" placeholder="Search this workspace…" leftSection={<IconSearch size={17} />} />
         {gateway.capabilities.has('source') ? <Button className="workspaceAddSource" aria-label="Add source" leftSection={<IconPlus size={17} />} disabled={!workspaceReady} onClick={() => { navigate('knowledge', 'sources'); setImportOpen(true) }}>Add source</Button> : null}
+        <ActionIcon
+          className="workspaceThemeToggle"
+          variant="subtle"
+          color="gray"
+          size="lg"
+          aria-label={`Switch to ${colorScheme === 'dark' ? 'light' : 'dark'} theme`}
+          onClick={() => onColorSchemeChange(colorScheme === 'dark' ? 'light' : 'dark')}
+        >
+          {colorScheme === 'dark' ? <IconSun size={21} /> : <IconMoon size={21} />}
+        </ActionIcon>
         <ActionIcon className="workspaceAccount" variant="subtle" color="gray" size="lg" aria-label={runtime.mode === 'hosted' ? 'Account' : 'Local owner'}>
           <IconUserCircle size={23} />
         </ActionIcon>

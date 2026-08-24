@@ -16,7 +16,7 @@ export function solutionActivityItem(record: SolutionEpisodeRecord): ActivityIte
       goal: episode.goal_summary, status: episode.status, retention: episode.retention_class, version: episode.version,
       supersededBy: episode.superseded_by, outcome: record.summary?.outcome, summary: record.summary?.summary,
       validation: record.summary?.validation, pinned: record.pinned, stepCount: record.step_count,
-      createdAt: episode.created_at, updatedAt: episode.updated_at,
+      createdAt: episode.created_at, updatedAt: episode.updated_at, finalizedAt: record.summary?.created_at,
     },
   }
 }

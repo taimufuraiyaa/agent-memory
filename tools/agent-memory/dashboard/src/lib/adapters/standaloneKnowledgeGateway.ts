@@ -1,5 +1,7 @@
 import {
+  createClientProfile,
   createNote as createStandaloneNote,
+  deleteClientProfile,
   deleteNotePermanently,
   deleteMemories as deleteStandaloneMemories,
   getStats,
@@ -7,11 +9,14 @@ import {
   getNote as getStandaloneNote,
   importLibraryBook,
   listFeedback,
+  listClientProfiles,
   listNotes,
   listProjects,
   listRecentMemories,
+  listSchedulerHistory,
   listSessions,
   listSolutionEpisodes,
+  listSkills,
   recallPreview,
   restoreNote as restoreStandaloneNote,
   reviewSolutionEpisode as reviewStandaloneSolutionEpisode,
@@ -22,10 +27,13 @@ import {
   submitRequestFeedback,
   trashNote as trashStandaloneNote,
   updateNote as updateStandaloneNote,
+  updateClientProfile,
   type MemoryEntry,
   type RightsBasis,
 } from '../api'
 import {
+  ACTIVITY_PAGE_SIZE,
+  type ActivityFilter,
   type ActivityItem,
   type AskResponse,
   type CursorPage,
@@ -82,10 +90,12 @@ function workspaceNote(note: import('../api').NoteDocument): WorkspaceNote {
 
 export function createStandaloneKnowledgeGateway(): KnowledgeGateway {
   const runtimeActivity: ActivityItem[] = []
+  const capabilities = new Set<import('../knowledgeGateway').KnowledgeCapability>(['workspace', 'ask', 'search', 'browse', 'source', 'study', 'note', 'activity', 'settings', 'lifecycle', 'clients', 'skills'])
   const recordActivity = (item: Omit<ActivityItem, 'updatedAt'>) => runtimeActivity.unshift({ ...item, updatedAt: new Date().toISOString() })
   return {
     runtime: 'standalone',
-    capabilities: new Set(['workspace', 'ask', 'search', 'browse', 'source', 'study', 'note', 'activity', 'settings']),
+    capabilities,
+    supports(capability) { return capabilities.has(capability) },
     async listWorkspaces() {
       const response = await listProjects()
       return response.projects.map<WorkspaceSummary>((project) => ({
@@ -230,7 +240,7 @@ export function createStandaloneKnowledgeGateway(): KnowledgeGateway {
     async retryNoteIndex(scope, noteId) {
       await retryStandaloneNoteIndex({ workspace: scope.workspaceId, note_id: noteId })
     },
-    async listActivity(scope, cursor) {
+    async listActivity(scope, cursor, filter: ActivityFilter = 'all') {
 	  const [sessionsResponse, feedback, solutions] = await Promise.all([listSessions({ workspace: scope.workspaceId, limit: 100 }), listFeedback({ workspace: scope.workspaceId }), listSolutionEpisodes({ workspace: scope.workspaceId, limit: 100 })])
       const items: ActivityItem[] = [
         ...runtimeActivity.filter((item) => item.workspaceId === scope.workspaceId),
@@ -254,9 +264,10 @@ export function createStandaloneKnowledgeGateway(): KnowledgeGateway {
           },
         })),
       ].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+      const filteredItems = filter === 'all' ? items : items.filter((item) => item.kind === filter)
       const offset = numericCursor(cursor)
-      const page = items.slice(offset, offset + 20)
-      return { items: page, nextCursor: items.length > offset + 20 ? String(offset + 20) : undefined }
+      const page = filteredItems.slice(offset, offset + ACTIVITY_PAGE_SIZE)
+      return { items: page, nextCursor: filteredItems.length > offset + ACTIVITY_PAGE_SIZE ? String(offset + ACTIVITY_PAGE_SIZE) : undefined }
     },
     async retryActivity() {
       throw new Error('This activity cannot be retried from the unified timeline.')
@@ -276,6 +287,17 @@ export function createStandaloneKnowledgeGateway(): KnowledgeGateway {
     async submitFeedback(scope, requestId, score, reason) {
       await submitRequestFeedback({ workspace: scope.workspaceId, request_id: requestId, score, reason })
     },
+    async listLifecycle(scope) {
+      const [stats, response] = await Promise.all([getStats(scope.workspaceId), listSchedulerHistory({ workspace: scope.workspaceId, limit: 100 })])
+      return { scheduler: stats.scheduler, history: response.history || [] }
+    },
+    async listSkills(scope) {
+      return listSkills({ workspace: scope.workspaceId })
+    },
+    async listClientProfiles() { return listClientProfiles() },
+    async createClientProfile(input) { return createClientProfile(input) },
+    async updateClientProfile(input) { return updateClientProfile(input) },
+    async deleteClientProfile(input) { return deleteClientProfile(input) },
     async getSettings(scope) {
       return getStats(scope.workspaceId)
     },

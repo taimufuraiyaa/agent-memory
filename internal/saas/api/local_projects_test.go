@@ -7,8 +7,10 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/taimufuraiyaa/agent-memory/internal/application"
+	"github.com/taimufuraiyaa/agent-memory/internal/clientprofile"
 	"github.com/taimufuraiyaa/agent-memory/internal/core"
 	"github.com/taimufuraiyaa/agent-memory/internal/engine"
 	"github.com/taimufuraiyaa/agent-memory/internal/saas/auth"
@@ -35,7 +37,44 @@ type localProjectFixture struct {
 	handoff    LocalProjectSolutionHandoffInput
 	finalize   LocalProjectSolutionFinalizeInput
 	recall     LocalProjectSolutionRecallInput
+	promote    LocalProjectSolutionPromoteInput
 	export     LocalProjectSolutionExportInput
+	lifecycle  LocalProjectLifecycle
+	skills     []LocalProjectSkill
+}
+
+func (fixture *localProjectFixture) Lifecycle(_ context.Context, workspaceName string, limit int) (LocalProjectLifecycle, error) {
+	if workspaceName != "agent-memory" || limit != 100 {
+		return LocalProjectLifecycle{}, fmt.Errorf("unexpected lifecycle scope")
+	}
+	return fixture.lifecycle, nil
+}
+
+func (fixture *localProjectFixture) Skills(_ context.Context, workspaceName string) ([]LocalProjectSkill, error) {
+	if workspaceName != "agent-memory" {
+		return nil, fmt.Errorf("unexpected skills scope")
+	}
+	return fixture.skills, nil
+}
+
+type localClientProfileFixture struct {
+	profiles []clientprofile.Profile
+}
+
+func (fixture *localClientProfileFixture) ListClientProfiles(context.Context) ([]clientprofile.Profile, error) {
+	return fixture.profiles, nil
+}
+
+func (fixture *localClientProfileFixture) CreateClientProfile(_ context.Context, input clientprofile.Input) (clientprofile.Profile, error) {
+	return clientprofile.Profile{ID: input.ID, DisplayName: input.DisplayName, ClientKind: input.ClientKind, ToolProfile: input.ToolProfile, Revision: 1}, nil
+}
+
+func (fixture *localClientProfileFixture) UpdateClientProfile(_ context.Context, id string, expectedRevision int64, input clientprofile.Input) (clientprofile.Profile, error) {
+	return clientprofile.Profile{ID: id, DisplayName: input.DisplayName, ClientKind: input.ClientKind, ToolProfile: input.ToolProfile, Revision: expectedRevision + 1}, nil
+}
+
+func (fixture *localClientProfileFixture) DeleteClientProfile(context.Context, string, int64) error {
+	return nil
 }
 
 func (fixture *localProjectFixture) StartSolutionEpisode(_ context.Context, input LocalProjectSolutionStartInput) (core.SolutionEpisode, bool, error) {
@@ -71,6 +110,11 @@ func (fixture *localProjectFixture) FinalizeSolutionEpisode(_ context.Context, i
 func (fixture *localProjectFixture) RecallSolutionPaths(_ context.Context, input LocalProjectSolutionRecallInput) (engine.HowRecallResult, error) {
 	fixture.recall = input
 	return engine.HowRecallResult{RequestID: "request-1"}, nil
+}
+
+func (fixture *localProjectFixture) PromoteSolutionEpisode(_ context.Context, input LocalProjectSolutionPromoteInput) (application.SolutionPromotionResult, error) {
+	fixture.promote = input
+	return application.SolutionPromotionResult{}, nil
 }
 
 func (fixture *localProjectFixture) ExportSolutionEpisode(_ context.Context, input LocalProjectSolutionExportInput) (LocalProjectSolutionExport, error) {
@@ -193,6 +237,64 @@ func TestLocalProjectsListReturnsRegisteredProjects(t *testing.T) {
 	}
 }
 
+func TestLocalProjectSystemReadsReturnBoundedLifecycleAndSafeSkills(t *testing.T) {
+	fixture := &localProjectFixture{
+		lifecycle: LocalProjectLifecycle{History: []LocalProjectLifecycleRun{{ID: "run-1", Workspace: "agent-memory", StartedAt: time.Date(2026, 8, 24, 1, 2, 3, 0, time.UTC), Result: "success", Promoted: 2}}},
+		skills:    []LocalProjectSkill{{Name: "safe-release", DisplayName: "Safe release", Description: "Release checks", Content: "Run checks.", Path: ".agents/skills/safe-release/SKILL.md"}},
+	}
+	for _, test := range []struct {
+		name    string
+		handler http.HandlerFunc
+		path    string
+		want    string
+	}{
+		{"lifecycle", listLocalProjectLifecycle(fixture), "/v1/local-projects/lifecycle?workspace=agent-memory&limit=100", `"promoted":2`},
+		{"skills", listLocalProjectSkills(fixture), "/v1/local-projects/skills?workspace=agent-memory", `"path":".agents/skills/safe-release/SKILL.md"`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			test.handler(recorder, httptest.NewRequest(http.MethodGet, test.path, nil))
+			if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), test.want) {
+				t.Fatalf("unexpected response: status=%d body=%s", recorder.Code, recorder.Body.String())
+			}
+		})
+	}
+}
+
+func TestLocalClientProfilesSupportRevisionSafeCRUD(t *testing.T) {
+	fixture := &localClientProfileFixture{profiles: []clientprofile.Profile{{ID: "codex-main", DisplayName: "Codex", ClientKind: clientprofile.KindCodex, ToolProfile: clientprofile.ProfileDefault, Revision: 1}}}
+	requests := []struct {
+		method  string
+		path    string
+		body    string
+		handler http.HandlerFunc
+		want    string
+	}{
+		{http.MethodGet, "/v1/local-client-profiles", "", localClientProfiles(fixture), `"id":"codex-main"`},
+		{http.MethodPost, "/v1/local-client-profiles", `{"id":"claude-main","display_name":"Claude","client_kind":"claude","tool_profile":"default"}`, localClientProfiles(fixture), `"id":"claude-main"`},
+		{http.MethodPut, "/v1/local-client-profiles/codex-main", `{"display_name":"Codex Desktop","client_kind":"codex","tool_profile":"expanded","expected_revision":1}`, localClientProfile(fixture), `"revision":2`},
+		{http.MethodDelete, "/v1/local-client-profiles/codex-main?expected_revision=2", "", localClientProfile(fixture), `"deleted":true`},
+	}
+	for _, request := range requests {
+		recorder := httptest.NewRecorder()
+		httpRequest := httptest.NewRequest(request.method, request.path, strings.NewReader(request.body))
+		httpRequest.SetPathValue("client_id", "codex-main")
+		request.handler(recorder, httpRequest)
+		if recorder.Code < 200 || recorder.Code >= 300 || !strings.Contains(recorder.Body.String(), request.want) {
+			t.Fatalf("%s %s failed: status=%d body=%s", request.method, request.path, recorder.Code, recorder.Body.String())
+		}
+	}
+}
+
+func TestLocalClientProfileRevisionConflictIsExplicit(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPut, "/v1/local-client-profiles/codex-main", nil)
+	writeLocalClientProfileError(recorder, request, clientprofile.ErrRevisionConflict)
+	if recorder.Code != http.StatusConflict || !strings.Contains(recorder.Body.String(), `"code":"client_profile_revision_conflict"`) {
+		t.Fatalf("unexpected revision conflict: status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+}
+
 func TestLocalProjectStudyUsesRegisteredNameAndBoundedOptions(t *testing.T) {
 	fixture := &localProjectFixture{}
 	recorder := httptest.NewRecorder()
@@ -232,6 +334,15 @@ func TestLocalProjectFeedbackListsHistoricalRequests(t *testing.T) {
 	listLocalProjectFeedback(fixture)(recorder, httptest.NewRequest(http.MethodGet, "/v1/local-project-feedback?workspace=agent-memory", nil))
 	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), `"query":"feedback dashboard"`) {
 		t.Fatalf("unexpected response: %d %s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestLocalProjectFeedbackSerializesEmptyCollectionAsArray(t *testing.T) {
+	fixture := &localProjectFixture{}
+	recorder := httptest.NewRecorder()
+	listLocalProjectFeedback(fixture)(recorder, httptest.NewRequest(http.MethodGet, "/v1/local-project-feedback?workspace=agent-memory", nil))
+	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), `"feedback":[]`) {
+		t.Fatalf("empty feedback must be a JSON array: status=%d body=%s", recorder.Code, recorder.Body.String())
 	}
 }
 
@@ -345,6 +456,7 @@ func TestLocalProjectSolutionLifecycleRoutesPreserveWorkspaceAndPrincipalScope(t
 		{"handoff", handoffLocalProjectSolution(fixture), "/v1/local-project-solutions/handoff", `{"workspace":"agent-memory","principal_id":"principal-1","episode_id":"episode-1","expected_version":1,"target_principal_id":"principal-2","target_session_id":"session-2","idempotency_key":"handoff-key"}`, func() bool { return fixture.handoff.TargetPrincipalID == "principal-2" }},
 		{"finalize", finalizeLocalProjectSolution(fixture), "/v1/local-project-solutions/finalize", `{"workspace":"agent-memory","principal_id":"principal-1","episode_id":"episode-1","expected_version":2,"idempotency_key":"finalize-key"}`, func() bool { return fixture.finalize.ExpectedVersion == 2 }},
 		{"recall", recallLocalProjectSolutions(fixture), "/v1/local-project-solutions/recall", `{"workspace":"agent-memory","principal_id":"principal-1","session_id":"session-1","task":"Ship safely","token_budget":800}`, func() bool { return fixture.recall.Task == "Ship safely" }},
+		{"promote", promoteLocalProjectSolution(fixture), "/v1/local-project-solutions/promote", `{"workspace":"agent-memory","principal_id":"principal-1","episode_id":"episode-1","summary_id":"summary-1","idempotency_key":"promote-key","targets":[{"memory_type":"procedural"}]}`, func() bool { return fixture.promote.SummaryID == "summary-1" }},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

@@ -176,3 +176,55 @@
 - [x] Standalone and hosted registered projects present equivalent How, What, Where, and Feedback semantics.
 - [x] Existing Activity, memory search/browse, selection, export, deletion, and ungrouped memory behavior remain compatible.
 - [x] Focused Go and dashboard tests, full dashboard tests, type checking, production build, `go test ./...`, and `go vet ./...` pass.
+
+## Phase 7 — Executable Workflow Completion
+
+- [x] **Task 19: Compose How paths into standalone and expanded-client recall**
+  - Acceptance: Explicitly how-oriented CLI and recall-preview requests include bounded solution-path context without changing factual recall ranking; expanded MCP provides direct solution recall and legacy profiles remain stable.
+  - Verify: focused CLI, API, intent-classifier, and MCP contract tests cover positive intent, negative intent, empty paths, and bounded output.
+  - Dependencies: Tasks 12, 14, and 17.
+  - Files: recall composition, standalone handlers, MCP tool contracts, focused tests.
+  - Estimated scope: Medium.
+
+- [x] **Task 20: Expose authorized solution promotion**
+  - Acceptance: CLI, standalone HTTP, expanded MCP, and registered-project hosted adapters invoke the existing promotion service with typed targets, idempotency, partial-state reporting, and provenance.
+  - Verify: adapter tests cover published, replayed, invalid, unauthorized, and partial promotion requests plus What-tree visibility.
+  - Dependencies: Tasks 9 and 16.
+  - Files: work command, solution handlers, hosted local-project contract, MCP mapping, tests.
+  - Estimated scope: Medium.
+
+- [x] **Task 21: Make standalone dashboard routing and runtime selection exact**
+  - Acceptance: `/w/<workspace>/...` refresh serves the embedded SPA; an explicit database filename is honored; `--force-local` skips hosted reuse and honors address/database flags.
+  - Verify: server and dashboard-command tests cover GET/HEAD fallback, mutation rejection, exact path, default reuse, forced-local bypass, and registered-workspace isolation.
+  - Dependencies: Task 18.
+  - Files: API service resolution, embedded routes, dashboard command and child configuration, tests.
+  - Estimated scope: Medium.
+
+- [x] **Task 22: Add the natural standalone workflow release regression**
+  - Acceptance: A fresh temporary workspace captures, checkpoints, finalizes, recalls, promotes, and exposes the complete tree plus ungrouped memories and direct workspace-route refresh.
+  - Verify: the focused acceptance test and all existing Go, MCP, dashboard, typecheck, build, vet, and embedded-asset gates pass.
+  - Dependencies: Tasks 19-21.
+  - Files: integration fixture/test and release verification documentation.
+  - Estimated scope: Medium.
+
+### Checkpoint G — Agent-Usable How Memory
+
+- [x] Existing agent entry points naturally retrieve How for method-seeking tasks.
+- [x] Promoted What knowledge is created only through the validated public promotion boundary and appears under its explicit How parent.
+- [x] Standalone dashboard launch and browser refresh operate on the exact requested workspace database.
+- [x] The complete fresh-database workflow is protected by a permanent regression test and the full release gates pass.
+
+## Phase 8 — Complete What/When/Where Presentation
+
+- [x] **Task 23: Render stored When history and explicit N/A states**
+  - Acceptance: Every expanded How root shows Steps, What, When, Where, and Feedback; When uses only persisted lifecycle timestamps; empty optional branches display a literal `N/A` badge and a concise reason; legacy absence is not attributed to an agent decision.
+  - Verify: focused dashboard tests cover branch presence, timestamp normalization, literal N/A states, and the production build; the natural standalone workflow and embedded-dashboard gate remain green.
+  - Dependencies: Tasks 18 and 22.
+  - Files: knowledge gateway types, solution episode adapter, How History view, generated agent guidance, focused tests, and embedded assets.
+  - Estimated scope: Small.
+
+### Checkpoint H — Unambiguous How Dimensions
+
+- [x] All expanded How roots expose What, When, and Where without blank or fabricated content.
+- [x] Existing episodes render from stored timestamps and require no data migration.
+- [x] Agent guidance requires intentional optional omissions to be represented as `N/A` rather than silently skipped.

@@ -142,6 +142,7 @@ The Knowledge surface adds a How History view backed by stored provenance rather
 flowchart TD
     H["How: solution episode"] --> S["Steps: ordered safe path"]
     H --> W["What: promoted memories and skills"]
+    H --> T["When: stored lifecycle timestamps"]
     H --> E["Where: evidence and source references"]
     H --> F["Feedback: path and step review"]
     W --> U["Existing durable memory detail"]
@@ -150,7 +151,9 @@ flowchart TD
 
 The list contract remains compact: episode identity, goal, state, summary, validation, counts, and timestamps. Opening a root lazy-loads one bounded detail packet. The detail packet extends the existing Activity episode contract with resolved promotion targets and path feedback; it does not duplicate memory bodies in episode storage. A resolved memory child contains the existing memory identifier, type, bounded content summary, confidence, pin state, and provenance. Non-memory, pending, failed, unauthorized, or deleted targets expose only their promotion kind and state.
 
-The tree uses four stable child groups. Steps sort by server ordinal. What sorts published targets before pending or failed targets, then by promotion time. Where deduplicates the summary and step references by kind, target identity, locator, and resolution while preserving first-seen order. Feedback sorts newest first and keeps step reviews distinguishable from solution-retrieval outcomes. Standalone memories with no promotion edge are not forced into a synthetic How root; the existing memory explorer presents them as Ungrouped memories.
+The tree uses five stable child groups. Steps sort by server ordinal. What sorts published targets before pending or failed targets, then by promotion time. When renders the episode creation and last-update times and the final summary creation time when available; these values come directly from persisted lifecycle records. Where deduplicates the summary and step references by kind, target identity, locator, and resolution while preserving first-seen order. Feedback sorts newest first and keeps step reviews distinguishable from solution-retrieval outcomes. Standalone memories with no promotion edge are not forced into a synthetic How root; the existing memory explorer presents them as Ungrouped memories.
+
+Empty optional branches use one shared presentation contract: a visible `N/A` badge followed by a bounded explanation of the absent stored relationship. This preserves narrow-layout consistency and avoids blank sections. For backward compatibility, absence is reported as repository state rather than attributed to an agent decision; existing episodes require no migration. A future explicit applicability declaration can extend the detail contract without changing these legacy semantics.
 
 Path feedback and memory feedback remain separate data contracts. The UI may display both within one expanded root only when their stored target identities establish the relationship. It must not imply that feedback on one promoted child validates the entire episode.
 
@@ -261,3 +264,34 @@ Rollback disables episode capture and how-oriented recall. Additive tables remai
 Release requires domain invariant tests, migration round trips, concurrent append tests, stale working-state conflicts, expiry tests with a controllable clock, policy rejection and redaction fixtures, idempotent finalization, partial promotion recovery, provenance integrity, local registered-project routing, hosted two-tenant isolation, CLI/MCP contracts, dashboard accessibility, import/export compatibility, and full regression tests.
 
 The decisive product evaluation compares a baseline agent with an episode-enabled agent on interrupted-task resume, similar-task reuse, tool selection, failed-approach avoidance, token consumption, and harmful-path suppression. Success requires better completion or fewer repeated steps without increased secret retention or cross-scope exposure.
+
+## Executable Workflow Completion
+
+### Recall composition
+
+Standalone recall remains backward compatible by retaining the existing memory retrieval result as the primary response. A deterministic, case-insensitive intent classifier identifies explicit method-seeking language such as “how”, “steps”, “workflow”, “process”, and “approach”. Only those requests invoke solution-path recall. The bounded How context is appended as a separately labeled section and its structured result is returned alongside existing hits and clipping metadata. This avoids perturbing factual ranking while making the stored path discoverable through the command and dashboard contracts agents already use.
+
+Expanded MCP exposes direct How recall for clients that want to declare intent structurally. Legacy MCP profiles do not gain new tools. Retrieval identities remain distinct: legacy feedback applies to memory hits, while solution-path feedback applies to path targets.
+
+### Promotion boundary
+
+Promotion is a command/API adapter over `SolutionService.Promote`; no adapter writes memories directly. The request contains the authorized episode and summary identities, one to eight typed targets, optional content, explicit source-step identities, and an idempotency key. The response preserves per-target published or failed state and the aggregate partial flag. CLI, standalone HTTP, and expanded MCP share this contract. Registered-project hosted promotion resolves the project server-side before invoking the same local service and never accepts a database path.
+
+### Dashboard routing and runtime selection
+
+The embedded server mounts the SPA at both `/dashboard/` and the workspace route prefix `/w/`. The `/w/` handler accepts only GET and HEAD and delegates missing client routes to the embedded index document; assets continue to use their existing dashboard asset URLs. API namespaces retain precedence in the HTTP multiplexer.
+
+For a fixed standalone workspace, `Service.DBPath` is an optional exact database binding. Resolution uses it only when the requested workspace equals the fixed workspace. Daemon and alternate-workspace resolution continue through the registered-project manager, preventing the exact-path option from becoming a remote arbitrary-file surface.
+
+Hosted dashboard reuse remains the default convenience behavior. `--force-local` is an explicit operator override that skips hosted discovery, validates the requested loopback listener, and starts the child with the resolved exact database configuration. The flag does not weaken the local request boundary.
+
+### Failure modes, performance, and rollout
+
+- If How recall fails after legacy recall succeeds, the request fails rather than returning an apparently complete answer that silently omits the requested method.
+- If no validated path fits the budget, legacy recall is returned with an empty structured How result.
+- Promotion validation fails before writes for invalid types or unauthorized source steps; per-target write failures remain explicit partial results.
+- Exact database binding is scoped to one fixed workspace and cached by both workspace and resolved path, so existing lazy-store behavior and scale remain unchanged.
+- SPA fallback never handles mutations, API paths, or unknown non-client prefixes.
+- The acceptance workflow uses a temporary directory and deterministic local inputs, requires no running Floci service, and leaves no persistent user data.
+
+The rollout is additive: ship public adapters and route/runtime fixes behind existing solution capabilities, retain default hosted reuse, then use the permanent acceptance test as a release regression. Rollback removes the adapters and fallback while leaving stored episodes and promoted memories readable by earlier versions.

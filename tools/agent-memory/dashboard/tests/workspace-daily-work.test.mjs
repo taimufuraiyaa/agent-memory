@@ -6,6 +6,7 @@ const askSource = await readFile(new URL('../src/ui/workspace/AskView.tsx', impo
 const memorySource = await readFile(new URL('../src/ui/workspace/MemoryExplorer.tsx', import.meta.url), 'utf8').catch(() => '')
 const resultSource = await readFile(new URL('../src/ui/workspace/KnowledgeResultCard.tsx', import.meta.url), 'utf8').catch(() => '')
 const appSource = await readFile(new URL('../src/ui/WorkspaceApp.tsx', import.meta.url), 'utf8')
+const workspaceCss = await readFile(new URL('../src/ui/workspace/workspace.css', import.meta.url), 'utf8')
 
 test('Ask keeps source evidence, durable memory, and weak context separate', () => {
   assert.match(askSource, /Source evidence/)
@@ -18,9 +19,32 @@ test('Ask keeps source evidence, durable memory, and weak context separate', () 
   assert.match(askSource, /aria-label="Narrow Ask to source"/)
 })
 
-test('memory search explains ranking and continues with a cursor', () => {
+test('Ask uses responsive question and evidence columns without an empty answer card', () => {
+  assert.match(askSource, /className="askPrimary"/)
+  assert.match(askSource, /className="askEvidence"/)
+  assert.match(askSource, /response\.answer\?\.trim\(\)/)
+  assert.doesNotMatch(askSource, /tt="uppercase">Grounded answer</)
+  assert.match(workspaceCss, /\.askWorkspace\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:/s)
+  assert.match(workspaceCss, /\.askWorkspace\[data-has-evidence\]/)
+  assert.match(workspaceCss, /@media \(max-width: 1100px\)[^{]*\{[^}]*\.askWorkspace\[data-has-evidence\]\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)/s)
+})
+
+test('Ask evidence has a five-line preview, one detail modal, and a separate copy action', () => {
+  assert.match(askSource, /selectedEvidence/)
+  assert.match(askSource, /<Modal[\s\S]*opened=\{Boolean\(selectedEvidence\)\}/)
+  assert.match(askSource, /navigator\.clipboard\?\.writeText\(evidence\.content\)/)
+  assert.match(askSource, /copyStatus/)
+  assert.match(askSource, /previewLines=\{5\}/)
+  assert.match(resultSource, /lineClamp=\{previewLines\}/)
+  assert.match(resultSource, /Copy evidence/)
+  assert.match(resultSource, /knowledgeResultActions/)
+})
+
+test('memory search explains ranking and pages with an opaque cursor', () => {
   assert.match(memorySource, /gateway\.search\(scope, query, pageCursor/)
-  assert.match(memorySource, /Load more/)
+  assert.match(memorySource, /cursorHistory/)
+  assert.match(memorySource, /<CursorPagination/)
+  assert.doesNotMatch(memorySource, />Load more</)
   assert.match(resultSource, /result\.explanation/)
   assert.match(resultSource, /result\.relevance/)
 })

@@ -1,3 +1,5 @@
+import type { ClientKind, ClientProfile, ClientToolProfile, SchedulerRunHistory, SchedulerSummary, SkillInfo } from './api'
+
 export type KnowledgeCapability =
   | 'workspace'
   | 'ask'
@@ -8,6 +10,9 @@ export type KnowledgeCapability =
   | 'note'
   | 'activity'
   | 'settings'
+  | 'lifecycle'
+  | 'clients'
+  | 'skills'
 
 export type WorkspaceScope = { workspaceId: string; sourceId?: string }
 
@@ -115,6 +120,9 @@ export type ActivityItem = {
   episode?: SolutionEpisodeSummary
 }
 
+export type ActivityFilter = 'all' | ActivityItem['kind']
+export const ACTIVITY_PAGE_SIZE = 10
+
 export type SolutionEpisodeSummary = {
   id: string
   workspaceId: string
@@ -132,6 +140,7 @@ export type SolutionEpisodeSummary = {
   stepCount: number
   createdAt: string
   updatedAt: string
+  finalizedAt?: string
 }
 
 export type SolutionEpisodeDetail = SolutionEpisodeSummary & {
@@ -167,6 +176,7 @@ export type SourceUploadInput = {
 export interface KnowledgeGateway {
   readonly runtime: 'standalone' | 'hosted'
   readonly capabilities: ReadonlySet<KnowledgeCapability>
+  supports(capability: KnowledgeCapability, scope: WorkspaceScope): boolean
   listWorkspaces(signal?: AbortSignal): Promise<WorkspaceSummary[]>
   ask(scope: WorkspaceScope, question: string, signal?: AbortSignal): Promise<AskResponse>
   search(scope: WorkspaceScope, query: string, cursor?: string, signal?: AbortSignal): Promise<CursorPage<KnowledgeResult>>
@@ -187,12 +197,18 @@ export interface KnowledgeGateway {
   restoreNote(scope: WorkspaceScope, noteId: string): Promise<void>
   deleteNote(scope: WorkspaceScope, noteId: string): Promise<void>
   retryNoteIndex(scope: WorkspaceScope, noteId: string): Promise<void>
-  listActivity(scope: WorkspaceScope, cursor?: string, signal?: AbortSignal): Promise<CursorPage<ActivityItem>>
+  listActivity(scope: WorkspaceScope, cursor?: string, filter?: ActivityFilter, signal?: AbortSignal): Promise<CursorPage<ActivityItem>>
   retryActivity(scope: WorkspaceScope, activityId: string): Promise<void>
   listHowHistory(scope: WorkspaceScope, signal?: AbortSignal): Promise<SolutionEpisodeSummary[]>
   getSolutionEpisode(scope: WorkspaceScope, episodeId: string, signal?: AbortSignal): Promise<SolutionEpisodeDetail>
   reviewSolutionEpisode(scope: WorkspaceScope, input: SolutionEpisodeReviewInput): Promise<void>
   submitFeedback(scope: WorkspaceScope, requestId: string, score: number, reason: string): Promise<void>
+  listLifecycle(scope: WorkspaceScope, signal?: AbortSignal): Promise<{ scheduler?: SchedulerSummary; history: SchedulerRunHistory[] }>
+  listSkills(scope: WorkspaceScope, signal?: AbortSignal): Promise<SkillInfo[]>
+  listClientProfiles(signal?: AbortSignal): Promise<{ profiles: ClientProfile[] }>
+  createClientProfile(input: { id: string; display_name: string; client_kind: ClientKind; tool_profile: ClientToolProfile }): Promise<{ profile: ClientProfile }>
+  updateClientProfile(input: { id: string; display_name: string; client_kind: ClientKind; tool_profile: ClientToolProfile; expected_revision: number }): Promise<{ profile: ClientProfile }>
+  deleteClientProfile(input: { id: string; expected_revision: number }): Promise<{ deleted: boolean; id: string }>
   getSettings(scope: WorkspaceScope, signal?: AbortSignal): Promise<Record<string, unknown>>
   importMigration(scope: WorkspaceScope, file: File, passphrase: string, idempotencyKey: string): Promise<{ imported: number; merged: number; skipped: number; failed: number }>
 }

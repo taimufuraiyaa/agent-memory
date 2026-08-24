@@ -9,12 +9,13 @@ import {
 import { createHostedKnowledgeGateway } from '../lib/adapters/hostedKnowledgeGateway'
 import type { DashboardRuntime } from '../lib/runtime'
 import { RightsAttestationGate } from './RightsAttestationGate'
-import { WorkspaceApp } from './WorkspaceApp'
+import { WorkspaceApp, type DashboardColorScheme } from './WorkspaceApp'
 
 const emptyConnection: HostedConnection = { token: '', tenant: '', workspace: '' }
 
-export function HostedWorkspaceBootstrap({ runtime }: { runtime: DashboardRuntime }) {
+export function HostedWorkspaceBootstrap({ runtime, colorScheme, onColorSchemeChange }: { runtime: DashboardRuntime; colorScheme: DashboardColorScheme; onColorSchemeChange: (value: DashboardColorScheme) => void }) {
   const localOnboarding = runtime.features.includes('local_onboarding')
+  const localSystemTools = runtime.features.includes('local_system_tools')
   const [connection, setConnection] = useState<HostedConnection>(emptyConnection)
   const [draft, setDraft] = useState<HostedConnection>(emptyConnection)
   const [sessionState, setSessionState] = useState<'loading' | 'signup_required' | 'authenticated'>(localOnboarding ? 'loading' : 'signup_required')
@@ -38,7 +39,7 @@ export function HostedWorkspaceBootstrap({ runtime }: { runtime: DashboardRuntim
   }, [localOnboarding])
 
   const connected = Boolean(connection.tenant && connection.workspace && (connection.token || localOnboarding))
-  const gateway = useMemo(() => connected ? createHostedKnowledgeGateway(connection) : null, [connected, connection])
+  const gateway = useMemo(() => connected ? createHostedKnowledgeGateway(connection, { localOwner: localOnboarding, localSystemTools }) : null, [connected, connection, localOnboarding, localSystemTools])
 
   async function createOwner(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -72,6 +73,6 @@ export function HostedWorkspaceBootstrap({ runtime }: { runtime: DashboardRuntim
   </div>
 
   return <RightsAttestationGate getStatus={() => getHostedRightsAttestationStatus(connection)} accept={(input) => acceptHostedRightsAttestation(connection, input)}>
-    <WorkspaceApp runtime={runtime} gateway={gateway} />
+    <WorkspaceApp runtime={runtime} gateway={gateway} colorScheme={colorScheme} onColorSchemeChange={onColorSchemeChange} />
   </RightsAttestationGate>
 }

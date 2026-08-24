@@ -179,6 +179,18 @@ func executeRecall(
 	if err != nil {
 		return nil, "", err
 	}
+	var howResult *engine.HowRecallResult
+	if engine.IsHowOrientedTask(task) {
+		how, howErr := engine.NewHowRecallService(store).Recall(ctx, engine.HowRecallInput{
+			Workspace: cfg.workspace, Task: task, TokenBudget: req.Budget,
+			SessionID: req.ObservationSessionID,
+		})
+		if howErr != nil {
+			return nil, "", howErr
+		}
+		result.ContextBlock = engine.AppendHowRecallContext(result.ContextBlock, how)
+		howResult = &how
+	}
 	// Flush benchmark instrumentation metrics after each recall.
 	_ = engine.FlushBenchmarkMetrics()
 	payload := map[string]any{
@@ -207,6 +219,10 @@ func executeRecall(
 		"deep_recall_used":       result.Decision.Strategy != engine.RecallStrategySearchSatisfied,
 		"reconstruction":         result.Reconstruction,
 		"benchmark_metrics":      engine.SnapshotBenchmarkMetrics(),
+	}
+	if howResult != nil {
+		payload["how_recall"] = howResult
+		payload["how_request_id"] = howResult.RequestID
 	}
 	return payload, result.ContextBlock, nil
 }

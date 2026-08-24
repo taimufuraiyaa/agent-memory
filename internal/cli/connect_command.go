@@ -84,7 +84,11 @@ func backupAgentFiles(agent, root, dataDir string) ([]string, error) {
 	case "codex":
 		paths = []string{filepath.Join(root, ".codex", "config.toml"), filepath.Join(root, ".codex", "hooks.json")}
 	case "claude", "claude-code":
-		paths = []string{filepath.Join(root, ".mcp.json"), filepath.Join(root, ".claude", "settings.json")}
+		paths = []string{filepath.Join(root, ".mcp.json"), filepath.Join(root, ".claude", "settings.json"), filepath.Join(root, "CLAUDE.md")}
+	case "cursor":
+		paths = []string{filepath.Join(root, ".cursor", "rules", "agent-memory.mdc")}
+	case "kiro":
+		paths = []string{filepath.Join(root, ".kiro", "hooks", "memory-recall-gate.json"), filepath.Join(root, ".kiro", "hooks", "memory-consolidation-gate.json")}
 	default:
 		return nil, fmt.Errorf("unknown agent adapter: %s", agent)
 	}

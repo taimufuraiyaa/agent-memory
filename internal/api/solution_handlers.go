@@ -92,6 +92,30 @@ type solutionReviewRequest struct {
 	Pinned             bool   `json:"pinned,omitempty"`
 }
 
+type solutionRecallRequest struct {
+	Workspace     string `json:"workspace"`
+	PrincipalID   string `json:"principal_id"`
+	SessionID     string `json:"session_id"`
+	Task          string `json:"task"`
+	TokenBudget   int    `json:"token_budget"`
+	MaxCandidates int    `json:"max_candidates"`
+}
+
+type solutionPromotionTargetRequest struct {
+	MemoryType    core.MemoryType `json:"memory_type"`
+	Content       string          `json:"content,omitempty"`
+	SourceStepIDs []string        `json:"source_step_ids,omitempty"`
+}
+
+type solutionPromoteRequest struct {
+	Workspace      string                           `json:"workspace"`
+	PrincipalID    string                           `json:"principal_id"`
+	EpisodeID      string                           `json:"episode_id"`
+	SummaryID      string                           `json:"summary_id"`
+	IdempotencyKey string                           `json:"idempotency_key"`
+	Targets        []solutionPromotionTargetRequest `json:"targets"`
+}
+
 func solutionStartHandler(svc *Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -116,6 +140,69 @@ func solutionStartHandler(svc *Service) http.HandlerFunc {
 			return
 		}
 		writeOK(w, http.StatusOK, map[string]any{"episode": episode, "deduplicated": deduplicated})
+	}
+}
+
+func solutionRecallHandler(svc *Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeErr(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+			return
+		}
+		var req solutionRecallRequest
+		if !decodeSolutionRequest(w, r, &req) {
+			return
+		}
+		ws, _, ok := resolveSolutionService(w, r, svc, req.Workspace)
+		if !ok {
+			return
+		}
+		assets, err := svc.resolve(r.Context(), ws)
+		if err != nil {
+			writeWorkspaceResolveError(w, err)
+			return
+		}
+		result, err := engine.NewHowRecallService(assets.Store).Recall(r.Context(), engine.HowRecallInput{
+			Workspace: ws, PrincipalID: req.PrincipalID, SessionID: req.SessionID, Task: req.Task,
+			TokenBudget: req.TokenBudget, MaxCandidates: req.MaxCandidates,
+		})
+		if err != nil {
+			writeSolutionError(w, err)
+			return
+		}
+		writeOK(w, http.StatusOK, result)
+	}
+}
+
+func solutionPromoteHandler(svc *Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeErr(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+			return
+		}
+		var req solutionPromoteRequest
+		if !decodeSolutionRequest(w, r, &req) {
+			return
+		}
+		ws, service, ok := resolveSolutionService(w, r, svc, req.Workspace)
+		if !ok {
+			return
+		}
+		targets := make([]application.SolutionPromotionTarget, 0, len(req.Targets))
+		for _, target := range req.Targets {
+			targets = append(targets, application.SolutionPromotionTarget{
+				MemoryType: target.MemoryType, Content: target.Content, SourceStepIDs: target.SourceStepIDs,
+			})
+		}
+		result, err := service.Promote(r.Context(), application.SolutionPromoteInput{
+			Workspace: ws, PrincipalID: req.PrincipalID, EpisodeID: req.EpisodeID, SummaryID: req.SummaryID,
+			IdempotencyKey: req.IdempotencyKey, Targets: targets,
+		})
+		if err != nil {
+			writeSolutionError(w, err)
+			return
+		}
+		writeOK(w, http.StatusOK, result)
 	}
 }
 

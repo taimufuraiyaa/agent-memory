@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import { Alert, Badge, Button, Card, Drawer, Group, Loader, Paper, Stack, Text, Title, UnstyledButton } from '@mantine/core'
 import { IconChevronRight, IconRefresh } from '@tabler/icons-react'
 import type { KnowledgeGateway, KnowledgeResult, SolutionEpisodeDetail, SolutionEpisodeSummary } from '../../lib/knowledgeGateway'
+import { ListPagination, paginateRecords } from './ListPagination'
 
 export function HowHistoryView({ gateway, workspaceId }: { gateway: KnowledgeGateway; workspaceId: string }) {
   const [episodes, setEpisodes] = useState<SolutionEpisodeSummary[]>([])
@@ -13,6 +14,8 @@ export function HowHistoryView({ gateway, workspaceId }: { gateway: KnowledgeGat
   const [loading, setLoading] = useState(false)
   const [detailLoading, setDetailLoading] = useState('')
   const [error, setError] = useState('')
+  const [episodePage, setEpisodePage] = useState(1)
+  const [ungroupedPage, setUngroupedPage] = useState(1)
 
   async function load() {
     setLoading(true)
@@ -24,6 +27,8 @@ export function HowHistoryView({ gateway, workspaceId }: { gateway: KnowledgeGat
       ])
       setEpisodes(history)
       setUngrouped(memories.items)
+      setEpisodePage(1)
+      setUngroupedPage(1)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'How History could not be loaded.')
     } finally { setLoading(false) }
@@ -54,13 +59,16 @@ export function HowHistoryView({ gateway, workspaceId }: { gateway: KnowledgeGat
     } finally { setDetailLoading('') }
   }
 
+  const pagedEpisodes = paginateRecords(episodes, episodePage)
+  const pagedUngrouped = paginateRecords(ungrouped, ungroupedPage)
+
   return <Stack className="howHistoryView" gap="lg" aria-label="How History">
     <Group justify="space-between" align="flex-start"><div><Title order={2}>How History</Title><Text c="dimmed">Trace how work produced knowledge, where its evidence came from, and what feedback affects trust.</Text></div><Button variant="default" leftSection={<IconRefresh size={16} />} loading={loading} onClick={() => void load()}>Refresh</Button></Group>
     {error ? <Alert color="red" title="How History unavailable" role="alert">{error}</Alert> : null}
     {loading && !episodes.length ? <Group justify="center" py="xl"><Loader size="sm" /><Text c="dimmed">Loading solution history…</Text></Group> : null}
     {!loading && !episodes.length ? <Paper withBorder p="xl" radius="lg"><Title order={3}>No How history yet</Title><Text c="dimmed" mt="xs">Completed agent work will appear here when it has a structured solution episode.</Text></Paper> : null}
     <Stack role="tree" aria-label="Solution-path knowledge tree" gap="sm">
-      {episodes.map((episode) => {
+      {pagedEpisodes.items.map((episode) => {
         const expanded = expandedId === episode.id
         const detail = details[episode.id]
         return <Card key={episode.id} className="howTreeRoot" withBorder radius="lg" padding={0}>
@@ -71,16 +79,22 @@ export function HowHistoryView({ gateway, workspaceId }: { gateway: KnowledgeGat
           {expanded ? <Stack role="group" className="howTreeBranches" gap="sm">
             {detailLoading === episode.id && !detail ? <Group p="md"><Loader size="xs" /><Text size="sm" c="dimmed">Loading provenance…</Text></Group> : null}
             {detail ? <>
-              <TreeBranch label="Steps" count={detail.steps.length}>{detail.steps.map((step) => <Paper key={step.id} withBorder p="sm" radius="md"><Group gap="xs"><Badge variant="light">{step.ordinal}</Badge><Badge variant="outline">{step.kind}</Badge>{step.misleading ? <Badge color="orange">Misleading</Badge> : null}{step.redacted ? <Badge color="red">Redacted</Badge> : null}</Group><Text mt="xs">{step.summary}</Text>{step.rationale ? <Text size="sm" c="dimmed" mt={4}>{step.rationale}</Text> : null}</Paper>)}</TreeBranch>
-              <TreeBranch label="What" count={detail.promotionTargets.length}>{detail.promotionTargets.length ? detail.promotionTargets.map((target) => <Paper key={target.promotionId} withBorder p="sm" radius="md"><Group justify="space-between"><Group gap="xs"><Badge variant="light">{target.memoryType || target.kind}</Badge><Badge color={target.availability === 'available' ? 'memory' : target.state === 'failed' ? 'red' : 'gray'}>{target.availability}</Badge></Group>{target.memory ? <Button size="xs" variant="subtle" onClick={() => setSelectedMemory(target.memory!)}>Open memory</Button> : null}</Group>{target.memory ? <Text mt="xs" lineClamp={3}>{target.memory.content}</Text> : <Text mt="xs" size="sm" c="dimmed">Target content is unavailable; the promotion state remains part of history.</Text>}</Paper>) : <EmptyBranch text="No durable memory or skill was promoted from this path." />}</TreeBranch>
-              <TreeBranch label="Where" count={detail.evidence.length}>{detail.evidence.length ? detail.evidence.map((reference, index) => <Paper key={`${reference.kind}:${reference.targetId}:${reference.locator || ''}:${index}`} withBorder p="sm" radius="md"><Group justify="space-between"><Text size="sm"><strong>{reference.kind}</strong>: {reference.locator || reference.targetId}</Text><Badge variant="outline">{reference.resolution || 'unverified'}</Badge></Group></Paper>) : <EmptyBranch text="No explicit evidence reference was stored." />}</TreeBranch>
-              <TreeBranch label="Feedback" count={detail.pathFeedback.length + detail.steps.filter((step) => step.misleading || step.redacted || step.reviewReason).length}>{detail.pathFeedback.map((feedback) => <Paper key={feedback.id} withBorder p="sm" radius="md"><Group justify="space-between"><Text size="sm">Path retrieval feedback</Text><Badge color={feedback.outcome === 'helpful' ? 'memory' : feedback.outcome === 'harmful' ? 'red' : 'orange'}>{feedback.outcome}</Badge></Group><Text c="dimmed" size="xs" mt={4}>{new Date(feedback.createdAt).toLocaleString()}</Text></Paper>)}{detail.steps.filter((step) => step.misleading || step.redacted || step.reviewReason).map((step) => <Paper key={`review:${step.id}`} withBorder p="sm" radius="md"><Group gap="xs"><Badge variant="outline">Step {step.ordinal}</Badge>{step.misleading ? <Badge color="orange">Misleading</Badge> : null}{step.redacted ? <Badge color="red">Redacted</Badge> : null}</Group><Text size="sm" mt="xs">{step.reviewReason || step.reasonClass || 'Reviewed without an explanation.'}</Text></Paper>)}{!detail.pathFeedback.length && !detail.steps.some((step) => step.misleading || step.redacted || step.reviewReason) ? <EmptyBranch text="No path or step feedback has been recorded." /> : null}</TreeBranch>
+              <TreeBranch label="Steps" count={detail.steps.length}>{detail.steps.length ? detail.steps.map((step) => <Paper key={step.id} withBorder p="sm" radius="md"><Group gap="xs"><Badge variant="light">{step.ordinal}</Badge><Badge variant="outline">{step.kind}</Badge>{step.misleading ? <Badge color="orange">Misleading</Badge> : null}{step.redacted ? <Badge color="red">Redacted</Badge> : null}</Group><Text mt="xs">{step.summary}</Text>{step.rationale ? <Text size="sm" c="dimmed" mt={4}>{step.rationale}</Text> : null}</Paper>) : <NotApplicable reason="No safe solution steps were stored for this episode." />}</TreeBranch>
+              <TreeBranch label="What" count={detail.promotionTargets.length}>{detail.promotionTargets.length ? detail.promotionTargets.map((target) => <Paper key={target.promotionId} withBorder p="sm" radius="md"><Group justify="space-between"><Group gap="xs"><Badge variant="light">{target.memoryType || target.kind}</Badge><Badge color={target.availability === 'available' ? 'memory' : target.state === 'failed' ? 'red' : 'gray'}>{target.availability}</Badge></Group>{target.memory ? <Button size="xs" variant="subtle" onClick={() => setSelectedMemory(target.memory!)}>Open memory</Button> : null}</Group>{target.memory ? <Text mt="xs" lineClamp={3}>{target.memory.content}</Text> : <Text mt="xs" size="sm" c="dimmed">Target content is unavailable; the promotion state remains part of history.</Text>}</Paper>) : <NotApplicable reason="No durable memory or skill was promoted from this path." />}</TreeBranch>
+              <TreeBranch label="When" count={detail.finalizedAt ? 3 : 2}>
+                <TimeFact label="Started" value={detail.createdAt} />
+                <TimeFact label="Last updated" value={detail.updatedAt} />
+                {detail.finalizedAt ? <TimeFact label="Finalized" value={detail.finalizedAt} /> : <NotApplicable reason="This episode has no finalized summary yet." />}
+              </TreeBranch>
+              <TreeBranch label="Where" count={detail.evidence.length}>{detail.evidence.length ? detail.evidence.map((reference, index) => <Paper key={`${reference.kind}:${reference.targetId}:${reference.locator || ''}:${index}`} withBorder p="sm" radius="md"><Group justify="space-between"><Text size="sm"><strong>{reference.kind}</strong>: {reference.locator || reference.targetId}</Text><Badge variant="outline">{reference.resolution || 'unverified'}</Badge></Group></Paper>) : <NotApplicable reason="No explicit evidence reference was stored." />}</TreeBranch>
+              <TreeBranch label="Feedback" count={detail.pathFeedback.length + detail.steps.filter((step) => step.misleading || step.redacted || step.reviewReason).length}>{detail.pathFeedback.map((feedback) => <Paper key={feedback.id} withBorder p="sm" radius="md"><Group justify="space-between"><Text size="sm">Path retrieval feedback</Text><Badge color={feedback.outcome === 'helpful' ? 'memory' : feedback.outcome === 'harmful' ? 'red' : 'orange'}>{feedback.outcome}</Badge></Group><Text c="dimmed" size="xs" mt={4}>{new Date(feedback.createdAt).toLocaleString()}</Text></Paper>)}{detail.steps.filter((step) => step.misleading || step.redacted || step.reviewReason).map((step) => <Paper key={`review:${step.id}`} withBorder p="sm" radius="md"><Group gap="xs"><Badge variant="outline">Step {step.ordinal}</Badge>{step.misleading ? <Badge color="orange">Misleading</Badge> : null}{step.redacted ? <Badge color="red">Redacted</Badge> : null}</Group><Text size="sm" mt="xs">{step.reviewReason || step.reasonClass || 'Reviewed without an explanation.'}</Text></Paper>)}{!detail.pathFeedback.length && !detail.steps.some((step) => step.misleading || step.redacted || step.reviewReason) ? <NotApplicable reason="No path or step feedback has been recorded." /> : null}</TreeBranch>
             </> : null}
           </Stack> : null}
         </Card>
       })}
     </Stack>
-    <Stack gap="sm"><div><Title order={3}>Ungrouped memories</Title><Text c="dimmed" size="sm">Durable memories that do not have an explicit solution-path promotion.</Text></div>{ungrouped.length ? ungrouped.map((memory) => <Paper key={memory.id} withBorder p="md" radius="md"><Group justify="space-between"><Badge variant="light">{memory.memoryType || 'memory'}</Badge><Button size="xs" variant="subtle" onClick={() => setSelectedMemory(memory)}>Open memory</Button></Group><Text mt="xs" lineClamp={3}>{memory.content}</Text></Paper>) : <EmptyBranch text="No ungrouped memories in the current page." />}</Stack>
+    <ListPagination page={pagedEpisodes.page} total={episodes.length} onChange={setEpisodePage} label="Solution episodes" />
+    <Stack gap="sm"><div><Title order={3}>Ungrouped memories</Title><Text c="dimmed" size="sm">Durable memories that do not have an explicit solution-path promotion.</Text></div>{ungrouped.length ? pagedUngrouped.items.map((memory) => <Paper key={memory.id} withBorder p="md" radius="md"><Group justify="space-between"><Badge variant="light">{memory.memoryType || 'memory'}</Badge><Button size="xs" variant="subtle" onClick={() => setSelectedMemory(memory)}>Open memory</Button></Group><Text mt="xs" lineClamp={3}>{memory.content}</Text></Paper>) : <EmptyBranch text="No ungrouped memories in the current page." />}<ListPagination page={pagedUngrouped.page} total={ungrouped.length} onChange={setUngroupedPage} label="Ungrouped memories" /></Stack>
     <Drawer opened={Boolean(selectedMemory)} onClose={() => setSelectedMemory(null)} position="right" size="lg" title="Memory detail">{selectedMemory ? <Stack><Badge color="memory" variant="light">{selectedMemory.memoryType || 'memory'}</Badge><Text lh={1.7}>{selectedMemory.content}</Text><Text size="sm" c="dimmed">{selectedMemory.provenance || 'No source locator recorded.'}</Text></Stack> : null}</Drawer>
   </Stack>
 }
@@ -91,4 +105,12 @@ function TreeBranch({ label, count, children }: { label: string; count: number; 
 
 function EmptyBranch({ text }: { text: string }) {
   return <Text c="dimmed" size="sm">{text}</Text>
+}
+
+function TimeFact({ label, value }: { label: string; value: string }) {
+  return <Paper withBorder p="sm" radius="md"><Group justify="space-between"><Text size="sm" fw={700}>{label}</Text><Text size="sm" c="dimmed">{new Date(value).toLocaleString()}</Text></Group></Paper>
+}
+
+function NotApplicable({ reason }: { reason: string }) {
+  return <Group gap="xs" align="flex-start"><Badge color="gray" variant="outline">N/A</Badge><Text c="dimmed" size="sm">{reason}</Text></Group>
 }

@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 
 	"github.com/taimufuraiyaa/agent-memory/internal/application"
 	"github.com/taimufuraiyaa/agent-memory/internal/core"
+	"github.com/taimufuraiyaa/agent-memory/internal/embeddings"
 	"github.com/taimufuraiyaa/agent-memory/internal/engine"
 	"github.com/taimufuraiyaa/agent-memory/internal/storage/sqlite"
 )
@@ -22,8 +24,89 @@ func newWorkCommand() *cobra.Command {
 	command.AddCommand(
 		newWorkStartCommand(&flags), newWorkStepCommand(&flags), newWorkCheckpointCommand(&flags),
 		newWorkShowCommand(&flags), newWorkEndCommand(&flags), newWorkHandoffCommand(&flags),
+		newWorkRecallCommand(&flags), newWorkPromoteCommand(&flags),
 	)
 	return command
+}
+
+func newWorkRecallCommand(flags *commonFlags) *cobra.Command {
+	var principalID, sessionID, task string
+	var budget, maxCandidates int
+	cmd := &cobra.Command{Use: "recall", Short: "Recall prior solution paths", RunE: func(cmd *cobra.Command, _ []string) error {
+		cfg, err := resolveRuntime(*flags)
+		if err != nil {
+			return err
+		}
+		body := map[string]any{"workspace": cfg.workspace, "principal_id": principalID, "session_id": sessionID, "task": task,
+			"token_budget": budget, "max_candidates": maxCandidates}
+		var output any
+		if cfg.apiURL != "" {
+			err = postAPI(cmd.Context(), cfg.apiURL, "/api/v1/solutions/recall", body, &output)
+		} else {
+			store, openErr := sqlite.Open(cmd.Context(), cfg.dbPath)
+			if openErr != nil {
+				return openErr
+			}
+			defer func() { _ = store.Close() }()
+			output, err = engine.NewHowRecallService(store).Recall(cmd.Context(), engine.HowRecallInput{
+				Workspace: cfg.workspace, PrincipalID: principalID, SessionID: sessionID, Task: task,
+				TokenBudget: budget, MaxCandidates: maxCandidates,
+			})
+		}
+		if err != nil {
+			return err
+		}
+		return writeSuccessEnvelope(cmd.OutOrStdout(), "work.recall", output)
+	}}
+	cmd.Flags().StringVar(&principalID, "principal", "", "Principal identifier for active-state recall")
+	cmd.Flags().StringVar(&sessionID, "session", "", "Session identifier for active-state recall")
+	cmd.Flags().StringVar(&task, "task", "", "How-oriented task")
+	cmd.Flags().IntVar(&budget, "budget", 800, "Token budget")
+	cmd.Flags().IntVar(&maxCandidates, "max-candidates", 50, "Maximum candidates to rank")
+	_ = cmd.MarkFlagRequired("task")
+	return cmd
+}
+
+func newWorkPromoteCommand(flags *commonFlags) *cobra.Command {
+	var principalID, episodeID, summaryID, memoryType, content, key string
+	var sourceStepIDs []string
+	cmd := &cobra.Command{Use: "promote", Short: "Promote verified How knowledge into durable What memory", RunE: func(cmd *cobra.Command, _ []string) error {
+		cfg, err := resolveRuntime(*flags)
+		if err != nil {
+			return err
+		}
+		key = idempotencyKeyOrNew(key)
+		body := map[string]any{"workspace": cfg.workspace, "principal_id": principalID, "episode_id": episodeID, "summary_id": summaryID,
+			"idempotency_key": key, "targets": []map[string]any{{"memory_type": memoryType, "content": content, "source_step_ids": sourceStepIDs}}}
+		var output any
+		if cfg.apiURL != "" {
+			err = postAPI(cmd.Context(), cfg.apiURL, "/api/v1/solutions/promote", body, &output)
+		} else {
+			err = withSolutionWriterService(cmd.Context(), cfg, func(service *application.SolutionService) error {
+				result, callErr := service.Promote(cmd.Context(), application.SolutionPromoteInput{
+					Workspace: cfg.workspace, PrincipalID: principalID, EpisodeID: episodeID, SummaryID: summaryID, IdempotencyKey: key,
+					Targets: []application.SolutionPromotionTarget{{MemoryType: core.MemoryType(memoryType), Content: content, SourceStepIDs: sourceStepIDs}},
+				})
+				output = result
+				return callErr
+			})
+		}
+		if err != nil {
+			return err
+		}
+		return writeSuccessEnvelope(cmd.OutOrStdout(), "work.promote", output)
+	}}
+	cmd.Flags().StringVar(&principalID, "principal", "", "Principal identifier")
+	cmd.Flags().StringVar(&episodeID, "episode", "", "Episode identifier")
+	cmd.Flags().StringVar(&summaryID, "summary", "", "Finalized summary identifier")
+	cmd.Flags().StringVar(&memoryType, "memory-type", string(core.ProceduralMemory), "Durable memory type")
+	cmd.Flags().StringVar(&content, "content", "", "Optional promoted content; defaults to the finalized summary")
+	cmd.Flags().StringSliceVar(&sourceStepIDs, "source-step", nil, "Source step identifier (repeatable)")
+	cmd.Flags().StringVar(&key, "idempotency-key", "", "Stable retry key")
+	for _, flag := range []string{"principal", "episode", "summary"} {
+		_ = cmd.MarkFlagRequired(flag)
+	}
+	return cmd
 }
 
 func newWorkStartCommand(flags *commonFlags) *cobra.Command {
@@ -268,6 +351,23 @@ func withSolutionService(ctx context.Context, cfg runtimeConfig, run func(*appli
 	}
 	defer func() { _ = store.Close() }()
 	return run(application.NewSolutionService(store, engine.NewSolutionAdmissionPolicy()))
+}
+
+func withSolutionWriterService(ctx context.Context, cfg runtimeConfig, run func(*application.SolutionService) error) error {
+	store, err := openStore(ctx, cfg)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = store.Close() }()
+	if err := os.MkdirAll(cfg.modelDir, 0o755); err != nil {
+		return err
+	}
+	provider, err := embeddings.NewLocalProvider(cfg.modelDir)
+	if err != nil {
+		return err
+	}
+	writer := engine.NewWritePipelineWithOptions(store, engine.WritePipelineOptions{Embedder: provider})
+	return run(application.NewSolutionService(store, engine.NewSolutionAdmissionPolicy(), application.WithSolutionWriter(writer)))
 }
 
 func idempotencyKeyOrNew(value string) string {

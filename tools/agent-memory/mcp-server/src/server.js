@@ -142,6 +142,14 @@ const allTools = [
     workspace: { type: "string" }, principal_id: { type: "string" }, episode_id: { type: "string" }, expected_version: { type: "integer", minimum: 1 },
     target_principal_id: { type: "string" }, target_session_id: { type: "string" }, idempotency_key: { type: "string" },
   }, ["principal_id", "episode_id", "expected_version", "target_principal_id", "target_session_id"]),
+  tool("solution_recall", "Recall bounded prior solution paths for a how-oriented task", {
+    workspace: { type: "string" }, principal_id: { type: "string" }, session_id: { type: "string" }, task: { type: "string" },
+    token_budget: { type: "integer", minimum: 1, maximum: 32000 }, max_candidates: { type: "integer", minimum: 1, maximum: 100 },
+  }, ["task"]),
+  tool("solution_promote", "Promote verified solution-path knowledge into durable memory", {
+    workspace: { type: "string" }, principal_id: { type: "string" }, episode_id: { type: "string" }, summary_id: { type: "string" },
+    idempotency_key: { type: "string" }, targets: { type: "array", minItems: 1, maxItems: 8, items: { type: "object" } },
+  }, ["principal_id", "episode_id", "summary_id", "targets"]),
 ];
 const defaultToolNames = new Set([
   "memory_write",
@@ -149,6 +157,14 @@ const defaultToolNames = new Set([
   "memory_recall",
   "memory_feedback",
   "memory_session_end",
+	"solution_start",
+	"solution_step",
+	"solution_checkpoint",
+	"solution_state",
+	"solution_transition",
+	"solution_handoff",
+	"solution_recall",
+	"solution_promote",
 ]);
 const tools = profile === "expanded"
   ? allTools
@@ -323,6 +339,14 @@ async function callTool(name, args) {
     case "solution_handoff":
       requireLocalSolutionTool();
       return requestService("/api/v1/solutions/handoff", { body: { ...args, idempotency_key: args.idempotency_key || randomUUID() } });
+    case "solution_recall":
+      requireLocalSolutionTool();
+      return requestService("/api/v1/solutions/recall", { body: {
+        ...args, token_budget: args.token_budget || 800, max_candidates: args.max_candidates || 50,
+      } });
+    case "solution_promote":
+      requireLocalSolutionTool();
+      return requestService("/api/v1/solutions/promote", { body: { ...args, idempotency_key: args.idempotency_key || randomUUID() } });
     default:
       throw new Error(`tool execution is not available for ${name}`);
   }

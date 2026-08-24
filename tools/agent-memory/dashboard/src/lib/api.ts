@@ -3,7 +3,7 @@ export type MemoryType = 'episodic' | 'semantic' | 'procedural' | 'outcome'
 export type StorageTier = 'markdown' | 'vector' | 'vector+graph' | 'document' | 'cold'
 export type NoteIndexState = 'pending' | 'indexing' | 'ready' | 'failed' | 'retired' | 'paused'
 
-export type ClientKind = 'codex' | 'claude' | 'cursor' | 'other'
+export type ClientKind = 'codex' | 'claude' | 'cursor' | 'kiro' | 'other'
 export type ClientToolProfile = 'default' | 'expanded'
 
 export type ClientProfile = {

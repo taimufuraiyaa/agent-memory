@@ -154,6 +154,18 @@ func memoriesRecallHandler(svc *Service) http.HandlerFunc {
 			writeErr(w, http.StatusBadRequest, "runtime", err.Error())
 			return
 		}
+		var howResult *engine.HowRecallResult
+		if engine.IsHowOrientedTask(task) {
+			how, howErr := engine.NewHowRecallService(assets.Store).Recall(r.Context(), engine.HowRecallInput{
+				Workspace: ws, SessionID: req.ObservationSession, Task: task, TokenBudget: budget,
+			})
+			if howErr != nil {
+				writeErr(w, http.StatusBadRequest, "runtime", howErr.Error())
+				return
+			}
+			result.contextBlock = engine.AppendHowRecallContext(result.contextBlock, how)
+			howResult = &how
+		}
 		data := map[string]any{
 			"request_id":             result.requestID,
 			"context_block":          result.contextBlock,
@@ -182,6 +194,10 @@ func memoriesRecallHandler(svc *Service) http.HandlerFunc {
 		}
 		if strings.EqualFold(strings.TrimSpace(req.Format), "raw") {
 			data["text"] = result.contextBlock
+		}
+		if howResult != nil {
+			data["how_recall"] = howResult
+			data["how_request_id"] = howResult.RequestID
 		}
 		writeOK(w, http.StatusOK, data)
 	}
@@ -264,6 +280,18 @@ func memoriesRecallPreviewHandler(svc *Service) http.HandlerFunc {
 			writeErr(w, http.StatusBadRequest, "runtime", err.Error())
 			return
 		}
+		var howResult *engine.HowRecallResult
+		if engine.IsHowOrientedTask(task) {
+			how, howErr := engine.NewHowRecallService(assets.Store).Recall(r.Context(), engine.HowRecallInput{
+				Workspace: ws, SessionID: req.ObservationSession, Task: task, TokenBudget: budget,
+			})
+			if howErr != nil {
+				writeErr(w, http.StatusBadRequest, "runtime", howErr.Error())
+				return
+			}
+			result.contextBlock = engine.AppendHowRecallContext(result.contextBlock, how)
+			howResult = &how
+		}
 		tierDist := make(map[string]int)
 		mems := make([]map[string]any, 0, len(result.included))
 		var fullMems []core.MemoryEntry
@@ -320,6 +348,10 @@ func memoriesRecallPreviewHandler(svc *Service) http.HandlerFunc {
 		}
 		if req.IncludeMemories {
 			out["memories_included_full"] = fullMems
+		}
+		if howResult != nil {
+			out["how_recall"] = howResult
+			out["how_request_id"] = howResult.RequestID
 		}
 		writeOK(w, http.StatusOK, out)
 	}

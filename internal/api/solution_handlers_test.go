@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/taimufuraiyaa/agent-memory/internal/embeddings"
 )
 
 func TestSolutionContinuationHTTPContract(t *testing.T) {
@@ -89,7 +91,11 @@ func TestSolutionStateRejectsPriorPrincipalAfterHandoff(t *testing.T) {
 }
 
 func TestStructuredSessionEndFinalizesEpisodeThroughHTTPWithoutTranscript(t *testing.T) {
-	svc := &Service{Workspace: "ws", BaseDir: t.TempDir()}
+	provider, err := embeddings.NewLocalProvider(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc := &Service{Workspace: "ws", BaseDir: t.TempDir(), EmbeddingProvider: provider}
 	server := httptest.NewServer(NewMux(svc))
 	t.Cleanup(func() { server.Close(); _ = svc.Close() })
 
@@ -114,6 +120,18 @@ func TestStructuredSessionEndFinalizesEpisodeThroughHTTPWithoutTranscript(t *tes
 	}
 	if ended["episode"].(map[string]any)["status"] != "completed" || ended["summary"].(map[string]any)["episode_id"] != episodeID {
 		t.Fatalf("structured episode was not finalized: %#v", ended)
+	}
+	recalled := postJSON(t, server.URL+"/api/v1/solutions/recall", map[string]any{
+		"workspace": "ws", "task": "How was the structured HTTP episode finalized?", "token_budget": 800,
+	})
+	if len(recalled["paths"].([]any)) != 1 || recalled["request_id"] == "" {
+		t.Fatalf("finalized solution path was not publicly recallable: %#v", recalled)
+	}
+	naturalRecall := postJSON(t, server.URL+"/api/v1/memories/recall", map[string]any{
+		"workspace": "ws", "task": "How was the structured HTTP episode finalized?", "budget": 800,
+	})
+	if naturalRecall["how_request_id"] == "" || naturalRecall["how_recall"] == nil {
+		t.Fatalf("normal recall did not naturally compose How context: %#v", naturalRecall)
 	}
 }
 

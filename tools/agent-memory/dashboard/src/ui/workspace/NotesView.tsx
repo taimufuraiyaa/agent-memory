@@ -3,6 +3,7 @@ import { Alert, Button, Grid, Group, Paper, ScrollArea, SegmentedControl, Stack,
 import { IconFilePlus, IconRefresh, IconRestore, IconTrash } from '@tabler/icons-react'
 import type { KnowledgeGateway, NoteSummary, WorkspaceNote } from '../../lib/knowledgeGateway'
 import { MarkdownView } from '../MarkdownView'
+import { ListPagination, paginateRecords } from './ListPagination'
 
 export function NotesView({ gateway, workspaceId }: { gateway: KnowledgeGateway; workspaceId: string }) {
   const [notes, setNotes] = useState<NoteSummary[]>([])
@@ -12,6 +13,7 @@ export function NotesView({ gateway, workspaceId }: { gateway: KnowledgeGateway;
   const [preview, setPreview] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [notePage, setNotePage] = useState(1)
   const controllerRef = useRef<AbortController | null>(null)
   const scope = { workspaceId }
 
@@ -26,6 +28,7 @@ export function NotesView({ gateway, workspaceId }: { gateway: KnowledgeGateway;
     const controller = new AbortController()
     controllerRef.current = controller
     setActive(null)
+    setNotePage(1)
     setError('')
     refresh(controller.signal).catch((reason: unknown) => {
       if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : 'Notes are unavailable in this workspace.')
@@ -81,6 +84,7 @@ export function NotesView({ gateway, workspaceId }: { gateway: KnowledgeGateway;
   }
 
   const visibleNotes = showTrash ? trash : notes
+  const pagedNotes = paginateRecords(visibleNotes, notePage)
 
   return <Stack className="notesWorkspace" gap="md">
     {error ? <Alert color="red" title="Notes unavailable" role="alert">{error}</Alert> : null}
@@ -88,11 +92,12 @@ export function NotesView({ gateway, workspaceId }: { gateway: KnowledgeGateway;
       <Grid.Col span={{ base: 12, md: 4, lg: 3 }}>
         <Paper className="notesExplorer" withBorder p="sm" radius="lg" h="100%">
           <Stack gap="sm">
-            <Group><Button size="xs" leftSection={<IconFilePlus size={15} />} onClick={() => void create()} loading={busy}>New note</Button><Button size="xs" variant={showTrash ? 'light' : 'default'} leftSection={<IconTrash size={15} />} onClick={() => setShowTrash((value) => !value)}>Trash</Button><Text size="xs" c="dimmed">{trash.length}</Text></Group>
+            <Group><Button size="xs" leftSection={<IconFilePlus size={15} />} onClick={() => void create()} loading={busy}>New note</Button><Button size="xs" variant={showTrash ? 'light' : 'default'} leftSection={<IconTrash size={15} />} onClick={() => { setShowTrash((value) => !value); setNotePage(1) }}>Trash</Button><Text size="xs" c="dimmed">{trash.length}</Text></Group>
             <ScrollArea h={520} type="auto"><Stack component="nav" aria-label={showTrash ? 'Trashed notes' : 'Notes'} gap={4}>
-              {visibleNotes.map((note) => <Paper key={note.id} withBorder p="xs" radius="md"><Stack gap="xs"><UnstyledButton className="noteListItem" data-active={active?.id === note.id || undefined} aria-current={active?.id === note.id ? 'true' : undefined} onClick={() => void open(note.id)}><Text fw={650}>{note.title}</Text><Text size="xs" c="dimmed" lineClamp={1}>{note.path}</Text></UnstyledButton>{showTrash ? <Group gap="xs"><Button size="compact-xs" variant="light" leftSection={<IconRestore size={13} />} onClick={() => void restore(note.id)}>Restore</Button><Button size="compact-xs" color="red" variant="subtle" onClick={() => void remove(note.id, note.title)}>Delete</Button></Group> : <Button size="compact-xs" variant="subtle" color="red" leftSection={<IconTrash size={13} />} onClick={() => void moveToTrash(note.id)}>Trash</Button>}</Stack></Paper>)}
+              {pagedNotes.items.map((note) => <Paper key={note.id} withBorder p="xs" radius="md"><Stack gap="xs"><UnstyledButton className="noteListItem" data-active={active?.id === note.id || undefined} aria-current={active?.id === note.id ? 'true' : undefined} onClick={() => void open(note.id)}><Text fw={650}>{note.title}</Text><Text size="xs" c="dimmed" lineClamp={1}>{note.path}</Text></UnstyledButton>{showTrash ? <Group gap="xs"><Button size="compact-xs" variant="light" leftSection={<IconRestore size={13} />} onClick={() => void restore(note.id)}>Restore</Button><Button size="compact-xs" color="red" variant="subtle" onClick={() => void remove(note.id, note.title)}>Delete</Button></Group> : <Button size="compact-xs" variant="subtle" color="red" leftSection={<IconTrash size={13} />} onClick={() => void moveToTrash(note.id)}>Trash</Button>}</Stack></Paper>)}
               {!visibleNotes.length ? <Text c="dimmed" size="sm" p="md">{showTrash ? 'Trash is empty.' : 'Create the first note in this workspace.'}</Text> : null}
             </Stack></ScrollArea>
+            <ListPagination page={pagedNotes.page} total={visibleNotes.length} onChange={setNotePage} label={showTrash ? 'Trashed notes' : 'Notes'} />
           </Stack>
         </Paper>
       </Grid.Col>

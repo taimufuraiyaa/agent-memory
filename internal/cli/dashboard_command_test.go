@@ -232,6 +232,26 @@ func TestEmbeddedDashboardWrapperUsesBundledAssets(t *testing.T) {
 	}
 }
 
+func TestDashboardForceLocalFlagIsAvailable(t *testing.T) {
+	command := newDashboardCommand()
+	flag := command.Flags().Lookup("force-local")
+	if flag == nil || flag.DefValue != "false" {
+		t.Fatalf("expected opt-in --force-local flag, got %#v", flag)
+	}
+}
+
+func TestDashboardForceLocalBypassesHostedDiscovery(t *testing.T) {
+	if !shouldDiscoverHostedDashboard(true, false, false) {
+		t.Fatal("background start should discover a hosted dashboard by default")
+	}
+	if shouldDiscoverHostedDashboard(true, false, true) {
+		t.Fatal("--force-local must bypass hosted dashboard discovery")
+	}
+	if shouldDiscoverHostedDashboard(true, true, false) {
+		t.Fatal("hot reload must remain local")
+	}
+}
+
 func TestEmbeddedDashboardPublishesBackgroundStartHandshake(t *testing.T) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {

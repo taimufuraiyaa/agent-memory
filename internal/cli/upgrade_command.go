@@ -398,6 +398,7 @@ func newUpgradeCommand() *cobra.Command {
 	var noDashboard bool
 	var dashboardDir string
 	var all bool
+	var ideTargets []string
 
 	cmd := &cobra.Command{
 		Use:   "upgrade",
@@ -425,6 +426,7 @@ Use --hooks-only to push hooks without touching the binary (useful for existing 
 					CWD:     cwd,
 					DataDir: defaultAgentMemoryDataDir(),
 					Force:   force,
+					IDEs:    ideTargets,
 				})
 			}
 
@@ -451,6 +453,7 @@ Use --hooks-only to push hooks without touching the binary (useful for existing 
 						Workspace: proj.Name,
 						DataDir:   defaultAgentMemoryDataDir(),
 						Force:     force,
+						IDEs:      ideTargets,
 					})
 					if err != nil {
 						continue
@@ -750,6 +753,7 @@ Use --hooks-only to push hooks without touching the binary (useful for existing 
 	cmd.Flags().BoolVar(&hooksOnly, "hooks-only", false, "Only write hippocampus hook files, skip binary upgrade")
 	cmd.Flags().BoolVar(&noHooks, "no-hooks", false, "Skip writing hippocampus hook files")
 	cmd.Flags().BoolVar(&forceHooks, "force-hooks", false, "Overwrite hook files even if already up-to-date")
+	cmd.Flags().StringSliceVar(&ideTargets, "ide", nil, "IDE rule targets to upgrade (repeatable): kiro|cursor|antigravity|claude|zcode|codex|aierules|cursorrules|trae|windsurfrules|generic|all")
 	cmd.Flags().BoolVar(&noDashboard, "no-dashboard", false, "Skip refreshing standalone dashboard from source checkout")
 	cmd.Flags().StringVar(&dashboardDir, "dashboard-dir", "", "Dashboard install dir (default: $AGENT_MEMORY_DASHBOARD_DIR or ~/.agent-memory/dashboard)")
 	cmd.Flags().BoolVarP(&all, "all", "a", false, "Upgrade all registered workspaces/projects")

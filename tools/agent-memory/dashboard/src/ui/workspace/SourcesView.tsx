@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, Badge, Button, Grid, Group, NumberInput, Paper, Select, SimpleGrid, Stack, Switch, Text, Title, UnstyledButton } from '@mantine/core'
 import { IconAlertTriangle, IconArrowLeft, IconBook2, IconChevronRight, IconCode, IconFileText, IconMessageCircleQuestion, IconPlayerPlay, IconRefresh, IconSearch, IconTrash } from '@tabler/icons-react'
 import type { KnowledgeGateway, SourceSummary, StudyResult } from '../../lib/knowledgeGateway'
+import { ListPagination, paginateRecords } from './ListPagination'
 
 const sourceKinds: SourceSummary['kind'][] = ['codebase', 'document', 'note']
 const processingStates: SourceSummary['state'][] = ['uploading', 'parsing', 'ocr-required', 'ocr-processing', 'indexing', 'ready', 'failed']
@@ -38,6 +39,7 @@ export function SourcesView({ gateway, workspaceId, importedSource, onNavigate }
   const [preview, setPreview] = useState(false)
   const [pages, setPages] = useState<StudyResult[]>([])
   const [pageIndex, setPageIndex] = useState(0)
+  const [sourcePage, setSourcePage] = useState(1)
   const controllerRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
@@ -47,6 +49,7 @@ export function SourcesView({ gateway, workspaceId, importedSource, onNavigate }
     setSources([])
     setSelectedId('')
     setPages([])
+    setSourcePage(1)
     setError('')
     gateway.listSources({ workspaceId }, controller.signal).then((items) => {
       if (controller.signal.aborted) return
@@ -62,6 +65,7 @@ export function SourcesView({ gateway, workspaceId, importedSource, onNavigate }
     if (!importedSource || importedSource.workspaceId !== workspaceId) return
     setSources((current) => [importedSource, ...current.filter((source) => source.id !== importedSource.id)])
     setSelectedId(importedSource.id)
+    setSourcePage(1)
   }, [importedSource, workspaceId])
 
   useEffect(() => {
@@ -73,6 +77,7 @@ export function SourcesView({ gateway, workspaceId, importedSource, onNavigate }
 
   const selected = sources.find((source) => source.id === selectedId) || null
   const result = pages[pageIndex] || null
+  const pagedSources = paginateRecords(sources, sourcePage)
   const counts = useMemo(() => sourceKinds.map((kind) => ({ kind, count: sources.filter((source) => source.kind === kind).length })), [sources])
 
   async function runStudy(offset: number, writePreview = false) {
@@ -112,7 +117,7 @@ export function SourcesView({ gateway, workspaceId, importedSource, onNavigate }
     <SimpleGrid cols={{ base: 1, xs: 3 }} aria-label="Source inventory">{counts.map((item) => <Paper key={item.kind} withBorder p="md" radius="lg"><Text size="xs" c="dimmed" tt="uppercase">{item.kind}</Text><Text size="xl" fw={700}>{item.count}</Text></Paper>)}</SimpleGrid>
     {error ? <Alert color="red" title="Sources unavailable" role="alert">{error}</Alert> : null}
     <Grid gutter="md" align="stretch">
-      <Grid.Col span={{ base: 12, md: 4, lg: 3 }}><Paper withBorder p="xs" radius="lg" h="100%" aria-label="Workspace sources"><Stack gap={4}>{sources.map((source) => <UnstyledButton className="sourceListItem" key={source.id} data-active={selectedId === source.id || undefined} aria-current={selectedId === source.id ? 'true' : undefined} onClick={() => setSelectedId(source.id)}><Group wrap="nowrap" align="flex-start"><SourceIcon kind={source.kind} /><div className="sourceListCopy"><Text size="xs" c="memory" tt="uppercase">{source.kind}</Text><Text fw={650} lineClamp={2}>{source.title}</Text><Badge size="xs" variant="light" color={stateColor(source.state, Boolean(source.failure))}>{sourceStatus(source)}</Badge></div><IconChevronRight className="sourceListChevron" size={16} /></Group></UnstyledButton>)}{!sources.length ? <Text c="dimmed" size="sm" p="md">No sources yet. Use Add source in the header.</Text> : null}</Stack></Paper></Grid.Col>
+      <Grid.Col span={{ base: 12, md: 4, lg: 3 }}><Paper withBorder p="xs" radius="lg" h="100%" aria-label="Workspace sources"><Stack gap={4}>{pagedSources.items.map((source) => <UnstyledButton className="sourceListItem" key={source.id} data-active={selectedId === source.id || undefined} aria-current={selectedId === source.id ? 'true' : undefined} onClick={() => setSelectedId(source.id)}><Group wrap="nowrap" align="flex-start"><SourceIcon kind={source.kind} /><div className="sourceListCopy"><Text size="xs" c="memory" tt="uppercase">{source.kind}</Text><Text fw={650} lineClamp={2}>{source.title}</Text><Badge size="xs" variant="light" color={stateColor(source.state, Boolean(source.failure))}>{sourceStatus(source)}</Badge></div><IconChevronRight className="sourceListChevron" size={16} /></Group></UnstyledButton>)}{!sources.length ? <Text c="dimmed" size="sm" p="md">No sources yet. Use Add source in the header.</Text> : null}<ListPagination page={pagedSources.page} total={sources.length} onChange={setSourcePage} label="Sources" /></Stack></Paper></Grid.Col>
       <Grid.Col span={{ base: 12, md: 8, lg: 9 }}><Paper className="sourceDetail" withBorder p={{ base: 'md', md: 'xl' }} radius="lg" h="100%">
         {selected ? <Stack gap="lg">
           <Group justify="space-between" align="flex-start"><div><Text size="xs" c="memory" fw={700} tt="uppercase">{selected.kind} source</Text><Title order={2}>{selected.title}</Title><Text c="dimmed">{selected.format ? selected.format.toUpperCase() : selected.statusLabel}</Text></div><Stack gap="xs" align="flex-end"><Badge variant="light" color={stateColor(selected.state, Boolean(selected.failure))}>{sourceStatus(selected)}</Badge>{selected.kind !== 'codebase' ? <Button color="red" variant="light" size="xs" leftSection={<IconTrash size={15} />} onClick={() => void removeSource(selected)}>Remove source</Button> : null}</Stack></Group>

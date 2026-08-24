@@ -504,6 +504,10 @@ func shouldServeEmbeddedDashboard(hotReload bool) bool {
 	return !hotReload
 }
 
+func shouldDiscoverHostedDashboard(start, hotReload, forceLocal bool) bool {
+	return start && !hotReload && !forceLocal
+}
+
 func newDashboardCommand() *cobra.Command {
 	var flags commonFlags
 	var addr string
@@ -514,6 +518,7 @@ func newDashboardCommand() *cobra.Command {
 	var pidFile string
 	var status bool
 	var hotReload bool
+	var forceLocal bool
 	cmd := &cobra.Command{
 		Use:     "dashboard",
 		Short:   "Open the Agent Memory webapp (reuses Floci or starts a local fallback)",
@@ -569,7 +574,7 @@ func newDashboardCommand() *cobra.Command {
 			if start && stop {
 				return errors.New("only one of --start or --stop can be set")
 			}
-			if start && !hotReload {
+			if shouldDiscoverHostedDashboard(start, hotReload, forceLocal) {
 				client := &http.Client{
 					Timeout: 750 * time.Millisecond,
 					CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
@@ -700,6 +705,7 @@ func newDashboardCommand() *cobra.Command {
 			svc := &api.Service{
 				Workspace:         cfg.workspace,
 				BaseDir:           filepath.Dir(cfg.dbPath),
+				DBPath:            cfg.dbPath,
 				EmbeddingProvider: provider,
 			}
 			if err := api.ConfigureLocalRightsAttestation(ctx, svc); err != nil {
@@ -825,6 +831,7 @@ func newDashboardCommand() *cobra.Command {
 	cmd.Flags().BoolVar(&stop, "stop", false, "Stop the background dashboard server (started via --start)")
 	cmd.Flags().BoolVar(&status, "status", false, "Show background dashboard server status")
 	cmd.Flags().BoolVar(&hotReload, "hot-reload", false, "Run the dashboard with Vite hot reload (development only; requires npm)")
+	cmd.Flags().BoolVar(&forceLocal, "force-local", false, "Start the standalone dashboard and do not reuse a running hosted webapp")
 	cmd.Flags().StringVar(&dashDirFlag, "dashboard-dir", "", "Path to standalone dashboard folder (tools/agent-memory/dashboard)")
 	cmd.Flags().StringVar(&pidFile, "pid-file", "", "Internal: pid file path")
 	_ = cmd.Flags().MarkHidden("pid-file")

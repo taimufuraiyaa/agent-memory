@@ -3,12 +3,14 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/taimufuraiyaa/agent-memory/internal/application"
+	"github.com/taimufuraiyaa/agent-memory/internal/clientprofile"
 	"github.com/taimufuraiyaa/agent-memory/internal/core"
 	"github.com/taimufuraiyaa/agent-memory/internal/embeddings"
 	"github.com/taimufuraiyaa/agent-memory/internal/engine"
@@ -20,6 +22,7 @@ import (
 type localProjectService struct {
 	manager  *workspace.Manager
 	modelDir string
+	clients  *clientprofile.Store
 }
 
 func newLocalProjectService() (*localProjectService, error) {
@@ -42,7 +45,118 @@ func newLocalProjectService() (*localProjectService, error) {
 	if err := os.MkdirAll(modelDir, 0o755); err != nil {
 		return nil, err
 	}
-	return &localProjectService{manager: manager, modelDir: modelDir}, nil
+	clients, err := clientprofile.Open(baseDir, time.Now)
+	if err != nil {
+		return nil, err
+	}
+	return &localProjectService{manager: manager, modelDir: modelDir, clients: clients}, nil
+}
+
+func (service *localProjectService) Lifecycle(ctx context.Context, workspaceName string, limit int) (api.LocalProjectLifecycle, error) {
+	store, err := service.openProjectStore(ctx, workspaceName)
+	if err != nil {
+		return api.LocalProjectLifecycle{}, err
+	}
+	defer store.Close()
+	runs, err := store.ListSchedulerRunHistory(ctx, workspaceName, limit)
+	if err != nil {
+		return api.LocalProjectLifecycle{}, err
+	}
+	history := make([]api.LocalProjectLifecycleRun, 0, len(runs))
+	for _, run := range runs {
+		history = append(history, api.LocalProjectLifecycleRun{ID: run.ID, Workspace: run.Workspace, StartedAt: run.StartedAt, CompletedAt: run.CompletedAt, Trigger: run.Trigger, Result: run.Result, SkipReason: run.SkipReason, DurationMS: run.DurationMS, DecayUpdated: run.DecayUpdated, Consolidated: run.Consolidated, ConflictsFound: run.ConflictsFound, Evicted: run.Evicted, Promoted: run.Promoted, Demoted: run.Demoted, Error: run.Error})
+	}
+	return api.LocalProjectLifecycle{History: history}, nil
+}
+
+func (service *localProjectService) Skills(_ context.Context, workspaceName string) ([]api.LocalProjectSkill, error) {
+	project, err := service.manager.Project(workspaceName)
+	if err != nil {
+		return nil, err
+	}
+	root, err := filepath.EvalSymlinks(project.WorkspaceRoot)
+	if err != nil {
+		return nil, fmt.Errorf("resolve registered project root: %w", err)
+	}
+	skillsDir, err := filepath.EvalSymlinks(filepath.Join(root, ".agents", "skills"))
+	if os.IsNotExist(err) {
+		return []api.LocalProjectSkill{}, nil
+	}
+	if err != nil || !pathWithinRoot(root, skillsDir) {
+		return nil, errors.New("workspace skills directory is unavailable")
+	}
+	entries, err := os.ReadDir(skillsDir)
+	if err != nil {
+		return nil, err
+	}
+	skills := make([]api.LocalProjectSkill, 0, len(entries))
+	for _, entry := range entries {
+		if !entry.IsDir() || entry.Type()&os.ModeSymlink != 0 {
+			continue
+		}
+		path := filepath.Join(skillsDir, entry.Name(), "SKILL.md")
+		info, statErr := os.Lstat(path)
+		if statErr != nil || !info.Mode().IsRegular() || info.Size() > 12_000 {
+			continue
+		}
+		resolved, resolveErr := filepath.EvalSymlinks(path)
+		if resolveErr != nil || !pathWithinRoot(root, resolved) {
+			continue
+		}
+		content, readErr := os.ReadFile(resolved)
+		if readErr != nil {
+			continue
+		}
+		displayName, description, body := parseLocalSkill(string(content))
+		if displayName == "" {
+			displayName = entry.Name()
+		}
+		skills = append(skills, api.LocalProjectSkill{Name: entry.Name(), DisplayName: displayName, Description: description, Content: body, Path: filepath.ToSlash(filepath.Join(".agents", "skills", entry.Name(), "SKILL.md"))})
+	}
+	return skills, nil
+}
+
+func pathWithinRoot(root, candidate string) bool {
+	relative, err := filepath.Rel(root, candidate)
+	return err == nil && relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator)) && !filepath.IsAbs(relative)
+}
+
+func parseLocalSkill(raw string) (name, description, content string) {
+	content = raw
+	if !strings.HasPrefix(raw, "---\n") && !strings.HasPrefix(raw, "---\r\n") {
+		return "", "", content
+	}
+	parts := strings.SplitN(raw, "---", 3)
+	if len(parts) < 3 {
+		return "", "", content
+	}
+	content = strings.TrimSpace(parts[2])
+	for _, line := range strings.Split(parts[1], "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "name:") {
+			name = strings.Trim(strings.TrimSpace(strings.TrimPrefix(line, "name:")), `"'`)
+		}
+		if strings.HasPrefix(line, "description:") {
+			description = strings.Trim(strings.TrimSpace(strings.TrimPrefix(line, "description:")), `"'`)
+		}
+	}
+	return name, description, content
+}
+
+func (service *localProjectService) ListClientProfiles(context.Context) ([]clientprofile.Profile, error) {
+	return service.clients.List(), nil
+}
+
+func (service *localProjectService) CreateClientProfile(_ context.Context, input clientprofile.Input) (clientprofile.Profile, error) {
+	return service.clients.Create(input)
+}
+
+func (service *localProjectService) UpdateClientProfile(_ context.Context, id string, expectedRevision int64, input clientprofile.Input) (clientprofile.Profile, error) {
+	return service.clients.Update(id, expectedRevision, input)
+}
+
+func (service *localProjectService) DeleteClientProfile(_ context.Context, id string, expectedRevision int64) error {
+	return service.clients.Delete(id, expectedRevision)
 }
 
 func (service *localProjectService) List(ctx context.Context) ([]workspace.ListItem, error) {
@@ -326,6 +440,27 @@ func (service *localProjectService) RecallSolutionPaths(ctx context.Context, inp
 	return engine.NewHowRecallService(store).Recall(ctx, engine.HowRecallInput{
 		Workspace: input.Workspace, PrincipalID: input.PrincipalID, SessionID: input.SessionID, Task: input.Task,
 		TokenBudget: input.TokenBudget, MaxCandidates: input.MaxCandidates,
+	})
+}
+
+func (service *localProjectService) PromoteSolutionEpisode(ctx context.Context, input api.LocalProjectSolutionPromoteInput) (application.SolutionPromotionResult, error) {
+	store, err := service.openProjectStore(ctx, input.Workspace)
+	if err != nil {
+		return application.SolutionPromotionResult{}, err
+	}
+	defer store.Close()
+	provider, err := embeddings.NewLocalProvider(service.modelDir)
+	if err != nil {
+		return application.SolutionPromotionResult{}, err
+	}
+	writer := engine.NewWritePipelineWithOptions(store, engine.WritePipelineOptions{Embedder: provider})
+	targets := make([]application.SolutionPromotionTarget, 0, len(input.Targets))
+	for _, target := range input.Targets {
+		targets = append(targets, application.SolutionPromotionTarget{MemoryType: core.MemoryType(target.MemoryType), Content: target.Content, SourceStepIDs: target.SourceStepIDs})
+	}
+	return application.NewSolutionService(store, engine.NewSolutionAdmissionPolicy(), application.WithSolutionWriter(writer)).Promote(ctx, application.SolutionPromoteInput{
+		Workspace: input.Workspace, PrincipalID: input.PrincipalID, EpisodeID: input.EpisodeID, SummaryID: input.SummaryID,
+		IdempotencyKey: input.IdempotencyKey, Targets: targets,
 	})
 }
 

@@ -125,14 +125,27 @@ The feature is successful when a later agent can answer four questions from boun
 ### R11 — How History and Knowledge Tree
 
 - The Knowledge surface must provide a first-class How History view for active and completed solution episodes; Activity remains the chronological operational timeline.
-- Each How root must expose the safe ordered path and four explicitly labeled branches: Steps, What, Where, and Feedback.
+- Each How root must expose the safe ordered path and five explicitly labeled branches: Steps, What, When, Where, and Feedback.
 - What contains only durable memories or skill artifacts connected by stored promotion provenance. The UI must never infer a parent from text similarity.
+- When contains the stored episode start and last-update times, plus finalization time when a summary exists. The UI must not infer or fabricate missing timestamps.
 - Where contains bounded episode evidence and step references with their resolution state. Missing or tombstoned targets remain labeled rather than silently removed.
 - Feedback contains path-targeted retrieval feedback and human episode or step reviews. Feedback on a promoted memory remains attached to that memory unless an explicit path target also exists.
+- An empty optional branch must render a literal `N/A` status and a concise reason. `N/A` means that no corresponding stored relationship or event exists; it must not be presented as proof that a legacy agent explicitly evaluated applicability.
 - Promotion targets must resolve to bounded display summaries when authorized. Failed, pending, deleted, or non-memory promotions remain visible as typed states without leaking target content.
 - Existing memories without a stored solution-path relationship remain available in an Ungrouped memories section and retain current search, browse, selection, export, and deletion behavior.
 - The tree must support keyboard expansion, semantic tree roles and labels, narrow-screen layouts, deterministic ordering, bounded initial payloads, and lazy detail loading.
 - Standalone and registered-project hosted gateways must return equivalent tree semantics and enforce their existing workspace and principal boundaries.
+
+### R12 — Executable End-to-End How Workflow
+
+- A standalone `recall` request whose task is explicitly how-oriented must include bounded validated solution-path context in addition to compatible legacy memory recall; factual recall must retain its current ranking behavior.
+- The standalone recall-preview API used by the dashboard must apply the same how-intent rule and expose the solution-path request identity and structured result without replacing legacy hits.
+- Expanded MCP clients must be able to invoke solution-path recall directly, while older profiles remain unchanged.
+- Finalized solution summaries must be promotable through public standalone CLI, HTTP, and expanded MCP contracts. Promotion must use the existing application service, admission pipeline, idempotency, authorization, and provenance rules.
+- A dashboard launched with an explicit database path must open that exact file for its fixed workspace; it must not derive a different filename from the workspace name.
+- Workspace client routes under `/w/` must survive direct navigation and browser refresh by serving the embedded SPA shell for GET and HEAD requests, without intercepting API or asset routes.
+- `dashboard --start` may reuse the discovered hosted webapp by default, but an explicit forced-local option must bypass discovery and honor the requested address and database.
+- A permanent acceptance test must exercise capture, meaningful steps, checkpoint, finalization, how recall, promotion, How History grouping, ungrouped-memory compatibility, exact database selection, and workspace-route refresh against a fresh temporary database.
 
 ## Commands
 
@@ -174,6 +187,7 @@ Run from the repository root unless a command says otherwise.
 6. Existing unstructured clients and all current memory types remain compatible.
 7. A user can open How History and trace an episode to its ordered safe steps, explicitly promoted knowledge, scoped evidence, and feedback without fabricated relationships.
 8. Legacy or independently written memories remain browsable under Ungrouped memories.
+9. A fresh standalone workflow can capture and finalize a verified path, recall its method through a how-oriented request, promote durable What knowledge, and inspect the resulting How/What/When/Where/Feedback tree without manual database intervention.
 
 ## Open Questions for Product Review
 

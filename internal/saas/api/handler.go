@@ -105,12 +105,11 @@ func NewHandler(deps Dependencies) (http.Handler, error) {
 		}
 		return deps.Telemetry.Wrap(handler)
 	}
-	features := []string{"sources", "memory", "portable_import", "privacy", "billing"}
+	features := hostedDashboardFeatures(deps)
 	if deps.LocalOwner != nil {
 		if strings.TrimSpace(deps.LocalSessionToken) == "" {
 			return nil, errors.New("local onboarding session token is required")
 		}
-		features = append(features, "local_onboarding")
 		root.Handle("GET /v1/local-session", observe(localSessionStatus(deps.LocalOwner, deps.LocalSessionToken)))
 		root.Handle("POST /v1/local-session/signup", observe(localOwnerSignup(deps.LocalOwner, deps.LocalSessionToken)))
 		root.HandleFunc("DELETE /v1/local-session", localSessionLogout)
@@ -159,7 +158,18 @@ func NewHandler(deps Dependencies) (http.Handler, error) {
 		protected.Handle("POST /v1/local-project-solutions/handoff", localProjectBoundary("memory:write", handoffLocalProjectSolution(deps.LocalProjects)))
 		protected.Handle("POST /v1/local-project-solutions/finalize", localProjectBoundary("memory:write", finalizeLocalProjectSolution(deps.LocalProjects)))
 		protected.Handle("POST /v1/local-project-solutions/recall", localProjectBoundary("memory:read", recallLocalProjectSolutions(deps.LocalProjects)))
+		protected.Handle("POST /v1/local-project-solutions/promote", localProjectBoundary("memory:write", promoteLocalProjectSolution(deps.LocalProjects)))
 		protected.Handle("GET /v1/local-project-solutions/export", localProjectBoundary("memory:read", exportLocalProjectSolution(deps.LocalProjects)))
+		if system, ok := deps.LocalProjects.(LocalProjectSystemService); ok {
+			protected.Handle("GET /v1/local-projects/lifecycle", localProjectBoundary("memory:read", listLocalProjectLifecycle(system)))
+			protected.Handle("GET /v1/local-projects/skills", localProjectBoundary("memory:read", listLocalProjectSkills(system)))
+		}
+		if clients, ok := deps.LocalProjects.(LocalClientProfileService); ok {
+			protected.Handle("GET /v1/local-client-profiles", localProjectBoundary("memory:read", localClientProfiles(clients)))
+			protected.Handle("POST /v1/local-client-profiles", localProjectBoundary("memory:write", localClientProfiles(clients)))
+			protected.Handle("PUT /v1/local-client-profiles/{client_id}", localProjectBoundary("memory:write", localClientProfile(clients)))
+			protected.Handle("DELETE /v1/local-client-profiles/{client_id}", localProjectBoundary("memory:write", localClientProfile(clients)))
+		}
 	}
 	protected.HandleFunc("GET /v1/sources/{source_id}", getSource(deps.SourceCatalog))
 	protected.HandleFunc("POST /v1/sources/{source_id}/retry", retrySource(deps.SourceCatalog))
@@ -183,6 +193,27 @@ func NewHandler(deps Dependencies) (http.Handler, error) {
 	}
 	root.Handle("/v1/", protectedMiddleware(observe(protected)))
 	return root, nil
+}
+
+func localSystemToolsAvailable(projects LocalProjectService) bool {
+	if projects == nil {
+		return false
+	}
+	_, hasSystemTools := projects.(LocalProjectSystemService)
+	_, hasClientProfiles := projects.(LocalClientProfileService)
+	return hasSystemTools && hasClientProfiles
+}
+
+func hostedDashboardFeatures(deps Dependencies) []string {
+	features := []string{"sources", "memory", "portable_import", "privacy", "billing"}
+	if deps.LocalOwner == nil {
+		return features
+	}
+	features = append(features, "local_onboarding")
+	if localSystemToolsAvailable(deps.LocalProjects) {
+		features = append(features, "local_system_tools")
+	}
+	return features
 }
 
 func registerOperationalRoutes(root *http.ServeMux, readiness func(context.Context) error, telemetry HTTPObserver) {

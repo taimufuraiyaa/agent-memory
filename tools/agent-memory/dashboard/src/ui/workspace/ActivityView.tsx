@@ -1,9 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Alert, Badge, Button, Card, Divider, Drawer, Group, NumberInput, Paper, Progress, SegmentedControl, Stack, Text, Textarea, TextInput, Title } from '@mantine/core'
+import { useEffect, useRef, useState } from 'react'
+import { Alert, Badge, Button, Card, Divider, Drawer, Group, Modal, NumberInput, Paper, Progress, SegmentedControl, Stack, Text, Textarea, TextInput, Title } from '@mantine/core'
 import { IconMessageReport, IconRefresh } from '@tabler/icons-react'
-import type { ActivityItem, KnowledgeGateway, SolutionEpisodeDetail, SolutionEpisodeReviewInput } from '../../lib/knowledgeGateway'
-
-type ActivityFilter = 'all' | ActivityItem['kind']
+import type { ActivityFilter, ActivityItem, KnowledgeGateway, SolutionEpisodeDetail, SolutionEpisodeReviewInput } from '../../lib/knowledgeGateway'
+import { CursorPagination } from './ListPagination'
 
 const filters: Array<{ value: ActivityFilter; label: string }> = [
   { value: 'all', label: 'All' },
@@ -19,13 +18,17 @@ const filters: Array<{ value: ActivityFilter; label: string }> = [
 
 export function ActivityView({ gateway, workspaceId }: { gateway: KnowledgeGateway; workspaceId: string }) {
   const [items, setItems] = useState<ActivityItem[]>([])
-  const [cursor, setCursor] = useState<string>()
+  const [nextCursor, setNextCursor] = useState<string>()
+  const [cursorHistory, setCursorHistory] = useState<Array<string | undefined>>([undefined])
+  const [pageIndex, setPageIndex] = useState(0)
   const [filter, setFilter] = useState<ActivityFilter>('all')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [feedbackId, setFeedbackId] = useState('')
   const [score, setScore] = useState(4)
   const [reason, setReason] = useState('')
+  const [feedbackError, setFeedbackError] = useState('')
+  const [feedbackSaving, setFeedbackSaving] = useState(false)
   const [selectedItem, setSelectedItem] = useState<ActivityItem | null>(null)
   const [episodeDetail, setEpisodeDetail] = useState<SolutionEpisodeDetail | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
@@ -33,23 +36,42 @@ export function ActivityView({ gateway, workspaceId }: { gateway: KnowledgeGatew
   const [reviewStepId, setReviewStepId] = useState('')
   const [reviewReason, setReviewReason] = useState('')
   const [successorEpisodeId, setSuccessorEpisodeId] = useState('')
+  const loadSequence = useRef(0)
 
-  async function load(nextCursor?: string) {
+  async function load(pageCursor = cursorHistory[pageIndex], targetPage = pageIndex, activityFilter = filter) {
+    const sequence = ++loadSequence.current
     setLoading(true)
     setError('')
     try {
-      const page = await gateway.listActivity({ workspaceId }, nextCursor)
-      setItems((current) => nextCursor ? [...current, ...page.items] : page.items)
-      setCursor(page.nextCursor)
+      const page = await gateway.listActivity({ workspaceId }, pageCursor, activityFilter)
+      if (sequence === loadSequence.current) {
+        setItems(page.items)
+        setNextCursor(page.nextCursor)
+        setPageIndex(targetPage)
+      }
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Activity could not be loaded.')
+      if (sequence === loadSequence.current) setError(cause instanceof Error ? cause.message : 'Activity could not be loaded.')
     } finally {
-      setLoading(false)
+      if (sequence === loadSequence.current) setLoading(false)
     }
   }
 
-  useEffect(() => { setItems([]); setCursor(undefined); setSelectedItem(null); setEpisodeDetail(null); void load() }, [gateway, workspaceId])
-  const visible = useMemo(() => filter === 'all' ? items : items.filter((item) => item.kind === filter), [filter, items])
+  useEffect(() => { setItems([]); setNextCursor(undefined); setCursorHistory([undefined]); setPageIndex(0); setFeedbackId(''); setReason(''); setFeedbackError(''); setSelectedItem(null); setEpisodeDetail(null); void load(undefined, 0) }, [gateway, workspaceId])
+  const visible = items
+
+  function openFeedback(item: ActivityItem) {
+    setFeedbackId(item.id)
+    setScore(4)
+    setReason('')
+    setFeedbackError('')
+  }
+
+  function closeFeedback() {
+    if (feedbackSaving) return
+    setFeedbackId('')
+    setReason('')
+    setFeedbackError('')
+  }
 
   async function retry(item: ActivityItem) {
     setError('')
@@ -59,13 +81,15 @@ export function ActivityView({ gateway, workspaceId }: { gateway: KnowledgeGatew
 
   async function sendFeedback() {
     if (!feedbackId || !reason.trim()) return
-    setError('')
+    setFeedbackSaving(true)
+    setFeedbackError('')
     try {
       await gateway.submitFeedback({ workspaceId }, feedbackId.replace(/^retrieval:/, ''), score, reason.trim())
       setFeedbackId('')
       setReason('')
       await load()
-    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Feedback could not be saved.') }
+    } catch (cause) { setFeedbackError(cause instanceof Error ? cause.message : 'Feedback could not be saved.') }
+    finally { setFeedbackSaving(false) }
   }
 
   async function openItem(item: ActivityItem) {
@@ -107,7 +131,7 @@ export function ActivityView({ gateway, workspaceId }: { gateway: KnowledgeGatew
 
   return <Stack className="activityView" gap="md" aria-label="Workspace activity">
     <Group justify="space-between" align="flex-start"><div><Title order={2}>Activity</Title><Text c="dimmed">Background work, agent sessions, retrievals, and feedback for this workspace.</Text></div><Button variant="default" leftSection={<IconRefresh size={16} />} onClick={() => void load()} loading={loading}>Refresh</Button></Group>
-    <div className="activityFilterScroller"><SegmentedControl fullWidth value={filter} onChange={(value) => setFilter(value as ActivityFilter)} aria-label="Activity filters" data={filters} /></div>
+    <div className="activityFilterScroller"><SegmentedControl fullWidth value={filter} onChange={(value) => { const nextFilter = value as ActivityFilter; setFilter(nextFilter); setCursorHistory([undefined]); setPageIndex(0); void load(undefined, 0, nextFilter) }} aria-label="Activity filters" data={filters} /></div>
     {error ? <Alert color="red" title="Activity unavailable" role="alert">{error}</Alert> : null}
     {!loading && visible.length === 0 ? <Paper withBorder p="xl" radius="lg"><Stack align="center"><Title order={3}>No activity here yet</Title><Text c="dimmed">Study a project, add a source, or ask a question to start the timeline.</Text></Stack></Paper> : null}
     <Stack className="activityTimeline" gap="sm">{visible.map((item) => {
@@ -130,10 +154,18 @@ export function ActivityView({ gateway, workspaceId }: { gateway: KnowledgeGatew
             void openItem(item)
           }
         } : undefined}
-      ><Group justify="space-between" align="flex-start"><Stack gap="xs" style={{ flex: 1 }}><Group gap="xs"><Badge variant="light">{item.kind}</Badge><Badge variant="dot" color={item.failure ? 'red' : item.state === 'completed' ? 'memory' : 'blue'}>{item.state}</Badge>{item.episode?.pinned ? <Badge color="memory">Pinned</Badge> : null}{item.episode?.validation ? <Badge variant="outline">{item.episode.validation}</Badge> : null}</Group><Title order={3}>{item.title}</Title>{item.episode?.summary ? <Text lineClamp={2}>{item.episode.summary}</Text> : null}<Text c="dimmed" size="sm">Updated {new Date(item.updatedAt).toLocaleString()}</Text>{typeof item.progress === 'number' ? <Progress value={item.progress} aria-label={`${item.progress}% complete`} /> : null}{item.failure ? <Alert color="red" title={item.failure.message} /> : null}</Stack><Group>{opensDetails ? <Text size="xs" fw={700} c="memory">View details</Text> : null}{item.failure?.retryAllowed ? <Button size="xs" variant="light" onClick={() => void retry(item)}>Retry</Button> : null}{item.kind === 'retrieval' ? <Button size="xs" variant="default" leftSection={<IconMessageReport size={15} />} onClick={() => setFeedbackId(item.id)}>Rate retrieval</Button> : null}</Group></Group></Card>
+      ><Group justify="space-between" align="flex-start"><Stack gap="xs" style={{ flex: 1 }}><Group gap="xs"><Badge variant="light">{item.kind}</Badge><Badge variant="dot" color={item.failure ? 'red' : item.state === 'completed' ? 'memory' : 'blue'}>{item.state}</Badge>{item.episode?.pinned ? <Badge color="memory">Pinned</Badge> : null}{item.episode?.validation ? <Badge variant="outline">{item.episode.validation}</Badge> : null}</Group><Title order={3}>{item.title}</Title>{item.episode?.summary ? <Text lineClamp={2}>{item.episode.summary}</Text> : null}<Text c="dimmed" size="sm">Updated {new Date(item.updatedAt).toLocaleString()}</Text>{typeof item.progress === 'number' ? <Progress value={item.progress} aria-label={`${item.progress}% complete`} /> : null}{item.failure ? <Alert color="red" title={item.failure.message} /> : null}</Stack><Group>{opensDetails ? <Text size="xs" fw={700} c="memory">View details</Text> : null}{item.failure?.retryAllowed ? <Button size="xs" variant="light" onClick={() => void retry(item)}>Retry</Button> : null}{item.kind === 'retrieval' ? <Button size="xs" variant="default" leftSection={<IconMessageReport size={15} />} onClick={() => openFeedback(item)}>Rate retrieval</Button> : null}</Group></Group></Card>
     })}</Stack>
-    {cursor ? <Button variant="light" onClick={() => void load(cursor)} loading={loading}>Load more activity</Button> : null}
-    {feedbackId ? <Paper component="form" withBorder p="lg" radius="lg" onSubmit={(event) => { event.preventDefault(); void sendFeedback() }}><Stack><Title order={3}>Retrieval feedback</Title><NumberInput label="Score (0–5)" min={0} max={5} value={score} onChange={(value) => setScore(Number(value))} /><Textarea label="What was useful or missing?" value={reason} onChange={(event) => setReason(event.currentTarget.value)} autosize minRows={3} /><Group justify="flex-end"><Button variant="default" onClick={() => setFeedbackId('')}>Cancel</Button><Button type="submit" disabled={!reason.trim()}>Save feedback</Button></Group></Stack></Paper> : null}
+    <CursorPagination page={pageIndex + 1} hasNext={Boolean(nextCursor)} busy={loading} label="Activity" onPrevious={() => void load(cursorHistory[pageIndex - 1], pageIndex - 1)} onNext={() => { if (!nextCursor) return; const target = pageIndex + 1; setCursorHistory((current) => [...current.slice(0, target), nextCursor]); void load(nextCursor, target) }} />
+    <Modal opened={Boolean(feedbackId)} onClose={closeFeedback} centered size="lg" title="Retrieval feedback" closeButtonProps={{ 'aria-label': 'Close retrieval feedback' }} closeOnClickOutside={!feedbackSaving} closeOnEscape={!feedbackSaving}>
+      <Stack component="form" gap="md" onSubmit={(event) => { event.preventDefault(); void sendFeedback() }}>
+        <Text c="dimmed" size="sm">Score this retrieval without losing your current place in Activity.</Text>
+        {feedbackError ? <Alert color="red" title="Feedback could not be saved" role="alert">{feedbackError}</Alert> : null}
+        <NumberInput label="Score (0–5)" min={0} max={5} value={score} onChange={(value) => setScore(Number(value))} />
+        <Textarea label="What was useful or missing?" value={reason} onChange={(event) => setReason(event.currentTarget.value)} autosize minRows={4} />
+        <Group justify="flex-end"><Button variant="default" onClick={closeFeedback} disabled={feedbackSaving}>Cancel</Button><Button type="submit" loading={feedbackSaving} disabled={!reason.trim()}>Save feedback</Button></Group>
+      </Stack>
+    </Modal>
     <Drawer opened={Boolean(selectedItem)} onClose={() => { setSelectedItem(null); setEpisodeDetail(null) }} title={selectedItem?.episode ? 'Episode details' : 'Feedback details'} position="right" size="lg" closeButtonProps={{ 'aria-label': selectedItem?.episode ? 'Close episode details' : 'Close feedback details' }}>
       {selectedItem?.feedback ? <Stack gap="lg">
         <Group gap="xs"><Badge variant="light">{selectedItem.feedback.requestType}</Badge><Badge color={selectedItem.feedback.score >= 4 ? 'memory' : 'orange'}>{selectedItem.feedback.score >= 0 ? `${selectedItem.feedback.score}/5` : 'Pending'}</Badge></Group>

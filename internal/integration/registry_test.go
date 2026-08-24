@@ -46,3 +46,15 @@ func TestRegistryRunsStructuredAdapterOperations(t *testing.T) {
 		t.Fatalf("unexpected result: %+v", result)
 	}
 }
+
+func TestDefaultRegistryIncludesPrimaryClients(t *testing.T) {
+	registry, err := NewDefaultRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"codex", "claude-code", "cursor", "kiro"} {
+		if _, err := registry.Adapter(name); err != nil {
+			t.Errorf("missing default adapter %q: %v", name, err)
+		}
+	}
+}

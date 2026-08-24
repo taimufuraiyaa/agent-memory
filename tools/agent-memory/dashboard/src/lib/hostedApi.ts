@@ -201,6 +201,32 @@ export function listHostedProjects(connection: HostedConnection): Promise<{ proj
   return hostedRequest(connection, '/v1/local-projects')
 }
 
+export function getHostedProjectLifecycle(connection: HostedConnection, workspace: string): Promise<{ scheduler?: import('./api').SchedulerSummary; history: import('./api').SchedulerRunHistory[] }> {
+  return hostedRequest(connection, `/v1/local-projects/lifecycle?workspace=${encodeURIComponent(workspace)}&limit=100`)
+}
+
+export function listHostedProjectSkills(connection: HostedConnection, workspace: string): Promise<{ skills: import('./api').SkillInfo[] }> {
+  return hostedRequest(connection, `/v1/local-projects/skills?workspace=${encodeURIComponent(workspace)}`)
+}
+
+export function listHostedClientProfiles(connection: HostedConnection): Promise<{ profiles: import('./api').ClientProfile[] }> {
+  return hostedRequest(connection, '/v1/local-client-profiles')
+}
+
+export function createHostedClientProfile(connection: HostedConnection, input: { id: string; display_name: string; client_kind: import('./api').ClientKind; tool_profile: import('./api').ClientToolProfile }): Promise<{ profile: import('./api').ClientProfile }> {
+  return hostedRequest(connection, '/v1/local-client-profiles', { method: 'POST', body: JSON.stringify(input) })
+}
+
+export function updateHostedClientProfile(connection: HostedConnection, input: { id: string; display_name: string; client_kind: import('./api').ClientKind; tool_profile: import('./api').ClientToolProfile; expected_revision: number }): Promise<{ profile: import('./api').ClientProfile }> {
+  const { id, ...body } = input
+  return hostedRequest(connection, `/v1/local-client-profiles/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(body) })
+}
+
+export function deleteHostedClientProfile(connection: HostedConnection, input: { id: string; expected_revision: number }): Promise<{ deleted: boolean; id: string }> {
+  const query = new URLSearchParams({ expected_revision: String(input.expected_revision) })
+  return hostedRequest(connection, `/v1/local-client-profiles/${encodeURIComponent(input.id)}?${query.toString()}`, { method: 'DELETE' })
+}
+
 export function studyHostedProject(connection: HostedConnection, input: { workspace: string; depth: 'shallow' | 'medium' | 'deep'; dry_run: boolean; max_files: number; offset: number }): Promise<HostedProjectStudyResult> {
   return hostedRequest(connection, '/v1/local-projects/study', { method: 'POST', body: JSON.stringify(input) })
 }
@@ -219,7 +245,7 @@ export function getHostedProjectMemory(connection: HostedConnection, workspace: 
   return hostedRequest(connection, `/v1/local-projects/memories/${encodeURIComponent(memoryID)}?workspace=${encodeURIComponent(workspace)}`)
 }
 
-export function listHostedRetrievalFeedback(connection: HostedConnection, workspace: string): Promise<{ feedback: HostedRetrievalRequest[] }> {
+export function listHostedRetrievalFeedback(connection: HostedConnection, workspace: string): Promise<{ feedback: HostedRetrievalRequest[] | null }> {
   return hostedRequest(connection, `/v1/local-project-feedback?workspace=${encodeURIComponent(workspace)}`)
 }
 

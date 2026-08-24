@@ -29,8 +29,11 @@ import (
 )
 
 type Service struct {
-	Workspace              string
-	BaseDir                string
+	Workspace string
+	BaseDir   string
+	// DBPath binds a fixed standalone workspace to an exact database file.
+	// It is ignored for daemon and alternate-workspace resolution.
+	DBPath                 string
 	EmbeddingProvider      embeddings.Provider
 	Scheduler              Scheduler
 	LibraryRoleRunner      readingroom.RoleRunner
@@ -70,6 +73,9 @@ func (s *Service) resolve(ctx context.Context, ws string) (*workspaceAssets, err
 		return nil, errors.New("workspace is required")
 	}
 	dbPath := filepath.Join(s.BaseDir, ws+".db")
+	if ws == strings.TrimSpace(s.Workspace) && strings.TrimSpace(s.DBPath) != "" {
+		dbPath = filepath.Clean(s.DBPath)
+	}
 	// A daemon has no fixed workspace and routes exclusively through the
 	// registry. A fixed-workspace embedded service preserves its legacy path.
 	if strings.TrimSpace(s.Workspace) == "" || ws != s.Workspace {
@@ -282,6 +288,8 @@ func NewMux(svc *Service) *http.ServeMux {
 	mux.HandleFunc("/api/v1/memories/session-end", sessionEnd)
 	mux.HandleFunc("/api/v1/sessions/end", sessionEnd)
 	mux.HandleFunc("/api/v1/solutions/start", solutionStartHandler(svc))
+	mux.HandleFunc("/api/v1/solutions/recall", solutionRecallHandler(svc))
+	mux.HandleFunc("/api/v1/solutions/promote", solutionPromoteHandler(svc))
 	mux.HandleFunc("/api/v1/solutions/steps", solutionStepHandler(svc))
 	mux.HandleFunc("/api/v1/solutions/checkpoint", solutionCheckpointHandler(svc))
 	mux.HandleFunc("/api/v1/solutions/state", solutionStateHandler(svc))
@@ -347,6 +355,7 @@ func NewMux(svc *Service) *http.ServeMux {
 
 	// Serve embedded dashboard assets
 	mux.Handle("/dashboard/", serveDashboard())
+	mux.Handle("/w/", serveWorkspaceDashboard())
 
 	return mux
 }
@@ -431,4 +440,19 @@ func serveDashboard() http.Handler {
 		}))
 	}
 	return http.StripPrefix("/dashboard/", dashboard.GetEmbeddedHandler())
+}
+
+func serveWorkspaceDashboard() http.Handler {
+	assets := dashboard.GetEmbeddedHandler()
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			writeErr(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+			return
+		}
+		clone := r.Clone(r.Context())
+		urlCopy := *r.URL
+		urlCopy.Path = "/"
+		clone.URL = &urlCopy
+		assets.ServeHTTP(w, clone)
+	})
 }

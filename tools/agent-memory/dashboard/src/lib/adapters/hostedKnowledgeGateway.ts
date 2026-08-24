@@ -1,15 +1,20 @@
 import {
   browseHostedProjectMemories,
+  createHostedClientProfile,
   deleteHostedSource,
+  deleteHostedClientProfile,
+  getHostedProjectLifecycle,
   getHostedBilling,
   getHostedPrivacy,
   getHostedProjectMemory,
   getHostedProjectSolution,
   importHostedBundle,
   listHostedProcessingTasks,
+  listHostedClientProfiles,
   listHostedProjects,
   listHostedRetrievalFeedback,
   listHostedProjectSolutions,
+  listHostedProjectSkills,
   listHostedSources,
   queryHostedSources,
   retryHostedSource,
@@ -19,6 +24,7 @@ import {
   studyHostedProject,
   submitHostedRetrievalFeedback,
   uploadHostedSource,
+  updateHostedClientProfile,
   type HostedConnection,
   type HostedMemory,
   type HostedProject,
@@ -26,6 +32,7 @@ import {
   type HostedSource,
 } from '../hostedApi'
 import type {
+  ActivityFilter,
   ActivityItem,
   AskResponse,
   KnowledgeCapability,
@@ -34,7 +41,22 @@ import type {
   SourceSummary,
   WorkspaceSummary,
 } from '../knowledgeGateway'
+import { ACTIVITY_PAGE_SIZE } from '../knowledgeGateway'
 import { solutionActivityItem, solutionDetail } from './solutionEpisodeAdapter'
+
+function numericCursor(cursor?: string): number {
+  const value = Number.parseInt(cursor || '0', 10)
+  return Number.isFinite(value) && value >= 0 ? value : 0
+}
+
+function activityPage(items: ActivityItem[], cursor?: string, filter: ActivityFilter = 'all') {
+  const filteredItems = filter === 'all' ? items : items.filter((item) => item.kind === filter)
+  const offset = numericCursor(cursor)
+  return {
+    items: filteredItems.slice(offset, offset + ACTIVITY_PAGE_SIZE),
+    nextCursor: filteredItems.length > offset + ACTIVITY_PAGE_SIZE ? String(offset + ACTIVITY_PAGE_SIZE) : undefined,
+  }
+}
 
 function hostedMemoryResult(memory: HostedMemory, workspaceId: string, score?: number, explanation?: string): KnowledgeResult {
   return {
@@ -83,13 +105,22 @@ function hostedRightsBasis(value: 'author-owned' | 'licensed' | 'public-domain-o
   return 'licensed'
 }
 
-export function createHostedKnowledgeGateway(connection: HostedConnection): KnowledgeGateway {
+export function createHostedKnowledgeGateway(connection: HostedConnection, options: { localOwner?: boolean; localSystemTools?: boolean } = {}): KnowledgeGateway {
   let registeredProjects = new Map<string, HostedProject>()
   const isRegisteredProject = (workspaceId: string) => registeredProjects.has(workspaceId)
+  const localOwner = Boolean(options.localOwner)
+  const localSystemTools = Boolean(localOwner && options.localSystemTools)
+  const capabilities = new Set<KnowledgeCapability>(['workspace', 'ask', 'search', 'browse', 'source', 'study', 'activity', 'settings', ...(localSystemTools ? ['lifecycle', 'clients', 'skills'] as const : [])])
 
   return {
     runtime: 'hosted',
-    capabilities: new Set<KnowledgeCapability>(['workspace', 'ask', 'search', 'browse', 'source', 'study', 'activity', 'settings']),
+    capabilities,
+    supports(capability, scope) {
+      if (!capabilities.has(capability)) return false
+      if (capability === 'clients') return localSystemTools
+      if (capability === 'lifecycle' || capability === 'skills') return localSystemTools && isRegisteredProject(scope.workspaceId)
+      return true
+    },
     async listWorkspaces() {
       const response = await listHostedProjects(connection).catch(() => ({ projects: [] }))
       registeredProjects = new Map(response.projects.map((project) => [project.name, project]))
@@ -177,10 +208,10 @@ export function createHostedKnowledgeGateway(connection: HostedConnection): Know
     async restoreNote() { throw new Error('Notes are unavailable in this runtime.') },
     async deleteNote() { throw new Error('Notes are unavailable in this runtime.') },
     async retryNoteIndex() { throw new Error('Notes are unavailable in this runtime.') },
-    async listActivity(scope) {
+    async listActivity(scope, cursor, filter: ActivityFilter = 'all') {
       if (isRegisteredProject(scope.workspaceId)) {
         const [response, solutions] = await Promise.all([listHostedRetrievalFeedback(connection, scope.workspaceId), listHostedProjectSolutions(connection, scope.workspaceId)])
-        return { items: [...solutions.episodes.map(solutionActivityItem), ...response.feedback.map<ActivityItem>((request) => ({
+        const items = [...solutions.episodes.map(solutionActivityItem), ...(response.feedback ?? []).map<ActivityItem>((request) => ({
           id: request.id,
           workspaceId: scope.workspaceId,
           kind: request.score >= 0 ? 'feedback' : 'retrieval',
@@ -196,10 +227,12 @@ export function createHostedKnowledgeGateway(connection: HostedConnection): Know
             usefulCount: request.useful_count,
             totalCount: request.total_count,
           },
-        }))].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)) }
+        }))].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+        return activityPage(items, cursor, filter)
       }
       const tasks = await listHostedProcessingTasks({ ...connection, workspace: scope.workspaceId })
-      return { items: tasks.map<ActivityItem>((task) => ({ id: task.id, workspaceId: scope.workspaceId, kind: task.kind === 'source_deletion' ? 'deletion' : 'upload', title: task.title, state: task.state, updatedAt: task.updated_at, progress: task.progress.percent, failure: task.failure ? { message: task.failure.message || task.failure.code || 'Task failed.', retryAllowed: task.failure.retry_allowed } : undefined })) }
+      const items = tasks.map<ActivityItem>((task) => ({ id: task.id, workspaceId: scope.workspaceId, kind: task.kind === 'source_deletion' ? 'deletion' : 'upload', title: task.title, state: task.state, updatedAt: task.updated_at, progress: task.progress.percent, failure: task.failure ? { message: task.failure.message || task.failure.code || 'Task failed.', retryAllowed: task.failure.retry_allowed } : undefined }))
+      return activityPage(items, cursor, filter)
     },
     async retryActivity(scope, activityId) {
       if (isRegisteredProject(scope.workspaceId)) throw new Error('This retrieval activity cannot be retried.')
@@ -223,6 +256,30 @@ export function createHostedKnowledgeGateway(connection: HostedConnection): Know
     async submitFeedback(scope, requestId, score, reason) {
       if (!isRegisteredProject(scope.workspaceId)) throw new Error('Hosted feedback uses the memory feedback control.')
       await submitHostedRetrievalFeedback(connection, { workspace: scope.workspaceId, request_id: requestId, score, reason })
+    },
+    async listLifecycle(scope) {
+      if (!localSystemTools || !isRegisteredProject(scope.workspaceId)) throw new Error('Lifecycle is available only for registered projects in a private installation.')
+      return getHostedProjectLifecycle(connection, scope.workspaceId)
+    },
+    async listSkills(scope) {
+      if (!localSystemTools || !isRegisteredProject(scope.workspaceId)) throw new Error('Skills are available only for registered projects in a private installation.')
+      return (await listHostedProjectSkills(connection, scope.workspaceId)).skills || []
+    },
+    async listClientProfiles() {
+      if (!localSystemTools) throw new Error('Client profiles are available only in a private installation.')
+      return listHostedClientProfiles(connection)
+    },
+    async createClientProfile(input) {
+      if (!localSystemTools) throw new Error('Client profiles are available only in a private installation.')
+      return createHostedClientProfile(connection, input)
+    },
+    async updateClientProfile(input) {
+      if (!localSystemTools) throw new Error('Client profiles are available only in a private installation.')
+      return updateHostedClientProfile(connection, input)
+    },
+    async deleteClientProfile(input) {
+      if (!localSystemTools) throw new Error('Client profiles are available only in a private installation.')
+      return deleteHostedClientProfile(connection, input)
     },
     async getSettings(scope) {
       if (isRegisteredProject(scope.workspaceId)) return { workspace: scope.workspaceId, kind: 'registered-project' }

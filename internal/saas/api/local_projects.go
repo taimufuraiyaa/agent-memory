@@ -2,12 +2,14 @@ package api
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/taimufuraiyaa/agent-memory/internal/application"
+	"github.com/taimufuraiyaa/agent-memory/internal/clientprofile"
 	"github.com/taimufuraiyaa/agent-memory/internal/core"
 	"github.com/taimufuraiyaa/agent-memory/internal/engine"
 	"github.com/taimufuraiyaa/agent-memory/internal/saas/auth"
@@ -133,6 +135,21 @@ type LocalProjectSolutionRecallInput struct {
 	MaxCandidates int    `json:"max_candidates"`
 }
 
+type LocalProjectSolutionPromotionTarget struct {
+	MemoryType    string   `json:"memory_type"`
+	Content       string   `json:"content,omitempty"`
+	SourceStepIDs []string `json:"source_step_ids,omitempty"`
+}
+
+type LocalProjectSolutionPromoteInput struct {
+	Workspace      string                                `json:"workspace"`
+	PrincipalID    string                                `json:"principal_id"`
+	EpisodeID      string                                `json:"episode_id"`
+	SummaryID      string                                `json:"summary_id"`
+	IdempotencyKey string                                `json:"idempotency_key"`
+	Targets        []LocalProjectSolutionPromotionTarget `json:"targets"`
+}
+
 type LocalProjectSolutionExportInput struct {
 	Workspace   string `json:"workspace"`
 	PrincipalID string `json:"principal_id"`
@@ -148,6 +165,48 @@ type LocalProjectMemoryResult struct {
 	Memory      core.MemoryEntry `json:"memory"`
 	Score       float64          `json:"score"`
 	Explanation string           `json:"explanation,omitempty"`
+}
+
+type LocalProjectLifecycleRun struct {
+	ID             string    `json:"id"`
+	Workspace      string    `json:"workspace"`
+	StartedAt      time.Time `json:"started_at"`
+	CompletedAt    time.Time `json:"completed_at,omitempty"`
+	Trigger        string    `json:"trigger"`
+	Result         string    `json:"result"`
+	SkipReason     string    `json:"skip_reason,omitempty"`
+	DurationMS     int       `json:"duration_ms"`
+	DecayUpdated   int       `json:"decay_updated"`
+	Consolidated   int       `json:"consolidated"`
+	ConflictsFound int       `json:"conflicts_found"`
+	Evicted        int       `json:"evicted"`
+	Promoted       int       `json:"promoted"`
+	Demoted        int       `json:"demoted"`
+	Error          string    `json:"error,omitempty"`
+}
+
+type LocalProjectLifecycle struct {
+	History []LocalProjectLifecycleRun `json:"history"`
+}
+
+type LocalProjectSkill struct {
+	Name        string `json:"name"`
+	DisplayName string `json:"display_name"`
+	Description string `json:"description"`
+	Content     string `json:"content"`
+	Path        string `json:"path"`
+}
+
+type LocalProjectSystemService interface {
+	Lifecycle(context.Context, string, int) (LocalProjectLifecycle, error)
+	Skills(context.Context, string) ([]LocalProjectSkill, error)
+}
+
+type LocalClientProfileService interface {
+	ListClientProfiles(context.Context) ([]clientprofile.Profile, error)
+	CreateClientProfile(context.Context, clientprofile.Input) (clientprofile.Profile, error)
+	UpdateClientProfile(context.Context, string, int64, clientprofile.Input) (clientprofile.Profile, error)
+	DeleteClientProfile(context.Context, string, int64) error
 }
 
 type LocalProjectService interface {
@@ -168,6 +227,7 @@ type LocalProjectService interface {
 	HandoffSolutionEpisode(context.Context, LocalProjectSolutionHandoffInput) (core.SolutionEpisode, error)
 	FinalizeSolutionEpisode(context.Context, LocalProjectSolutionFinalizeInput) (core.SolutionSummary, error)
 	RecallSolutionPaths(context.Context, LocalProjectSolutionRecallInput) (engine.HowRecallResult, error)
+	PromoteSolutionEpisode(context.Context, LocalProjectSolutionPromoteInput) (application.SolutionPromotionResult, error)
 	ExportSolutionEpisode(context.Context, LocalProjectSolutionExportInput) (LocalProjectSolutionExport, error)
 }
 
@@ -533,6 +593,28 @@ func recallLocalProjectSolutions(service LocalProjectService) http.HandlerFunc {
 	}
 }
 
+func promoteLocalProjectSolution(service LocalProjectService) http.HandlerFunc {
+	return func(response http.ResponseWriter, request *http.Request) {
+		var body LocalProjectSolutionPromoteInput
+		if decodeJSON(request, &body) != nil {
+			writeError(response, http.StatusBadRequest, requestID(request), "invalid_request", "request body is invalid")
+			return
+		}
+		workspaceName, valid := validLocalProjectWorkspace(body.Workspace)
+		if !valid || !validSolutionIdentity(body.PrincipalID) || !validSolutionIdentity(body.EpisodeID) || !validSolutionIdentity(body.SummaryID) || strings.TrimSpace(body.IdempotencyKey) == "" || len(body.Targets) < 1 || len(body.Targets) > 8 {
+			writeError(response, http.StatusBadRequest, requestID(request), "invalid_project_solution_promotion", "registered workspace and valid promotion fields are required")
+			return
+		}
+		body.Workspace = workspaceName
+		result, err := service.PromoteSolutionEpisode(request.Context(), body)
+		if err != nil {
+			solutionOperationError(response, request, err)
+			return
+		}
+		writeSuccess(response, http.StatusOK, requestID(request), result)
+	}
+}
+
 func exportLocalProjectSolution(service LocalProjectService) http.HandlerFunc {
 	return func(response http.ResponseWriter, request *http.Request) {
 		workspaceName, valid := validLocalProjectWorkspace(request.URL.Query().Get("workspace"))
@@ -562,6 +644,9 @@ func listLocalProjectFeedback(service LocalProjectService) http.HandlerFunc {
 			writeError(response, http.StatusBadRequest, requestID(request), "project_feedback_unavailable", err.Error())
 			return
 		}
+		if feedback == nil {
+			feedback = []core.RetrievalRequestLog{}
+		}
 		writeSuccess(response, http.StatusOK, requestID(request), map[string]any{"feedback": feedback})
 	}
 }
@@ -587,6 +672,136 @@ func recordLocalProjectFeedback(service LocalProjectService) http.HandlerFunc {
 		}
 		writeSuccess(response, http.StatusOK, requestID(request), input)
 	}
+}
+
+func listLocalProjectLifecycle(service LocalProjectSystemService) http.HandlerFunc {
+	return func(response http.ResponseWriter, request *http.Request) {
+		workspaceName, valid := validLocalProjectWorkspace(request.URL.Query().Get("workspace"))
+		limit, err := strconv.Atoi(request.URL.Query().Get("limit"))
+		if request.URL.Query().Get("limit") == "" {
+			limit, err = 100, nil
+		}
+		if !valid || err != nil || limit < 1 || limit > 200 {
+			writeError(response, http.StatusBadRequest, requestID(request), "invalid_project_lifecycle", "a registered workspace and limit from 1 to 200 are required")
+			return
+		}
+		result, err := service.Lifecycle(request.Context(), workspaceName, limit)
+		if err != nil {
+			writeError(response, http.StatusBadRequest, requestID(request), "project_lifecycle_unavailable", "Lifecycle history is unavailable for this registered project.")
+			return
+		}
+		if result.History == nil {
+			result.History = []LocalProjectLifecycleRun{}
+		}
+		writeSuccess(response, http.StatusOK, requestID(request), result)
+	}
+}
+
+func listLocalProjectSkills(service LocalProjectSystemService) http.HandlerFunc {
+	return func(response http.ResponseWriter, request *http.Request) {
+		workspaceName, valid := validLocalProjectWorkspace(request.URL.Query().Get("workspace"))
+		if !valid {
+			writeError(response, http.StatusBadRequest, requestID(request), "invalid_project_skills", "a registered workspace is required")
+			return
+		}
+		skills, err := service.Skills(request.Context(), workspaceName)
+		if err != nil {
+			writeError(response, http.StatusBadRequest, requestID(request), "project_skills_unavailable", "Skills are unavailable for this registered project.")
+			return
+		}
+		if skills == nil {
+			skills = []LocalProjectSkill{}
+		}
+		writeSuccess(response, http.StatusOK, requestID(request), map[string]any{"skills": skills})
+	}
+}
+
+func localClientProfiles(service LocalClientProfileService) http.HandlerFunc {
+	return func(response http.ResponseWriter, request *http.Request) {
+		switch request.Method {
+		case http.MethodGet:
+			profiles, err := service.ListClientProfiles(request.Context())
+			if err != nil {
+				writeLocalClientProfileError(response, request, err)
+				return
+			}
+			if profiles == nil {
+				profiles = []clientprofile.Profile{}
+			}
+			writeSuccess(response, http.StatusOK, requestID(request), map[string]any{"profiles": profiles})
+		case http.MethodPost:
+			var input clientprofile.Input
+			if decodeJSON(request, &input) != nil {
+				writeError(response, http.StatusBadRequest, requestID(request), "client_profile_validation", "invalid client profile request")
+				return
+			}
+			profile, err := service.CreateClientProfile(request.Context(), input)
+			if err != nil {
+				writeLocalClientProfileError(response, request, err)
+				return
+			}
+			writeSuccess(response, http.StatusCreated, requestID(request), map[string]any{"profile": profile})
+		default:
+			writeError(response, http.StatusMethodNotAllowed, requestID(request), "method_not_allowed", "method not allowed")
+		}
+	}
+}
+
+func localClientProfile(service LocalClientProfileService) http.HandlerFunc {
+	return func(response http.ResponseWriter, request *http.Request) {
+		id := strings.TrimSpace(request.PathValue("client_id"))
+		if clientprofile.ValidateID(id) != nil {
+			writeError(response, http.StatusBadRequest, requestID(request), "client_profile_validation", "client profile id is invalid")
+			return
+		}
+		switch request.Method {
+		case http.MethodPut:
+			var input struct {
+				DisplayName      string `json:"display_name"`
+				ClientKind       string `json:"client_kind"`
+				ToolProfile      string `json:"tool_profile"`
+				ExpectedRevision int64  `json:"expected_revision"`
+			}
+			if decodeJSON(request, &input) != nil {
+				writeError(response, http.StatusBadRequest, requestID(request), "client_profile_validation", "invalid client profile request")
+				return
+			}
+			profile, err := service.UpdateClientProfile(request.Context(), id, input.ExpectedRevision, clientprofile.Input{DisplayName: input.DisplayName, ClientKind: input.ClientKind, ToolProfile: input.ToolProfile})
+			if err != nil {
+				writeLocalClientProfileError(response, request, err)
+				return
+			}
+			writeSuccess(response, http.StatusOK, requestID(request), map[string]any{"profile": profile})
+		case http.MethodDelete:
+			revision, err := strconv.ParseInt(request.URL.Query().Get("expected_revision"), 10, 64)
+			if err != nil || revision < 1 {
+				writeError(response, http.StatusBadRequest, requestID(request), "client_profile_validation", "expected_revision must be a positive integer")
+				return
+			}
+			if err := service.DeleteClientProfile(request.Context(), id, revision); err != nil {
+				writeLocalClientProfileError(response, request, err)
+				return
+			}
+			writeSuccess(response, http.StatusOK, requestID(request), map[string]any{"deleted": true, "id": id})
+		default:
+			writeError(response, http.StatusMethodNotAllowed, requestID(request), "method_not_allowed", "method not allowed")
+		}
+	}
+}
+
+func writeLocalClientProfileError(response http.ResponseWriter, request *http.Request, err error) {
+	status, code, message := http.StatusServiceUnavailable, "client_profiles_unavailable", "client profiles are temporarily unavailable"
+	switch {
+	case errors.Is(err, clientprofile.ErrValidation):
+		status, code, message = http.StatusBadRequest, "client_profile_validation", err.Error()
+	case errors.Is(err, clientprofile.ErrNotFound):
+		status, code, message = http.StatusNotFound, "client_profile_not_found", "client profile was not found"
+	case errors.Is(err, clientprofile.ErrConflict):
+		status, code, message = http.StatusConflict, "client_profile_conflict", "client profile already exists"
+	case errors.Is(err, clientprofile.ErrRevisionConflict):
+		status, code, message = http.StatusConflict, "client_profile_revision_conflict", "client profile changed; reload and try again"
+	}
+	writeError(response, status, requestID(request), code, message)
 }
 
 func listLocalProjects(service LocalProjectService) http.HandlerFunc {
