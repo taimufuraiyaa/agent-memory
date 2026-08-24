@@ -13,6 +13,9 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/taimufuraiyaa/agent-memory/internal/core"
+	"github.com/taimufuraiyaa/agent-memory/internal/validation"
 )
 
 // ArchiveRecord is the JSON envelope stored inside each .gz file.
@@ -42,11 +45,52 @@ func NewColdArchive(dataDir string) *ColdArchive {
 	}
 }
 
+// validateWorkspace guards the workspace name before it is used to build any
+// archive path. Rejected names fail with a typed core.ValidationError so
+// callers can distinguish rejection from storage failures.
+func (a *ColdArchive) validateWorkspace(workspace string) error {
+	if err := validation.ValidateWorkspaceName(workspace); err != nil {
+		return core.NewValidationError("workspace", workspace, err)
+	}
+	return nil
+}
+
+// contain asserts that path stays inside the archives root. Both paths are
+// absolutized and the relative remainder is checked, so a workspace such as
+// ".." cannot escape the root even if name validation were bypassed. The
+// absolutized path is returned.
+func (a *ColdArchive) contain(path string) (string, error) {
+	absRoot, err := filepath.Abs(a.baseDir)
+	if err != nil {
+		return "", fmt.Errorf("resolve archives root: %w", err)
+	}
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return "", fmt.Errorf("resolve archive path: %w", err)
+	}
+	rel, err := filepath.Rel(absRoot, absPath)
+	if err != nil {
+		return "", fmt.Errorf("relate archive path to archives root: %w", err)
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("archive path %q escapes archives root %q", path, a.baseDir)
+	}
+	return absPath, nil
+}
+
 // workspaceDir returns the per-workspace archive directory, creating it if needed.
 func (a *ColdArchive) workspaceDir(workspace string) (string, error) {
-	// Sanitize workspace name to prevent path traversal.
+	// Guard the workspace name before touching the filesystem so names like
+	// ".." or "../x" cannot escape the archives root.
+	if err := a.validateWorkspace(workspace); err != nil {
+		return "", err
+	}
+	// Sanitize the workspace name to prevent path traversal.
 	clean := strings.ReplaceAll(filepath.Clean(workspace), "/", "_")
-	dir := filepath.Join(a.baseDir, clean)
+	dir, err := a.contain(filepath.Join(a.baseDir, clean))
+	if err != nil {
+		return "", err
+	}
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", fmt.Errorf("create archive dir: %w", err)
 	}
@@ -61,7 +105,7 @@ func (a *ColdArchive) archivePath(workspace, memoryID string) (string, error) {
 	}
 	// Sanitize memoryID (UUIDs are safe but be defensive).
 	safe := strings.ReplaceAll(filepath.Base(memoryID), "/", "_")
-	return filepath.Join(dir, safe+".gz"), nil
+	return a.contain(filepath.Join(dir, safe+".gz"))
 }
 
 // Store compresses rec and writes it to <baseDir>/<workspace>/<id>.gz.

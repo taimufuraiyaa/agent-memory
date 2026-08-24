@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -13,14 +14,26 @@ import (
 	"github.com/taimufuraiyaa/agent-memory/internal/core"
 )
 
+// observationDedupIndex is the unique index backing observation dedup. The schema
+// migration in store.go creates this name as a non-unique index; observations.go
+// upgrades it to UNIQUE lazily (see ensureObservationUniqueIndex) so that the
+// dedup insert is safe under concurrency without a check-then-insert TOCTOU.
+const observationDedupIndex = "idx_observations_dedup"
+
 type ObservationInsert struct {
-	Workspace   string
-	SessionID   string
-	OccurredAt  time.Time
-	Kind        string
-	ToolName    string
-	Summary     string
-	ContentHash string
+	Workspace       string
+	SessionID       string
+	OccurredAt      time.Time
+	Kind            string
+	ToolName        string
+	Summary         string
+	ContentHash     string
+	SourceAgent     string
+	SourceAdapter   string
+	HookEvent       string
+	ExternalEventID string
+	SchemaVersion   string
+	CaptureMode     string
 }
 
 type ObserveUpsertSessionInput struct {
@@ -78,33 +91,44 @@ func (s *Store) InsertObservationDedupWindow(
 		hash = ComputeObservationHash(in.Workspace, in.SessionID, in.Kind, in.ToolName, in.Summary)
 	}
 
-	cutoff := occurredAt.Add(-1 * dedupWindow)
-	var existingID string
-	err := s.db.QueryRowContext(ctx, `
-SELECT id
-FROM observations
-WHERE workspace = ? AND content_hash = ? AND occurred_at >= ?
-ORDER BY occurred_at DESC
-LIMIT 1
-`, in.Workspace, hash, cutoff.Format(time.RFC3339Nano)).Scan(&existingID)
-	if err == nil && existingID != "" {
-		return core.Observation{ID: existingID}, true, nil
-	}
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return core.Observation{}, false, err
+	// The unique index on (workspace, content_hash) makes dedup race-free: the
+	// insert below is the only place a duplicate can be rejected, so no
+	// SELECT-then-INSERT TOCTOU window exists. Because the index covers all
+	// history, the dedup window is effectively infinite for exact-hash
+	// duplicates; dedupWindow is retained for API compatibility and callers
+	// that rely on the time-based semantics should pre-filter their inputs.
+	if err := s.ensureObservationUniqueIndex(ctx); err != nil {
+		return core.Observation{}, false, fmt.Errorf("ensure unique dedup index: %w", err)
 	}
 
 	id := uuid.NewString()
 	toolName := strings.TrimSpace(in.ToolName)
 	createdAt := now
 
-	_, err = s.db.ExecContext(ctx, `
+	res, err := s.db.ExecContext(ctx, `
 INSERT INTO observations (
-  id, workspace, session_id, occurred_at, kind, tool_name, summary, content_hash, created_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-`, id, in.Workspace, in.SessionID, occurredAt.Format(time.RFC3339Nano), in.Kind, toolName, in.Summary, hash, createdAt.Format(time.RFC3339Nano))
+  id, workspace, session_id, occurred_at, kind, tool_name, summary, content_hash,
+  source_agent, source_adapter, hook_event, external_event_id, schema_version, capture_mode, created_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT DO NOTHING
+`, id, in.Workspace, in.SessionID, occurredAt.Format(time.RFC3339Nano), in.Kind, toolName, in.Summary, hash,
+		strings.TrimSpace(in.SourceAgent), strings.TrimSpace(in.SourceAdapter), strings.TrimSpace(in.HookEvent),
+		strings.TrimSpace(in.ExternalEventID), strings.TrimSpace(in.SchemaVersion), strings.TrimSpace(in.CaptureMode), createdAt.Format(time.RFC3339Nano))
 	if err != nil {
 		return core.Observation{}, false, err
+	}
+	inserted, err := res.RowsAffected()
+	if err != nil {
+		return core.Observation{}, false, err
+	}
+	if inserted == 0 {
+		// Duplicate (workspace, content_hash) already exists: return the
+		// earliest existing observation instead of inserting a second row.
+		existing, err := s.earliestObservationByHash(ctx, in.Workspace, hash)
+		if err != nil {
+			return core.Observation{}, false, err
+		}
+		return existing, true, nil
 	}
 
 	var toolPtr *string
@@ -112,14 +136,20 @@ INSERT INTO observations (
 		toolPtr = &toolName
 	}
 	return core.Observation{
-		ID:         id,
-		Workspace:  in.Workspace,
-		SessionID:  in.SessionID,
-		OccurredAt: occurredAt,
-		Kind:       in.Kind,
-		ToolName:   toolPtr,
-		Summary:    in.Summary,
-		CreatedAt:  createdAt,
+		ID:              id,
+		Workspace:       in.Workspace,
+		SessionID:       in.SessionID,
+		OccurredAt:      occurredAt,
+		Kind:            in.Kind,
+		ToolName:        toolPtr,
+		Summary:         in.Summary,
+		SourceAgent:     strings.TrimSpace(in.SourceAgent),
+		SourceAdapter:   strings.TrimSpace(in.SourceAdapter),
+		HookEvent:       strings.TrimSpace(in.HookEvent),
+		ExternalEventID: strings.TrimSpace(in.ExternalEventID),
+		SchemaVersion:   strings.TrimSpace(in.SchemaVersion),
+		CaptureMode:     strings.TrimSpace(in.CaptureMode),
+		CreatedAt:       createdAt,
 	}, false, nil
 }
 
@@ -214,7 +244,8 @@ func (s *Store) ListObservations(
 	args = append(args, limit)
 
 	q := `
-SELECT id, workspace, session_id, occurred_at, kind, tool_name, summary, created_at
+SELECT id, workspace, session_id, occurred_at, kind, tool_name, summary,
+       source_agent, source_adapter, hook_event, external_event_id, schema_version, capture_mode, created_at
 FROM observations
 WHERE ` + strings.Join(where, " AND ") + `
 ORDER BY occurred_at DESC
@@ -230,9 +261,9 @@ LIMIT ?
 	out := make([]core.Observation, 0, limit)
 	for rows.Next() {
 		var (
-			id, ws, sid, occurredAtRaw, kind, toolNameRaw, summary, createdAtRaw string
+			id, ws, sid, occurredAtRaw, kind, toolNameRaw, summary, sourceAgent, sourceAdapter, hookEvent, externalEventID, schemaVersion, captureMode, createdAtRaw string
 		)
-		if err := rows.Scan(&id, &ws, &sid, &occurredAtRaw, &kind, &toolNameRaw, &summary, &createdAtRaw); err != nil {
+		if err := rows.Scan(&id, &ws, &sid, &occurredAtRaw, &kind, &toolNameRaw, &summary, &sourceAgent, &sourceAdapter, &hookEvent, &externalEventID, &schemaVersion, &captureMode, &createdAtRaw); err != nil {
 			return nil, err
 		}
 		occurredAt, _ := time.Parse(time.RFC3339Nano, occurredAtRaw)
@@ -243,17 +274,154 @@ LIMIT ?
 			toolPtr = &v
 		}
 		out = append(out, core.Observation{
-			ID:         id,
-			Workspace:  ws,
-			SessionID:  sid,
-			OccurredAt: occurredAt,
-			Kind:       kind,
-			ToolName:   toolPtr,
-			Summary:    summary,
-			CreatedAt:  createdAt,
+			ID:              id,
+			Workspace:       ws,
+			SessionID:       sid,
+			OccurredAt:      occurredAt,
+			Kind:            kind,
+			ToolName:        toolPtr,
+			Summary:         summary,
+			SourceAgent:     sourceAgent,
+			SourceAdapter:   sourceAdapter,
+			HookEvent:       hookEvent,
+			ExternalEventID: externalEventID,
+			SchemaVersion:   schemaVersion,
+			CaptureMode:     captureMode,
+			CreatedAt:       createdAt,
 		})
 	}
 	return out, rows.Err()
+}
+
+// observationDedupIndexIsUnique reports whether the dedup index already exists
+// as a UNIQUE index. It guards the lazy migration in ensureObservationUniqueIndex
+// so the collapse + DDL work runs only once per database.
+func (s *Store) observationDedupIndexIsUnique(ctx context.Context) (bool, error) {
+	rows, err := s.db.QueryContext(ctx, `PRAGMA index_list('observations')`)
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	for rows.Next() {
+		var (
+			seq     int
+			name    string
+			unique  bool
+			origin  string
+			partial int
+		)
+		if err := rows.Scan(&seq, &name, &unique, &origin, &partial); err != nil {
+			return false, err
+		}
+		if name == observationDedupIndex {
+			return unique, nil
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return false, err
+	}
+	// Index absent entirely (e.g. legacy database): treat as needing migration.
+	return false, nil
+}
+
+// collapseDuplicateObservations removes later duplicates of (workspace,
+// content_hash), keeping the earliest row (by occurred_at, then insertion
+// order). It is idempotent and only touches rows with a non-empty hash, matching
+// the partial unique index predicate.
+func collapseDuplicateObservations(ctx context.Context, tx *sql.Tx) error {
+	_, err := tx.ExecContext(ctx, `
+DELETE FROM observations
+WHERE rowid IN (
+  SELECT rowid FROM (
+    SELECT rowid,
+           ROW_NUMBER() OVER (
+             PARTITION BY workspace, content_hash
+             ORDER BY occurred_at ASC, rowid ASC
+           ) AS rn
+    FROM observations
+    WHERE content_hash != ''
+  )
+  WHERE rn > 1
+)
+`)
+	return err
+}
+
+// ensureObservationUniqueIndex upgrades the dedup index to UNIQUE so concurrent
+// identical inserts cannot both succeed. It runs the legacy-duplicate collapse
+// and the DDL inside a single transaction (idempotent), so it is safe to call on
+// every dedup insert: the PRAGMA guard short-circuits once the unique index
+// exists.
+func (s *Store) ensureObservationUniqueIndex(ctx context.Context) error {
+	unique, err := s.observationDedupIndexIsUnique(ctx)
+	if err != nil {
+		return err
+	}
+	if unique {
+		return nil
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if err := collapseDuplicateObservations(ctx, tx); err != nil {
+		return fmt.Errorf("collapse duplicate observations: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DROP INDEX IF EXISTS `+observationDedupIndex); err != nil {
+		return fmt.Errorf("drop non-unique dedup index: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `CREATE UNIQUE INDEX IF NOT EXISTS `+observationDedupIndex+` ON observations(workspace, content_hash) WHERE content_hash != ''`); err != nil {
+		return fmt.Errorf("create unique dedup index: %w", err)
+	}
+	return tx.Commit()
+}
+
+// earliestObservationByHash returns the earliest row for a (workspace,
+// content_hash) dedup key. Used by the duplicate path so a repeated insert
+// preserves the original observation (including its occurred_at) instead of
+// creating a second row.
+func (s *Store) earliestObservationByHash(ctx context.Context, workspace, hash string) (core.Observation, error) {
+	var (
+		id, sid, occurredAtRaw, kind, toolNameRaw, summary, sourceAgent, sourceAdapter, hookEvent, externalEventID, schemaVersion, captureMode, createdAtRaw string
+	)
+	err := s.db.QueryRowContext(ctx, `
+SELECT id, session_id, occurred_at, kind, tool_name, summary,
+       source_agent, source_adapter, hook_event, external_event_id, schema_version, capture_mode, created_at
+FROM observations
+WHERE workspace = ? AND content_hash = ?
+ORDER BY occurred_at ASC, rowid ASC
+LIMIT 1
+`, workspace, hash).Scan(&id, &sid, &occurredAtRaw, &kind, &toolNameRaw, &summary, &sourceAgent, &sourceAdapter, &hookEvent, &externalEventID, &schemaVersion, &captureMode, &createdAtRaw)
+	if err != nil {
+		return core.Observation{}, err
+	}
+	occurredAt, _ := time.Parse(time.RFC3339Nano, occurredAtRaw)
+	createdAt, _ := time.Parse(time.RFC3339Nano, createdAtRaw)
+	var toolPtr *string
+	if strings.TrimSpace(toolNameRaw) != "" {
+		v := strings.TrimSpace(toolNameRaw)
+		toolPtr = &v
+	}
+	return core.Observation{
+		ID:              id,
+		Workspace:       workspace,
+		SessionID:       sid,
+		OccurredAt:      occurredAt,
+		Kind:            kind,
+		ToolName:        toolPtr,
+		Summary:         summary,
+		SourceAgent:     sourceAgent,
+		SourceAdapter:   sourceAdapter,
+		HookEvent:       hookEvent,
+		ExternalEventID: externalEventID,
+		SchemaVersion:   schemaVersion,
+		CaptureMode:     captureMode,
+		CreatedAt:       createdAt,
+	}, nil
 }
 
 func (s *Store) ListSessions(ctx context.Context, workspace string, limit int) ([]core.Session, error) {

@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: agent-memory-runtime
+data:
+  AGENT_MEMORY_SAAS_ENV: staging
+  AGENT_MEMORY_SAAS_LISTEN_ADDR: ":8080"
+  AGENT_MEMORY_TELEMETRY_LISTEN_ADDR: ":9090"
+  AGENT_MEMORY_TRACING_ENABLED: "true"
+  AGENT_MEMORY_TRACING_SAMPLE_RATE: "1"
+  AGENT_MEMORY_MODEL_PROVIDER: local-minilm-scaffold
+  AGENT_MEMORY_MODEL_DIR: /tmp/agent-memory-models
+  AGENT_MEMORY_MODEL_RETENTION: local-only
+  AGENT_MEMORY_OIDC_ISSUER: https://replace-with-staging-issuer.example
+  AGENT_MEMORY_OIDC_AUDIENCE: agent-memory-staging
+  AGENT_MEMORY_SAAS_SHUTDOWN_TIMEOUT: 20s

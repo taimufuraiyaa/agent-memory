@@ -1,0 +1,32 @@
+{
+  "schema": "agent-memory-self-managed-backup-expiry-drill-v1",
+  "classification": "self_managed_external",
+  "environment": "production",
+  "drill_id": "replace-with-aged-backup-drill-id",
+  "backup_id": "replace-with-opaque-backup-id",
+  "inventory_id": "replace-with-production-inventory-id",
+  "inventory_receipt_sha256": "7182f58be6da288610f64f8e706b044dd18a0e0029240a78d83367804cf3e80d",
+  "change_id": "replace-with-production-change-id",
+  "change_receipt_sha256": "62262a25a202d44219ba0a05be0a19091bc9ce1c5a3995b29e53b6f3cc16471f",
+  "retention_inventory_receipt_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+  "policies_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "backup_policy_version": "retention-v1",
+  "backup_retention_seconds": 2592000,
+  "ready": true,
+  "generated_at": "2026-09-11T03:00:00Z",
+  "timeline": {
+    "backup_created_at": "2026-08-11T00:00:00Z",
+    "deletion_completed_at": "2026-08-12T00:00:00Z",
+    "verification_started_at": "2026-09-11T01:00:00Z",
+    "verification_completed_at": "2026-09-11T02:00:00Z"
+  },
+  "checks": [
+    {"id": "backup_manifest_verified", "outcome": "passed", "evidence_sha256": "1111111111111111111111111111111111111111111111111111111111111111"},
+    {"id": "deleted_record_present_in_backup", "outcome": "passed", "evidence_sha256": "2222222222222222222222222222222222222222222222222222222222222222"},
+    {"id": "deletion_receipt_verified", "outcome": "passed", "evidence_sha256": "3333333333333333333333333333333333333333333333333333333333333333"},
+    {"id": "expiry_schedule_verified", "outcome": "passed", "evidence_sha256": "4444444444444444444444444444444444444444444444444444444444444444"},
+    {"id": "backup_absent_after_deadline", "outcome": "passed", "evidence_sha256": "5555555555555555555555555555555555555555555555555555555555555555"},
+    {"id": "restore_unavailable", "outcome": "passed", "evidence_sha256": "6666666666666666666666666666666666666666666666666666666666666666"},
+    {"id": "cryptographic_material_expired", "outcome": "passed", "evidence_sha256": "7777777777777777777777777777777777777777777777777777777777777777"}
+  ]
+}

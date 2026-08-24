@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-memory.local/schemas/self-managed-infrastructure-plan-v1.json",
+  "title": "Agent Memory self-managed infrastructure plan receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "environment",
+    "plan_id",
+    "inventory_id",
+    "inventory_receipt_sha256",
+    "generated_at",
+    "source_revision",
+    "source_bundle_sha256",
+    "raw_plan_sha256",
+    "toolchain",
+    "capabilities"
+  ],
+  "properties": {
+    "schema": {"const": "agent-memory-self-managed-infrastructure-plan-v1"},
+    "environment": {"enum": ["staging", "production"]},
+    "plan_id": {"$ref": "#/$defs/opaque_id"},
+    "inventory_id": {"$ref": "#/$defs/opaque_id"},
+    "inventory_receipt_sha256": {"$ref": "#/$defs/sha256"},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "source_revision": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$"
+    },
+    "source_bundle_sha256": {"$ref": "#/$defs/sha256"},
+    "raw_plan_sha256": {"$ref": "#/$defs/sha256"},
+    "toolchain": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 8,
+      "items": {"$ref": "#/$defs/tool"}
+    },
+    "capabilities": {
+      "type": "array",
+      "minItems": 21,
+      "maxItems": 21,
+      "items": {"$ref": "#/$defs/capability"}
+    }
+  },
+  "$defs": {
+    "opaque_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "tool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version"],
+      "properties": {
+        "name": {
+          "enum": ["ansible", "custom", "helm", "kustomize", "opentofu", "pulumi", "terraform"]
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$"
+        }
+      }
+    },
+    "capability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "action", "failure_domain_ids", "public_ingress"],
+      "properties": {
+        "id": {
+          "enum": [
+            "edge_ingress",
+            "application_network",
+            "data_network",
+            "kubernetes_cluster",
+            "oidc_identity",
+            "postgres",
+            "quarantine_bucket",
+            "vault_bucket",
+            "export_bucket",
+            "durable_queue",
+            "api_identity",
+            "worker_identity",
+            "reconciler_identity",
+            "migration_identity",
+            "api_secret",
+            "worker_secret",
+            "reconciler_secret",
+            "migration_secret",
+            "telemetry",
+            "postgres_backup",
+            "object_backup"
+          ]
+        },
+        "action": {"enum": ["no_change", "create", "update", "replace", "delete"]},
+        "failure_domain_ids": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/opaque_id"}
+        },
+        "public_ingress": {"type": "boolean"}
+      }
+    }
+  }
+}

@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-memory.local/schemas/kubernetes-platform-preflight-receipt-v1.json",
+  "title": "Agent Memory Kubernetes platform preflight receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "ready",
+    "environment",
+    "kubernetes_context",
+    "namespace",
+    "inventory_id",
+    "inventory_receipt_sha256",
+    "collected_at",
+    "checks"
+  ],
+  "properties": {
+    "schema": {"const": "agent-memory-kubernetes-platform-preflight-receipt-v1"},
+    "ready": {"type": "boolean"},
+    "environment": {"enum": ["staging", "production"]},
+    "kubernetes_context": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@-]{0,127}$"},
+    "namespace": {"enum": ["agent-memory-staging", "agent-memory-production"]},
+    "inventory_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"},
+    "inventory_receipt_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "collected_at": {"type": "string", "format": "date-time"},
+    "checks": {
+      "type": "array",
+      "minItems": 8,
+      "maxItems": 8,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "outcome"],
+        "properties": {
+          "id": {
+            "enum": [
+              "namespace",
+              "service_accounts",
+              "secret_contracts",
+              "network_policy",
+              "private_service",
+              "workload_identity",
+              "immutable_images",
+              "ready_workloads"
+            ]
+          },
+          "outcome": {"enum": ["passed", "failed"]}
+        }
+      }
+    }
+  }
+}

@@ -20,6 +20,13 @@ func NewRootCommand() *cobra.Command {
 		Short: "Persistent memory layer for AI coding agents",
 		Long:  "agent-memory is a local-first memory system for coding agents with CLI-first integration.",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			// Load ~/.agent-memory/agent-memory.env into the process environment
+			// before any engine configuration is resolved, so persisted toggles
+			// (--toggle-on/off, --run-label) take effect on later invocations.
+			// Precedence: command-line flags > env file > process environment,
+			// so the flags below are applied after this load.
+			loadEnvFile(cmd)
+
 			if toggleOn && toggleOff {
 				return errors.New("only one of --toggle-on or --toggle-off can be set")
 			}
@@ -86,6 +93,7 @@ func NewRootCommand() *cobra.Command {
 	cmd.AddCommand(newRecallCommand())
 	cmd.AddCommand(newBenchmarkWorkerCommand())
 	cmd.AddCommand(newReembedCommand())
+	cmd.AddCommand(newReindexTermsCommand())
 	cmd.AddCommand(newFeedbackCommand())
 	cmd.AddCommand(newSessionEndCommand())
 	cmd.AddCommand(newConsolidateCommand())
@@ -94,6 +102,7 @@ func NewRootCommand() *cobra.Command {
 	cmd.AddCommand(newExportCommand())
 	cmd.AddCommand(newImportCommand())
 	cmd.AddCommand(newStatsCommand())
+	cmd.AddCommand(newAdvisorCommand())
 	cmd.AddCommand(newTuningCommand())
 	cmd.AddCommand(newConfigCommand())
 	cmd.AddCommand(newInitCommand())
@@ -108,5 +117,50 @@ func NewRootCommand() *cobra.Command {
 	cmd.AddCommand(newUpgradeCommand())
 	cmd.AddCommand(newInstallCommand())
 	cmd.AddCommand(newDistillCommand())
+	cmd.AddCommand(newConnectCommand(false))
+	cmd.AddCommand(newConnectCommand(true))
+	cmd.AddCommand(newDoctorCommand())
+	cmd.AddCommand(newDemoCommand())
+	cmd.AddCommand(newHookCommand())
+	cmd.AddCommand(newAuditCommand())
+	cmd.AddCommand(newImportJSONLCommand())
+	cmd.AddCommand(newHostedCommand())
+	cmd.AddCommand(newDevelopmentCommand("start"))
+	cmd.AddCommand(newDevelopmentCommand("stop"))
+	cmd.AddCommand(newDevelopmentCommand("restart"))
+	cmd.AddCommand(newDevelopmentCommand("build"))
 	return cmd
+}
+
+// loadEnvFile reads KEY=VALUE assignments from ~/.agent-memory/agent-memory.env
+// and applies them to the process environment. It is called during CLI startup,
+// before engine configuration is resolved, so that persisted toggles affect
+// every invocation even when the shell rc-autoload is not installed. Precedence
+// is flags > env file > process environment: flags (--toggle-on/off,
+// --run-label) are applied by the caller after this load. Missing files are
+// ignored; malformed lines are skipped with a warning to stderr and do not
+// abort the run.
+func loadEnvFile(cmd *cobra.Command) {
+	envPath := filepath.Join(defaultAgentMemoryDataDir(), "agent-memory.env")
+	data, err := os.ReadFile(envPath)
+	if err != nil {
+		if !errors.Is(err, os.ErrNotExist) {
+			fmt.Fprintf(cmd.ErrOrStderr(), "warning: cannot read %s: %v\n", envPath, err)
+		}
+		return
+	}
+	malformed := 0
+	for _, line := range strings.Split(strings.ReplaceAll(string(data), "\r\n", "\n"), "\n") {
+		k, v, ok := parseEnvAssignmentLine(line)
+		if !ok {
+			if trimmed := strings.TrimSpace(line); trimmed != "" && !strings.HasPrefix(trimmed, "#") {
+				malformed++
+			}
+			continue
+		}
+		_ = os.Setenv(k, v)
+	}
+	if malformed > 0 {
+		fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s: %d malformed line(s) ignored\n", envPath, malformed)
+	}
 }

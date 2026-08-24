@@ -1,0 +1,15 @@
+ALTER TABLE saas_sessions_memory DROP CONSTRAINT IF EXISTS saas_sessions_memory_idempotency;
+ALTER TABLE saas_sessions_memory DROP COLUMN IF EXISTS transcript_hash;
+ALTER TABLE saas_sessions_memory DROP COLUMN IF EXISTS idempotency_key;
+ALTER TABLE saas_note_revisions DROP COLUMN IF EXISTS author_kind;
+ALTER TABLE saas_note_revisions DROP COLUMN IF EXISTS content_hash;
+ALTER TABLE saas_note_revisions DROP COLUMN IF EXISTS properties;
+ALTER TABLE saas_note_revisions DROP COLUMN IF EXISTS path;
+ALTER TABLE saas_notes DROP CONSTRAINT IF EXISTS saas_notes_idempotency;
+ALTER TABLE saas_notes DROP COLUMN IF EXISTS idempotency_key;
+ALTER TABLE saas_notes DROP COLUMN IF EXISTS index_error;
+ALTER TABLE saas_notes DROP COLUMN IF EXISTS indexed_version;
+ALTER TABLE saas_notes DROP COLUMN IF EXISTS index_state;
+ALTER TABLE saas_notes DROP COLUMN IF EXISTS content_hash;
+ALTER TABLE saas_notes DROP COLUMN IF EXISTS properties;
+ALTER TABLE saas_notes DROP COLUMN IF EXISTS path;

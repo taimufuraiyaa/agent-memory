@@ -1,0 +1,188 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-memory.local/schemas/self-managed-infrastructure-change-v1.json",
+  "title": "Agent Memory self-managed infrastructure apply and drift receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "environment",
+    "change_id",
+    "inventory_id",
+    "inventory_receipt_sha256",
+    "plan_id",
+    "plan_receipt_sha256",
+    "generated_at",
+    "apply",
+    "rollback",
+    "resource_inventory",
+    "drift",
+    "capabilities"
+  ],
+  "properties": {
+    "schema": {"const": "agent-memory-self-managed-infrastructure-change-v1"},
+    "environment": {"enum": ["staging", "production"]},
+    "change_id": {"$ref": "#/$defs/opaque_id"},
+    "inventory_id": {"$ref": "#/$defs/opaque_id"},
+    "inventory_receipt_sha256": {"$ref": "#/$defs/sha256"},
+    "plan_id": {"$ref": "#/$defs/opaque_id"},
+    "plan_receipt_sha256": {"$ref": "#/$defs/sha256"},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "apply": {"$ref": "#/$defs/apply"},
+    "rollback": {"$ref": "#/$defs/rollback"},
+    "resource_inventory": {"$ref": "#/$defs/resource_inventory"},
+    "drift": {"$ref": "#/$defs/drift"},
+    "capabilities": {
+      "type": "array",
+      "minItems": 21,
+      "maxItems": 21,
+      "items": {"$ref": "#/$defs/capability_result"}
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"apply": {"properties": {"outcome": {"const": "succeeded"}}}}},
+      "then": {
+        "properties": {
+          "rollback": {"properties": {"outcome": {"const": "not_required"}}},
+          "resource_inventory": {"properties": {"outcome": {"const": "collected"}}},
+          "drift": {"properties": {"outcome": {"enum": ["clean", "drift_detected", "check_failed"]}}}
+        }
+      },
+      "else": {
+        "properties": {
+          "rollback": {"properties": {"outcome": {"enum": ["not_attempted", "succeeded", "failed"]}}},
+          "resource_inventory": {"properties": {"outcome": {"const": "not_collected"}}},
+          "drift": {"properties": {"outcome": {"const": "not_run"}}}
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "opaque_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "apply": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["outcome", "completed_at", "raw_output_sha256"],
+      "properties": {
+        "outcome": {"enum": ["succeeded", "failed"]},
+        "completed_at": {"type": "string", "format": "date-time"},
+        "raw_output_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "rollback": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["outcome"],
+      "properties": {
+        "outcome": {"enum": ["not_required", "not_attempted", "succeeded", "failed"]},
+        "completed_at": {"type": "string", "format": "date-time"},
+        "raw_output_sha256": {"$ref": "#/$defs/sha256"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"outcome": {"enum": ["succeeded", "failed"]}}},
+          "then": {"required": ["completed_at", "raw_output_sha256"]},
+          "else": {
+            "not": {
+              "anyOf": [
+                {"required": ["completed_at"]},
+                {"required": ["raw_output_sha256"]}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "resource_inventory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["outcome"],
+      "properties": {
+        "outcome": {"enum": ["collected", "not_collected"]},
+        "collected_at": {"type": "string", "format": "date-time"},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "resource_count": {"type": "integer", "minimum": 1, "maximum": 10000000}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"outcome": {"const": "collected"}}},
+          "then": {"required": ["collected_at", "sha256", "resource_count"]},
+          "else": {
+            "not": {
+              "anyOf": [
+                {"required": ["collected_at"]},
+                {"required": ["sha256"]},
+                {"required": ["resource_count"]}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "drift": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["outcome"],
+      "properties": {
+        "outcome": {"enum": ["clean", "drift_detected", "check_failed", "not_run"]},
+        "checked_at": {"type": "string", "format": "date-time"},
+        "raw_output_sha256": {"$ref": "#/$defs/sha256"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"outcome": {"const": "not_run"}}},
+          "then": {
+            "not": {
+              "anyOf": [
+                {"required": ["checked_at"]},
+                {"required": ["raw_output_sha256"]}
+              ]
+            }
+          },
+          "else": {"required": ["checked_at", "raw_output_sha256"]}
+        }
+      ]
+    },
+    "capability_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "outcome"],
+      "properties": {
+        "id": {
+          "enum": [
+            "edge_ingress",
+            "application_network",
+            "data_network",
+            "kubernetes_cluster",
+            "oidc_identity",
+            "postgres",
+            "quarantine_bucket",
+            "vault_bucket",
+            "export_bucket",
+            "durable_queue",
+            "api_identity",
+            "worker_identity",
+            "reconciler_identity",
+            "migration_identity",
+            "api_secret",
+            "worker_secret",
+            "reconciler_secret",
+            "migration_secret",
+            "telemetry",
+            "postgres_backup",
+            "object_backup"
+          ]
+        },
+        "outcome": {"enum": ["unchanged", "applied", "failed", "rolled_back"]}
+      }
+    }
+  }
+}

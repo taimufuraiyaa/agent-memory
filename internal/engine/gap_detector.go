@@ -41,7 +41,11 @@ func (g *GapDetector) Detect(ctx context.Context, workspace, query string) (*Gap
 		if !t.CooldownUntil.IsZero() && now.Before(t.CooldownUntil) {
 			continue
 		}
-		ageDays := now.Sub(t.EvictedAt).Hours() / 24
+		age := now.Sub(t.EvictedAt)
+		if age < 0 {
+			age = 0 // clamp future evictions so the recency factor never exceeds 1
+		}
+		ageDays := age.Hours() / 24
 		recency := 1 / (1 + ageDays/30)
 		score += 0.35 * recency
 		if strings.Contains(strings.ToLower(t.FragmentSummary), strings.ToLower(query)) {

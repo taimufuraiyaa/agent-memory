@@ -1,0 +1,98 @@
+{
+  "annotations": {"list": []},
+  "editable": false,
+  "panels": [
+    {
+      "title": "Funnel — successful lifecycle operations (24h)",
+      "description": "Owner: product. Source ref: prometheus/agent-memory-saas/funnel.",
+      "type": "timeseries",
+      "targets": [{"expr": "sum by (operation) (increase(agent_memory_saas_http_requests_total{outcome=\"success\",operation=~\"POST:/v1/(signup|attestations/rights|sources/uploads|source-queries|memory-proposals.*|exports).*\"}[24h]))"}],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}
+    },
+    {
+      "title": "Availability — successful or policy-rejected requests",
+      "description": "Owner: platform-oncall. Source ref: prometheus/agent-memory-saas/api-availability.",
+      "type": "stat",
+      "targets": [{"expr": "1 - (sum(rate(agent_memory_saas_http_requests_total{outcome=\"error\"}[5m])) / clamp_min(sum(rate(agent_memory_saas_http_requests_total[5m])), 0.001))"}],
+      "gridPos": {"h": 8, "w": 6, "x": 12, "y": 0}
+    },
+    {
+      "title": "API p95 latency",
+      "description": "Owner: platform-oncall. Source ref: prometheus/agent-memory-saas/api-latency.",
+      "type": "timeseries",
+      "targets": [{"expr": "histogram_quantile(0.95, sum by (le) (rate(agent_memory_saas_http_request_duration_seconds_bucket[5m])))"}],
+      "gridPos": {"h": 8, "w": 6, "x": 18, "y": 0}
+    },
+    {
+      "title": "Jobs — background outcomes",
+      "description": "Owner: ingestion-oncall. Source ref: prometheus/agent-memory-saas/jobs.",
+      "type": "timeseries",
+      "targets": [{"expr": "sum by (operation, outcome) (rate(agent_memory_saas_component_operations_total{component=\"worker\"}[5m]))"}],
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 8}
+    },
+    {
+      "title": "Sources — validation, extraction, and projection",
+      "description": "Owner: ingestion-oncall. Source ref: prometheus/agent-memory-saas/source-lifecycle.",
+      "type": "timeseries",
+      "targets": [{"expr": "sum by (operation, outcome) (increase(agent_memory_saas_component_operations_total{operation=~\"source_validation|source_extraction|fulltext_projection|vector_projection\"}[15m]))"}],
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 8}
+    },
+    {
+      "title": "Deletion — requests and status checks",
+      "description": "Owner: privacy-oncall. Source ref: prometheus/agent-memory-saas/deletion.",
+      "type": "timeseries",
+      "targets": [{"expr": "sum by (operation, outcome) (increase(agent_memory_saas_http_requests_total{operation=~\"DELETE:/v1/(sources/.*|account)|GET:/v1/deletions/.*\"}[15m]))"}],
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 8}
+    },
+    {
+      "title": "Security and audit pipeline",
+      "description": "Owner: security-oncall. Source ref: prometheus/agent-memory-saas/security-audit.",
+      "type": "timeseries",
+      "targets": [{"expr": "sum by (operation, outcome) (increase(agent_memory_saas_component_operations_total{operation=~\"security_detection|audit_archive\"}[15m]))"}],
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 16}
+    },
+    {
+      "title": "Billing and quota customer operations",
+      "description": "Owner: billing-oncall. Source ref: prometheus/agent-memory-saas/billing.",
+      "type": "timeseries",
+      "targets": [{"expr": "sum by (operation, outcome) (increase(agent_memory_saas_http_requests_total{operation=~\"(GET|POST):/v1/billing.*\"}[1h]))"}],
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 16}
+    },
+    {
+      "title": "Support demand proxy — errors and rejected requests",
+      "description": "Owner: support-lead. Source ref: prometheus/agent-memory-saas/support-proxy. Join with the approved ticket system after provider selection.",
+      "type": "timeseries",
+      "targets": [{"expr": "sum by (operation, outcome) (increase(agent_memory_saas_http_requests_total{outcome=~\"error|rejected\"}[1h]))"}],
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 16}
+    },
+    {
+      "title": "Cost — attributed model USD/hour",
+      "description": "Owner: finops. Source ref: prometheus/agent-memory-saas/cost.",
+      "type": "timeseries",
+      "targets": [{"expr": "sum by (component) (increase(agent_memory_saas_cost_microusd_total[1h])) / 1000000"}],
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 24}
+    },
+    {
+      "title": "Queue publication failures",
+      "description": "Owner: platform-oncall. Source ref: prometheus/agent-memory-saas/queue.",
+      "type": "timeseries",
+      "targets": [{"expr": "sum by (operation, outcome) (increase(agent_memory_saas_component_operations_total{component=\"queue\"}[15m]))"}],
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 24}
+    },
+    {
+      "title": "Provider health — object and model gateways",
+      "description": "Owner: platform-oncall. Source ref: prometheus/agent-memory-saas/providers.",
+      "type": "timeseries",
+      "targets": [{"expr": "sum by (component, operation, outcome) (increase(agent_memory_saas_component_operations_total{component=~\"object_storage|model_gateway\"}[15m]))"}],
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 24}
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["agent-memory", "saas", "launch"],
+  "templating": {"list": []},
+  "time": {"from": "now-24h", "to": "now"},
+  "timezone": "browser",
+  "title": "Agent Memory SaaS Launch",
+  "uid": "agent-memory-saas-launch",
+  "version": 2
+}

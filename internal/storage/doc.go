@@ -10,98 +10,98 @@
 //
 // agent-memory uses a hybrid storage architecture with five tiers:
 //
-//  Markdown Tier (markdown/):
-//    - Always-loaded facts in Markdown format
-//    - Zero retrieval cost (loaded at session start)
-//    - Token budget enforced (default: 4000 tokens)
-//    - Managed section within AGENTS.md or similar
-//    - Best for: Pinned conventions, critical rules, project facts
-//    - Implementation: File-based with atomic writes
+//	Markdown Tier (markdown/):
+//	  - Always-loaded facts in Markdown format
+//	  - Zero retrieval cost (loaded at session start)
+//	  - Token budget enforced (default: 4000 tokens)
+//	  - Managed section within AGENTS.md or similar
+//	  - Best for: Pinned conventions, critical rules, project facts
+//	  - Implementation: File-based with atomic writes
 //
-//  Vector Tier (sqlite/ vector tables):
-//    - Semantic search via embedding similarity
-//    - SQLite-backed with FTS5 for text search
-//    - Local-first, deterministic, reproducible
-//    - Best for: Semantic memories, procedural knowledge
-//    - Implementation: SQLite with embeddings stored as BLOB
+//	Vector Tier (sqlite/ vector tables):
+//	  - Semantic search via embedding similarity
+//	  - SQLite-backed with FTS5 for text search
+//	  - Local-first, deterministic, reproducible
+//	  - Best for: Semantic memories, procedural knowledge
+//	  - Implementation: SQLite with embeddings stored as BLOB
 //
-//  Vector+Graph Tier (sqlite/ with relationships):
-//    - Combines vector search with relationship traversal
-//    - Graph edges stored in memory_relations table
-//    - Enables structural queries (call graphs, dependencies)
-//    - Best for: Outcome memories, service architectures
-//    - Implementation: SQLite with separate relations table
+//	Vector+Graph Tier (sqlite/ with relationships):
+//	  - Combines vector search with relationship traversal
+//	  - Graph edges stored in memory_relations table
+//	  - Enables structural queries (call graphs, dependencies)
+//	  - Best for: Outcome memories, service architectures
+//	  - Implementation: SQLite with separate relations table
 //
-//  Document Tier (sqlite/ document table):
-//    - Cold storage for large episodic content
-//    - Full text search but not embedded
-//    - Referenced by other tiers via memory IDs
-//    - Best for: Session transcripts, large analyses
-//    - Implementation: SQLite with FTS5 virtual table
+//	Document Tier (sqlite/ document table):
+//	  - Cold storage for large episodic content
+//	  - Full text search but not embedded
+//	  - Referenced by other tiers via memory IDs
+//	  - Best for: Session transcripts, large analyses
+//	  - Implementation: SQLite with FTS5 virtual table
 //
-//  Cold Tier (sqlite/ tombstones + reconstruction):
-//    - Evicted memories marked with tombstones
-//    - Enables "tip of the tongue" gap detection
-//    - Reconstruction engine can recover from fragments
-//    - Best for: Graceful forgetting with recovery option
-//    - Implementation: Tombstone table + lineage tracking
+//	Cold Tier (sqlite/ tombstones + reconstruction):
+//	  - Evicted memories marked with tombstones
+//	  - Enables "tip of the tongue" gap detection
+//	  - Reconstruction engine can recover from fragments
+//	  - Best for: Graceful forgetting with recovery option
+//	  - Implementation: Tombstone table + lineage tracking
 //
 // # SQLite Schema Overview
 //
 // The SQLite store uses several tables:
 //
-//  memories:
-//    Primary table for all memory entries.
-//    Columns: id, type, content, embedding (BLOB), workspace, source,
-//             confidence, created_at, updated_at, last_accessed, access_count,
-//             decay_score, salience_score, suppression_score, storage_tier,
-//             useful_count, ignored_count, rejected_count, harmful_count,
-//             superseded_by, pinned, promoted_at, demoted_at, importance
+//	memories:
+//	  Primary table for all memory entries.
+//	  Columns: id, type, content, embedding (BLOB), workspace, source,
+//	           confidence, created_at, updated_at, last_accessed, access_count,
+//	           decay_score, salience_score, suppression_score, storage_tier,
+//	           useful_count, ignored_count, rejected_count, harmful_count,
+//	           superseded_by, pinned, promoted_at, demoted_at, importance
 //
-//  memory_relations:
-//    Graph edges between memories.
-//    Columns: source_id, target_id, relation_type, weight, metadata (JSON)
-//    Indexes: (source_id), (target_id), (relation_type)
+//	memory_relations:
+//	  Graph edges between memories.
+//	  Columns: source_id, target_id, relation_type, weight, metadata (JSON)
+//	  Indexes: (source_id), (target_id), (relation_type)
 //
-//  memory_outcomes:
-//    Outcome data for outcome-type memories.
-//    Columns: memory_id, result, approach, reason, linked_memories (JSON)
+//	memory_outcomes:
+//	  Outcome data for outcome-type memories.
+//	  Columns: memory_id, result, approach, reason, linked_memories (JSON)
 //
-//  memory_documents:
-//    Document tier storage with full-text search.
-//    Uses SQLite FTS5 virtual table for fast text queries.
-//    Columns: id, workspace, content, created_at
+//	memory_documents:
+//	  Document tier storage with full-text search.
+//	  Uses SQLite FTS5 virtual table for fast text queries.
+//	  Columns: id, workspace, content, created_at
 //
-//  tombstones:
-//    Records of evicted memories for reconstruction.
-//    Columns: original_id, content_hash, evicted_at, reason,
-//             original_type, original_workspace, metadata (JSON)
+//	tombstones:
+//	  Records of evicted memories for reconstruction.
+//	  Columns: original_id, content_hash, evicted_at, reason,
+//	           original_type, original_workspace, metadata (JSON)
 //
-//  reconstruction_lineage:
-//    Tracks which tombstones were used to reconstruct memories.
-//    Prevents reconstruction loops.
-//    Columns: reconstructed_id, tombstone_id, created_at
+//	reconstruction_lineage:
+//	  Tracks which tombstones were used to reconstruct memories.
+//	  Prevents reconstruction loops.
+//	  Columns: reconstructed_id, tombstone_id, created_at
 //
-//  observations:
-//    Tool usage and agent action observations.
-//    Columns: id, workspace, session_id, occurred_at, kind,
-//             tool_name, summary, hash, created_at
-//    Deduplication via hash with 60-second window
+//	observations:
+//	  Tool usage and agent action observations.
+//	  Columns: id, workspace, session_id, occurred_at, kind,
+//	           tool_name, summary, hash, created_at
+//	  Deduplication via hash with 60-second window
 //
-//  sessions:
-//    Session metadata for grouping observations.
-//    Columns: id, workspace, started_at, ended_at, status,
-//             last_heartbeat_at, task_summary
+//	sessions:
+//	  Session metadata for grouping observations.
+//	  Columns: id, workspace, started_at, ended_at, status,
+//	           last_heartbeat_at, task_summary
 //
-//  llm_usage_metrics:
-//    Token consumption tracking for cost analysis.
-//    Columns: id, workspace, timestamp, group_tag, model,
-//             prompt_tokens, completion_tokens, total_tokens
+//	llm_usage_metrics:
+//	  Token consumption tracking for cost analysis.
+//	  Columns: id, workspace, timestamp, group_tag, model,
+//	           prompt_tokens, completion_tokens, total_tokens
 //
-//  benchmark_runs:
-//    Benchmark results for performance tracking.
-//    Columns: id, workspace, run_id, mode, created_at,
-//             config (JSON), summary (JSON)
+//	benchmark_runs:
+//	  Benchmark results for performance tracking.
+//	  Columns: id, workspace, run_id, mode, created_at,
+//	           config (JSON), summary (JSON)
 //
 // # Migration Approach
 //
@@ -119,76 +119,76 @@
 //
 // Storage files are organized per workspace:
 //
-//  User-level:
-//    ~/.agent-memory/                      # User directory
-//    ~/.agent-memory/config.yaml           # User config
-//    ~/.agent-memory/models/               # Embedding models
+//	User-level:
+//	  ~/.agent-memory/                      # User directory
+//	  ~/.agent-memory/config.yaml           # User config
+//	  ~/.agent-memory/models/               # Embedding models
 //
-//  Workspace-level:
-//    .agent-memory.yaml                    # Workspace config
-//    ~/.agent-memory/workspaces/<name>/    # Workspace data
-//    └── memories.db                       # SQLite database
-//    ~/.agent-memory/workspaces/<name>/markdown/
-//    └── AGENTS.md                         # Markdown tier
+//	Workspace-level:
+//	  .agent-memory.yaml                    # Workspace config
+//	  ~/.agent-memory/workspaces/<name>/    # Workspace data
+//	  └── memories.db                       # SQLite database
+//	  ~/.agent-memory/workspaces/<name>/markdown/
+//	  └── AGENTS.md                         # Markdown tier
 //
 // # Markdown Adapter
 //
 // The markdown adapter (markdown/adapter.go) manages the markdown tier:
 //
-//  Features:
-//    - Atomic writes via temp file + rename
-//    - Token budget enforcement with eviction strategy
-//    - Preserves non-managed content in AGENTS.md
-//    - Sectioned format: ## agent-memory [id] ... ## /agent-memory
+//	Features:
+//	  - Atomic writes via temp file + rename
+//	  - Token budget enforcement with eviction strategy
+//	  - Preserves non-managed content in AGENTS.md
+//	  - Sectioned format: ## agent-memory [id] ... ## /agent-memory
 //
-//  Usage:
-//    adapter := markdown.NewAdapter("AGENTS.md", 4000)
-//    err := adapter.Upsert("mem-123", "This is a critical fact")
-//    err = adapter.Remove("mem-456")
+//	Usage:
+//	  adapter := markdown.NewAdapter("AGENTS.md", 4000)
+//	  err := adapter.Upsert("mem-123", "This is a critical fact")
+//	  err = adapter.Remove("mem-456")
 //
-//  Budget Management:
-//    When the markdown file exceeds maxTokens, the adapter:
-//    1. Counts tokens in managed sections
-//    2. If over budget, removes oldest unpinned entries
-//    3. Preserves pinned entries and non-managed content
-//    4. Returns error if pinned entries alone exceed budget
+//	Budget Management:
+//	  When the markdown file exceeds maxTokens, the adapter:
+//	  1. Counts tokens in managed sections
+//	  2. If over budget, removes oldest unpinned entries
+//	  3. Preserves pinned entries and non-managed content
+//	  4. Returns error if pinned entries alone exceed budget
 //
 // # SQLite Store
 //
 // The SQLite store (sqlite/store.go) provides the main persistence layer:
 //
-//  Initialization:
-//    store, err := sqlite.NewStore(dbPath)
-//    // Automatically runs migrations and creates indexes
+//	Initialization:
+//	  store, err := sqlite.NewStore(dbPath)
+//	  // Automatically runs migrations and creates indexes
 //
-//  Memory Operations:
-//    Insert(ctx, memory) error
-//    Get(ctx, id) (MemoryEntry, error)
-//    Update(ctx, id, patch) error
-//    Delete(ctx, id) error
-//    List(ctx, filters) ([]MemoryEntry, error)
+//	Memory Operations:
+//	  Insert(ctx, memory) error
+//	  Get(ctx, id) (MemoryEntry, error)
+//	  Update(ctx, id, patch) error
+//	  Delete(ctx, id) error
+//	  List(ctx, filters) ([]MemoryEntry, error)
 //
-//  Relationship Operations:
-//    AddRelation(ctx, sourceID, targetID, relType, weight, metadata) error
-//    ListRelations(ctx, sourceID) ([]Relation, error)
-//    TraverseRelations(ctx, startID, relTypes, maxDepth) ([]MemoryEntry, error)
+//	Relationship Operations:
+//	  AddRelation(ctx, sourceID, targetID, relType, weight, metadata) error
+//	  ListRelations(ctx, sourceID) ([]Relation, error)
+//	  TraverseRelations(ctx, startID, relTypes, maxDepth) ([]MemoryEntry, error)
 //
-//  Lifecycle Operations:
-//    UpdateDecayScores(ctx, workspace) (int, error)
-//    MarkSuperseded(ctx, sourceIDs, successorID) error
-//    UpdateTier(ctx, id, tier) error
-//    DeleteByIDs(ctx, ids) error
+//	Lifecycle Operations:
+//	  UpdateDecayScores(ctx, workspace) (int, error)
+//	  MarkSuperseded(ctx, sourceIDs, successorID) error
+//	  UpdateTier(ctx, id, tier) error
+//	  DeleteByIDs(ctx, ids) error
 //
-//  Observation Tracking:
-//    InsertObservation(ctx, observation) error
-//    ListObservations(ctx, workspace, sessionID, limit) ([]Observation, error)
-//    UpsertSession(ctx, sessionInput) error
-//    ListSessions(ctx, workspace, limit) ([]Session, error)
+//	Observation Tracking:
+//	  InsertObservation(ctx, observation) error
+//	  ListObservations(ctx, workspace, sessionID, limit) ([]Observation, error)
+//	  UpsertSession(ctx, sessionInput) error
+//	  ListSessions(ctx, workspace, limit) ([]Session, error)
 //
-//  Metrics:
-//    AddLLMUsageMetric(ctx, metric) error
-//    AggregateLLMUsageTotals(ctx, workspace) (LLMUsageTotals, error)
-//    AggregateLLMUsageByGroup(ctx, workspace) ([]GroupTotals, error)
+//	Metrics:
+//	  AddLLMUsageMetric(ctx, metric) error
+//	  AggregateLLMUsageTotals(ctx, workspace) (LLMUsageTotals, error)
+//	  AggregateLLMUsageByGroup(ctx, workspace) ([]GroupTotals, error)
 //
 // # Transactions
 //
@@ -222,25 +222,25 @@
 //
 // The storage layer is optimized for local-first performance:
 //
-//  Indexes:
-//    - Primary key index on id
-//    - Index on (workspace, type) for filtered queries
-//    - Index on (workspace, storage_tier) for tier queries
-//    - Index on (source_id) and (target_id) for relationship traversal
-//    - FTS5 index on document content
+//	Indexes:
+//	  - Primary key index on id
+//	  - Index on (workspace, type) for filtered queries
+//	  - Index on (workspace, storage_tier) for tier queries
+//	  - Index on (source_id) and (target_id) for relationship traversal
+//	  - FTS5 index on document content
 //
-//  Query Optimization:
-//    - Prepared statements for common queries
-//    - Batch inserts for lifecycle operations
-//    - Lazy loading of embeddings (only when needed)
-//    - Cursor-based pagination for large result sets
+//	Query Optimization:
+//	  - Prepared statements for common queries
+//	  - Batch inserts for lifecycle operations
+//	  - Lazy loading of embeddings (only when needed)
+//	  - Cursor-based pagination for large result sets
 //
-//  Benchmarks (1000 memories):
-//    - Insert: ~1ms per memory (including indexes)
-//    - Get by ID: ~0.1ms
-//    - List with filters: ~5-10ms
-//    - Full-text search: ~10-20ms (depends on query)
-//    - Relationship traversal (depth 2): ~15-30ms
+//	Benchmarks (1000 memories):
+//	  - Insert: ~1ms per memory (including indexes)
+//	  - Get by ID: ~0.1ms
+//	  - List with filters: ~5-10ms
+//	  - Full-text search: ~10-20ms (depends on query)
+//	  - Relationship traversal (depth 2): ~15-30ms
 //
 // # Testing
 //

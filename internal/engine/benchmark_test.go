@@ -16,9 +16,9 @@ func BenchmarkWritePipeline(b *testing.B) {
 	ctx := context.Background()
 	store, provider := setupBenchmarkDeps(b)
 	defer store.Close()
-	
+
 	pipeline := NewWritePipelineWithEmbedder(store, provider)
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_, err := pipeline.Write(ctx, WriteInput{
@@ -41,9 +41,9 @@ func BenchmarkWritePipelineParallel(b *testing.B) {
 	ctx := context.Background()
 	store, provider := setupBenchmarkDeps(b)
 	defer store.Close()
-	
+
 	pipeline := NewWritePipelineWithEmbedder(store, provider)
-	
+
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		i := 0
@@ -68,12 +68,12 @@ func BenchmarkRetrievalSearch(b *testing.B) {
 	ctx := context.Background()
 	store, provider := setupBenchmarkDeps(b)
 	defer store.Close()
-	
+
 	// Seed with test data
 	seedBenchmarkMemories(b, ctx, store, provider, 100)
-	
+
 	engine := NewRetrievalEngine(NewVectorSearcher(store, provider))
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_, err := engine.Retrieve(ctx, RetrievalOptions{
@@ -93,11 +93,11 @@ func BenchmarkRetrievalRecall(b *testing.B) {
 	ctx := context.Background()
 	store, provider := setupBenchmarkDeps(b)
 	defer store.Close()
-	
+
 	seedBenchmarkMemories(b, ctx, store, provider, 100)
-	
+
 	engine := NewRetrievalEngine(NewVectorSearcher(store, provider))
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_, err := engine.Retrieve(ctx, RetrievalOptions{
@@ -117,11 +117,11 @@ func BenchmarkVectorSearcher(b *testing.B) {
 	ctx := context.Background()
 	store, provider := setupBenchmarkDeps(b)
 	defer store.Close()
-	
+
 	seedBenchmarkMemories(b, ctx, store, provider, 200)
-	
+
 	searcher := NewVectorSearcher(store, provider)
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_, err := searcher.Search(ctx, "bench", "semantic search query", 20)
@@ -134,7 +134,7 @@ func BenchmarkVectorSearcher(b *testing.B) {
 // BenchmarkTokenClipper benchmarks token clipping
 func BenchmarkTokenClipper(b *testing.B) {
 	clipper := NewTokenClipper(nil)
-	
+
 	// Create sample hits
 	hits := make([]RetrievalHit, 50)
 	for i := range hits {
@@ -148,7 +148,7 @@ func BenchmarkTokenClipper(b *testing.B) {
 			Score: float64(50-i) / 50.0,
 		}
 	}
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_, _ = clipper.Clip(hits, 2000)
@@ -169,9 +169,9 @@ func BenchmarkRebalanceRecallHits(b *testing.B) {
 			Score: float64(100-i) / 100.0,
 		}
 	}
-	
+
 	query := "task description for rebalancing test"
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_ = RebalanceRecallHits(query, hits)
@@ -191,9 +191,9 @@ func BenchmarkAssembleRecallSections(b *testing.B) {
 			Score: float64(20-i) / 20.0,
 		}
 	}
-	
+
 	task := "Complete the implementation task"
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_ = AssembleRecallSections(task, hits)
@@ -205,24 +205,24 @@ func BenchmarkAssembleRecallSections(b *testing.B) {
 func setupBenchmarkDeps(b *testing.B) (*sqlite.Store, embeddings.Provider) {
 	b.Helper()
 	ctx := context.Background()
-	
+
 	dbPath := filepath.Join(b.TempDir(), "bench.db")
 	store, err := sqlite.Open(ctx, dbPath)
 	if err != nil {
 		b.Fatalf("open store: %v", err)
 	}
-	
+
 	// Use mock provider for benchmarks (faster)
 	provider := &mockEmbeddingProvider{}
-	
+
 	return store, provider
 }
 
 func seedBenchmarkMemories(b *testing.B, ctx context.Context, store *sqlite.Store, provider embeddings.Provider, count int) {
 	b.Helper()
-	
+
 	pipeline := NewWritePipelineWithEmbedder(store, provider)
-	
+
 	for i := 0; i < count; i++ {
 		_, err := pipeline.Write(ctx, WriteInput{
 			Workspace: "bench",

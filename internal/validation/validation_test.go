@@ -19,7 +19,7 @@ func TestValidateWorkspaceName(t *testing.T) {
 		{"valid numbers", "project123", false},
 		{"valid single char", "a", false},
 		{"valid max length", strings.Repeat("a", MaxWorkspaceNameLength), false},
-		
+
 		// Invalid names
 		{"empty", "", true},
 		{"spaces", "my project", true},
@@ -32,7 +32,7 @@ func TestValidateWorkspaceName(t *testing.T) {
 		{"leading dot dot", "..project", true},
 		{"contains traversal", "my..project", true},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := ValidateWorkspaceName(tt.input)
@@ -54,14 +54,14 @@ func TestValidateFilePath(t *testing.T) {
 		{"valid absolute", "/usr/local/bin/app", false},
 		{"valid with dots in name", "file.config.yaml", false},
 		{"valid nested", "a/b/c/d.txt", false},
-		
+
 		// Invalid paths
 		{"empty", "", true},
 		{"traversal start", "../secret", true},
 		{"traversal tilde", "~/secret", true},
 		{"traversal nested", "a/../../b", true},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := ValidateFilePath(tt.input)
@@ -83,12 +83,12 @@ func TestValidateContentLength(t *testing.T) {
 		{"small", "Hello, world!", false},
 		{"max allowed", strings.Repeat("a", MaxContentLength), false},
 		{"unicode", "Hello 世界 🌍", false},
-		
+
 		// Invalid content
 		{"too large", strings.Repeat("a", MaxContentLength+1), true},
 		{"invalid utf8", string([]byte{0xff, 0xfe, 0xfd}), true},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := ValidateContentLength(tt.input)
@@ -109,12 +109,12 @@ func TestValidateDiagramCode(t *testing.T) {
 		{"empty", "", false},
 		{"simple mermaid", "graph TD\nA-->B", false},
 		{"max allowed", strings.Repeat("a", MaxDiagramCodeLength), false},
-		
+
 		// Invalid diagram code
 		{"too large", strings.Repeat("a", MaxDiagramCodeLength+1), true},
 		{"invalid utf8", string([]byte{0xff, 0xfe, 0xfd}), true},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := ValidateDiagramCode(tt.input)
@@ -144,7 +144,7 @@ func TestSanitizeWorkspaceName(t *testing.T) {
 		{"path traversal cleaned", "../project", "project"},
 		{"tilde removed", "~/project", "project"},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := SanitizeWorkspaceName(tt.input)
@@ -166,7 +166,7 @@ func TestSanitizeWorkspaceNameAlwaysValid(t *testing.T) {
 		"unicode世界🌍emoji",
 		strings.Repeat("x", 200),
 	}
-	
+
 	for _, input := range inputs {
 		t.Run(input, func(t *testing.T) {
 			sanitized := SanitizeWorkspaceName(input)

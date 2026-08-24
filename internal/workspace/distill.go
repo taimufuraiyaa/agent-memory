@@ -122,7 +122,7 @@ func (m *Manager) Distill(ctx context.Context, cwd string, opt DistillOptions) (
 	skillFile := filepath.Join(skillDir, "SKILL.md")
 
 	if !opt.Force && fileExists(skillFile) {
-		return nil, fmt.Errorf("skill file already exists at %s (use --force to overwrite)", skillFile)
+		return nil, fmt.Errorf("%w: skill file already exists at %s (use --force to overwrite)", core.ErrAlreadyExists, skillFile)
 	}
 
 	if err := os.MkdirAll(skillDir, 0o755); err != nil {

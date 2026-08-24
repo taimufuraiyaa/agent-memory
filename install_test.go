@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -12,15 +13,98 @@ import (
 	amconfig "github.com/taimufuraiyaa/agent-memory/internal/config"
 )
 
+func TestRepositoryDoesNotContainDeveloperSpecificHomePath(t *testing.T) {
+	forbiddenPath := strings.Join([]string{"", "Users", "ti" + "me"}, "/")
+	root, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("get repository root: %v", err)
+	}
+
+	output, err := exec.Command("git", "ls-files", "--cached", "--others", "--exclude-standard", "-z").Output()
+	if err != nil {
+		t.Fatalf("list repository files: %v", err)
+	}
+	for _, name := range bytes.Split(output, []byte{0}) {
+		if len(name) == 0 {
+			continue
+		}
+		path := filepath.Join(root, filepath.FromSlash(string(name)))
+		contents, readErr := os.ReadFile(path)
+		if readErr != nil {
+			if os.IsNotExist(readErr) {
+				continue
+			}
+			t.Fatalf("read repository file %s: %v", name, readErr)
+		}
+		if bytes.Contains(contents, []byte(forbiddenPath)) {
+			t.Errorf("developer-specific home path found in %s", name)
+		}
+	}
+}
+
+func TestReleaseBuildUsesTrimpath(t *testing.T) {
+	contents, err := os.ReadFile("Makefile")
+	if err != nil {
+		t.Fatal(err)
+	}
+	makefile := string(contents)
+	if strings.Count(makefile, "go build -trimpath -o $(BIN_DIR)/$(APP) ./cmd/agent-memory") != 2 {
+		t.Fatalf("development and embedded release builds must both use -trimpath")
+	}
+}
+
+func TestBuildAndReleaseArtifactsIncludeConciseExecutable(t *testing.T) {
+	makefileBytes, err := os.ReadFile("Makefile")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Count(string(makefileBytes), "cp $(BIN_DIR)/$(APP) $(BIN_DIR)/am") != 2 {
+		t.Fatal("development and embedded builds must publish bin/am")
+	}
+	releaseBytes, err := os.ReadFile(".github/workflows/release.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(releaseBytes), "tar -czf agent-memory_${{ github.ref_name }}_${{ matrix.target.goos }}_${{ matrix.target.goarch }}.tar.gz agent-memory am") {
+		t.Fatal("release archive must contain agent-memory and am")
+	}
+}
+
+func TestPublishConciseExecutableCopiesCanonicalBinary(t *testing.T) {
+	binDir := t.TempDir()
+	canonical := filepath.Join(binDir, binNameWithExt())
+	if err := os.WriteFile(canonical, []byte("same-cli"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	alias, err := publishConciseExecutable(canonical)
+	if err != nil {
+		t.Fatalf("publish concise executable: %v", err)
+	}
+	if filepath.Base(alias) != conciseBinNameWithExt() {
+		t.Fatalf("alias path=%q", alias)
+	}
+	content, err := os.ReadFile(alias)
+	if err != nil {
+		t.Fatalf("read concise executable: %v", err)
+	}
+	if string(content) != "same-cli" {
+		t.Fatalf("concise executable content=%q", content)
+	}
+}
+
 func TestMergeEnvFileAddsAdaptiveTuningGuidance(t *testing.T) {
 	merged, err := mergeEnvFile("/tmp/agent-memory.env", map[string]string{
-		"AGENT_MEMORY_ENABLED": "1",
+		"AGENT_MEMORY_ENABLED":         "1",
+		"AGENT_MEMORY_TERM_BLOOM_MODE": "shadow",
 	})
 	if err != nil {
 		t.Fatalf("merge env file: %v", err)
 	}
 	if !strings.Contains(merged, "export AGENT_MEMORY_ENABLED=1") {
 		t.Fatalf("expected base env assignment, got %q", merged)
+	}
+	if !strings.Contains(merged, "AGENT_MEMORY_TERM_BLOOM_MODE") {
+		t.Fatalf("expected term Bloom rollout mode, got %q", merged)
 	}
 	if !strings.Contains(merged, amconfig.AdaptiveTuningEnvGuidanceHeader()) {
 		t.Fatalf("expected adaptive tuning guidance, got %q", merged)
@@ -44,6 +128,20 @@ func TestMergeEnvFileGuidanceIsIdempotent(t *testing.T) {
 	}
 	if strings.Count(second, amconfig.AdaptiveTuningEnvGuidanceHeader()) != 1 {
 		t.Fatalf("expected one guidance header in second output, got %q", second)
+	}
+}
+
+func TestMergeEnvFilePreservesExistingTermBloomMode(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "agent-memory.env")
+	if err := os.WriteFile(path, []byte("export AGENT_MEMORY_TERM_BLOOM_MODE=gate\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	merged, err := mergeEnvFile(path, map[string]string{"AGENT_MEMORY_TERM_BLOOM_MODE": "shadow"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(merged, "AGENT_MEMORY_TERM_BLOOM_MODE=gate") || strings.Contains(merged, "AGENT_MEMORY_TERM_BLOOM_MODE=shadow") {
+		t.Fatalf("existing operator mode was not preserved: %q", merged)
 	}
 }
 

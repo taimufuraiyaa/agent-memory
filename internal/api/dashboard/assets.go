@@ -33,5 +33,11 @@ func GetEmbeddedHandler() http.Handler {
 			http.Error(w, "Dashboard assets not available", http.StatusNotFound)
 		})
 	}
-	return http.FileServer(http.FS(fsys))
+	fileServer := http.FileServer(http.FS(fsys))
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Asset names are intentionally stable (app.js/app.css), so browsers must
+		// revalidate after the single binary is replaced.
+		w.Header().Set("Cache-Control", "no-store")
+		fileServer.ServeHTTP(w, r)
+	})
 }

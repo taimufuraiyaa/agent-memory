@@ -30,31 +30,31 @@
 //
 // agent-memory is local-first by design, supporting both local and cloud providers:
 //
-//  Local Embeddings (Recommended):
-//    Provider: ONNX Runtime with local transformer models
-//    Models: Sentence-BERT variants (all-MiniLM-L6-v2, etc.)
-//    Pros:
-//      - Fully offline, no API calls
-//      - Deterministic and reproducible
-//      - Zero per-query cost
-//      - Fast inference on modern CPUs
-//      - Privacy-preserving (no data leaves machine)
-//    Cons:
-//      - Initial model download (~100MB)
-//      - Slightly lower quality vs large cloud models
-//      - CPU inference slower than GPU cloud endpoints
+//	Local Embeddings (Recommended):
+//	  Provider: ONNX Runtime with local transformer models
+//	  Models: Sentence-BERT variants (all-MiniLM-L6-v2, etc.)
+//	  Pros:
+//	    - Fully offline, no API calls
+//	    - Deterministic and reproducible
+//	    - Zero per-query cost
+//	    - Fast inference on modern CPUs
+//	    - Privacy-preserving (no data leaves machine)
+//	  Cons:
+//	    - Initial model download (~100MB)
+//	    - Slightly lower quality vs large cloud models
+//	    - CPU inference slower than GPU cloud endpoints
 //
-//  Cloud Embeddings (Optional):
-//    Providers: OpenAI (text-embedding-3-small), Cohere, etc.
-//    Pros:
-//      - Higher quality embeddings
-//      - Faster inference with GPU acceleration
-//      - No local model storage
-//    Cons:
-//      - Requires API key and internet
-//      - Per-query cost
-//      - Not deterministic (model updates)
-//      - Privacy: content sent to third-party
+//	Cloud Embeddings (Optional):
+//	  Providers: OpenAI (text-embedding-3-small), Cohere, etc.
+//	  Pros:
+//	    - Higher quality embeddings
+//	    - Faster inference with GPU acceleration
+//	    - No local model storage
+//	  Cons:
+//	    - Requires API key and internet
+//	    - Per-query cost
+//	    - Not deterministic (model updates)
+//	    - Privacy: content sent to third-party
 //
 // Default: Local ONNX provider for privacy and cost. Configure via:
 //
@@ -68,25 +68,25 @@
 //
 // Local models are managed automatically:
 //
-//  Download:
-//    Models download on first use to ~/.agent-memory/models/
-//    Includes model weights, tokenizer vocab, and config files
-//    Uses fallback mirrors if primary download fails
+//	Download:
+//	  Models download on first use to ~/.agent-memory/models/
+//	  Includes model weights, tokenizer vocab, and config files
+//	  Uses fallback mirrors if primary download fails
 //
-//  Validation:
-//    Models are validated via SHA256 checksum
-//    Corrupted downloads are re-fetched automatically
-//    Validation runs on every store initialization
+//	Validation:
+//	  Models are validated via SHA256 checksum
+//	  Corrupted downloads are re-fetched automatically
+//	  Validation runs on every store initialization
 //
-//  Upgrade:
-//    New agent-memory versions may include updated models
-//    Run: agent-memory upgrade --check to see available updates
-//    Run: agent-memory upgrade --models to download new models
+//	Upgrade:
+//	  New agent-memory versions may include updated models
+//	  Run: agent-memory upgrade --check to see available updates
+//	  Run: agent-memory upgrade --models to download new models
 //
-//  Storage:
-//    Models are stored in ~/.agent-memory/models/<model-name>/
-//    Shared across all workspaces (single download)
-//    ~100-200MB per model (compressed)
+//	Storage:
+//	  Models are stored in ~/.agent-memory/models/<model-name>/
+//	  Shared across all workspaces (single download)
+//	  ~100-200MB per model (compressed)
 //
 // # Embedding Pipeline
 //
@@ -142,22 +142,22 @@
 //
 // Currently supported providers:
 //
-//  ONNX (local/onnx_provider.go):
-//    Uses ONNX Runtime for local inference
-//    Models: Sentence-BERT variants exported to ONNX format
-//    Dimensions: 384 (all-MiniLM-L6-v2)
-//    Throughput: ~50-100 embeddings/sec on CPU
+//	ONNX (local/onnx_provider.go):
+//	  Uses ONNX Runtime for local inference
+//	  Models: Sentence-BERT variants exported to ONNX format
+//	  Dimensions: 384 (all-MiniLM-L6-v2)
+//	  Throughput: ~50-100 embeddings/sec on CPU
 //
-//  OpenAI (cloud/openai_provider.go):
-//    Uses OpenAI Embeddings API
-//    Models: text-embedding-3-small, text-embedding-ada-002
-//    Dimensions: 1536 (ada-002), 256-1536 (text-embedding-3-small)
-//    Throughput: API rate limit dependent
+//	OpenAI (cloud/openai_provider.go):
+//	  Uses OpenAI Embeddings API
+//	  Models: text-embedding-3-small, text-embedding-ada-002
+//	  Dimensions: 1536 (ada-002), 256-1536 (text-embedding-3-small)
+//	  Throughput: API rate limit dependent
 //
-//  Mock (test/mock_provider.go):
-//    Returns random embeddings for testing
-//    Dimensions: Configurable
-//    Use: Integration tests only
+//	Mock (test/mock_provider.go):
+//	  Returns random embeddings for testing
+//	  Dimensions: Configurable
+//	  Use: Integration tests only
 //
 // # Configuration
 //
@@ -183,15 +183,15 @@
 //
 // Embedding generation performance varies by provider:
 //
-//  ONNX Local (CPU):
-//    Single embed: ~10-20ms
-//    Batch embed (32 items): ~200-400ms (~6-12ms per item)
-//    Throughput: 50-100 embeddings/sec
+//	ONNX Local (CPU):
+//	  Single embed: ~10-20ms
+//	  Batch embed (32 items): ~200-400ms (~6-12ms per item)
+//	  Throughput: 50-100 embeddings/sec
 //
-//  OpenAI API:
-//    Single embed: ~100-200ms (network latency)
-//    Batch embed (100 items): ~500-1000ms (~5-10ms per item)
-//    Throughput: Rate limit dependent (typically 3000 RPM)
+//	OpenAI API:
+//	  Single embed: ~100-200ms (network latency)
+//	  Batch embed (100 items): ~500-1000ms (~5-10ms per item)
+//	  Throughput: Rate limit dependent (typically 3000 RPM)
 //
 // Optimization tips:
 //   - Use EmbedBatch for multiple items (amortizes overhead)
@@ -203,21 +203,21 @@
 //
 // Common embedding errors and recovery:
 //
-//  Model Not Found:
-//    Error: "model file not found at <path>"
-//    Fix: Run agent-memory upgrade --models
+//	Model Not Found:
+//	  Error: "model file not found at <path>"
+//	  Fix: Run agent-memory upgrade --models
 //
-//  Network Timeout (cloud):
-//    Error: "context deadline exceeded"
-//    Fix: Check internet connection, increase timeout in config
+//	Network Timeout (cloud):
+//	  Error: "context deadline exceeded"
+//	  Fix: Check internet connection, increase timeout in config
 //
-//  API Key Invalid (cloud):
-//    Error: "authentication failed"
-//    Fix: Set correct API key in config or OPENAI_API_KEY env var
+//	API Key Invalid (cloud):
+//	  Error: "authentication failed"
+//	  Fix: Set correct API key in config or OPENAI_API_KEY env var
 //
-//  Out of Memory:
-//    Error: "failed to allocate tensor"
-//    Fix: Reduce batch_size in config or upgrade RAM
+//	Out of Memory:
+//	  Error: "failed to allocate tensor"
+//	  Fix: Reduce batch_size in config or upgrade RAM
 //
 // All errors are wrapped with context using the error handling system
 // in internal/core/errors.go.

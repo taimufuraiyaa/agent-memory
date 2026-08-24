@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: agent-memory-staging
+  labels:
+    agent-memory.io/environment: staging
+    agent-memory.io/network-tier: application

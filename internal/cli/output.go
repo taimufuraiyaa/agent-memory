@@ -47,14 +47,14 @@ func writeSuccessEnvelope(out io.Writer, command string, data any) error {
 	})
 }
 
-func writeErrorEnvelope(out io.Writer, command, message string) error {
+func writeErrorEnvelope(out io.Writer, command string, err error) error {
 	return writeJSON(out, envelope{
 		OK:      false,
 		Command: command,
 		Version: envelopeMajor,
 		Error: &errorPayload{
-			Code:    exitCodeName(mapExitCode(message)),
-			Message: message,
+			Code:    exitCodeName(mapExitCode(err)),
+			Message: err.Error(),
 		},
 	})
 }

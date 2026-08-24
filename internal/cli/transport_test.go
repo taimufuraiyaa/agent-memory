@@ -58,3 +58,33 @@ func TestResolveAPIURL(t *testing.T) {
 		t.Fatalf("expected env api url, got %q", got)
 	}
 }
+
+func TestResolveWorkspaceValidation(t *testing.T) {
+	t.Setenv("MEMORY_WORKSPACE", "")
+
+	cases := []struct {
+		workspace string
+		wantErr   bool
+		want      string
+	}{
+		{workspace: "../../evil", wantErr: true},
+		{workspace: "..", wantErr: true},
+		{workspace: "workspace with spaces", wantErr: true},
+		{workspace: "valid-workspace", want: "valid-workspace"},
+	}
+	for _, tc := range cases {
+		got, err := resolveWorkspace(tc.workspace)
+		if tc.wantErr {
+			if err == nil {
+				t.Fatalf("resolveWorkspace(%q) expected error, got %q", tc.workspace, got)
+			}
+			continue
+		}
+		if err != nil {
+			t.Fatalf("resolveWorkspace(%q) returned error: %v", tc.workspace, err)
+		}
+		if got != tc.want {
+			t.Fatalf("resolveWorkspace(%q) expected %q, got %q", tc.workspace, tc.want, got)
+		}
+	}
+}

@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: agent-memory-production
+  labels:
+    agent-memory.io/environment: production
+    agent-memory.io/network-tier: application

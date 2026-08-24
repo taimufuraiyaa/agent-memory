@@ -1,7 +1,15 @@
 import { StrictMode } from 'react'
 import ReactDOM from 'react-dom/client'
-import { App } from './ui/App'
+import { MantineProvider } from '@mantine/core'
+import '@mantine/core/styles.css'
+import { RightsAttestationGate } from './ui/RightsAttestationGate'
+import { loadDashboardRuntime } from './lib/runtime'
+import { createStandaloneKnowledgeGateway } from './lib/adapters/standaloneKnowledgeGateway'
+import { WorkspaceApp } from './ui/WorkspaceApp'
+import { HostedWorkspaceBootstrap } from './ui/HostedWorkspaceBootstrap'
+import { agentMemoryTheme } from './ui/theme'
 import './ui/styles.css'
+import './ui/connection.css'
 
 type PreloadRecoveryState = {
   attempted: boolean
@@ -241,8 +249,44 @@ function installPreloadRecovery(): void {
 
 installPreloadRecovery()
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-)
+function RuntimeUnavailable({ message }: { message: string }) {
+  return (
+    <main className="runtimeUnavailable" role="alert">
+      <p className="eyebrow">Safe startup</p>
+      <h1>Dashboard runtime unavailable</h1>
+      <p>{message}</p>
+      <button type="button" onClick={() => window.location.reload()}>Retry discovery</button>
+    </main>
+  )
+}
+
+async function bootstrap(): Promise<void> {
+  const root = ReactDOM.createRoot(document.getElementById('root')!)
+  const render = (content: React.ReactNode) => root.render(
+    <StrictMode>
+      <MantineProvider theme={agentMemoryTheme} forceColorScheme="dark">
+        {content}
+      </MantineProvider>
+    </StrictMode>,
+  )
+  try {
+    const runtime = await loadDashboardRuntime()
+    const gateway = runtime.mode === 'standalone' ? createStandaloneKnowledgeGateway() : null
+    render(
+      runtime.mode === 'hosted' ? (
+        <HostedWorkspaceBootstrap runtime={runtime} />
+      ) : gateway ? (
+        <RightsAttestationGate>
+          <WorkspaceApp runtime={runtime} gateway={gateway} />
+        </RightsAttestationGate>
+      ) : (
+        <RuntimeUnavailable message="No knowledge gateway is available for this runtime." />
+      ),
+    )
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Runtime discovery failed.'
+    render(<RuntimeUnavailable message={message} />)
+  }
+}
+
+void bootstrap()

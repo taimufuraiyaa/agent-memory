@@ -20,6 +20,7 @@ BUDGET="400"
 CONCURRENCY="8"
 SKIP_BUILD="0"
 SKIP_GENERATE="0"
+TRIALS="3"
 
 usage() {
   cat <<EOF
@@ -40,6 +41,7 @@ Options:
   --concurrency <n>       Parallel worker count for the ON phase (default: 8)
   --skip-build            Reuse the existing binary without rebuilding
   --skip-generate         Reuse existing generated benchmark inputs
+  --trials <n>            Number of repeated trials per phase (default: 3, min: 1)
   --help                  Show this help text
 EOF
 }
@@ -102,6 +104,10 @@ while [[ $# -gt 0 ]]; do
       SKIP_GENERATE="1"
       shift
       ;;
+    --trials)
+      TRIALS="$2"
+      shift 2
+      ;;
     --help|-h)
       usage
       exit 0
@@ -158,12 +164,15 @@ export BENCHMARK_CASE_LIMIT="${CASE_LIMIT}"
 export BENCHMARK_TOP_K="${TOP_K}"
 export BENCHMARK_BUDGET="${BUDGET}"
 export BENCHMARK_CONCURRENCY="${CONCURRENCY}"
+export BENCHMARK_TRIALS="${TRIALS}"
 
 python3 - <<'PY'
 import concurrent.futures
 import json
 import os
 import queue
+import re
+import sqlite3
 import subprocess
 import sys
 import threading
@@ -348,6 +357,7 @@ case_limit_raw = os.environ.get("BENCHMARK_CASE_LIMIT", "").strip()
 top_k = int(env("BENCHMARK_TOP_K"))
 budget = int(env("BENCHMARK_BUDGET"))
 concurrency = int(env("BENCHMARK_CONCURRENCY"))
+trials = int(env("BENCHMARK_TRIALS"))
 
 if case_limit_raw:
     case_limit = int(case_limit_raw)
@@ -358,6 +368,9 @@ else:
 
 if concurrency <= 0:
     raise SystemExit("BENCHMARK_CONCURRENCY must be positive")
+
+if trials <= 0:
+    raise SystemExit("BENCHMARK_TRIALS must be positive")
 
 seeds = load_jsonl(seed_file)
 cases = load_jsonl(cases_file)
@@ -408,6 +421,142 @@ for seed in seeds:
         force=(len(seed_results) == len(seeds)),
     )
 seed_duration_ms = int((time.time() - seed_started) * 1000)
+
+
+# ── BM25 FTS5 Lexical Baseline Phase ──────────────────────────────────────
+# Tokenization note: FTS5 unicode61 tokenizer splits on Unicode word
+# boundaries, while the term indexer segments on CamelCase/snake_case
+# boundaries.  This divergence is acceptable for a lexical baseline — the
+# point is "does retrieval beat a simple text matcher", not exact parity.
+
+_STOP_WORDS = {
+    "the", "and", "for", "that", "this", "with", "from", "what", "where",
+    "when", "which", "how", "does", "did", "was", "are", "can", "will",
+    "have", "has", "been", "about", "into", "over", "after", "before",
+    "between", "under", "again", "then", "here", "there", "your", "all",
+    "not", "but", "its", "you", "also", "more", "some", "each", "just",
+}
+
+
+def build_fts5_query(prompt: str) -> str:
+    words = re.findall(r"[a-zA-Z0-9]{3,}", prompt.lower())
+    terms = [w for w in words if w not in _STOP_WORDS]
+    if not terms:
+        return '""'
+    return " OR ".join(terms)
+
+
+bm25_started = time.time()
+bm25_db = sqlite3.connect(":memory:")
+bm25_fts5_available = True
+try:
+    bm25_db.execute(
+        "CREATE VIRTUAL TABLE IF NOT EXISTS mem_fts USING fts5(id, content)"
+    )
+    for seed in seeds:
+        bm25_db.execute(
+            "INSERT INTO mem_fts (id, content) VALUES (?, ?)",
+            (seed["stable_id"], seed["content"]),
+        )
+except Exception as exc:
+    print(
+        f"[benchmark] bm25: FTS5 unavailable — {exc}",
+        file=sys.stderr,
+        flush=True,
+    )
+    bm25_fts5_available = False
+
+bm25_rows: list[dict] = []
+if bm25_fts5_available:
+    print(
+        f"[benchmark] bm25: starting {len(cases)} cases",
+        file=sys.stderr,
+        flush=True,
+    )
+    bm25_last_print = bm25_started
+    for i, case in enumerate(cases):
+        query = build_fts5_query(case["prompt"])
+        try:
+            cursor = bm25_db.execute(
+                "SELECT id FROM mem_fts WHERE mem_fts MATCH ? ORDER BY rank LIMIT ?",
+                (query, top_k),
+            )
+            returned_ids = [row[0] for row in cursor.fetchall()]
+        except Exception:
+            returned_ids = []
+        bm25_rows.append(
+            {
+                "stable_case_id": case["stable_case_id"],
+                "cluster_id": case["cluster_id"],
+                "cluster_title": case["cluster_title"],
+                "question_id": case["question_id"],
+                "question_index": case["question_index"],
+                "variant_index": case["variant_index"],
+                "prompt": case["prompt"],
+                "prior_fixture_ids": case.get("prior_fixture_ids", []),
+                "expected_facts": case.get("expected_facts", []),
+                "expected_fact_groups": case.get("expected_fact_groups", []),
+                "expected_files": case.get("expected_files", []),
+                "expected_commands": case.get("expected_commands", []),
+                "expected_locator_targets": case.get("expected_locator_targets", []),
+                "gold_ids": case["gold_ids"],
+                "partial_ids": case["partial_ids"],
+                "required_keywords": case["required_keywords"],
+                "relevance_grades": case["relevance_grades"],
+                "memory_enabled": False,
+                "run_label": "benchmark-bm25",
+                "elapsed_ms": 0,
+                "answer_text": "",
+                "returned_memory_ids": returned_ids,
+                "returned_count": len(returned_ids),
+                "returned_tokens": 0,
+                "baseline_tokens": 0,
+                "saved_tokens": 0,
+                "trace_summary": {
+                    "lookup_effort_units": 0,
+                    "retrieved_hit_count": len(returned_ids),
+                    "observation_count": 0,
+                    "observation_tokens": 0,
+                    "expected_locator_count": len(
+                        case.get("expected_locator_targets", [])
+                    ),
+                    "expected_fact_group_count": len(
+                        case.get("expected_fact_groups", [])
+                    ),
+                    "prior_fixture_count": len(case.get("prior_fixture_ids", [])),
+                    "disabled": False,
+                    "retrieval_mode": "bm25-fts5",
+                },
+                "result_data": {
+                    "disabled": False,
+                    "hits": [
+                        {"memory": {"id": rid, "content": ""}} for rid in returned_ids
+                    ],
+                    "retrieved_hit_count": len(returned_ids),
+                    "retrieval_mode": "bm25-fts5",
+                    "context_block": "",
+                },
+            }
+        )
+        bm25_last_print = maybe_print_progress(
+            "bm25",
+            i + 1,
+            len(cases),
+            bm25_started,
+            bm25_last_print,
+            force=(i + 1 == len(cases)),
+        )
+    bm25_duration_ms = int((time.time() - bm25_started) * 1000)
+else:
+    bm25_duration_ms = 0
+    print(
+        "[benchmark] bm25: skipped (FTS5 unavailable)",
+        file=sys.stderr,
+        flush=True,
+    )
+
+bm25_db.close()
+write_jsonl(run_dir / "quality-bm25.jsonl", bm25_rows)
 
 
 def estimate_baseline_tokens(result_data: dict) -> int:
@@ -513,96 +662,354 @@ def build_case_result(case: dict, worker: BenchmarkWorker, *, enabled: bool, run
     }
 
 
-def execute_phase(enabled: bool, run_label: str) -> tuple[list[dict], int]:
-    started = time.time()
-    phase_name = "on" if enabled else "off"
-    print(f"[benchmark] {phase_name}: starting {len(cases)} cases", file=sys.stderr, flush=True)
-    indexed_cases = list(enumerate(cases))
-    rows: list[dict | None] = [None] * len(indexed_cases)
-    completed = 0
-    last_print = started
-    worker_count = max(1, min(concurrency, len(indexed_cases))) if indexed_cases else 1
-    work_queue: queue.Queue[tuple[int, dict]] = queue.Queue()
-    for item in indexed_cases:
-        work_queue.put(item)
+def run_one_trial(
+    trial_index: int,
+    trial_db_path: str,
+    trial_dir: Path,
+) -> dict:
+    """Run a single trial: seed, ON phase, OFF phase. Returns trial summary dict."""
+    trial_label_suffix = f"-trial-{trial_index:03d}"
+    trial_dir.mkdir(parents=True, exist_ok=True)
 
-    completion_queue: queue.Queue[tuple[int, dict]] = queue.Queue()
+    # Fresh DB per trial
+    for suffix in ("", "-shm", "-wal"):
+        p = Path(trial_db_path + suffix)
+        if p.exists():
+            p.unlink()
 
-    def worker_loop(worker: BenchmarkWorker) -> None:
-        while True:
+    seed_results: list[dict] = []
+    id_mapping: dict[str, str] = {}
+    seed_started = time.time()
+    seed_last_print = seed_started
+    print(f"[benchmark] trial {trial_index}: seeding {len(seeds)} memories", file=sys.stderr, flush=True)
+    for seed in seeds:
+        payload = run_cli(
+            [
+                "write",
+                "--db", trial_db_path,
+                "--workspace", workspace,
+                "--type", "semantic",
+                "--content", seed["content"],
+                "--format", "json",
+            ],
+            enabled=True,
+            run_label="benchmark-seed" + trial_label_suffix,
+        )
+        data = payload.get("data", {})
+        runtime_id = data.get("ID") or data.get("id") or ""
+        if not runtime_id:
+            raise RuntimeError(f"write response missing runtime ID for stable seed {seed['stable_id']}")
+        id_mapping[seed["stable_id"]] = runtime_id
+        seed_results.append(
+            {
+                "stable_id": seed["stable_id"],
+                "runtime_id": runtime_id,
+                "cluster_id": seed["cluster_id"],
+                "cluster_title": seed["cluster_title"],
+                "fixture_index": int(seed.get("fixture_index", seed.get("seed_index", 0))),
+                "memory_type": seed.get("memory_type", "semantic"),
+                "content": seed["content"],
+                "write_data": data,
+            }
+        )
+        seed_last_print = maybe_print_progress(
+            "seed",
+            len(seed_results),
+            len(seeds),
+            seed_started,
+            seed_last_print,
+            force=(len(seed_results) == len(seeds)),
+        )
+    seed_duration_ms = int((time.time() - seed_started) * 1000)
+
+    # Use closure over top_k, budget, concurrency, cases, binary_path, model_dir, workspace, trial_db_path.
+    # (These are all available from the outer scope.)
+
+    class TrialBenchmarkWorker:
+        def __init__(self, *, enabled: bool, run_label: str, worker_index: int) -> None:
+            command = [
+                binary_path,
+                "benchmark-worker",
+                "--db", trial_db_path,
+                "--workspace", workspace,
+                "--format", "json",
+            ]
+            if model_dir:
+                command.extend(["--model-dir", model_dir])
+            run_env = dict(os.environ)
+            run_env["AGENT_MEMORY_ENABLED"] = "1" if enabled else "0"
+            run_env["AGENT_MEMORY_RUN_LABEL"] = run_label
+            self._process = subprocess.Popen(
+                command,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                env=run_env,
+                bufsize=1,
+            )
+            self._stderr_lines: list[str] = []
+            self._stderr_thread = threading.Thread(
+                target=self._drain_stderr,
+                name=f"benchmark-worker-stderr-{worker_index}",
+                daemon=True,
+            )
+            self._stderr_thread.start()
+
+        def _drain_stderr(self) -> None:
+            assert self._process.stderr is not None
+            for line in self._process.stderr:
+                clean = line.rstrip()
+                if clean:
+                    self._stderr_lines.append(clean)
+                    if len(self._stderr_lines) > 50:
+                        self._stderr_lines = self._stderr_lines[-50:]
+
+        def request(self, payload: dict) -> dict:
+            if self._process.stdin is None or self._process.stdout is None:
+                raise RuntimeError("benchmark worker pipes are not available")
+            if self._process.poll() is not None:
+                raise RuntimeError(self._dead_process_message("worker exited before handling request"))
+            self._process.stdin.write(json.dumps(payload, sort_keys=True) + "\n")
+            self._process.stdin.flush()
+            line = self._process.stdout.readline()
+            if not line:
+                raise RuntimeError(self._dead_process_message("worker produced no response"))
             try:
-                index, case = work_queue.get_nowait()
-            except queue.Empty:
-                return
-            try:
-                completion_queue.put((index, build_case_result(case, worker, enabled=enabled, run_label=run_label)))
-            finally:
-                work_queue.task_done()
+                response = json.loads(line)
+            except json.JSONDecodeError as exc:
+                raise RuntimeError(f"benchmark worker returned invalid JSON: {line!r}") from exc
+            if not response.get("ok"):
+                raise RuntimeError(response.get("error") or "benchmark worker request failed")
+            data = response.get("data")
+            if not isinstance(data, dict):
+                raise RuntimeError(f"benchmark worker returned invalid payload: {response!r}")
+            return data
 
-    workers = [BenchmarkWorker(enabled=enabled, run_label=run_label, worker_index=i) for i in range(worker_count)]
-    try:
-        with concurrent.futures.ThreadPoolExecutor(max_workers=worker_count) as executor:
-            futures = [executor.submit(worker_loop, worker) for worker in workers]
-            while completed < len(indexed_cases):
+        def close(self) -> None:
+            if self._process.stdin is not None and not self._process.stdin.closed:
+                self._process.stdin.close()
+            try:
+                self._process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                self._process.kill()
+                self._process.wait(timeout=5)
+
+        def _dead_process_message(self, prefix: str) -> str:
+            tail = "\n".join(self._stderr_lines[-10:])
+            if tail:
+                return f"{prefix}: {tail}"
+            return prefix
+
+    def execute_trial_phase(enabled: bool, run_label: str) -> tuple[list[dict], int]:
+        started = time.time()
+        phase_name = "on" if enabled else "off"
+        print(f"[benchmark] trial {trial_index} {phase_name}: starting {len(cases)} cases", file=sys.stderr, flush=True)
+        indexed_cases = list(enumerate(cases))
+        rows: list[dict | None] = [None] * len(indexed_cases)
+        completed = 0
+        last_print = started
+        worker_count = max(1, min(concurrency, len(indexed_cases))) if indexed_cases else 1
+        work_queue: queue.Queue[tuple[int, dict]] = queue.Queue()
+        for item in indexed_cases:
+            work_queue.put(item)
+
+        completion_queue: queue.Queue[tuple[int, dict]] = queue.Queue()
+
+        def worker_loop(worker: TrialBenchmarkWorker) -> None:
+            while True:
                 try:
-                    index, row = completion_queue.get(timeout=0.5)
+                    index, case = work_queue.get_nowait()
                 except queue.Empty:
-                    for future in futures:
-                        exc = future.exception(timeout=0) if future.done() else None
-                        if exc is not None:
-                            raise exc
-                    continue
-                rows[index] = row
-                completed += 1
-                last_print = maybe_print_progress(
-                    phase_name,
-                    completed,
-                    len(indexed_cases),
-                    started,
-                    last_print,
-                    force=(completed == len(indexed_cases)),
-                )
-            for future in futures:
-                future.result()
-    finally:
-        for worker in workers:
-            worker.close()
-    completed_rows = [row for row in rows if row is not None]
-    if len(completed_rows) != len(indexed_cases):
-        raise RuntimeError("runner did not produce a result for every benchmark case")
-    duration_ms = int((time.time() - started) * 1000)
-    return completed_rows, duration_ms
+                    return
+                try:
+                    completion_queue.put((index, build_case_result_trial(case, worker, enabled=enabled, run_label=run_label)))
+                finally:
+                    work_queue.task_done()
+
+        workers = [TrialBenchmarkWorker(enabled=enabled, run_label=run_label, worker_index=i) for i in range(worker_count)]
+        try:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=worker_count) as executor:
+                futures = [executor.submit(worker_loop, worker) for worker in workers]
+                while completed < len(indexed_cases):
+                    try:
+                        index, row = completion_queue.get(timeout=0.5)
+                    except queue.Empty:
+                        for future in futures:
+                            exc = future.exception(timeout=0) if future.done() else None
+                            if exc is not None:
+                                raise exc
+                        continue
+                    rows[index] = row
+                    completed += 1
+                    last_print = maybe_print_progress(
+                        phase_name,
+                        completed,
+                        len(indexed_cases),
+                        started,
+                        last_print,
+                        force=(completed == len(indexed_cases)),
+                    )
+                for future in futures:
+                    future.result()
+        finally:
+            for worker in workers:
+                worker.close()
+        completed_rows = [row for row in rows if row is not None]
+        if len(completed_rows) != len(indexed_cases):
+            raise RuntimeError("runner did not produce a result for every benchmark case")
+        duration_ms = int((time.time() - started) * 1000)
+        return completed_rows, duration_ms
+
+    def build_case_result_trial(case: dict, worker: TrialBenchmarkWorker, *, enabled: bool, run_label: str) -> dict:
+        started = time.time()
+        data = worker.request(
+            {
+                "task": case["prompt"],
+                "top_k": top_k,
+                "budget": budget,
+            }
+        )
+        elapsed_ms = int((time.time() - started) * 1000)
+        returned_tokens, baseline_tokens, saved_tokens = case_token_totals(data)
+        hits = data.get("hits", [])
+        returned_ids = []
+        for hit in hits:
+            memory = hit.get("memory", {})
+            memory_id = memory.get("id")
+            if memory_id:
+                returned_ids.append(memory_id)
+        return {
+            "stable_case_id": case["stable_case_id"],
+            "cluster_id": case["cluster_id"],
+            "cluster_title": case["cluster_title"],
+            "question_id": case["question_id"],
+            "question_index": case["question_index"],
+            "variant_index": case["variant_index"],
+            "prompt": case["prompt"],
+            "prior_fixture_ids": case.get("prior_fixture_ids", []),
+            "expected_facts": case.get("expected_facts", []),
+            "expected_fact_groups": case.get("expected_fact_groups", []),
+            "expected_files": case.get("expected_files", []),
+            "expected_commands": case.get("expected_commands", []),
+            "expected_locator_targets": case.get("expected_locator_targets", []),
+            "gold_ids": case["gold_ids"],
+            "partial_ids": case["partial_ids"],
+            "required_keywords": case["required_keywords"],
+            "relevance_grades": case["relevance_grades"],
+            "memory_enabled": enabled,
+            "run_label": run_label,
+            "elapsed_ms": elapsed_ms,
+            "answer_text": answer_text_from_result(data),
+            "returned_memory_ids": returned_ids,
+            "returned_count": len(returned_ids),
+            "returned_tokens": returned_tokens,
+            "baseline_tokens": baseline_tokens,
+            "saved_tokens": saved_tokens,
+            "trace_summary": {
+                "lookup_effort_units": 1 if enabled else 0,
+                "retrieved_hit_count": int(data.get("retrieved_hit_count", len(hits)) or len(hits)),
+                "observation_count": int(data.get("observation_count", 0) or 0),
+                "observation_tokens": int(data.get("observation_tokens", 0) or 0),
+                "expected_locator_count": len(case.get("expected_locator_targets", [])),
+                "expected_fact_group_count": len(case.get("expected_fact_groups", [])),
+                "prior_fixture_count": len(case.get("prior_fixture_ids", [])),
+                "disabled": bool(data.get("disabled", False)),
+                "retrieval_mode": data.get("retrieval_mode") or data.get("mode") or "",
+            },
+            "result_data": data,
+        }
+
+    on_results, on_duration_ms = execute_trial_phase(True, "benchmark-on" + trial_label_suffix)
+    off_results, off_duration_ms = execute_trial_phase(False, "benchmark-off" + trial_label_suffix)
+
+    seed_results_path = trial_dir / "seed_results.jsonl"
+    id_mapping_path = trial_dir / "id_mapping.json"
+    quality_on_path = trial_dir / "quality-on.jsonl"
+    quality_off_path = trial_dir / "quality-off.jsonl"
+    trial_manifest_path = trial_dir / "run_manifest.json"
+
+    write_jsonl(seed_results_path, seed_results)
+    id_mapping_path.write_text(json.dumps(id_mapping, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    write_jsonl(quality_on_path, on_results)
+    write_jsonl(quality_off_path, off_results)
+
+    trial_manifest = {
+        "run_id": f"{run_id}-trial-{trial_index:03d}",
+        "trial_index": trial_index,
+        "generated_at": now_rfc3339(),
+        "workspace": workspace,
+        "db_path": str(trial_dir / "benchmark.db"),
+        "binary_path": binary_path,
+        "model_dir": model_dir,
+        "case_limit": case_limit,
+        "top_k": top_k,
+        "budget": budget,
+        "concurrency": concurrency,
+        "execution_mode": "persistent-worker",
+        "worker_count_per_phase": max(1, min(concurrency, len(cases))) if cases else 1,
+        "seed_file": str(seed_file),
+        "prior_session_fixtures_file": str(seed_file),
+        "cases_file": str(cases_file),
+        "seed_count": len(seeds),
+        "executed_case_count_per_phase": len(cases),
+        "seed_duration_ms": seed_duration_ms,
+        "on_duration_ms": on_duration_ms,
+        "off_duration_ms": off_duration_ms,
+        "artifacts": {
+            "seed_results": str(seed_results_path),
+            "id_mapping": str(id_mapping_path),
+            "quality_on": str(quality_on_path),
+            "quality_off": str(quality_off_path),
+        },
+    }
+    trial_manifest_path.write_text(json.dumps(trial_manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+    return {
+        "trial_index": trial_index,
+        "run_id": trial_manifest["run_id"],
+        "seed_count": len(seeds),
+        "executed_case_count_per_phase": len(cases),
+        "seed_duration_ms": seed_duration_ms,
+        "on_duration_ms": on_duration_ms,
+        "off_duration_ms": off_duration_ms,
+        "trial_dir": str(trial_dir),
+    }
 
 
-on_results, on_duration_ms = execute_phase(True, "benchmark-on")
-off_results, off_duration_ms = execute_phase(False, "benchmark-off")
+# ── Main execution: run N trials ───────────────────────────────────────────
 
-seed_results_path = run_dir / "seed_results.jsonl"
-id_mapping_path = run_dir / "id_mapping.json"
-quality_on_path = run_dir / "quality-on.jsonl"
-quality_off_path = run_dir / "quality-off.jsonl"
-run_manifest_path = run_dir / "run_manifest.json"
+trial_summaries: list[dict] = []
+for trial_index in range(1, trials + 1):
+    trial_dir = run_dir / f"trial_{trial_index:03d}"
+    trial_db_path = str(trial_dir / "benchmark.db")
+    print(f"\n[benchmark] ======== Trial {trial_index}/{trials} ========", file=sys.stderr, flush=True)
+    summary = run_one_trial(
+        trial_index=trial_index,
+        trial_db_path=trial_db_path,
+        trial_dir=trial_dir,
+    )
+    trial_summaries.append(summary)
+    if trials == 1:
+        print(f"\n[benchmark] Single-run mode — no confidence intervals available.", file=sys.stderr, flush=True)
 
-write_jsonl(seed_results_path, seed_results)
-id_mapping_path.write_text(json.dumps(id_mapping, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-write_jsonl(quality_on_path, on_results)
-write_jsonl(quality_off_path, off_results)
-
+# Build combined manifest referencing all trials
 generator_manifest = {}
 if manifest_file.is_file():
     generator_manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
 
-run_manifest = {
+combined_manifest = {
     "run_id": run_id,
     "generated_at": now_rfc3339(),
     "workspace": workspace,
-    "db_path": db_path,
     "binary_path": binary_path,
     "model_dir": model_dir,
     "case_limit": case_limit,
     "top_k": top_k,
     "budget": budget,
     "concurrency": concurrency,
+    "trials": trials,
+    "trials_note": "binary does not accept --seed; randomness is from Go internals. Each trial uses a fresh DB.",
     "execution_mode": "persistent-worker",
     "worker_count_per_phase": max(1, min(concurrency, len(cases))) if cases else 1,
     "seed_file": str(seed_file),
@@ -610,28 +1017,20 @@ run_manifest = {
     "cases_file": str(cases_file),
     "seed_count": len(seeds),
     "executed_case_count_per_phase": len(cases),
-    "seed_duration_ms": seed_duration_ms,
-    "on_duration_ms": on_duration_ms,
-    "off_duration_ms": off_duration_ms,
-    "artifacts": {
-        "seed_results": str(seed_results_path),
-        "id_mapping": str(id_mapping_path),
-        "quality_on": str(quality_on_path),
-        "quality_off": str(quality_off_path),
-    },
+    "trial_summaries": trial_summaries,
     "generator_manifest": generator_manifest,
 }
-run_manifest_path.write_text(json.dumps(run_manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+combined_manifest_path = run_dir / "run_manifest.json"
+combined_manifest_path.write_text(json.dumps(combined_manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 print(json.dumps(
     {
         "run_id": run_id,
         "workspace": workspace,
+        "trials": trials,
         "seed_count": len(seeds),
         "executed_case_count_per_phase": len(cases),
-        "seed_duration_ms": seed_duration_ms,
-        "on_duration_ms": on_duration_ms,
-        "off_duration_ms": off_duration_ms,
+        "trial_summaries": trial_summaries,
         "run_dir": str(run_dir),
     },
     sort_keys=True,

@@ -21,8 +21,13 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/taimufuraiyaa/agent-memory/internal/api"
+	dashboardassets "github.com/taimufuraiyaa/agent-memory/internal/api/dashboard"
 	"github.com/taimufuraiyaa/agent-memory/internal/embeddings"
 )
+
+var localHostedDashboardBaseURL = "http://localhost:58081"
+
+const dashboardRuntimeSchema = "agent-memory-dashboard-runtime-v1"
 
 func openInBrowser(url string) error {
 	if strings.TrimSpace(url) == "" {
@@ -66,6 +71,37 @@ func waitForHTTP(url string, timeout time.Duration) error {
 		time.Sleep(125 * time.Millisecond)
 	}
 	return errors.New("timeout waiting for server")
+}
+
+func discoverHostedDashboard(ctx context.Context, client *http.Client, baseURL string) (string, bool) {
+	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	if baseURL == "" || client == nil {
+		return "", false
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+"/dashboard/runtime.json", nil)
+	if err != nil {
+		return "", false
+	}
+	res, err := client.Do(req)
+	if err != nil {
+		return "", false
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		return "", false
+	}
+	body, err := io.ReadAll(io.LimitReader(res.Body, 4097))
+	if err != nil || len(body) > 4096 {
+		return "", false
+	}
+	var manifest struct {
+		Schema string `json:"schema"`
+		Mode   string `json:"mode"`
+	}
+	if err := json.Unmarshal(body, &manifest); err != nil || manifest.Schema != dashboardRuntimeSchema || manifest.Mode != "hosted" {
+		return "", false
+	}
+	return baseURL + "/dashboard/", true
 }
 
 type dashboardPID struct {
@@ -247,6 +283,9 @@ func stopProcess(pid int) error {
 }
 
 func validateDashboardStartAddr(addr string) error {
+	if err := validateLocalListenAddr(addr); err != nil {
+		return err
+	}
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
 		if strings.HasPrefix(addr, ":") && len(addr) > 1 && addr != ":0" {
@@ -261,7 +300,23 @@ func validateDashboardStartAddr(addr string) error {
 	return nil
 }
 
-func buildDashboardProcessArgs(cfg runtimeConfig, addr string, dashDirFlag string, pidFile string) []string {
+func validateLocalListenAddr(addr string) error {
+	host, _, err := net.SplitHostPort(strings.TrimSpace(addr))
+	if err != nil {
+		return fmt.Errorf("invalid addr %q: %w", addr, err)
+	}
+	host = strings.Trim(host, "[]")
+	if strings.EqualFold(host, "localhost") {
+		return nil
+	}
+	ip := net.ParseIP(host)
+	if ip == nil || !ip.IsLoopback() {
+		return fmt.Errorf("addr %q is not loopback; standalone services only listen on localhost", addr)
+	}
+	return nil
+}
+
+func buildDashboardProcessArgs(cfg runtimeConfig, addr string, dashDirFlag string, pidFile string, hotReload bool) []string {
 	args := []string{
 		"dashboard",
 		"--no-open",
@@ -275,25 +330,34 @@ func buildDashboardProcessArgs(cfg runtimeConfig, addr string, dashDirFlag strin
 	if strings.TrimSpace(dashDirFlag) != "" {
 		args = append(args, "--dashboard-dir", dashDirFlag)
 	}
+	if hotReload {
+		args = append(args, "--hot-reload")
+	}
 	if strings.TrimSpace(pidFile) != "" {
 		args = append(args, "--pid-file", pidFile)
 	}
 	return args
 }
 
-func startDashboardProcess(cfg runtimeConfig, addr string, dashDirFlag string, pidFile string) (int, error) {
+func startDashboardProcess(cfg runtimeConfig, addr string, dashDirFlag string, pidFile string, hotReload bool) (int, error) {
 	exe, err := os.Executable()
 	if err != nil {
 		return 0, err
 	}
-	args := buildDashboardProcessArgs(cfg, addr, dashDirFlag, pidFile)
+	args := buildDashboardProcessArgs(cfg, addr, dashDirFlag, pidFile, hotReload)
 	c := exec.Command(exe, args...)
 	c.Stdout = io.Discard
 	c.Stderr = io.Discard
+	configureBackgroundProcess(c)
 	if err := c.Start(); err != nil {
 		return 0, err
 	}
-	return c.Process.Pid, nil
+	pid := c.Process.Pid
+	if err := c.Process.Release(); err != nil {
+		_ = c.Process.Kill()
+		return 0, err
+	}
+	return pid, nil
 }
 
 func pickFreeLocalPort() (int, error) {
@@ -391,7 +455,7 @@ func dashboardSourceDir(override string) (string, error) {
 	return dir, nil
 }
 
-func tryServeEmbeddedDashboard(cmd *cobra.Command, ctx context.Context, cfg runtimeConfig, ln net.Listener, apiURL string, noOpen bool) error {
+func tryServeEmbeddedDashboard(cmd *cobra.Command, ctx context.Context, cfg runtimeConfig, ln net.Listener, apiURL string, noOpen bool, pidFile string) error {
 	// Import the dashboard package to access embedded assets
 	embeddedDashboard := &embeddedDashboardWrapper{}
 
@@ -405,6 +469,19 @@ func tryServeEmbeddedDashboard(cmd *cobra.Command, ctx context.Context, cfg runt
 	// Get the dashboard URL - embedded assets are served from the API server
 	dashURL := strings.TrimRight(apiURL, "/") + "/dashboard/"
 
+	if strings.TrimSpace(pidFile) != "" {
+		if err := writeDashboardPID(pidFile, dashboardPID{
+			PID:       os.Getpid(),
+			Workspace: cfg.workspace,
+			Addr:      ln.Addr().String(),
+			URL:       dashURL,
+			StartedAt: time.Now().UTC(),
+		}); err != nil {
+			return fmt.Errorf("write dashboard start handshake: %w", err)
+		}
+		defer func() { _ = os.Remove(pidFile) }()
+	}
+
 	if noOpen {
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s\n", dashURL)
 	} else {
@@ -417,14 +494,14 @@ func tryServeEmbeddedDashboard(cmd *cobra.Command, ctx context.Context, cfg runt
 	return nil
 }
 
-// embeddedDashboardWrapper is a temporary wrapper to check for embedded assets
-// This will be replaced with direct dashboard package import once it's properly integrated
 type embeddedDashboardWrapper struct{}
 
 func (w *embeddedDashboardWrapper) hasAssets() bool {
-	// For now, return false to maintain existing behavior
-	// This will be updated to call dashboard.HasEmbeddedAssets() once fully integrated
-	return false
+	return dashboardassets.HasEmbeddedAssets()
+}
+
+func shouldServeEmbeddedDashboard(hotReload bool) bool {
+	return !hotReload
 }
 
 func newDashboardCommand() *cobra.Command {
@@ -436,9 +513,10 @@ func newDashboardCommand() *cobra.Command {
 	var dashDirFlag string
 	var pidFile string
 	var status bool
+	var hotReload bool
 	cmd := &cobra.Command{
 		Use:     "dashboard",
-		Short:   "Open the local dashboard (starts Go API + React dev server)",
+		Short:   "Open the Agent Memory webapp (reuses Floci or starts a local fallback)",
 		Aliases: []string{"ui"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, cancel := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
@@ -479,7 +557,7 @@ func newDashboardCommand() *cobra.Command {
 					"healthy": false,
 				})
 			}
-			if cfg.apiURL != "" {
+			if cfg.apiURL != "" && !hotReload {
 				url := strings.TrimRight(cfg.apiURL, "/") + "/dashboard/"
 				if noOpen {
 					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s\n", url)
@@ -490,6 +568,23 @@ func newDashboardCommand() *cobra.Command {
 			}
 			if start && stop {
 				return errors.New("only one of --start or --stop can be set")
+			}
+			if start && !hotReload {
+				client := &http.Client{
+					Timeout: 750 * time.Millisecond,
+					CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+						return http.ErrUseLastResponse
+					},
+				}
+				if url, ok := discoverHostedDashboard(ctx, client, localHostedDashboardBaseURL); ok {
+					_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "reusing running Agent Memory webapp")
+					if noOpen {
+						_, _ = fmt.Fprintln(cmd.OutOrStdout(), url)
+						return nil
+					}
+					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "opening %s\n", url)
+					return openInBrowser(url)
+				}
 			}
 			if stop {
 				var (
@@ -558,17 +653,10 @@ func newDashboardCommand() *cobra.Command {
 					return fmt.Errorf("cannot start dashboard: address %s is already in use by another process", addr)
 				}
 
-				pid, err := startDashboardProcess(cfg, addr, dashDirFlag, pidPath)
+				pid, err := startDashboardProcess(cfg, addr, dashDirFlag, pidPath, hotReload)
 				if err != nil {
 					return err
 				}
-				_ = writeDashboardPID(pidPath, dashboardPID{
-					PID:       pid,
-					Workspace: cfg.workspace,
-					Addr:      addr,
-					URL:       "",
-					StartedAt: time.Now().UTC(),
-				})
 
 				url := ""
 				for i := 0; i < 120; i++ {
@@ -614,9 +702,22 @@ func newDashboardCommand() *cobra.Command {
 				BaseDir:           filepath.Dir(cfg.dbPath),
 				EmbeddingProvider: provider,
 			}
+			if err := api.ConfigureLocalRightsAttestation(ctx, svc); err != nil {
+				return err
+			}
+			if err := api.ConfigureLocalClientProfiles(svc); err != nil {
+				return err
+			}
+			if err := api.ConfigureLocalDeploymentProfile(svc); err != nil {
+				return err
+			}
+			defer func() { _ = svc.Close() }()
+			if err := validateLocalListenAddr(addr); err != nil {
+				return err
+			}
 			server := &http.Server{
 				Addr:    addr,
-				Handler: api.NewMux(svc),
+				Handler: api.LocalRequestBoundary(api.NewMux(svc)),
 			}
 
 			ln, err := net.Listen("tcp", addr)
@@ -630,8 +731,10 @@ func newDashboardCommand() *cobra.Command {
 			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "api serving on %s\n", apiURL)
 
 			// Try embedded dashboard assets first (no npm required)
-			if err := tryServeEmbeddedDashboard(cmd, ctx, cfg, ln, apiURL, noOpen); err == nil {
-				return nil
+			if shouldServeEmbeddedDashboard(hotReload) {
+				if err := tryServeEmbeddedDashboard(cmd, ctx, cfg, ln, apiURL, noOpen, pidFile); err == nil {
+					return nil
+				}
 			}
 
 			// Fall back to npm-based development mode
@@ -716,11 +819,12 @@ func newDashboardCommand() *cobra.Command {
 	}
 	addCommonFlags(cmd, &flags)
 	_ = cmd.Flags().MarkHidden("workspace")
-	cmd.Flags().StringVar(&addr, "addr", ":3210", "HTTP listen address")
+	cmd.Flags().StringVar(&addr, "addr", "127.0.0.1:3100", "HTTP listen address")
 	cmd.Flags().BoolVar(&noOpen, "no-open", false, "Do not open a browser; just print the URL")
 	cmd.Flags().BoolVar(&start, "start", false, "Start dashboard server in the background and exit")
 	cmd.Flags().BoolVar(&stop, "stop", false, "Stop the background dashboard server (started via --start)")
 	cmd.Flags().BoolVar(&status, "status", false, "Show background dashboard server status")
+	cmd.Flags().BoolVar(&hotReload, "hot-reload", false, "Run the dashboard with Vite hot reload (development only; requires npm)")
 	cmd.Flags().StringVar(&dashDirFlag, "dashboard-dir", "", "Path to standalone dashboard folder (tools/agent-memory/dashboard)")
 	cmd.Flags().StringVar(&pidFile, "pid-file", "", "Internal: pid file path")
 	_ = cmd.Flags().MarkHidden("pid-file")

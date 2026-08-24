@@ -32,6 +32,7 @@ type AdaptivePolicySnapshot struct {
 	WeakSemanticScore   float64 `json:"weak_semantic_score"`
 	WeakTotalScore      float64 `json:"weak_total_score"`
 	WeakRelativeCutoff  float64 `json:"weak_relative_cutoff"`
+	SemanticScoreBand   float64 `json:"semantic_score_band"`
 }
 
 type AdaptiveCooldownSnapshot struct {
@@ -118,6 +119,7 @@ func policySnapshot(policy core.AdaptivePolicyDefaults) AdaptivePolicySnapshot {
 		WeakSemanticScore:   policy.WeakSemanticScore,
 		WeakTotalScore:      policy.WeakTotalScore,
 		WeakRelativeCutoff:  policy.WeakRelativeCutoff,
+		SemanticScoreBand:   policy.SemanticScoreBand,
 	}
 }
 
@@ -163,6 +165,7 @@ func applyPolicyPatch(base core.AdaptivePolicyDefaults, raw string) core.Adaptiv
 	applyUnitFloatField(fields, "weak_semantic_score", &base.WeakSemanticScore)
 	applyUnitFloatField(fields, "weak_total_score", &base.WeakTotalScore)
 	applyUnitFloatField(fields, "weak_relative_cutoff", &base.WeakRelativeCutoff)
+	applyUnitFloatField(fields, "semantic_score_band", &base.SemanticScoreBand)
 	return base
 }
 

@@ -125,7 +125,7 @@ func TestSentinelErrors(t *testing.T) {
 func TestErrorWrapping(t *testing.T) {
 	// Test that custom errors properly wrap and unwrap
 	baseErr := errors.New("base")
-	
+
 	wsErr := NewWorkspaceError("ws", "op", baseErr)
 	if !errors.Is(wsErr, baseErr) {
 		t.Error("WorkspaceError should wrap base error")

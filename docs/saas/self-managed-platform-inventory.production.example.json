@@ -1,0 +1,27 @@
+{
+  "schema": "agent-memory-self-managed-platform-inventory-v1",
+  "environment": "production",
+  "inventory_id": "replace-with-production-inventory-id",
+  "generated_at": "2026-08-10T00:00:00Z",
+  "administrative_domain_id": "replace-with-admin-domain",
+  "site_id": "replace-with-production-site",
+  "failure_domains": [
+    {"id": "replace-with-domain-a"},
+    {"id": "replace-with-domain-b"}
+  ],
+  "components": [
+    {"kind": "kubernetes", "owner_group": "platform_operations", "version": "replace-me", "replicas": 2, "failure_domain_ids": ["replace-with-domain-a", "replace-with-domain-b"], "public_ingress": false},
+    {"kind": "identity", "owner_group": "security_operations", "version": "replace-me", "replicas": 2, "failure_domain_ids": ["replace-with-domain-a", "replace-with-domain-b"], "public_ingress": true},
+    {"kind": "postgres", "owner_group": "database_operations", "version": "replace-me", "replicas": 2, "failure_domain_ids": ["replace-with-domain-a", "replace-with-domain-b"], "public_ingress": false},
+    {"kind": "object_storage", "owner_group": "storage_operations", "version": "replace-me", "replicas": 2, "failure_domain_ids": ["replace-with-domain-a", "replace-with-domain-b"], "public_ingress": false},
+    {"kind": "queue", "owner_group": "platform_operations", "version": "replace-me", "replicas": 2, "failure_domain_ids": ["replace-with-domain-a", "replace-with-domain-b"], "public_ingress": false},
+    {"kind": "secrets", "owner_group": "security_operations", "version": "replace-me", "replicas": 2, "failure_domain_ids": ["replace-with-domain-a", "replace-with-domain-b"], "public_ingress": false},
+    {"kind": "observability", "owner_group": "platform_operations", "version": "replace-me", "replicas": 2, "failure_domain_ids": ["replace-with-domain-a", "replace-with-domain-b"], "public_ingress": false},
+    {"kind": "backup", "owner_group": "recovery_operations", "version": "replace-me", "replicas": 2, "failure_domain_ids": ["replace-with-domain-a", "replace-with-domain-b"], "public_ingress": false}
+  ],
+  "external_integrations": [
+    {"kind": "payment", "enabled": false, "owner_group": "finance"},
+    {"kind": "email", "enabled": false, "owner_group": "product_operations"},
+    {"kind": "model", "enabled": false, "owner_group": "privacy_security"}
+  ]
+}

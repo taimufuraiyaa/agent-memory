@@ -15,6 +15,8 @@ func upsertEnvFile(path string, vars map[string]string) (bool, error) {
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return false, err
 	}
+	var sanitized bool
+	existing, sanitized = sanitizeLegacyEnvShellBlock(existing)
 
 	lines := []string{}
 	if existing != "" {
@@ -32,7 +34,7 @@ func upsertEnvFile(path string, vars map[string]string) (bool, error) {
 		}
 	}
 
-	changed := false
+	changed := sanitized
 	for k, v := range vars {
 		k = strings.TrimSpace(k)
 		v = strings.TrimSpace(v)
@@ -53,6 +55,7 @@ func upsertEnvFile(path string, vars map[string]string) (bool, error) {
 	}
 
 	out := strings.TrimRight(strings.Join(lines, "\n"), "\n") + "\n"
+	out = amconfig.EnsureTermBloomEnvGuidance(out)
 	if out == "" {
 		out = ""
 	}
@@ -65,6 +68,32 @@ func upsertEnvFile(path string, vars map[string]string) (bool, error) {
 	return true, nil
 }
 
+func sanitizeLegacyEnvShellBlock(content string) (string, bool) {
+	lines := strings.Split(content, "\n")
+	legacy := []string{
+		"# Put the agent-memory binary on PATH",
+		`case ":$PATH:" in`,
+		`*":$HOME/.local/bin:"*) ;;`,
+		`*) export PATH="$HOME/.local/bin:$PATH" ;;`,
+		"esac",
+	}
+	for i := 0; i+len(legacy) <= len(lines); i++ {
+		matched := true
+		for j, want := range legacy {
+			if strings.TrimSpace(lines[i+j]) != want {
+				matched = false
+				break
+			}
+		}
+		if !matched {
+			continue
+		}
+		lines = append(lines[:i], lines[i+len(legacy):]...)
+		return strings.Join(lines, "\n"), true
+	}
+	return content, false
+}
+
 func ensureAdaptiveTuningGuidance(path string) (bool, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
@@ -75,6 +104,25 @@ func ensureAdaptiveTuningGuidance(path string) (bool, error) {
 	}
 	existing := strings.ReplaceAll(string(b), "\r\n", "\n")
 	updated := amconfig.EnsureAdaptiveTuningEnvGuidance(existing)
+	if updated == existing {
+		return false, nil
+	}
+	if err := os.WriteFile(path, []byte(updated), 0o644); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func ensureTermBloomGuidance(path string) (bool, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return false, nil
+		}
+		return false, err
+	}
+	existing := strings.ReplaceAll(string(b), "\r\n", "\n")
+	updated := amconfig.EnsureTermBloomEnvGuidance(existing)
 	if updated == existing {
 		return false, nil
 	}

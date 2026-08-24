@@ -1,0 +1,57 @@
+{
+  "schema": "agent-memory-staging-identity-safety-drills-v1",
+  "classification": "staging_external",
+  "environment": "staging",
+  "bundle_id": "replace-with-bundle-id",
+  "inventory_id": "replace-with-inventory-id",
+  "inventory_receipt_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "plan_id": "replace-with-plan-id",
+  "plan_receipt_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "change_id": "replace-with-change-id",
+  "change_receipt_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "release_id": "replace-with-release-id",
+  "release_receipt_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "ready": true,
+  "generated_at": "2026-08-10T11:45:00Z",
+  "drills": [
+    {
+      "id": "identity_provider_outage",
+      "impairment_at": "2026-08-10T08:00:00Z",
+      "detected_at": "2026-08-10T08:01:00Z",
+      "alerted_at": "2026-08-10T08:02:00Z",
+      "contained_at": "2026-08-10T08:03:00Z",
+      "recovered_at": "2026-08-10T08:10:00Z",
+      "rto_target_seconds": 1200,
+      "target_approval_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "checks": [
+        {"id": "real_alert_delivered", "outcome": "passed", "evidence_sha256": "1111111111111111111111111111111111111111111111111111111111111111"},
+        {"id": "cached_key_authentication_continued", "outcome": "passed", "evidence_sha256": "2222222222222222222222222222222222222222222222222222222222222222"},
+        {"id": "unknown_or_invalid_trust_failed_closed", "outcome": "passed", "evidence_sha256": "3333333333333333333333333333333333333333333333333333333333333333"},
+        {"id": "containment_executed", "outcome": "passed", "evidence_sha256": "4444444444444444444444444444444444444444444444444444444444444444"},
+        {"id": "service_recovered", "outcome": "passed", "evidence_sha256": "5555555555555555555555555555555555555555555555555555555555555555"},
+        {"id": "immutable_audit_retained", "outcome": "passed", "evidence_sha256": "6666666666666666666666666666666666666666666666666666666666666666"},
+        {"id": "customer_content_absent", "outcome": "passed", "evidence_sha256": "7777777777777777777777777777777777777777777777777777777777777777"}
+      ]
+    },
+    {
+      "id": "credential_revocation",
+      "impairment_at": "2026-08-10T09:00:00Z",
+      "detected_at": "2026-08-10T09:01:00Z",
+      "alerted_at": "2026-08-10T09:02:00Z",
+      "contained_at": "2026-08-10T09:04:00Z",
+      "recovered_at": "2026-08-10T09:15:00Z",
+      "rto_target_seconds": 1200,
+      "target_approval_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "checks": [
+        {"id": "credential_abuse_detected", "outcome": "passed", "evidence_sha256": "8888888888888888888888888888888888888888888888888888888888888888"},
+        {"id": "real_alert_delivered", "outcome": "passed", "evidence_sha256": "9999999999999999999999999999999999999999999999999999999999999999"},
+        {"id": "independent_approval_verified", "outcome": "passed", "evidence_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+        {"id": "production_path_revocation_completed", "outcome": "passed", "evidence_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
+        {"id": "post_revoke_access_denied", "outcome": "passed", "evidence_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"},
+        {"id": "containment_executed", "outcome": "passed", "evidence_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"},
+        {"id": "immutable_audit_retained", "outcome": "passed", "evidence_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"},
+        {"id": "customer_content_absent", "outcome": "passed", "evidence_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"}
+      ]
+    }
+  ]
+}

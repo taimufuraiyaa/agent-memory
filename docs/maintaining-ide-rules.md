@@ -5,10 +5,13 @@ This document explains how to maintain the IDE-specific agent rules across diffe
 ## Overview
 
 The agent-memory project supports multiple AI-powered IDEs and editors:
+
+Codex setup is generated automatically by `agent-memory install`. A fresh install writes the universal `AGENTS.md` policy, project `.codex/config.toml` and `.codex/hooks.json`, plus preserved user-wide Codex configuration under `$CODEX_HOME` (default `~/.codex`). The managed sandbox entry grants write access only to the configured agent-memory data directory. Existing Codex settings and unrelated hooks are preserved; Codex may still show its own hook-trust confirmation because the installer does not bypass that security boundary.
 - Cursor (`.cursor/rules/agent-memory.mdc`)
 - Antigravity/Agents (`.agents/rules/agent-memory.md`)
 - Trae AI (`.trae/rules/project_rules.md`)
 - Claude Desktop (`CLAUDE.md`)
+- ZCode (`AGENTS.md`)
 - Generic rule files (`.cursorrules`, `.aierules`, `.windsurfrules`)
 
 To avoid maintaining duplicates, all these files are **generated** from a single source of truth.
@@ -52,9 +55,11 @@ More rules here...
 ### Supported IDE Tags
 
 - `cursor` - Cursor IDE (detailed memory policy)
+- `codex` - OpenAI Codex (`AGENTS.md`, sandbox writable root, and lifecycle hooks)
 - `agents` / `antigravity` - Antigravity/Agents IDE
 - `trae` - Trae AI
 - `claude` - Claude Desktop
+- `zcode` - ZCode (`AGENTS.md`)
 - `cursorrules` - Generic `.cursorrules` file
 - `aierules` - Generic `.aierules` file
 - `windsurfrules` - Generic `.windsurfrules` file
@@ -120,7 +125,7 @@ git commit -m "Update IDE rules"
    ```bash
    git add .kiro/templates/ide-rules-template.md
    git add .cursor/rules/ .agents/rules/ .trae/rules/
-   git add .cursorrules .aierules .windsurfrules CLAUDE.md
+   git add .cursorrules .aierules .windsurfrules CLAUDE.md AGENTS.md
    git commit -m "Add new IDE rule: [rule name]"
    ```
 

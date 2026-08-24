@@ -1,0 +1,347 @@
+{
+  "schema": "agent-memory-external-control-catalog-v1",
+  "controls": [
+    {
+      "id": "P0.1-A",
+      "approval_control": "p0_1_a",
+      "owner_group": "product_counsel",
+      "evidence_requirement": "Signed launch-scope decision and jurisdiction memo"
+    },
+    {
+      "id": "P0.1-B",
+      "approval_control": "p0_1_b",
+      "owner_group": "counsel_privacy",
+      "evidence_requirement": "Versioned legal review referencing exact policy/copy digests"
+    },
+    {
+      "id": "P0.2-A",
+      "approval_control": "p0_2_a",
+      "owner_group": "architecture_security_privacy_operations",
+      "evidence_requirement": "Signed topology/service ADRs, facility and failure-domain inventory, data-flow review, and external-integration contracts where used"
+    },
+    {
+      "id": "P0.2-B",
+      "approval_control": "p0_2_b",
+      "owner_group": "operations",
+      "evidence_requirement": "Per-component and per-integration runbooks plus successful failover or export/restore exercises"
+    },
+    {
+      "id": "P0.2-C",
+      "approval_control": "p0_2_c",
+      "owner_group": "privacy_security",
+      "evidence_requirement": "Data-flow review, contract clauses, retention/training settings, and traffic evidence"
+    },
+    {
+      "id": "CP0-A",
+      "approval_control": "cp0_a",
+      "owner_group": "product_counsel_architecture",
+      "evidence_requirement": "Signed decision register with no unowned blocker"
+    },
+    {
+      "id": "CP0-B",
+      "approval_control": "cp0_b",
+      "owner_group": "product_finance_operations",
+      "evidence_requirement": "Approved forecast, beta cap, on-call/support/notice staffing roster"
+    },
+    {
+      "id": "P1.2-A",
+      "approval_control": "p1_2_a",
+      "owner_group": "operations",
+      "evidence_requirement": "Tagged staging release receipt, image digests, Deployment revisions, health result, and rollback result"
+    },
+    {
+      "id": "P1.4-A",
+      "approval_control": "p1_4_a",
+      "owner_group": "platform_security",
+      "evidence_requirement": "Self-managed site, cluster, namespace, identity, secret, network, and data-store inventory with drift report"
+    },
+    {
+      "id": "P1.4-B",
+      "approval_control": "p1_4_b",
+      "owner_group": "platform_security",
+      "evidence_requirement": "Reviewed IaC plan/apply output and resource inventory"
+    },
+    {
+      "id": "P1.4-C",
+      "approval_control": "p1_4_c",
+      "owner_group": "security_operations",
+      "evidence_requirement": "Self-managed firewall/network-policy export and independent reachability scan"
+    },
+    {
+      "id": "CP1-A",
+      "approval_control": "cp1_a",
+      "owner_group": "operations",
+      "evidence_requirement": "Trace-linked request receipt from real edge and staging deployment"
+    },
+    {
+      "id": "CP1-B",
+      "approval_control": "cp1_b",
+      "owner_group": "security_operations",
+      "evidence_requirement": "Three passed drills with audit/rollout evidence and no customer content"
+    },
+    {
+      "id": "CP1-C",
+      "approval_control": "cp1_c",
+      "owner_group": "product",
+      "evidence_requirement": "Signed launch-state attestation and external exposure inventory"
+    },
+    {
+      "id": "CP2-A",
+      "approval_control": "cp2_a",
+      "owner_group": "independent_security_reviewer",
+      "evidence_requirement": "Signed report covering APIs, RLS, identifiers, caches, errors, and timing"
+    },
+    {
+      "id": "CP2-B",
+      "approval_control": "cp2_b",
+      "owner_group": "security_operations",
+      "evidence_requirement": "Passed staging drill receipts with alert, containment, RTO, and audit references"
+    },
+    {
+      "id": "CP3-A",
+      "approval_control": "cp3_a",
+      "owner_group": "product_qa",
+      "evidence_requirement": "Trace-linked journey receipts for web and scoped agent credential clients"
+    },
+    {
+      "id": "CP3-B",
+      "approval_control": "cp3_b",
+      "owner_group": "operations",
+      "evidence_requirement": "Self-managed backup identifier, restore timestamps, integrity reconciliation, measured RPO/RTO"
+    },
+    {
+      "id": "CP4-A",
+      "approval_control": "cp4_a",
+      "owner_group": "security",
+      "evidence_requirement": "Signed custody review referencing deployed policies and sampled telemetry"
+    },
+    {
+      "id": "CP4-B",
+      "approval_control": "cp4_b",
+      "owner_group": "privacy",
+      "evidence_requirement": "Data inventory with purpose, trigger, TTL, deletion method, and policy version"
+    },
+    {
+      "id": "CP4-C",
+      "approval_control": "cp4_c",
+      "owner_group": "qa_operations",
+      "evidence_requirement": "Per-format source/version/job/projection receipts and immutable release ID"
+    },
+    {
+      "id": "CP5-A",
+      "approval_control": "cp5_a",
+      "owner_group": "product_engineering",
+      "evidence_requirement": "Signed threshold decision plus immutable parity report"
+    },
+    {
+      "id": "CP5-B",
+      "approval_control": "cp5_b",
+      "owner_group": "independent_security_reviewer",
+      "evidence_requirement": "Blind corpus report, statistical timing analysis, cache-key review, and risk acceptance"
+    },
+    {
+      "id": "CP5-C",
+      "approval_control": "cp5_c",
+      "owner_group": "product_operations",
+      "evidence_requirement": "Versioned load report with corpus size, concurrency, deployment site, model route, p50/p95/p99, and cost"
+    },
+    {
+      "id": "P6.5-A",
+      "approval_control": "p6_5_a",
+      "owner_group": "counsel",
+      "evidence_requirement": "Signed review of exact notice copy, jurisdiction routing, deadlines, and escalation"
+    },
+    {
+      "id": "CP6-A",
+      "approval_control": "cp6_a",
+      "owner_group": "legal_operations_support",
+      "evidence_requirement": "Coverage roster, response SLA, escalation contacts, tabletop result, and counsel approval"
+    },
+    {
+      "id": "P7.4-A",
+      "approval_control": "p7_4_a",
+      "owner_group": "privacy_operations",
+      "evidence_requirement": "Self-managed backup-retention configuration plus aged-backup test after the full published interval"
+    },
+    {
+      "id": "CP7-A",
+      "approval_control": "cp7_a",
+      "owner_group": "privacy_counsel",
+      "evidence_requirement": "Signed review referencing rendered UI/copy and receipt schema digests"
+    },
+    {
+      "id": "CP9-A",
+      "approval_control": "cp9_a",
+      "owner_group": "product_qa",
+      "evidence_requirement": "Consented cohort report covering size/format distributions, reconciliation, and failures"
+    },
+    {
+      "id": "CP9-B",
+      "approval_control": "cp9_b",
+      "owner_group": "product_engineering_operations",
+      "evidence_requirement": "Signed parity report and completed rollback tabletop"
+    },
+    {
+      "id": "P10.1-A",
+      "approval_control": "p10_1_a",
+      "owner_group": "product_qa_operations",
+      "evidence_requirement": "End-to-end alpha journey receipts, support cases, and deletion reconciliation"
+    },
+    {
+      "id": "P10.2-A",
+      "approval_control": "p10_2_a",
+      "owner_group": "independent_security_reviewer",
+      "evidence_requirement": "Signed scoped penetration report and retest evidence"
+    },
+    {
+      "id": "P10.2-B",
+      "approval_control": "p10_2_b",
+      "owner_group": "security",
+      "evidence_requirement": "Finding register with remediation commits/releases and independent retest status"
+    },
+    {
+      "id": "P10.3-A",
+      "approval_control": "p10_3_a",
+      "owner_group": "operations_security",
+      "evidence_requirement": "Passed receipts for database, queue, model, credential, isolation, and deletion scenarios"
+    },
+    {
+      "id": "P10.3-B",
+      "approval_control": "p10_3_b",
+      "owner_group": "operations_finance",
+      "evidence_requirement": "Alert test timestamps, routes, acknowledgements, escalation, and owner roster"
+    },
+    {
+      "id": "CP10-A",
+      "approval_control": "cp10_a",
+      "owner_group": "named_domain_owners",
+      "evidence_requirement": "Five current private-beta signed approvals"
+    },
+    {
+      "id": "CP10-B",
+      "approval_control": "cp10_b",
+      "owner_group": "incident_commander_product",
+      "evidence_requirement": "Open-incident/finding export and signed blocker review"
+    },
+    {
+      "id": "CP10-C",
+      "approval_control": "cp10_c",
+      "owner_group": "operations_finance_product",
+      "evidence_requirement": "Load/capacity report and approved worst-case unit economics"
+    },
+    {
+      "id": "P11.1-A",
+      "approval_control": "p11_1_a",
+      "owner_group": "support_operations",
+      "evidence_requirement": "Published channel inventory, coverage roster, escalation test, and response policy"
+    },
+    {
+      "id": "P11.2-A",
+      "approval_control": "p11_2_a",
+      "owner_group": "finance_engineering",
+      "evidence_requirement": "Payment-processor settlement/invoice reconciliation with sampled tenant usage and variance"
+    },
+    {
+      "id": "P11.3-A",
+      "approval_control": "p11_3_a",
+      "owner_group": "product_operations",
+      "evidence_requirement": "Immutable metric samples covering the agreed observation interval"
+    },
+    {
+      "id": "P11.3-B",
+      "approval_control": "p11_3_b",
+      "owner_group": "privacy_security_support",
+      "evidence_requirement": "Receipt/case aggregates and sampled case evidence for the same beta window"
+    },
+    {
+      "id": "P11.3-C",
+      "approval_control": "p11_3_c",
+      "owner_group": "security",
+      "evidence_requirement": "Closed anomaly report, chain verification, and signed residual-risk review"
+    },
+    {
+      "id": "CP11-A",
+      "approval_control": "cp11_a",
+      "owner_group": "product_counsel_support_security",
+      "evidence_requirement": "Live URL/copy digests, ownership, monitoring, and signed launch-asset approvals"
+    },
+    {
+      "id": "CP11-B",
+      "approval_control": "cp11_b",
+      "owner_group": "domain_owners",
+      "evidence_requirement": "Public-beta gate report covering one shared current window"
+    },
+    {
+      "id": "CP11-C",
+      "approval_control": "cp11_c",
+      "owner_group": "product_release_authority",
+      "evidence_requirement": "Complete immutable approval-directory export and trust bundle"
+    },
+    {
+      "id": "P12.2-A",
+      "approval_control": "p12_2_a",
+      "owner_group": "product_domain_owners",
+      "evidence_requirement": "GA scorecard over agreed window with source references and digests"
+    },
+    {
+      "id": "P12.2-B",
+      "approval_control": "p12_2_b",
+      "owner_group": "operations_security_privacy",
+      "evidence_requirement": "Multiple dated drill receipts within GA window"
+    },
+    {
+      "id": "P12.2-C",
+      "approval_control": "p12_2_c",
+      "owner_group": "named_domain_owners",
+      "evidence_requirement": "Five unexpired GA approval artifacts from authorized keys"
+    },
+    {
+      "id": "MVP-A",
+      "approval_control": "mvp_a",
+      "owner_group": "program_owner",
+      "evidence_requirement": "Completed matrix with artifact digests and no missing row"
+    },
+    {
+      "id": "MVP-B",
+      "approval_control": "mvp_b",
+      "owner_group": "product_qa_operations",
+      "evidence_requirement": "Trace-linked E2E report covering consent, all formats, query/review, export, renewal, source deletion, and account deletion"
+    },
+    {
+      "id": "MVP-C",
+      "approval_control": "mvp_c",
+      "owner_group": "independent_security_reviewer",
+      "evidence_requirement": "CP2-A, CP5-B, and P10.2 evidence with retests"
+    },
+    {
+      "id": "MVP-D",
+      "approval_control": "mvp_d",
+      "owner_group": "operations_domain_owners",
+      "evidence_requirement": "Current passed drill set referenced by GA report"
+    },
+    {
+      "id": "MVP-E",
+      "approval_control": "mvp_e",
+      "owner_group": "finance_product",
+      "evidence_requirement": "Reconciled billing period and signed cost/cap decision"
+    },
+    {
+      "id": "MVP-F",
+      "approval_control": "mvp_f",
+      "owner_group": "counsel_privacy",
+      "evidence_requirement": "Current signed legal/privacy package"
+    },
+    {
+      "id": "MVP-G",
+      "approval_control": "mvp_g",
+      "owner_group": "operations",
+      "evidence_requirement": "Signed operational readiness package with real drill and deployment evidence"
+    },
+    {
+      "id": "MVP-H",
+      "approval_control": "mvp_h",
+      "owner_group": "security_product",
+      "evidence_requirement": "Current finding/incident export plus signed release decision"
+    }
+  ]
+}

@@ -6,6 +6,42 @@ import (
 	"github.com/taimufuraiyaa/agent-memory/internal/core"
 )
 
+type LibraryPrincipalRequest struct {
+	PrincipalID     string   `json:"principal_id"`
+	OrganizationIDs []string `json:"organization_ids,omitempty"`
+}
+
+type LibraryImportRequest struct {
+	Workspace      string `json:"workspace"`
+	LibraryID      string `json:"library_id"`
+	LibraryKind    string `json:"library_kind,omitempty"`
+	OrganizationID string `json:"organization_id,omitempty"`
+	PrincipalID    string `json:"principal_id"`
+	Title          string `json:"title"`
+	EditionLabel   string `json:"edition_label"`
+	Language       string `json:"language"`
+	Format         string `json:"format,omitempty"`
+	Markdown       string `json:"markdown"`
+	RightsBasis    string `json:"rights_basis"`
+}
+
+type LibraryQueryRequest struct {
+	Workspace       string   `json:"workspace"`
+	PrincipalID     string   `json:"principal_id"`
+	OrganizationIDs []string `json:"organization_ids,omitempty"`
+	Question        string   `json:"question"`
+	Limit           int      `json:"limit,omitempty"`
+	ProposeMemory   bool     `json:"propose_memory,omitempty"`
+	MemoryContent   string   `json:"memory_content,omitempty"`
+}
+
+type LibraryMemoryReviewRequest struct {
+	Workspace   string `json:"workspace"`
+	ProposalID  string `json:"proposal_id"`
+	PrincipalID string `json:"principal_id"`
+	Decision    string `json:"decision"`
+}
+
 var validate = validator.New()
 
 // WriteMemoryRequest is the API wrapper validated at transport boundary.
@@ -15,6 +51,7 @@ type WriteMemoryRequest struct {
 	Workspace string            `json:"workspace" validate:"required,min=1"`
 	Entities  []string          `json:"entities,omitempty"`
 	Tags      []string          `json:"tags,omitempty"`
+	Keywords  []string          `json:"keywords,omitempty" validate:"omitempty,max=3,dive,min=1,max=128"`
 	Outcome   *core.Outcome     `json:"outcome,omitempty"`
 	Source    core.MemorySource `json:"source" validate:"required"`
 }
@@ -39,16 +76,22 @@ func (r *SearchRequest) Validate() error {
 }
 
 type ObserveRequest struct {
-	Workspace   string `json:"workspace,omitempty" validate:"omitempty,min=1"`
-	SessionID   string `json:"session_id" validate:"required,min=1,max=128"`
-	OccurredAt  string `json:"occurred_at" validate:"required,min=1,max=64"`
-	Kind        string `json:"kind" validate:"required,min=1,max=64"`
-	ToolName    string `json:"tool_name,omitempty" validate:"omitempty,max=128"`
-	Prompt      string `json:"prompt,omitempty" validate:"omitempty,max=4000"`
-	ToolInput   any    `json:"tool_input,omitempty"`
-	ProjectRoot string `json:"project_root,omitempty" validate:"omitempty,max=512"`
-	CWD         string `json:"cwd,omitempty" validate:"omitempty,max=512"`
-	Metadata    any    `json:"metadata,omitempty"`
+	Workspace       string `json:"workspace,omitempty" validate:"omitempty,min=1"`
+	SessionID       string `json:"session_id" validate:"required,min=1,max=128"`
+	OccurredAt      string `json:"occurred_at" validate:"required,min=1,max=64"`
+	Kind            string `json:"kind" validate:"required,min=1,max=64"`
+	ToolName        string `json:"tool_name,omitempty" validate:"omitempty,max=128"`
+	Prompt          string `json:"prompt,omitempty" validate:"omitempty,max=4000"`
+	ToolInput       any    `json:"tool_input,omitempty"`
+	ProjectRoot     string `json:"project_root,omitempty" validate:"omitempty,max=512"`
+	CWD             string `json:"cwd,omitempty" validate:"omitempty,max=512"`
+	Metadata        any    `json:"metadata,omitempty"`
+	SourceAgent     string `json:"source_agent,omitempty" validate:"omitempty,max=64"`
+	SourceAdapter   string `json:"source_adapter,omitempty" validate:"omitempty,max=128"`
+	HookEvent       string `json:"hook_event,omitempty" validate:"omitempty,max=64"`
+	ExternalEventID string `json:"external_event_id,omitempty" validate:"omitempty,max=256"`
+	SchemaVersion   string `json:"schema_version,omitempty" validate:"omitempty,max=32"`
+	CaptureMode     string `json:"capture_mode,omitempty" validate:"omitempty,max=32"`
 }
 
 func (r *ObserveRequest) Validate() error {

@@ -23,4 +23,3 @@ func Cosine(a, b []float32) (float64, error) {
 	}
 	return dot / (math.Sqrt(na) * math.Sqrt(nb)), nil
 }
-

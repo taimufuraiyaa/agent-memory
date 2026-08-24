@@ -4,7 +4,7 @@ import react from '@vitejs/plugin-react'
 const apiTarget = process.env.VITE_API_TARGET || 'http://localhost:3210'
 
 export default defineConfig({
-  base: '/',
+  base: './',
   plugins: [react()],
   optimizeDeps: {
     // Mermaid pulls in dayjs and lazy-loaded diagram modules in dev.
@@ -14,12 +14,25 @@ export default defineConfig({
     needsInterop: ['dayjs'],
   },
   server: {
+    // Permit the documented development domain without disabling Vite's
+    // protection against arbitrary Host headers.
+    allowedHosts: ['agentmemory.build'],
     proxy: {
       '/api': {
         target: apiTarget,
         changeOrigin: true,
       },
+      '/v1': {
+        target: apiTarget,
+        // Preserve the browser-facing Host so API same-origin checks compare
+        // localhost:3100 Origin and Host consistently during hot reload.
+        changeOrigin: false,
+      },
       '/health': {
+        target: apiTarget,
+        changeOrigin: true,
+      },
+      '/dashboard/runtime.json': {
         target: apiTarget,
         changeOrigin: true,
       },
@@ -29,7 +42,7 @@ export default defineConfig({
     outDir: 'dist',
     emptyOutDir: true,
     sourcemap: false,
-    minify: false,
+    minify: 'esbuild',
     rollupOptions: {
       output: {
         entryFileNames: 'assets/app.js',

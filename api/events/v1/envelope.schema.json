@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-memory.dev/schemas/events/v1/envelope.schema.json",
+  "title": "Agent Memory event envelope v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "spec_version",
+    "event_id",
+    "event_type",
+    "occurred_at",
+    "tenant_id",
+    "actor",
+    "request_id",
+    "correlation_id",
+    "producer",
+    "subject",
+    "data"
+  ],
+  "properties": {
+    "spec_version": {"const": "1.0"},
+    "event_id": {"type": "string", "minLength": 16, "maxLength": 128},
+    "event_type": {"type": "string", "pattern": "^[a-z][a-z0-9_.]+$", "maxLength": 128},
+    "occurred_at": {"type": "string", "format": "date-time"},
+    "tenant_id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "actor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "id"],
+      "properties": {
+        "type": {"enum": ["member", "agent", "workload", "operator", "system"]},
+        "id": {"type": "string", "minLength": 1, "maxLength": 128}
+      }
+    },
+    "request_id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "correlation_id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "causation_id": {"type": "string", "maxLength": 128},
+    "producer": {"type": "string", "minLength": 1, "maxLength": 64},
+    "subject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "id"],
+      "properties": {
+        "type": {"type": "string", "minLength": 1, "maxLength": 64},
+        "id": {"type": "string", "minLength": 1, "maxLength": 128},
+        "version": {"type": "integer", "minimum": 0}
+      }
+    },
+    "data": {
+      "type": "object",
+      "description": "Content-free fields declared by the event-specific schema.",
+      "additionalProperties": false,
+      "properties": {}
+    }
+  }
+}
+

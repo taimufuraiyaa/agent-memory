@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-memory.local/schemas/evidence/v1/self-managed-backup-expiry-drill.schema.json",
+  "title": "Agent Memory self-managed aged-backup expiry drill",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "classification", "environment", "drill_id", "backup_id", "inventory_id", "inventory_receipt_sha256", "change_id", "change_receipt_sha256", "retention_inventory_receipt_sha256", "policies_sha256", "backup_policy_version", "backup_retention_seconds", "ready", "generated_at", "timeline", "checks"],
+  "properties": {
+    "schema": {"const": "agent-memory-self-managed-backup-expiry-drill-v1"},
+    "classification": {"const": "self_managed_external"},
+    "environment": {"const": "production"},
+    "drill_id": {"$ref": "#/$defs/opaque_id"},
+    "backup_id": {"$ref": "#/$defs/opaque_id"},
+    "inventory_id": {"$ref": "#/$defs/opaque_id"},
+    "inventory_receipt_sha256": {"$ref": "#/$defs/digest"},
+    "change_id": {"$ref": "#/$defs/opaque_id"},
+    "change_receipt_sha256": {"$ref": "#/$defs/digest"},
+    "retention_inventory_receipt_sha256": {"$ref": "#/$defs/digest"},
+    "policies_sha256": {"$ref": "#/$defs/digest"},
+    "backup_policy_version": {"type": "string", "minLength": 1, "maxLength": 512},
+    "backup_retention_seconds": {"type": "integer", "minimum": 1},
+    "ready": {"type": "boolean"},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "timeline": {"$ref": "#/$defs/timeline"},
+    "checks": {
+      "type": "array",
+      "minItems": 7,
+      "maxItems": 7,
+      "items": {"$ref": "#/$defs/check"}
+    }
+  },
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "opaque_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"},
+    "timeline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["backup_created_at", "deletion_completed_at", "verification_started_at", "verification_completed_at"],
+      "properties": {
+        "backup_created_at": {"type": "string", "format": "date-time"},
+        "deletion_completed_at": {"type": "string", "format": "date-time"},
+        "verification_started_at": {"type": "string", "format": "date-time"},
+        "verification_completed_at": {"type": "string", "format": "date-time"}
+      }
+    },
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "outcome", "evidence_sha256"],
+      "properties": {
+        "id": {"enum": ["backup_manifest_verified", "deleted_record_present_in_backup", "deletion_receipt_verified", "expiry_schedule_verified", "backup_absent_after_deadline", "restore_unavailable", "cryptographic_material_expired"]},
+        "outcome": {"enum": ["passed", "failed"]},
+        "evidence_sha256": {"$ref": "#/$defs/digest"}
+      }
+    }
+  }
+}

@@ -215,7 +215,6 @@ export AGENT_MEMORY_OBSERVE_ENABLED=1
 export AGENT_MEMORY_LOG_LEVEL=debug
 
 # Upgrade
-export AGENT_MEMORY_UPGRADE_YES=1
 export AGENT_MEMORY_SRC_DIR=/path/to/source
 
 # Storage

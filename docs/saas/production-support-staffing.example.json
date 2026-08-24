@@ -1,0 +1,18 @@
+{
+  "schema":"agent-memory-production-support-staffing-input-v1","classification":"production_external","environment":"production","review_id":"support-review-2026-08","channel_inventory_version":"channels-v1","coverage_roster_version":"coverage-v1","response_policy_version":"policy-v1","target_version":"targets-v1",
+  "inventory_id":"production-inventory","inventory_receipt_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","plan_id":"production-plan","plan_receipt_sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","change_id":"production-change","change_receipt_sha256":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","release_id":"production-release","release_receipt_sha256":"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "channel_inventory_sha256":"1111111111111111111111111111111111111111111111111111111111111111","coverage_roster_sha256":"2222222222222222222222222222222222222222222222222222222222222222","response_policy_sha256":"3333333333333333333333333333333333333333333333333333333333333333","target_decision_sha256":"4444444444444444444444444444444444444444444444444444444444444444","escalation_test_report_sha256":"5555555555555555555555555555555555555555555555555555555555555555",
+  "target_approved_at":"2026-08-10T05:30:00Z","period_start":"2026-08-10T06:00:00Z","period_end":"2026-08-10T14:00:00Z","reviewed_at":"2026-08-10T16:00:00Z","generated_at":"2026-08-10T17:30:00Z","required_coverage_minutes":480,"primary_covered_minutes":480,"backup_covered_minutes":480,"primary_slot_count":2,"backup_slot_count":2,"ready":true,
+  "drills":[
+    {"id":"customer_feedback","owner_slot_version":"feedback-slot-v1","submitted_at":"2026-08-10T07:00:00Z","delivered_at":"2026-08-10T07:01:00Z","escalated_at":"2026-08-10T07:02:00Z","acknowledged_at":"2026-08-10T07:03:00Z","resolved_at":"2026-08-10T07:05:00Z","maximum_delivery_seconds":120,"maximum_acknowledgement_seconds":300,"outcome":"passed","evidence_sha256":"6666666666666666666666666666666666666666666666666666666666666666"},
+    {"id":"security_incident","owner_slot_version":"incident-slot-v1","submitted_at":"2026-08-10T08:00:00Z","delivered_at":"2026-08-10T08:01:00Z","escalated_at":"2026-08-10T08:02:00Z","acknowledged_at":"2026-08-10T08:03:00Z","resolved_at":"2026-08-10T08:05:00Z","maximum_delivery_seconds":120,"maximum_acknowledgement_seconds":300,"outcome":"passed","evidence_sha256":"7777777777777777777777777777777777777777777777777777777777777777"}
+  ],
+  "checks":[
+    {"id":"channel_inventory_published","outcome":"passed","evidence_sha256":"8888888888888888888888888888888888888888888888888888888888888888"},
+    {"id":"response_policy_published","outcome":"passed","evidence_sha256":"9999999999999999999999999999999999999999999999999999999999999999"},
+    {"id":"coverage_roster_complete","outcome":"passed","evidence_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+    {"id":"feedback_delivery_acknowledgement","outcome":"passed","evidence_sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
+    {"id":"incident_delivery_acknowledgement","outcome":"passed","evidence_sha256":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"},
+    {"id":"backup_escalation_complete","outcome":"passed","evidence_sha256":"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"}
+  ]
+}

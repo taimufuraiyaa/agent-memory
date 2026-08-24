@@ -1,0 +1,45 @@
+name: agent-memory-saas
+
+# Development-only managed-identity rehearsal. This provider has one synthetic
+# identity and ephemeral keys. It must never be used as staging or production
+# identity infrastructure.
+services:
+  oidc:
+    image: agent-memory-saas-oidc
+    build:
+      context: ../..
+      dockerfile: deploy/saas/Dockerfile
+      args:
+        SERVICE: agent-memory-local-oidc
+    environment:
+      AGENT_MEMORY_LOCAL_OIDC_LISTEN_ADDR: :8082
+      AGENT_MEMORY_LOCAL_OIDC_ISSUER: http://oidc:8082
+      AGENT_MEMORY_LOCAL_OIDC_AUDIENCE: agent-memory-local
+      AGENT_MEMORY_LOCAL_OIDC_SUBJECT: local-oidc|member
+      AGENT_MEMORY_LOCAL_OIDC_EMAIL: member@oidc.local.invalid
+      AGENT_MEMORY_LOCAL_OIDC_DISPLAY_NAME: Local OIDC Member
+    ports:
+      - "127.0.0.1:58082:8082"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8082/_local/health/live"]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+
+  api:
+    environment:
+      AGENT_MEMORY_IDENTITY_MODE: oidc
+      AGENT_MEMORY_DEV_AUTH_TOKEN: ""
+      AGENT_MEMORY_DEV_SUBJECT: ""
+      AGENT_MEMORY_DEV_EMAIL: ""
+      AGENT_MEMORY_DEV_DISPLAY_NAME: ""
+      AGENT_MEMORY_OIDC_ISSUER: http://oidc:8082
+      AGENT_MEMORY_OIDC_AUDIENCE: agent-memory-local
+    depends_on:
+      oidc:
+        condition: service_healthy

@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-memory.local/schemas/evidence/v1/staging-tenant-isolation-receipt.schema.json",
+  "title": "Agent Memory normalized independent staging tenant-isolation receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "classification", "environment", "review_id", "inventory_id", "inventory_receipt_sha256", "change_id", "change_receipt_sha256", "release_id", "release_receipt_sha256", "input_sha256", "ready", "generated_at", "collected_at", "review", "domain_count", "passed_count", "failed_count", "inconclusive_count", "finding_count", "domains"],
+  "properties": {
+    "schema": {"const": "agent-memory-staging-tenant-isolation-receipt-v1"},
+    "classification": {"const": "staging_external"},
+    "environment": {"const": "staging"},
+    "review_id": {"$ref": "staging-tenant-isolation-review.schema.json#/$defs/opaque_id"},
+    "inventory_id": {"$ref": "staging-tenant-isolation-review.schema.json#/$defs/opaque_id"},
+    "inventory_receipt_sha256": {"$ref": "staging-tenant-isolation-review.schema.json#/$defs/digest"},
+    "change_id": {"$ref": "staging-tenant-isolation-review.schema.json#/$defs/opaque_id"},
+    "change_receipt_sha256": {"$ref": "staging-tenant-isolation-review.schema.json#/$defs/digest"},
+    "release_id": {"$ref": "staging-tenant-isolation-review.schema.json#/$defs/opaque_id"},
+    "release_receipt_sha256": {"$ref": "staging-tenant-isolation-review.schema.json#/$defs/digest"},
+    "input_sha256": {"$ref": "staging-tenant-isolation-review.schema.json#/$defs/digest"},
+    "ready": {"type": "boolean"},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "collected_at": {"type": "string", "format": "date-time"},
+    "review": {"$ref": "staging-tenant-isolation-review.schema.json#/$defs/review_window"},
+    "domain_count": {"const": 6},
+    "passed_count": {"type": "integer", "minimum": 0, "maximum": 6},
+    "failed_count": {"type": "integer", "minimum": 0, "maximum": 6},
+    "inconclusive_count": {"type": "integer", "minimum": 0, "maximum": 6},
+    "finding_count": {"type": "integer", "minimum": 0, "maximum": 6000},
+    "domains": {
+      "type": "array",
+      "minItems": 6,
+      "maxItems": 6,
+      "items": {"$ref": "staging-tenant-isolation-review.schema.json#/$defs/domain"}
+    }
+  }
+}

@@ -36,12 +36,12 @@ type GraphData struct {
 
 // DecayTimelinePoint represents decay data at a point in time.
 type DecayTimelinePoint struct {
-	Timestamp  string  `json:"timestamp"`
-	AvgDecay   float64 `json:"avg_decay"`
+	Timestamp   string  `json:"timestamp"`
+	AvgDecay    float64 `json:"avg_decay"`
 	MedianDecay float64 `json:"median_decay"`
-	MinDecay   float64 `json:"min_decay"`
-	MaxDecay   float64 `json:"max_decay"`
-	Count      int     `json:"count"`
+	MinDecay    float64 `json:"min_decay"`
+	MaxDecay    float64 `json:"max_decay"`
+	Count       int     `json:"count"`
 }
 
 // DecayTimelineSeries represents a time series for one memory type.
@@ -79,9 +79,9 @@ type EntityConnection struct {
 
 // EntityNetworkData represents the entity-memory network.
 type EntityNetworkData struct {
-	Entities    []EntityNode        `json:"entities"`
-	Memories    []MemoryNode        `json:"memories"`
-	Connections []EntityConnection  `json:"connections"`
+	Entities    []EntityNode       `json:"entities"`
+	Memories    []MemoryNode       `json:"memories"`
+	Connections []EntityConnection `json:"connections"`
 }
 
 // handleMemoryGraph generates graph visualization data.
@@ -107,7 +107,7 @@ func handleMemoryGraph(svc *Service) http.HandlerFunc {
 
 		assets, err := svc.resolve(r.Context(), workspace)
 		if err != nil {
-			writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
+			writeWorkspaceResolveError(w, err)
 			return
 		}
 
@@ -134,7 +134,7 @@ func buildGraphData(memories []core.MemoryEntry) GraphData {
 	for _, mem := range memories {
 		label := mem.Content
 		if len(label) > 50 {
-			label = label[:50] + "..."
+			label = core.TruncateUTF8(label, 50) + "..."
 		}
 
 		nodes = append(nodes, GraphNode{
@@ -192,7 +192,7 @@ func handleDecayTimeline(svc *Service) http.HandlerFunc {
 
 		assets, err := svc.resolve(r.Context(), workspace)
 		if err != nil {
-			writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
+			writeWorkspaceResolveError(w, err)
 			return
 		}
 
@@ -347,7 +347,7 @@ func handleEntityNetwork(svc *Service) http.HandlerFunc {
 
 		assets, err := svc.resolve(r.Context(), workspace)
 		if err != nil {
-			writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
+			writeWorkspaceResolveError(w, err)
 			return
 		}
 

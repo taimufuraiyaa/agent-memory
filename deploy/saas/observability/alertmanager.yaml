@@ -1,0 +1,20 @@
+route:
+  receiver: test-channel
+  group_by: ["alertname", "owner"]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    - matchers: ["severity=\"page\""]
+      receiver: paging-router
+
+receivers:
+  - name: test-channel
+    webhook_configs:
+      - url: http://alert-router:8080/v1/test-alerts
+        send_resolved: true
+  - name: paging-router
+    webhook_configs:
+      - url: http://alert-router:8080/v1/pages
+        send_resolved: true
+

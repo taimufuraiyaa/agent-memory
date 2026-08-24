@@ -1,0 +1,20 @@
+{
+  "schema": "agent-memory-staging-safe-platform-launch-state-v1",
+  "classification": "staging_external",
+  "environment": "staging",
+  "inventory_id": "replace-with-inventory-id",
+  "inventory_receipt_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "plan_id": "replace-with-plan-id",
+  "plan_receipt_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "change_id": "replace-with-change-id",
+  "change_receipt_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "release_id": "replace-with-release-id",
+  "release_receipt_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "collected_at": "2026-08-10T12:00:00Z",
+  "phase": "internal_alpha",
+  "signup_enabled": false,
+  "invitation_required": true,
+  "policy_version": "replace-with-policy-version",
+  "policy_updated_at": "2026-08-10T11:00:00Z",
+  "ready": true
+}

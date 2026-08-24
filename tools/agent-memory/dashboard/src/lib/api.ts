@@ -1,6 +1,214 @@
 export type OutcomeResult = 'success' | 'failure' | 'partial'
 export type MemoryType = 'episodic' | 'semantic' | 'procedural' | 'outcome'
 export type StorageTier = 'markdown' | 'vector' | 'vector+graph' | 'document' | 'cold'
+export type NoteIndexState = 'pending' | 'indexing' | 'ready' | 'failed' | 'retired' | 'paused'
+
+export type ClientKind = 'codex' | 'claude' | 'cursor' | 'other'
+export type ClientToolProfile = 'default' | 'expanded'
+
+export type ClientProfile = {
+  id: string
+  display_name: string
+  client_kind: ClientKind
+  tool_profile: ClientToolProfile
+  revision: number
+  created_at: string
+  updated_at: string
+}
+
+export type DeploymentDecisionStatus = 'assumed' | 'operator_confirmed'
+
+export type DeploymentProfile = {
+  monthly_infrastructure_operations_budget_usd: number
+  decision_status: DeploymentDecisionStatus
+  revision: number
+  created_at: string
+  updated_at: string
+}
+
+export type RightsBasis = 'author_owned' | 'licensed' | 'public_domain' | 'lawfully_acquired_private_use'
+
+export type RightsAttestationPolicy = {
+  version: string
+  effective_at: string
+  renewal_days: number
+  primary_confirmation: string
+  statement_digest: string
+  statements: Array<{ id: string; text: string }>
+}
+
+export type RightsAttestationStatus = {
+  status: 'required' | 'active' | 'expired'
+  reason: 'missing' | 'active' | 'expired' | 'policy_changed'
+  policy: RightsAttestationPolicy
+  receipt?: {
+    id: string
+    policy_version: string
+    statement_digest: string
+    accepted_statement_ids: string[]
+    accepted_at: string
+    expires_at: string
+  }
+}
+
+export type NoteDocument = {
+  id: string
+  workspace: string
+  path: string
+  title: string
+  body: string
+  properties: Record<string, unknown>
+  revision: number
+  content_hash: string
+  index_state: NoteIndexState
+  indexed_revision: number
+  index_error?: string
+  created_at: string
+  updated_at: string
+  deleted_at?: string
+}
+
+export type NoteRevision = {
+  note_id: string
+  workspace: string
+  revision: number
+  path: string
+  title: string
+  body: string
+  properties: Record<string, unknown>
+  content_hash: string
+  author_kind: string
+  created_at: string
+}
+
+export type NoteLink = {
+  source_note_id: string
+  target_note_id?: string
+  raw_target: string
+  line: number
+  snippet: string
+}
+
+export type LibraryImportRequest = {
+  workspace: string
+  library_id?: string
+  library_kind?: 'personal' | 'organization'
+  organization_id?: string
+  principal_id?: string
+  title: string
+  edition_label: string
+  language: string
+  format?: 'markdown' | 'text'
+  markdown: string
+  rights_basis: RightsBasis
+}
+
+export type LibraryFileImportRequest = Omit<LibraryImportRequest, 'markdown' | 'format'> & {
+  format: 'pdf' | 'epub' | 'markdown' | 'text'
+  source_file: File
+}
+
+export type LibraryImportResult = {
+  work_id: string
+  edition_id: string
+  asset_id: string
+  format: 'pdf' | 'epub' | 'markdown' | 'text'
+  node_count: number
+  passage_count?: number
+  existing: boolean
+}
+
+export type LibraryImportJob = {
+  id: string
+  state: 'pending' | 'running' | 'completed' | 'failed'
+  result?: LibraryImportResult
+  error?: string
+  created_at: string
+}
+
+export type LocalLLMConfig = {
+  enabled: boolean
+  base_url: string
+  text_model: string
+  vision_model?: string
+  api_key?: string
+  clear_api_key?: boolean
+  timeout_seconds?: number
+}
+
+export type LocalLLMStatus = {
+  config: Omit<LocalLLMConfig, 'api_key' | 'clear_api_key'> & { api_key_configured: boolean }
+  configured: boolean
+  enabled: boolean
+  reachable: boolean
+  text_model_available: boolean
+  vision_model_available?: boolean
+  error?: string
+}
+
+export type LibraryStructuralNode = {
+  id: string
+  edition_id: string
+  parent_id?: string
+  kind: 'part' | 'chapter' | 'section' | 'subsection' | 'appendix'
+  ordinal: number
+  title: string
+  start_offset?: number
+  end_offset?: number
+  explicit: boolean
+}
+
+export type SourceLocator = {
+  kind: string
+  display: string
+  parser_version: string
+  normalization_version: string
+  text?: {
+    heading_path?: string[]
+    source_start?: number
+    source_end?: number
+    normalized_start?: number
+    normalized_end?: number
+  }
+  pdf?: Record<string, unknown>
+  epub?: Record<string, unknown>
+  web?: Record<string, unknown>
+}
+
+export type LibraryPassageResult = {
+  passage: {
+    id: string
+    edition_id: string
+    source_asset_id: string
+    structural_node_id: string
+    text: string
+    locator: SourceLocator
+    fingerprint: string
+  }
+  score: number
+}
+
+export type BookMemoryProposal = {
+  id: string
+  workspace: string
+  content: string
+  confidence: number
+  status: 'suggested' | 'accepted' | 'rejected'
+  memory_id?: string
+  citations?: Array<{ id: string; locator: SourceLocator; short_quote?: string }>
+  created_at: string
+  reviewed_at?: string
+}
+
+export type LibraryQueryRequest = {
+  workspace: string
+  principal_id?: string
+  organization_ids?: string[]
+  question: string
+  limit?: number
+  propose_memory?: boolean
+  memory_content?: string
+}
 
 export type Diagram = {
   lang: string
@@ -44,6 +252,16 @@ export type MemoryEntry = {
   match_reason?: string
   band?: string
   exclusion_reasons?: string[]
+  source?: {
+    type: string
+    session_id?: string
+    file_path?: string
+    line_range?: number[]
+    note_id?: string
+    note_revision?: number
+    note_path?: string
+    heading?: string
+  }
 }
 
 export type Relation = {
@@ -65,9 +283,29 @@ export type RetrievalPolicy = {
 export type ProjectListItem = {
   name: string
   db_path: string
+  workspace_root?: string
   size_bytes: number
   memory_count: number
   last_activity: string
+}
+
+export type ProjectStudyError = {
+  path: string
+  reason: string
+}
+
+export type ProjectStudyResult = {
+  sources_scanned: number
+  scanned_files: number
+  skipped: number
+  extracted: number
+  written_ids?: string[]
+  errors?: ProjectStudyError[]
+  dry_run: boolean
+  offset: number
+  page_files: number
+  next_offset: number
+  has_more: boolean
 }
 
 export type CountMap = Record<string, number>
@@ -166,8 +404,43 @@ export type FeedbackStats = {
   average_useful_ratio?: number
 }
 
+export type AdvisorDimension = {
+  key: 'quality' | 'efficiency' | 'hygiene' | 'coverage' | 'trust'
+  label: string
+  score: number
+  weight: number
+  available: boolean
+  detail: string
+}
+
+export type AdvisorRecommendation = {
+  id: string
+  severity: 'critical' | 'warn' | 'info'
+  category: string
+  title: string
+  detail: string
+  metric?: string
+}
+
+export type AdvisorReport = {
+  workspace: string
+  score: number
+  grade: 'A' | 'B' | 'C' | 'D' | 'F' | 'N/A'
+  neutral: boolean
+  dimensions: AdvisorDimension[]
+  recommendations: AdvisorRecommendation[]
+  evidence: {
+    memory_count: number
+    active_memory_count: number
+    scored_request_count: number
+    useful_ratio_sample_count: number
+    recall_metric_records: number
+  }
+}
+
 export type DashboardStats = {
   workspace: string
+  advisor?: AdvisorReport
   feedback_stats?: FeedbackStats
   memory_count: number
   db_size_bytes: number
@@ -223,6 +496,20 @@ export type ObservationEntry = {
   tool_name?: string
   summary: string
   created_at: string
+}
+
+export type ReplayEvent = {
+  event_id: string
+  session_id: string
+  occurred_at: string
+  kind: string
+  actor?: string
+  summary: string
+  tool_name?: string
+  related_observation_ids?: string[]
+  related_memory_ids?: string[]
+  schema_version?: string
+  capture_mode?: string
 }
 
 export type ObservationPromotionResult = {
@@ -393,14 +680,27 @@ export type DeleteMemoriesResponse = {
 }
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
+  const headers = new Headers(init?.headers)
+  headers.set('accept', 'application/json')
+  if (!(typeof FormData !== 'undefined' && init?.body instanceof FormData)) {
+    headers.set('content-type', 'application/json')
+  }
   const res = await fetch(path, {
     ...init,
-    headers: {
-      'content-type': 'application/json',
-      ...(init?.headers ?? {}),
-    },
+    headers,
   })
-  const json = (await res.json()) as unknown
+  const body = await res.text()
+  let json: unknown
+  try {
+    json = JSON.parse(body)
+  } catch {
+    const contentType = res.headers.get('content-type') ?? 'unknown content type'
+    const preview = body.trim().replace(/\s+/g, ' ').slice(0, 160)
+    const detail = preview ? `: ${preview}` : ''
+    throw new Error(
+      `API ${res.status} ${path} returned a non-JSON response (${contentType})${detail}`,
+    )
+  }
   const env = json as {
     ok?: boolean
     data?: unknown
@@ -413,13 +713,209 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
   return env.data as T
 }
 
+export async function downloadPortableMigration(workspace: string, passphrase: string): Promise<Blob> {
+  const response = await fetch('/api/v1/migrations/portable-export', {
+    method: 'POST',
+    cache: 'no-store',
+    headers: { accept: 'application/octet-stream', 'content-type': 'application/json' },
+    body: JSON.stringify({ workspace, passphrase }),
+  })
+  if (!response.ok) {
+    const envelope = await response.json().catch(() => ({})) as { error?: { message?: string } }
+    throw new Error(envelope.error?.message || 'The encrypted migration bundle could not be created.')
+  }
+  return response.blob()
+}
+
 export function listProjects(): Promise<{ projects: ProjectListItem[] }> {
   return api('/api/v1/projects/list', { method: 'GET' })
+}
+
+export function studyProject(input: {
+  workspace: string
+  depth: 'shallow' | 'medium' | 'deep'
+  dry_run: boolean
+  max_files: number
+  offset: number
+}): Promise<ProjectStudyResult> {
+  return api('/api/v1/projects/study', { method: 'POST', body: JSON.stringify(input) })
+}
+
+export function listClientProfiles(): Promise<{ profiles: ClientProfile[] }> {
+  return api('/api/v1/client-profiles', { method: 'GET' })
+}
+
+export function createClientProfile(input: {
+  id: string
+  display_name: string
+  client_kind: ClientKind
+  tool_profile: ClientToolProfile
+}): Promise<{ profile: ClientProfile }> {
+  return api('/api/v1/client-profiles', { method: 'POST', body: JSON.stringify(input) })
+}
+
+export function updateClientProfile(input: {
+  id: string
+  display_name: string
+  client_kind: ClientKind
+  tool_profile: ClientToolProfile
+  expected_revision: number
+}): Promise<{ profile: ClientProfile }> {
+  const { id, ...body } = input
+  return api(`/api/v1/client-profiles/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(body) })
+}
+
+export function deleteClientProfile(input: { id: string; expected_revision: number }): Promise<{ deleted: boolean; id: string }> {
+  const query = new URLSearchParams({ expected_revision: String(input.expected_revision) })
+  return api(`/api/v1/client-profiles/${encodeURIComponent(input.id)}?${query.toString()}`, { method: 'DELETE' })
+}
+
+export function getDeploymentProfile(): Promise<{ profile: DeploymentProfile }> {
+  return api('/api/v1/deployment-profile', { method: 'GET' })
+}
+
+export function updateDeploymentProfile(input: {
+  monthly_infrastructure_operations_budget_usd: number
+  decision_status: DeploymentDecisionStatus
+  expected_revision: number
+}): Promise<{ profile: DeploymentProfile }> {
+  return api('/api/v1/deployment-profile', { method: 'PUT', body: JSON.stringify(input) })
+}
+
+export function listNotes(input: { workspace: string; include_deleted?: boolean }): Promise<{ workspace: string; notes: NoteDocument[] }> {
+  const qs = new URLSearchParams({ workspace: input.workspace })
+  if (input.include_deleted) qs.set('include_deleted', 'true')
+  return api(`/api/v1/notes?${qs.toString()}`, { method: 'GET' })
+}
+
+export function getNote(input: { workspace: string; note_id: string }): Promise<{ note: NoteDocument }> {
+  const qs = new URLSearchParams({ workspace: input.workspace, note_id: input.note_id })
+  return api(`/api/v1/notes/get?${qs.toString()}`, { method: 'GET' })
+}
+
+export function createNote(input: {
+  workspace: string
+  path: string
+  title: string
+  body?: string
+  properties?: Record<string, unknown>
+  author_kind?: string
+}): Promise<{ note: NoteDocument }> {
+  return api('/api/v1/notes/create', { method: 'POST', body: JSON.stringify(input) })
+}
+
+export function updateNote(input: {
+  workspace: string
+  note_id: string
+  expected_revision: number
+  path: string
+  title: string
+  body: string
+  properties: Record<string, unknown>
+  author_kind?: string
+}): Promise<{ note: NoteDocument }> {
+  return api('/api/v1/notes/update', { method: 'POST', body: JSON.stringify(input) })
+}
+
+export function trashNote(input: { workspace: string; note_id: string }): Promise<{ note: NoteDocument }> {
+  return api('/api/v1/notes/trash', { method: 'POST', body: JSON.stringify(input) })
+}
+
+export function restoreNote(input: { workspace: string; note_id: string }): Promise<{ note: NoteDocument }> {
+  return api('/api/v1/notes/restore', { method: 'POST', body: JSON.stringify(input) })
+}
+
+export function deleteNotePermanently(input: { workspace: string; note_id: string }): Promise<{ note: { deleted: boolean; note_id: string } }> {
+  return api('/api/v1/notes/delete', { method: 'POST', body: JSON.stringify(input) })
+}
+
+export function listNoteRevisions(input: { workspace: string; note_id: string }): Promise<{ revisions: NoteRevision[] }> {
+  const qs = new URLSearchParams({ workspace: input.workspace, note_id: input.note_id })
+  return api(`/api/v1/notes/revisions?${qs.toString()}`, { method: 'GET' })
+}
+
+export function restoreNoteRevision(input: {
+  workspace: string
+  note_id: string
+  revision: number
+  expected_revision: number
+}): Promise<{ note: NoteDocument }> {
+  return api('/api/v1/notes/revisions/restore', { method: 'POST', body: JSON.stringify(input) })
+}
+
+export function listNoteBacklinks(input: { workspace: string; note_id: string }): Promise<{ backlinks: NoteLink[] }> {
+  const qs = new URLSearchParams({ workspace: input.workspace, note_id: input.note_id })
+  return api(`/api/v1/notes/backlinks?${qs.toString()}`, { method: 'GET' })
+}
+
+export function retryNoteIndex(input: { workspace: string; note_id: string }): Promise<{ note: NoteDocument }> {
+  return api('/api/v1/notes/index/retry', { method: 'POST', body: JSON.stringify(input) })
+}
+
+export function importLibraryBook(input: LibraryImportRequest | LibraryFileImportRequest): Promise<LibraryImportJob> {
+  if ('source_file' in input) {
+    const form = new FormData()
+    form.append('workspace', input.workspace)
+    if (input.library_id) form.append('library_id', input.library_id)
+    form.append('library_kind', input.library_kind ?? 'personal')
+    if (input.organization_id) form.append('organization_id', input.organization_id)
+    if (input.principal_id) form.append('principal_id', input.principal_id)
+    form.append('title', input.title)
+    form.append('edition_label', input.edition_label)
+    form.append('language', input.language)
+    form.append('format', input.format)
+    form.append('rights_basis', input.rights_basis)
+    form.append('source', input.source_file)
+    return api('/api/v1/library/imports', { method: 'POST', body: form })
+  }
+  return api('/api/v1/library/imports', { method: 'POST', body: JSON.stringify(input) })
+}
+
+export function getRightsAttestationStatus(): Promise<RightsAttestationStatus> {
+  return api('/api/v1/rights-attestation/status', { method: 'GET' })
+}
+
+export function acceptRightsAttestation(input: {
+  policy_version: string
+  accepted_statement_ids: string[]
+}): Promise<RightsAttestationStatus> {
+  return api('/api/v1/rights-attestation/accept', { method: 'POST', body: JSON.stringify(input) })
+}
+
+export function getLibraryLocalLLMStatus(): Promise<LocalLLMStatus> {
+  return api('/api/v1/library/local-llm', { method: 'GET' })
+}
+
+export function testLibraryLocalLLM(input: LocalLLMConfig): Promise<LocalLLMStatus> {
+  return api('/api/v1/library/local-llm/test', { method: 'POST', body: JSON.stringify(input) })
+}
+
+export function saveLibraryLocalLLM(input: LocalLLMConfig): Promise<LocalLLMStatus> {
+  return api('/api/v1/library/local-llm', { method: 'PUT', body: JSON.stringify(input) })
+}
+
+export function getLibraryStructure(input: { workspace: string; principal_id?: string; edition_id: string }): Promise<{ edition_id: string; nodes: LibraryStructuralNode[] }> {
+  const qs = new URLSearchParams({ workspace: input.workspace, edition_id: input.edition_id })
+  if (input.principal_id) qs.set('principal_id', input.principal_id)
+  return api(`/api/v1/library/structure?${qs.toString()}`, { method: 'GET' })
+}
+
+export function queryLibrary(input: LibraryQueryRequest): Promise<{ results: LibraryPassageResult[]; proposal?: BookMemoryProposal }> {
+  return api('/api/v1/library/query', { method: 'POST', body: JSON.stringify(input) })
+}
+
+export function reviewLibraryMemory(input: { workspace: string; proposal_id: string; principal_id?: string; decision: 'accept' | 'reject' }): Promise<BookMemoryProposal> {
+  return api('/api/v1/library/memory-review', { method: 'POST', body: JSON.stringify(input) })
 }
 
 export function getStats(workspace?: string): Promise<DashboardStats> {
   const qs = workspace ? `?workspace=${encodeURIComponent(workspace)}` : ''
   return api(`/api/v1/stats${qs}`, { method: 'GET' })
+}
+
+export function getAdvisor(workspace?: string): Promise<AdvisorReport> {
+  const qs = workspace ? `?workspace=${encodeURIComponent(workspace)}` : ''
+  return api(`/api/v1/advisor${qs}`, { method: 'GET' })
 }
 
 export function listSchedulerHistory(input: { workspace: string; limit?: number }): Promise<{ workspace: string; limit: number; history: SchedulerRunHistory[] }> {
@@ -450,6 +946,15 @@ export function listObservations(input: {
   if (input.from) qs.set('from', input.from)
   if (input.to) qs.set('to', input.to)
   return api(`/api/v1/observations?${qs.toString()}`, { method: 'GET' })
+}
+
+export function listReplayEvents(input: { workspace: string; session_id: string; limit?: number; cursor?: string }): Promise<{ workspace: string; session_id: string; events: ReplayEvent[]; count: number; next_cursor?: string }> {
+  const qs = new URLSearchParams()
+  qs.set('workspace', input.workspace)
+  qs.set('session_id', input.session_id)
+  if (typeof input.limit === 'number') qs.set('limit', String(input.limit))
+  if (input.cursor) qs.set('cursor', input.cursor)
+  return api(`/api/v1/replay/events?${qs.toString()}`, { method: 'GET' })
 }
 
 export function listBenchmarkRuns(input: { workspace: string; limit?: number }): Promise<{ workspace: string; limit: number; runs: BenchmarkRun[] }> {

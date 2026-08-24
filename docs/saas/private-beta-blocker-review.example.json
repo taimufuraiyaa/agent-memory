@@ -1,0 +1,13 @@
+{
+  "schema":"agent-memory-private-beta-blocker-review-input-v1","classification":"staging_external","environment":"staging","review_id":"blocker-review-2026-08-10","register_version":"register-v1","classification_policy_version":"classification-v1","review_version":"review-v1",
+  "inventory_id":"staging-inventory","inventory_receipt_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","plan_id":"staging-plan","plan_receipt_sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","change_id":"staging-change","change_receipt_sha256":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","release_id":"staging-release","release_receipt_sha256":"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "finding_export_sha256":"1111111111111111111111111111111111111111111111111111111111111111","incident_export_sha256":"2222222222222222222222222222222222222222222222222222222222222222","classification_policy_sha256":"3333333333333333333333333333333333333333333333333333333333333333","review_decision_sha256":"4444444444444444444444444444444444444444444444444444444444444444",
+  "snapshot_at":"2026-08-10T12:00:00Z","reviewed_at":"2026-08-10T13:00:00Z","generated_at":"2026-08-10T17:30:00Z","open_finding_count":3,"open_incident_count":2,"severity_one_incident_count":0,"unresolved_launch_blocker_count":0,"reviewed_open_item_count":5,"ready":true,
+  "checks":[
+    {"id":"finding_export_complete","outcome":"passed","evidence_sha256":"5555555555555555555555555555555555555555555555555555555555555555"},
+    {"id":"incident_export_complete","outcome":"passed","evidence_sha256":"6666666666666666666666666666666666666666666666666666666666666666"},
+    {"id":"severity_and_launch_blocker_classification_complete","outcome":"passed","evidence_sha256":"7777777777777777777777777777777777777777777777777777777777777777"},
+    {"id":"incident_commander_review_complete","outcome":"passed","evidence_sha256":"8888888888888888888888888888888888888888888888888888888888888888"},
+    {"id":"product_review_complete","outcome":"passed","evidence_sha256":"9999999999999999999999999999999999999999999999999999999999999999"}
+  ]
+}

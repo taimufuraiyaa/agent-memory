@@ -1,0 +1,624 @@
+{
+  "schema": "agent-memory-component-recovery-exit-input-v1",
+  "classification": "self_managed_external",
+  "environment": "staging",
+  "review_id": "recovery-review-example",
+  "procedure_manifest_version": "procedures-v1",
+  "exercise_manifest_version": "exercises-v1",
+  "target_policy_version": "targets-v1",
+  "inventory_id": "replace-with-inventory-id",
+  "inventory_receipt_sha256": "0000000000000000000000000000000000000000000000000000000000000001",
+  "procedure_manifest_sha256": "0000000000000000000000000000000000000000000000000000000000000002",
+  "exercise_manifest_sha256": "0000000000000000000000000000000000000000000000000000000000000003",
+  "target_policy_sha256": "0000000000000000000000000000000000000000000000000000000000000004",
+  "operations_review_sha256": "0000000000000000000000000000000000000000000000000000000000000005",
+  "reviewed_at": "2026-08-10T18:00:00Z",
+  "generated_at": "2026-08-10T19:00:00Z",
+  "ready": true,
+  "subjects": [
+    {
+      "class": "core_component",
+      "kind": "kubernetes",
+      "enabled": true,
+      "procedure_version": "kubernetes-procedure-v1",
+      "replacement": {
+        "procedure_sha256": "000000000000000000000000000000000000000000000000000000000000000a",
+        "exercise_sha256": "000000000000000000000000000000000000000000000000000000000000000b",
+        "attempt_count": 1,
+        "passed_count": 1,
+        "failed_count": 0,
+        "inconclusive_count": 0,
+        "maximum_target_seconds": 300,
+        "maximum_observed_seconds": 120,
+        "outcome": "passed"
+      },
+      "failover": {
+        "procedure_sha256": "000000000000000000000000000000000000000000000000000000000000000c",
+        "exercise_sha256": "000000000000000000000000000000000000000000000000000000000000000d",
+        "attempt_count": 1,
+        "passed_count": 1,
+        "failed_count": 0,
+        "inconclusive_count": 0,
+        "maximum_target_seconds": 300,
+        "maximum_observed_seconds": 120,
+        "outcome": "passed"
+      },
+      "export": {
+        "procedure_sha256": "000000000000000000000000000000000000000000000000000000000000000e",
+        "exercise_sha256": "000000000000000000000000000000000000000000000000000000000000000f",
+        "attempt_count": 1,
+        "passed_count": 1,
+        "failed_count": 0,
+        "inconclusive_count": 0,
+        "maximum_target_seconds": 300,
+        "maximum_observed_seconds": 120,
+        "outcome": "passed"
+      },
+      "restore": {
+        "procedure_sha256": "0000000000000000000000000000000000000000000000000000000000000010",
+        "exercise_sha256": "0000000000000000000000000000000000000000000000000000000000000011",
+        "attempt_count": 1,
+        "passed_count": 1,
+        "failed_count": 0,
+        "inconclusive_count": 0,
+        "maximum_target_seconds": 300,
+        "maximum_observed_seconds": 120,
+        "outcome": "passed"
+      },
+      "outcome": "passed"
+    },
+    {
+      "class": "core_component",
+      "kind": "identity",
+      "enabled": true,
+      "procedure_version": "identity-procedure-v1",
+      "replacement": {
+        "procedure_sha256": "0000000000000000000000000000000000000000000000000000000000000012",
+        "exercise_sha256": "0000000000000000000000000000000000000000000000000000000000000013",
+        "attempt_count": 1,
+        "passed_count": 1,
+        "failed_count": 0,
+        "inconclusive_count": 0,
+        "maximum_target_seconds": 300,
+        "maximum_observed_seconds": 120,
+        "outcome": "passed"
+      },
+      "failover": {
+        "procedure_sha256": "0000000000000000000000000000000000000000000000000000000000000014",
+        "exercise_sha256": "0000000000000000000000000000000000000000000000000000000000000015",
+        "attempt_count": 1,
+        "passed_count": 1,
+        "failed_count": 0,
+        "inconclusive_count": 0,
+        "maximum_target_seconds": 300,
+        "maximum_observed_seconds": 120,
+        "outcome": "passed"
+      },
+      "export": {
+        "procedure_sha256": "0000000000000000000000000000000000000000000000000000000000000016",
+        "exercise_sha256": "0000000000000000000000000000000000000000000000000000000000000017",
+        "attempt_count": 1,
+        "passed_count": 1,
+        "failed_count": 0,
+        "inconclusive_count": 0,
+        "maximum_target_seconds": 300,
+        "maximum_observed_seconds": 120,
+        "outcome": "passed"
+      },
+      "restore": {
+        "procedure_sha256": "0000000000000000000000000000000000000000000000000000000000000018",
+        "exercise_sha256": "0000000000000000000000000000000000000000000000000000000000000019",
+        "attempt_count": 1,
+        "passed_count": 1,
+        "failed_count": 0,
+        "inconclusive_count": 0,
+        "maximum_target_seconds": 300,
+        "maximum_observed_seconds": 120,
+        "outcome": "passed"
+      },
+      "outcome": "passed"
+    },
+    {
+      "class": "core_component",
+      "kind": "postgres",
+      "enabled": true,
+      "procedure_version": "postgres-procedure-v1",
+      "replacement": {
+        "procedure_sha256": "000000000000000000000000000000000000000000000000000000000000001a",
+        "exercise_sha256": "000000000000000000000000000000000000000000000000000000000000001b",
+        "attempt_count": 1,
+        "passed_count": 1,
+        "failed_count": 0,
+        "inconclusive_count": 0,
+        "maximum_target_seconds": 300,
+        "maximum_observed_seconds": 120,
+        "outcome": "passed"
+      },
+      "failover": {
+        "procedure_sha256": "000000000000000000000000000000000000000000000000000000000000001c",
+        "exercise_sha256": "000000000000000000000000000000000000000000000000000000000000001d",
+        "attempt_count": 1,
+        "passed_count": 1,
+        "failed_count": 0,
+        "inconclusive_count": 0,
+        "maximum_target_seconds": 300,
+        "maximum_observed_seconds": 120,
+        "outcome": "passed"
+      },
+      "export": {
+        "procedure_sha256": "000000000000000000000000000000000000000000000000000000000000001e",
+        "exercise_sha256": "000000000000000000000000000000000000000000000000000000000000001f",
+        "attempt_count": 1,
+        "passed_count": 1,
+        "failed_count": 0,
+        "inconclusive_count": 0,
+        "maximum_target_seconds": 300,
+        "maximum_observed_seconds": 120,
+        "outcome": "passed"
+      },
+      "restore": {
+        "procedure_sha256": "0000000000000000000000000000000000000000000000000000000000000020",
+        "exercise_sha256": "0000000000000000000000000000000000000000000000000000000000000021",
+        "attempt_count": 1,
+        "passed_count": 1,
+        "failed_count": 0,
+        "inconclusive_count": 0,
+        "maximum_target_seconds": 300,
+        "maximum_observed_seconds": 120,
+        "outcome": "passed"
+      },
+      "outcome": "passed"
+    },
+    {
+      "class": "core_component",
+      "kind": "object_storage",
+      "enabled": true,
+      "procedure_version": "object_storage-procedure-v1",
+      "replacement": {
+        "procedure_sha256": "0000000000000000000000000000000000000000000000000000000000000022",
+        "exercise_sha256": "0000000000000000000000000000000000000000000000000000000000000023",
+        "attempt_count": 1,
+        "passed_count": 1,
+        "failed_count": 0,
+        "inconclusive_count": 0,
+        "maximum_target_seconds": 300,
+        "maximum_observed_seconds": 120,
+        "outcome": "passed"
+      },
+      "failover": {
+        "procedure_sha256": "0000000000000000000000000000000000000000000000000000000000000024",
+        "exercise_sha256": "0000000000000000000000000000000000000000000000000000000000000025",
+        "attempt_count": 1,
+        "passed_count": 1,
+        "failed_count": 0,
+        "inconclusive_count": 0,
+        "maximum_target_seconds": 300,
+        "maximum_observed_seconds": 120,
+        "outcome": "passed"
+      },
+      "export": {
+        "procedure_sha256": "0000000000000000000000000000000000000000000000000000000000000026",
+        "exercise_sha256": "0000000000000000000000000000000000000000000000000000000000000027",
+        "attempt_count": 1,
+        "passed_count": 1,
+        "failed_count": 0,
+        "inconclusive_count": 0,
+        "maximum_target_seconds": 300,
+        "maximum_observed_seconds": 120,
+        "outcome": "passed"
+      },
+      "restore": {
+        "procedure_sha256": "0000000000000000000000000000000000000000000000000000000000000028",
+        "exercise_sha256": "0000000000000000000000000000000000000000000000000000000000000029",
+        "attempt_count": 1,
+        "passed_count": 1,
+        "failed_count": 0,
+        "inconclusive_count": 0,
+        "maximum_target_seconds": 300,
+        "maximum_observed_seconds": 120,
+        "outcome": "passed"
+      },
+      "outcome": "passed"
+    },
+    {
+      "class": "core_component",
+      "kind": "queue",
+      "enabled": true,
+      "procedure_version": "queue-procedure-v1",
+      "replacement": {
+        "procedure_sha256": "000000000000000000000000000000000000000000000000000000000000002a",
+        "exercise_sha256": "000000000000000000000000000000000000000000000000000000000000002b",
+        "attempt_count": 1,
+        "passed_count": 1,
+        "failed_count": 0,
+        "inconclusive_count": 0,
+        "maximum_target_seconds": 300,
+        "maximum_observed_seconds": 120,
+        "outcome": "passed"
+      },
+      "failover": {
+        "procedure_sha256": "000000000000000000000000000000000000000000000000000000000000002c",
+        "exercise_sha256": "000000000000000000000000000000000000000000000000000000000000002d",
+        "attempt_count": 1,
+        "passed_count": 1,
+        "failed_count": 0,
+        "inconclusive_count": 0,
+        "maximum_target_seconds": 300,
+        "maximum_observed_seconds": 120,
+        "outcome": "passed"
+      },
+      "export": {
+        "procedure_sha256": "000000000000000000000000000000000000000000000000000000000000002e",
+        "exercise_sha256": "000000000000000000000000000000000000000000000000000000000000002f",
+        "attempt_count": 1,
+        "passed_count": 1,
+        "failed_count": 0,
+        "inconclusive_count": 0,
+        "maximum_target_seconds": 300,
+        "maximum_observed_seconds": 120,
+        "outcome": "passed"
+      },
+      "restore": {
+        "procedure_sha256": "0000000000000000000000000000000000000000000000000000000000000030",
+        "exercise_sha256": "0000000000000000000000000000000000000000000000000000000000000031",
+        "attempt_count": 1,
+        "passed_count": 1,
+        "failed_count": 0,
+        "inconclusive_count": 0,
+        "maximum_target_seconds": 300,
+        "maximum_observed_seconds": 120,
+        "outcome": "passed"
+      },
+      "outcome": "passed"
+    },
+    {
+      "class": "core_component",
+      "kind": "secrets",
+      "enabled": true,
+      "procedure_version": "secrets-procedure-v1",
+      "replacement": {
+        "procedure_sha256": "0000000000000000000000000000000000000000000000000000000000000032",
+        "exercise_sha256": "0000000000000000000000000000000000000000000000000000000000000033",
+        "attempt_count": 1,
+        "passed_count": 1,
+        "failed_count": 0,
+        "inconclusive_count": 0,
+        "maximum_target_seconds": 300,
+        "maximum_observed_seconds": 120,
+        "outcome": "passed"
+      },
+      "failover": {
+        "procedure_sha256": "0000000000000000000000000000000000000000000000000000000000000034",
+        "exercise_sha256": "0000000000000000000000000000000000000000000000000000000000000035",
+        "attempt_count": 1,
+        "passed_count": 1,
+        "failed_count": 0,
+        "inconclusive_count": 0,
+        "maximum_target_seconds": 300,
+        "maximum_observed_seconds": 120,
+        "outcome": "passed"
+      },
+      "export": {
+        "procedure_sha256": "0000000000000000000000000000000000000000000000000000000000000036",
+        "exercise_sha256": "0000000000000000000000000000000000000000000000000000000000000037",
+        "attempt_count": 1,
+        "passed_count": 1,
+        "failed_count": 0,
+        "inconclusive_count": 0,
+        "maximum_target_seconds": 300,
+        "maximum_observed_seconds": 120,
+        "outcome": "passed"
+      },
+      "restore": {
+        "procedure_sha256": "0000000000000000000000000000000000000000000000000000000000000038",
+        "exercise_sha256": "0000000000000000000000000000000000000000000000000000000000000039",
+        "attempt_count": 1,
+        "passed_count": 1,
+        "failed_count": 0,
+        "inconclusive_count": 0,
+        "maximum_target_seconds": 300,
+        "maximum_observed_seconds": 120,
+        "outcome": "passed"
+      },
+      "outcome": "passed"
+    },
+    {
+      "class": "core_component",
+      "kind": "observability",
+      "enabled": true,
+      "procedure_version": "observability-procedure-v1",
+      "replacement": {
+        "procedure_sha256": "000000000000000000000000000000000000000000000000000000000000003a",
+        "exercise_sha256": "000000000000000000000000000000000000000000000000000000000000003b",
+        "attempt_count": 1,
+        "passed_count": 1,
+        "failed_count": 0,
+        "inconclusive_count": 0,
+        "maximum_target_seconds": 300,
+        "maximum_observed_seconds": 120,
+        "outcome": "passed"
+      },
+      "failover": {
+        "procedure_sha256": "000000000000000000000000000000000000000000000000000000000000003c",
+        "exercise_sha256": "000000000000000000000000000000000000000000000000000000000000003d",
+        "attempt_count": 1,
+        "passed_count": 1,
+        "failed_count": 0,
+        "inconclusive_count": 0,
+        "maximum_target_seconds": 300,
+        "maximum_observed_seconds": 120,
+        "outcome": "passed"
+      },
+      "export": {
+        "procedure_sha256": "000000000000000000000000000000000000000000000000000000000000003e",
+        "exercise_sha256": "000000000000000000000000000000000000000000000000000000000000003f",
+        "attempt_count": 1,
+        "passed_count": 1,
+        "failed_count": 0,
+        "inconclusive_count": 0,
+        "maximum_target_seconds": 300,
+        "maximum_observed_seconds": 120,
+        "outcome": "passed"
+      },
+      "restore": {
+        "procedure_sha256": "0000000000000000000000000000000000000000000000000000000000000040",
+        "exercise_sha256": "0000000000000000000000000000000000000000000000000000000000000041",
+        "attempt_count": 1,
+        "passed_count": 1,
+        "failed_count": 0,
+        "inconclusive_count": 0,
+        "maximum_target_seconds": 300,
+        "maximum_observed_seconds": 120,
+        "outcome": "passed"
+      },
+      "outcome": "passed"
+    },
+    {
+      "class": "core_component",
+      "kind": "backup",
+      "enabled": true,
+      "procedure_version": "backup-procedure-v1",
+      "replacement": {
+        "procedure_sha256": "0000000000000000000000000000000000000000000000000000000000000042",
+        "exercise_sha256": "0000000000000000000000000000000000000000000000000000000000000043",
+        "attempt_count": 1,
+        "passed_count": 1,
+        "failed_count": 0,
+        "inconclusive_count": 0,
+        "maximum_target_seconds": 300,
+        "maximum_observed_seconds": 120,
+        "outcome": "passed"
+      },
+      "failover": {
+        "procedure_sha256": "0000000000000000000000000000000000000000000000000000000000000044",
+        "exercise_sha256": "0000000000000000000000000000000000000000000000000000000000000045",
+        "attempt_count": 1,
+        "passed_count": 1,
+        "failed_count": 0,
+        "inconclusive_count": 0,
+        "maximum_target_seconds": 300,
+        "maximum_observed_seconds": 120,
+        "outcome": "passed"
+      },
+      "export": {
+        "procedure_sha256": "0000000000000000000000000000000000000000000000000000000000000046",
+        "exercise_sha256": "0000000000000000000000000000000000000000000000000000000000000047",
+        "attempt_count": 1,
+        "passed_count": 1,
+        "failed_count": 0,
+        "inconclusive_count": 0,
+        "maximum_target_seconds": 300,
+        "maximum_observed_seconds": 120,
+        "outcome": "passed"
+      },
+      "restore": {
+        "procedure_sha256": "0000000000000000000000000000000000000000000000000000000000000048",
+        "exercise_sha256": "0000000000000000000000000000000000000000000000000000000000000049",
+        "attempt_count": 1,
+        "passed_count": 1,
+        "failed_count": 0,
+        "inconclusive_count": 0,
+        "maximum_target_seconds": 300,
+        "maximum_observed_seconds": 120,
+        "outcome": "passed"
+      },
+      "outcome": "passed"
+    },
+    {
+      "class": "external_integration",
+      "kind": "payment",
+      "enabled": false,
+      "procedure_version": "payment-procedure-v1",
+      "replacement": {
+        "procedure_sha256": "000000000000000000000000000000000000000000000000000000000000004a",
+        "exercise_sha256": "000000000000000000000000000000000000000000000000000000000000004b",
+        "attempt_count": 1,
+        "passed_count": 1,
+        "failed_count": 0,
+        "inconclusive_count": 0,
+        "maximum_target_seconds": 300,
+        "maximum_observed_seconds": 120,
+        "outcome": "passed"
+      },
+      "failover": {
+        "procedure_sha256": "000000000000000000000000000000000000000000000000000000000000004c",
+        "exercise_sha256": "000000000000000000000000000000000000000000000000000000000000004d",
+        "attempt_count": 1,
+        "passed_count": 1,
+        "failed_count": 0,
+        "inconclusive_count": 0,
+        "maximum_target_seconds": 300,
+        "maximum_observed_seconds": 120,
+        "outcome": "passed"
+      },
+      "export": {
+        "procedure_sha256": "000000000000000000000000000000000000000000000000000000000000004e",
+        "exercise_sha256": "000000000000000000000000000000000000000000000000000000000000004f",
+        "attempt_count": 1,
+        "passed_count": 1,
+        "failed_count": 0,
+        "inconclusive_count": 0,
+        "maximum_target_seconds": 300,
+        "maximum_observed_seconds": 120,
+        "outcome": "passed"
+      },
+      "restore": {
+        "procedure_sha256": "0000000000000000000000000000000000000000000000000000000000000050",
+        "exercise_sha256": "0000000000000000000000000000000000000000000000000000000000000051",
+        "attempt_count": 1,
+        "passed_count": 1,
+        "failed_count": 0,
+        "inconclusive_count": 0,
+        "maximum_target_seconds": 300,
+        "maximum_observed_seconds": 120,
+        "outcome": "passed"
+      },
+      "outcome": "passed"
+    },
+    {
+      "class": "external_integration",
+      "kind": "email",
+      "enabled": false,
+      "procedure_version": "email-procedure-v1",
+      "replacement": {
+        "procedure_sha256": "0000000000000000000000000000000000000000000000000000000000000052",
+        "exercise_sha256": "0000000000000000000000000000000000000000000000000000000000000053",
+        "attempt_count": 1,
+        "passed_count": 1,
+        "failed_count": 0,
+        "inconclusive_count": 0,
+        "maximum_target_seconds": 300,
+        "maximum_observed_seconds": 120,
+        "outcome": "passed"
+      },
+      "failover": {
+        "procedure_sha256": "0000000000000000000000000000000000000000000000000000000000000054",
+        "exercise_sha256": "0000000000000000000000000000000000000000000000000000000000000055",
+        "attempt_count": 1,
+        "passed_count": 1,
+        "failed_count": 0,
+        "inconclusive_count": 0,
+        "maximum_target_seconds": 300,
+        "maximum_observed_seconds": 120,
+        "outcome": "passed"
+      },
+      "export": {
+        "procedure_sha256": "0000000000000000000000000000000000000000000000000000000000000056",
+        "exercise_sha256": "0000000000000000000000000000000000000000000000000000000000000057",
+        "attempt_count": 1,
+        "passed_count": 1,
+        "failed_count": 0,
+        "inconclusive_count": 0,
+        "maximum_target_seconds": 300,
+        "maximum_observed_seconds": 120,
+        "outcome": "passed"
+      },
+      "restore": {
+        "procedure_sha256": "0000000000000000000000000000000000000000000000000000000000000058",
+        "exercise_sha256": "0000000000000000000000000000000000000000000000000000000000000059",
+        "attempt_count": 1,
+        "passed_count": 1,
+        "failed_count": 0,
+        "inconclusive_count": 0,
+        "maximum_target_seconds": 300,
+        "maximum_observed_seconds": 120,
+        "outcome": "passed"
+      },
+      "outcome": "passed"
+    },
+    {
+      "class": "external_integration",
+      "kind": "model",
+      "enabled": false,
+      "procedure_version": "model-procedure-v1",
+      "replacement": {
+        "procedure_sha256": "000000000000000000000000000000000000000000000000000000000000005a",
+        "exercise_sha256": "000000000000000000000000000000000000000000000000000000000000005b",
+        "attempt_count": 1,
+        "passed_count": 1,
+        "failed_count": 0,
+        "inconclusive_count": 0,
+        "maximum_target_seconds": 300,
+        "maximum_observed_seconds": 120,
+        "outcome": "passed"
+      },
+      "failover": {
+        "procedure_sha256": "000000000000000000000000000000000000000000000000000000000000005c",
+        "exercise_sha256": "000000000000000000000000000000000000000000000000000000000000005d",
+        "attempt_count": 1,
+        "passed_count": 1,
+        "failed_count": 0,
+        "inconclusive_count": 0,
+        "maximum_target_seconds": 300,
+        "maximum_observed_seconds": 120,
+        "outcome": "passed"
+      },
+      "export": {
+        "procedure_sha256": "000000000000000000000000000000000000000000000000000000000000005e",
+        "exercise_sha256": "000000000000000000000000000000000000000000000000000000000000005f",
+        "attempt_count": 1,
+        "passed_count": 1,
+        "failed_count": 0,
+        "inconclusive_count": 0,
+        "maximum_target_seconds": 300,
+        "maximum_observed_seconds": 120,
+        "outcome": "passed"
+      },
+      "restore": {
+        "procedure_sha256": "0000000000000000000000000000000000000000000000000000000000000060",
+        "exercise_sha256": "0000000000000000000000000000000000000000000000000000000000000061",
+        "attempt_count": 1,
+        "passed_count": 1,
+        "failed_count": 0,
+        "inconclusive_count": 0,
+        "maximum_target_seconds": 300,
+        "maximum_observed_seconds": 120,
+        "outcome": "passed"
+      },
+      "outcome": "passed"
+    }
+  ],
+  "checks": [
+    {
+      "id": "inventory_binding_verified",
+      "outcome": "passed",
+      "evidence_sha256": "00000000000000000000000000000000000000000000000000000000000000c8"
+    },
+    {
+      "id": "subject_inventory_complete",
+      "outcome": "passed",
+      "evidence_sha256": "00000000000000000000000000000000000000000000000000000000000000c9"
+    },
+    {
+      "id": "replacement_exercises_passed",
+      "outcome": "passed",
+      "evidence_sha256": "00000000000000000000000000000000000000000000000000000000000000ca"
+    },
+    {
+      "id": "failover_exercises_passed",
+      "outcome": "passed",
+      "evidence_sha256": "00000000000000000000000000000000000000000000000000000000000000cb"
+    },
+    {
+      "id": "export_exercises_passed",
+      "outcome": "passed",
+      "evidence_sha256": "00000000000000000000000000000000000000000000000000000000000000cc"
+    },
+    {
+      "id": "restore_exercises_passed",
+      "outcome": "passed",
+      "evidence_sha256": "00000000000000000000000000000000000000000000000000000000000000cd"
+    },
+    {
+      "id": "recovery_targets_met",
+      "outcome": "passed",
+      "evidence_sha256": "00000000000000000000000000000000000000000000000000000000000000ce"
+    },
+    {
+      "id": "operations_review_complete",
+      "outcome": "passed",
+      "evidence_sha256": "00000000000000000000000000000000000000000000000000000000000000cf"
+    }
+  ]
+}
+

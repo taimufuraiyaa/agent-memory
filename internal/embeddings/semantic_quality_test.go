@@ -17,10 +17,10 @@ func TestSemanticQualityImprovement(t *testing.T) {
 
 	// Test dataset: semantically similar pairs vs dissimilar pairs
 	testCases := []struct {
-		name      string
-		text1     string
-		text2     string
-		expect    string // "similar" or "dissimilar"
+		name   string
+		text1  string
+		text2  string
+		expect string // "similar" or "dissimilar"
 	}{
 		{
 			name:   "self_similarity",

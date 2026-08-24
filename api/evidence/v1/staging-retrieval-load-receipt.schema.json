@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-memory.local/schemas/evidence/v1/staging-retrieval-load-receipt.schema.json",
+  "title": "Agent Memory deployed staging retrieval load receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "classification", "environment", "run_id", "workload_version", "deployment_site_version", "model_route_version", "target_version", "inventory_id", "inventory_receipt_sha256", "plan_id", "plan_receipt_sha256", "change_id", "change_receipt_sha256", "release_id", "release_receipt_sha256", "workload_manifest_sha256", "load_report_sha256", "model_cost_report_sha256", "target_decision_sha256", "input_sha256", "target_approved_at", "run_started_at", "run_completed_at", "generated_at", "collected_at", "corpus_source_count", "corpus_passage_count", "request_count", "concurrency", "error_count", "model_call_count", "p50_latency_microseconds", "p95_latency_microseconds", "p99_latency_microseconds", "search_p95_target_microseconds", "maximum_model_cost_microusd_per_1000_requests", "observed_model_cost_microusd_per_1000_requests", "ready", "check_count", "passed_count", "failed_count", "inconclusive_count", "metric_breach_count", "checks"],
+  "properties": {
+    "schema": {"const": "agent-memory-staging-retrieval-load-receipt-v1"},
+    "classification": {"const": "staging_external"}, "environment": {"const": "staging"},
+    "run_id": {"$ref": "#/$defs/opaque_id"}, "workload_version": {"$ref": "#/$defs/opaque_id"}, "deployment_site_version": {"$ref": "#/$defs/opaque_id"}, "model_route_version": {"$ref": "#/$defs/opaque_id"}, "target_version": {"$ref": "#/$defs/opaque_id"},
+    "inventory_id": {"$ref": "#/$defs/opaque_id"}, "inventory_receipt_sha256": {"$ref": "#/$defs/digest"}, "plan_id": {"$ref": "#/$defs/opaque_id"}, "plan_receipt_sha256": {"$ref": "#/$defs/digest"}, "change_id": {"$ref": "#/$defs/opaque_id"}, "change_receipt_sha256": {"$ref": "#/$defs/digest"}, "release_id": {"$ref": "#/$defs/opaque_id"}, "release_receipt_sha256": {"$ref": "#/$defs/digest"},
+    "workload_manifest_sha256": {"$ref": "#/$defs/digest"}, "load_report_sha256": {"$ref": "#/$defs/digest"}, "model_cost_report_sha256": {"$ref": "#/$defs/digest"}, "target_decision_sha256": {"$ref": "#/$defs/digest"}, "input_sha256": {"$ref": "#/$defs/digest"},
+    "target_approved_at": {"type": "string", "format": "date-time"}, "run_started_at": {"type": "string", "format": "date-time"}, "run_completed_at": {"type": "string", "format": "date-time"}, "generated_at": {"type": "string", "format": "date-time"}, "collected_at": {"type": "string", "format": "date-time"},
+    "corpus_source_count": {"$ref": "#/$defs/positive_count"}, "corpus_passage_count": {"$ref": "#/$defs/positive_count"}, "request_count": {"$ref": "#/$defs/positive_count"}, "concurrency": {"$ref": "#/$defs/positive_count"}, "error_count": {"$ref": "#/$defs/count"}, "model_call_count": {"$ref": "#/$defs/count"},
+    "p50_latency_microseconds": {"$ref": "#/$defs/latency"}, "p95_latency_microseconds": {"$ref": "#/$defs/latency"}, "p99_latency_microseconds": {"$ref": "#/$defs/latency"}, "search_p95_target_microseconds": {"const": 800000},
+    "maximum_model_cost_microusd_per_1000_requests": {"type": "integer", "minimum": 1, "maximum": 1000000000000000}, "observed_model_cost_microusd_per_1000_requests": {"type": "integer", "minimum": 0, "maximum": 1000000000000000},
+    "ready": {"type": "boolean"}, "check_count": {"const": 8}, "passed_count": {"type": "integer", "minimum": 0, "maximum": 8}, "failed_count": {"type": "integer", "minimum": 0, "maximum": 8}, "inconclusive_count": {"type": "integer", "minimum": 0, "maximum": 8}, "metric_breach_count": {"type": "integer", "minimum": 0, "maximum": 4},
+    "checks": {"type": "array", "minItems": 8, "maxItems": 8, "items": {"$ref": "#/$defs/check"}}
+  },
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"}, "opaque_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"}, "positive_count": {"type": "integer", "minimum": 1, "maximum": 100000000}, "count": {"type": "integer", "minimum": 0, "maximum": 100000000}, "latency": {"type": "integer", "minimum": 0, "maximum": 86400000000},
+    "check": {"type": "object", "additionalProperties": false, "required": ["id", "outcome", "evidence_sha256"], "properties": {"id": {"enum": ["representative_corpus_verified", "deployed_site_verified", "approved_model_route_exercised", "concurrency_profile_completed", "latency_distribution_complete", "search_p95_target_met", "model_cost_attribution_complete", "model_cost_target_met"]}, "outcome": {"enum": ["passed", "failed", "inconclusive"]}, "evidence_sha256": {"$ref": "#/$defs/digest"}}}
+  }
+}

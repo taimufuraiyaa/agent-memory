@@ -13,6 +13,7 @@ import (
 )
 
 func TestReembedCommandBackfillsVectorsWithProvider(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
 	dbPath := filepath.Join(t.TempDir(), "reembed.db")
 	store, err := sqlite.Open(context.Background(), dbPath)
 	if err != nil {
@@ -79,6 +80,7 @@ func TestReembedCommandBackfillsVectorsWithProvider(t *testing.T) {
 }
 
 func TestReembedCommandDryRun(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
 	dbPath := filepath.Join(t.TempDir(), "reembed.db")
 	store, err := sqlite.Open(context.Background(), dbPath)
 	if err != nil {
@@ -138,6 +140,7 @@ func TestReembedCommandDryRun(t *testing.T) {
 }
 
 func TestReembedCommandSkipMatching(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
 	dbPath := filepath.Join(t.TempDir(), "reembed.db")
 	store, err := sqlite.Open(context.Background(), dbPath)
 	if err != nil {

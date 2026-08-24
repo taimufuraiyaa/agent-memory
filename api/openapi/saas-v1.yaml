@@ -1,0 +1,957 @@
+openapi: 3.1.0
+info:
+  title: Agent Memory Hosted API
+  version: 1.0.0
+  description: Provider-neutral contract for the private multi-tenant service.
+servers:
+  - url: https://api.example.invalid
+    description: Placeholder replaced by each environment.
+security:
+  - BearerAuth: []
+paths:
+  /v1/local-projects:
+    get:
+      operationId: listRegisteredLocalProjects
+      description: Local-owner-only list of server-registered project workspaces. This endpoint never accepts filesystem paths.
+      responses:
+        "200": {$ref: "#/components/responses/Success"}
+        "404": {$ref: "#/components/responses/Error"}
+  /v1/local-projects/study:
+    post:
+      operationId: studyRegisteredLocalProject
+      description: Studies one exact registered project name in a bounded, cursor-like file batch.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [workspace, depth, max_files, offset]
+              properties:
+                workspace: {type: string, minLength: 1, maxLength: 128}
+                depth: {type: string, enum: [shallow, medium, deep]}
+                dry_run: {type: boolean}
+                max_files: {type: integer, minimum: 1, maximum: 200}
+                offset: {type: integer, minimum: 0, maximum: 1000000}
+      responses:
+        "200": {$ref: "#/components/responses/Success"}
+        "400": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+  /v1/local-projects/search:
+    post:
+      operationId: searchRegisteredLocalProjectMemories
+      description: Searches memories in one exact registered project without accepting browser-supplied paths.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [workspace, query]
+              properties:
+                workspace: {type: string, minLength: 1, maxLength: 128}
+                query: {type: string, minLength: 1, maxLength: 4000}
+                cursor: {type: string, pattern: "^[0-9]+$"}
+                limit: {type: integer, minimum: 1, maximum: 100}
+      responses:
+        "200": {$ref: "#/components/responses/Success"}
+        "400": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+  /v1/local-projects/memories:
+    get:
+      operationId: browseRegisteredLocalProjectMemories
+      parameters:
+        - {name: workspace, in: query, required: true, schema: {type: string, minLength: 1, maxLength: 128}}
+        - {name: mode, in: query, required: false, schema: {type: string, enum: [recent, pinned, type]}}
+        - {name: cursor, in: query, required: false, schema: {type: string, pattern: "^[0-9]+$"}}
+        - {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 100}}
+      responses:
+        "200": {$ref: "#/components/responses/Success"}
+        "400": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+  /v1/local-projects/memories/{memory_id}:
+    get:
+      operationId: getRegisteredLocalProjectMemory
+      parameters:
+        - {name: memory_id, in: path, required: true, schema: {type: string, minLength: 1}}
+        - {name: workspace, in: query, required: true, schema: {type: string, minLength: 1, maxLength: 128}}
+      responses:
+        "200": {$ref: "#/components/responses/Success"}
+        "400": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+  /v1/local-session:
+    get:
+      operationId: getLocalSession
+      description: Development-only first-owner status and session resume endpoint. It is absent unless local onboarding is explicitly enabled.
+      security: []
+      responses:
+        "200": {$ref: "#/components/responses/Success"}
+        "503": {$ref: "#/components/responses/Error"}
+    delete:
+      operationId: deleteLocalSession
+      description: Clears the development-only HttpOnly local browser session cookie.
+      security: []
+      responses:
+        "204": {description: Local browser session cleared.}
+  /v1/local-session/signup:
+    post:
+      operationId: provisionLocalOwner
+      description: Development-only, same-origin bootstrap for the private installation owner. It does not change managed launch admission policy.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LocalOwnerSignup"
+      responses:
+        "201": {$ref: "#/components/responses/Success"}
+        "400": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "503": {$ref: "#/components/responses/Error"}
+  /v1/signup:
+    post:
+      operationId: provisionPersonalAccount
+      description: Provisions the verified provider identity after staged-launch admission controls pass.
+      parameters:
+        - name: X-Agent-Memory-Country
+          in: header
+          required: true
+          description: Trusted edge-derived ISO 3166-1 alpha-2 country code.
+          schema: {type: string, pattern: "^[A-Z]{2}$"}
+        - name: X-Agent-Memory-Country-Timestamp
+          in: header
+          required: true
+          description: Trusted edge assertion time as Unix seconds; accepted for at most five minutes.
+          schema: {type: string, pattern: "^[0-9]{10}$"}
+        - name: X-Agent-Memory-Country-Signature
+          in: header
+          required: true
+          description: HMAC-SHA-256 over the normalized country and timestamp using the edge-only secret.
+          schema: {type: string, pattern: "^[a-f0-9]{64}$"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [age_confirmed]
+              properties:
+                invitation_token:
+                  type: string
+                  description: Required only while the active launch policy is invitation-only.
+                age_confirmed:
+                  type: boolean
+                  description: Confirms the user meets the minimum age displayed by the active policy.
+      responses:
+        "201": {$ref: "#/components/responses/Success"}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+        "403": {$ref: "#/components/responses/Error"}
+        "429": {$ref: "#/components/responses/Error"}
+  /v1/whoami:
+    get:
+      operationId: getAuthorizationContext
+      responses:
+        "200": {$ref: "#/components/responses/Success"}
+        "404": {$ref: "#/components/responses/Error"}
+  /v1/attestations/rights:
+    get:
+      operationId: getRightsAttestation
+      responses:
+        "200":
+          description: Current policy and receipt status.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessEnvelope"
+    post:
+      operationId: acceptRightsAttestation
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [policy_version, accepted_statement_ids]
+              properties:
+                policy_version: {type: string, minLength: 1}
+                accepted_statement_ids:
+                  type: array
+                  minItems: 1
+                  items: {type: string, minLength: 1}
+      responses:
+        "200": {$ref: "#/components/responses/Success"}
+        "409": {$ref: "#/components/responses/Error"}
+  /v1/memories:
+    post:
+      operationId: createMemory
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [workspace_id, type, content, source]
+              properties:
+                workspace_id: {type: string, minLength: 1}
+                type: {enum: [episodic, semantic, procedural, outcome]}
+                content: {type: string, minLength: 1, maxLength: 2000}
+                source: {type: object}
+                keywords:
+                  type: array
+                  maxItems: 3
+                  items: {type: string, minLength: 1, maxLength: 128}
+      responses:
+        "201": {$ref: "#/components/responses/Success"}
+        "400": {$ref: "#/components/responses/Error"}
+        "409": {$ref: "#/components/responses/Error"}
+  /v1/credentials:
+    get:
+      operationId: listAgentCredentials
+      responses:
+        "200": {$ref: "#/components/responses/Success"}
+    post:
+      operationId: createAgentCredential
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [label, scopes, expires_at]
+              properties:
+                label: {type: string, minLength: 1, maxLength: 128}
+                scopes: {type: array, minItems: 1, items: {type: string}}
+                expires_at: {type: string, format: date-time}
+      responses:
+        "201": {$ref: "#/components/responses/Success"}
+        "403": {$ref: "#/components/responses/Error"}
+  /v1/credentials/{credential_id}:
+    delete:
+      operationId: revokeAgentCredential
+      parameters:
+        - name: credential_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        "200": {$ref: "#/components/responses/Success"}
+        "404": {$ref: "#/components/responses/Error"}
+  /v1/current-credential:
+    delete:
+      operationId: revokeCurrentAgentCredential
+      description: Revokes the bearer agent credential used for this request without requiring credential-management scope.
+      responses:
+        "200": {$ref: "#/components/responses/Success"}
+        "403": {$ref: "#/components/responses/Error"}
+  /v1/credentials/{credential_id}/rotate:
+    post:
+      operationId: rotateAgentCredential
+      parameters:
+        - name: credential_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [expires_at]
+              properties:
+                expires_at: {type: string, format: date-time}
+      responses:
+        "201": {$ref: "#/components/responses/Success"}
+        "404": {$ref: "#/components/responses/Error"}
+  /v1/exports:
+    post:
+      operationId: requestTenantExport
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                workspace_id: {type: string, format: uuid}
+      responses:
+        "202": {$ref: "#/components/responses/AcceptedOperation"}
+        "404": {$ref: "#/components/responses/Error"}
+  /v1/exports/{export_id}:
+    get:
+      operationId: getTenantExport
+      parameters:
+        - name: export_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        "200": {$ref: "#/components/responses/Success"}
+        "404": {$ref: "#/components/responses/Error"}
+  /v1/exports/{export_id}/download:
+    get:
+      operationId: downloadTenantExport
+      parameters:
+        - name: export_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        "200":
+          description: Decrypted JSON export for the authorized requester.
+          content:
+            application/json:
+              schema: {type: object}
+        "404": {$ref: "#/components/responses/Error"}
+  /v1/imports:
+    post:
+      operationId: importPortableBundle
+      description: Imports an authenticated AMPB2 encrypted bundle into an explicitly selected workspace. Sensitive passphrase headers must be redacted by infrastructure.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/ImportWorkspace"
+        - $ref: "#/components/parameters/BundlePassphrase"
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema: {type: string, format: binary, maxLength: 262144000}
+      responses:
+        "200": {$ref: "#/components/responses/Success"}
+        "400": {$ref: "#/components/responses/Error"}
+        "413": {$ref: "#/components/responses/Error"}
+        "428": {$ref: "#/components/responses/Error"}
+  /v1/imports/{import_id}:
+    get:
+      operationId: getPortableImportReport
+      parameters:
+        - name: import_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        "200": {$ref: "#/components/responses/Success"}
+        "404": {$ref: "#/components/responses/Error"}
+  /v1/search:
+    post:
+      operationId: searchMemory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [workspace_id, query]
+              properties:
+                workspace_id: {type: string, format: uuid}
+                query: {type: string, minLength: 1, maxLength: 4000}
+                limit: {type: integer, minimum: 1, maximum: 200, default: 20}
+                cursor: {type: string, maxLength: 2048}
+      responses:
+        "200":
+          description: Tenant-authorized memory search results.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/MemorySearchEnvelope"}
+        "400": {$ref: "#/components/responses/Error"}
+  /v1/sources:
+    get:
+      operationId: listSources
+      parameters:
+        - name: workspace_id
+          in: query
+          required: false
+          schema: {type: string, format: uuid}
+      responses:
+        "200": {$ref: "#/components/responses/Success"}
+        "404": {$ref: "#/components/responses/Error"}
+  /v1/source-statuses:
+    get:
+      operationId: listSourceStatuses
+      description: Returns only lifecycle fields needed to poll source processing without reloading catalog metadata.
+      parameters:
+        - name: workspace_id
+          in: query
+          required: false
+          schema: {type: string, format: uuid}
+      responses:
+        "200":
+          description: Tenant-authorized source lifecycle statuses.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/SourceStatusEnvelope"}
+        "404": {$ref: "#/components/responses/Error"}
+  /v1/processing-tasks:
+    get:
+      operationId: listProcessingTasks
+      description: Returns a bounded workspace feed of source ingestion and deletion tasks for customer tracking.
+      parameters:
+        - name: workspace_id
+          in: query
+          required: false
+          schema: {type: string, format: uuid}
+      responses:
+        "200":
+          description: Tenant-authorized processing tasks.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ProcessingTaskEnvelope"}
+        "404": {$ref: "#/components/responses/Error"}
+  /v1/sources/{source_id}:
+    get:
+      operationId: getSource
+      parameters:
+        - name: source_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        "200": {$ref: "#/components/responses/Success"}
+        "404": {$ref: "#/components/responses/Error"}
+    delete:
+      operationId: requestSourceDeletion
+      parameters:
+        - name: source_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200": {$ref: "#/components/responses/Success"}
+        "202": {$ref: "#/components/responses/AcceptedOperation"}
+        "404": {$ref: "#/components/responses/Error"}
+  /v1/sources/{source_id}/retry:
+    post:
+      operationId: retrySourceExtraction
+      parameters:
+        - name: source_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        "202": {$ref: "#/components/responses/AcceptedOperation"}
+        "404": {$ref: "#/components/responses/Error"}
+  /v1/sources/uploads:
+    post:
+      operationId: createSourceUpload
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [workspace_id, filename, media_type, size_bytes, checksum_sha256, rights_basis]
+              properties:
+                workspace_id: {type: string, minLength: 1}
+                filename: {type: string, minLength: 1, maxLength: 512}
+                media_type: {enum: [application/pdf, application/epub+zip, text/markdown, text/plain]}
+                size_bytes: {type: integer, minimum: 1}
+                checksum_sha256: {type: string, pattern: "^[a-f0-9]{64}$"}
+                rights_basis: {enum: [author_owned, licensed, public_domain_or_open, lawfully_acquired_private_use]}
+      responses:
+        "202": {$ref: "#/components/responses/AcceptedOperation"}
+        "409": {$ref: "#/components/responses/Error"}
+        "428": {$ref: "#/components/responses/Error"}
+  /v1/source-uploads/{grant_id}/content:
+    put:
+      operationId: uploadGrantedSourceContent
+      security: []
+      parameters:
+        - name: grant_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+        - name: token
+          in: query
+          required: true
+          schema: {type: string, minLength: 32}
+      requestBody:
+        required: true
+        content:
+          application/pdf: {schema: {type: string, format: binary}}
+          application/epub+zip: {schema: {type: string, format: binary}}
+          text/markdown: {schema: {type: string, format: binary}}
+          text/plain: {schema: {type: string, format: binary}}
+      responses:
+        "200": {$ref: "#/components/responses/Success"}
+        "404": {$ref: "#/components/responses/Error"}
+  /v1/source-queries:
+    post:
+      operationId: queryAuthorizedSources
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [source_ids, query, provider, model]
+              properties:
+                source_ids:
+                  type: array
+                  minItems: 1
+                  maxItems: 100
+                  items: {type: string, format: uuid}
+                query: {type: string, minLength: 1, maxLength: 4000}
+                limit: {type: integer, minimum: 1, maximum: 50, default: 10}
+                offset: {type: integer, minimum: 0, maximum: 49, default: 0}
+                context_token_budget: {type: integer, minimum: 1, maximum: 32768, default: 1200}
+                generate: {type: boolean, default: false}
+                provider: {type: string, minLength: 1}
+                model: {type: string, minLength: 1}
+      responses:
+        "200": {$ref: "#/components/responses/Success"}
+        "400": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+  /v1/memory-proposals:
+    post:
+      operationId: createReviewedMemoryProposal
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [workspace_id, memory_type, content, transformation, evidence]
+              properties:
+                workspace_id: {type: string, format: uuid}
+                memory_type: {enum: [episodic, semantic, procedural, outcome]}
+                content: {type: string, minLength: 1, maxLength: 2000}
+                transformation: {enum: [summary, interpretation, synthesis, user_edit]}
+                evidence:
+                  type: array
+                  minItems: 1
+                  maxItems: 50
+                  items: {$ref: "#/components/schemas/ProposalEvidence"}
+      responses:
+        "201": {$ref: "#/components/responses/Success"}
+        "400": {$ref: "#/components/responses/Error"}
+  /v1/memory-proposals/{proposal_id}:
+    parameters:
+      - $ref: "#/components/parameters/ProposalID"
+    get:
+      operationId: getReviewedMemoryProposal
+      responses:
+        "200": {$ref: "#/components/responses/Success"}
+        "404": {$ref: "#/components/responses/Error"}
+    patch:
+      operationId: editReviewedMemoryProposal
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [content, transformation]
+              properties:
+                content: {type: string, minLength: 1, maxLength: 2000}
+                transformation: {enum: [summary, interpretation, synthesis, user_edit]}
+      responses:
+        "200": {$ref: "#/components/responses/Success"}
+        "409": {$ref: "#/components/responses/Error"}
+  /v1/memory-proposals/{proposal_id}/accept:
+    post:
+      operationId: acceptReviewedMemoryProposal
+      parameters:
+        - $ref: "#/components/parameters/ProposalID"
+      responses:
+        "200": {$ref: "#/components/responses/Success"}
+        "409": {$ref: "#/components/responses/Error"}
+  /v1/memory-proposals/{proposal_id}/reject:
+    post:
+      operationId: rejectReviewedMemoryProposal
+      parameters:
+        - $ref: "#/components/parameters/ProposalID"
+      responses:
+        "200": {$ref: "#/components/responses/Success"}
+        "409": {$ref: "#/components/responses/Error"}
+  /v1/deletions/{operation_id}:
+    get:
+      operationId: getDeletionStatus
+      parameters:
+        - name: operation_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        "200": {$ref: "#/components/responses/Success"}
+        "404": {$ref: "#/components/responses/Error"}
+  /v1/account:
+    delete:
+      operationId: requestAccountDeletion
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200": {$ref: "#/components/responses/Success"}
+        "202": {$ref: "#/components/responses/AcceptedOperation"}
+        "400": {$ref: "#/components/responses/Error"}
+  /v1/privacy:
+    get:
+      operationId: getPrivacyOverview
+      responses:
+        "200":
+          description: Customer-visible retention and lifecycle overview.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/PrivacyOverviewEnvelope"}
+        "404": {$ref: "#/components/responses/Error"}
+  /v1/billing:
+    get:
+      operationId: getBillingOverview
+      responses:
+        "200": {$ref: "#/components/responses/Success"}
+        "404": {$ref: "#/components/responses/Error"}
+  /v1/billing/plan-changes:
+    post:
+      operationId: requestBillingPlanChange
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [action, plan_id]
+              properties:
+                action: {enum: [upgrade, cancel]}
+                plan_id: {type: string, minLength: 1}
+      responses:
+        "200": {$ref: "#/components/responses/Success"}
+        "202": {$ref: "#/components/responses/AcceptedOperation"}
+        "400": {$ref: "#/components/responses/Error"}
+  /v1/operations/{operation_id}:
+    get:
+      operationId: getOperation
+      parameters:
+        - name: operation_id
+          in: path
+          required: true
+          schema: {type: string, minLength: 1}
+      responses:
+        "200": {$ref: "#/components/responses/Success"}
+        "404": {$ref: "#/components/responses/Error"}
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: {type: string, minLength: 16, maxLength: 128}
+    TenantSelection:
+      name: X-Agent-Memory-Tenant
+      in: header
+      required: false
+      description: Selects an authorized membership and never grants access.
+      schema: {type: string, maxLength: 128}
+    ProposalID:
+      name: proposal_id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    ImportWorkspace:
+      name: X-Agent-Memory-Workspace
+      in: header
+      required: true
+      schema: {type: string, format: uuid}
+    BundlePassphrase:
+      name: X-Agent-Memory-Bundle-Passphrase
+      in: header
+      required: true
+      description: Sensitive AMPB2 decryption secret. Never persist or log this value.
+      schema: {type: string, minLength: 12, maxLength: 1024}
+  responses:
+    Success:
+      description: Successful synchronous operation.
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/SuccessEnvelope"}
+    AcceptedOperation:
+      description: Asynchronous operation accepted.
+      headers:
+        Location:
+          schema: {type: string}
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/SuccessEnvelope"}
+    Error:
+      description: Safe structured error.
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/ErrorEnvelope"}
+  schemas:
+    SourceStatusEnvelope:
+      type: object
+      additionalProperties: false
+      required: [ok, version, request_id, data]
+      properties:
+        ok: {const: true}
+        version: {const: v1}
+        request_id: {type: string}
+        data:
+          type: array
+          items: {$ref: "#/components/schemas/SourceStatus"}
+    SourceStatus:
+      type: object
+      additionalProperties: false
+      required: [id, state, progress, failure, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        state: {type: string}
+        progress:
+          type: object
+          additionalProperties: false
+          required: [state, label, percent]
+          properties:
+            state: {type: string}
+            label: {type: string}
+            percent: {type: integer, minimum: 0, maximum: 100}
+        failure:
+          type: object
+          additionalProperties: false
+          required: [retry_allowed]
+          properties:
+            code: {type: string}
+            message: {type: string}
+            action: {type: string}
+            retry_allowed: {type: boolean}
+        updated_at: {type: string, format: date-time}
+    ProcessingTaskEnvelope:
+      type: object
+      additionalProperties: false
+      required: [ok, version, request_id, data]
+      properties:
+        ok: {const: true}
+        version: {const: v1}
+        request_id: {type: string}
+        data:
+          type: array
+          maxItems: 100
+          items: {$ref: "#/components/schemas/ProcessingTask"}
+    ProcessingTask:
+      type: object
+      additionalProperties: false
+      required: [id, kind, subject_id, title, state, progress, failure, created_at, updated_at]
+      properties:
+        id: {type: string}
+        kind: {type: string, enum: [source_ingestion, source_deletion]}
+        subject_id: {type: string, format: uuid}
+        title: {type: string}
+        state: {type: string, enum: [queued, running, completed, failed]}
+        progress:
+          type: object
+          additionalProperties: false
+          required: [state, label, percent]
+          properties:
+            state: {type: string}
+            label: {type: string}
+            percent: {type: integer, minimum: 0, maximum: 100}
+        failure:
+          type: object
+          additionalProperties: false
+          required: [retry_allowed]
+          properties:
+            code: {type: string}
+            message: {type: string}
+            action: {type: string}
+            retry_allowed: {type: boolean}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    LocalOwnerSignup:
+      type: object
+      additionalProperties: false
+      required: [display_name, email, private_installation_confirmed]
+      properties:
+        display_name: {type: string, minLength: 1, maxLength: 160}
+        email: {type: string, format: email, maxLength: 320}
+        private_installation_confirmed:
+          type: boolean
+          const: true
+    PrivacyOverviewEnvelope:
+      type: object
+      additionalProperties: false
+      required: [ok, version, request_id, data]
+      properties:
+        ok: {const: true}
+        version: {const: v1}
+        request_id: {type: string}
+        data: {$ref: "#/components/schemas/PrivacyOverview"}
+    PrivacyOverview:
+      type: object
+      additionalProperties: false
+      required: [retained_classes, source_access, exports, deletions, revocation_explanation, physical_purge_explanation]
+      properties:
+        retained_classes:
+          type: array
+          maxItems: 12
+          items: {$ref: "#/components/schemas/RetainedClass"}
+        source_access:
+          type: array
+          maxItems: 100
+          items: {$ref: "#/components/schemas/PrivacyAccessEvent"}
+        exports:
+          type: array
+          maxItems: 50
+          items: {$ref: "#/components/schemas/PrivacyExport"}
+        deletions:
+          type: array
+          maxItems: 100
+          items: {$ref: "#/components/schemas/PrivacyDeletion"}
+        consent_expires_at: {type: string, format: date-time}
+        revocation_explanation: {type: string, minLength: 1, maxLength: 1024}
+        physical_purge_explanation: {type: string, minLength: 1, maxLength: 1024}
+    PrivacyAccessEvent:
+      type: object
+      additionalProperties: false
+      required: [operation, outcome, target_type, target_id, reason_code, occurred_at]
+      properties:
+        operation: {type: string}
+        outcome: {type: string}
+        target_type: {type: string}
+        target_id: {type: string}
+        reason_code: {type: string}
+        occurred_at: {type: string, format: date-time}
+    PrivacyExport:
+      type: object
+      additionalProperties: false
+      required: [id, state, safe_error_code, requested_at]
+      properties:
+        id: {type: string, format: uuid}
+        state: {type: string}
+        safe_error_code: {type: string}
+        requested_at: {type: string, format: date-time}
+        expires_at: {type: string, format: date-time}
+    PrivacyDeletion:
+      type: object
+      additionalProperties: false
+      required: [id, target_type, target_id, state, policy_version, safe_error_code, receipt_sha256, requested_at, pending_subsystems]
+      properties:
+        id: {type: string, format: uuid}
+        target_type: {type: string}
+        target_id: {type: string, format: uuid}
+        state: {type: string}
+        policy_version: {type: string}
+        safe_error_code: {type: string}
+        receipt_sha256: {type: string}
+        requested_at: {type: string, format: date-time}
+        completed_at: {type: string, format: date-time}
+        pending_subsystems: {type: integer, minimum: 0}
+    RetainedClass:
+      type: object
+      additionalProperties: false
+      required: [data_class, purpose, policy_version, owner, trigger, duration_seconds, deletion_method, hold_behavior, customer_impact]
+      properties:
+        data_class: {type: string, minLength: 1, maxLength: 64}
+        purpose: {type: string, minLength: 1, maxLength: 512}
+        policy_version: {type: string, minLength: 1, maxLength: 512}
+        owner: {type: string, minLength: 1, maxLength: 512}
+        trigger: {type: string, minLength: 1, maxLength: 512}
+        duration_seconds: {type: integer, minimum: 0}
+        deletion_method: {type: string, minLength: 1, maxLength: 512}
+        hold_behavior: {type: string, minLength: 1, maxLength: 512}
+        customer_impact: {type: string, minLength: 1, maxLength: 512}
+    MemorySearchItem:
+      type: object
+      additionalProperties: false
+      required: [id, workspace_id, type, content, source_kind, entities, tags, keywords, confidence, storage_tier, created_at, updated_at, score]
+      properties:
+        id: {type: string, format: uuid}
+        workspace_id: {type: string, format: uuid}
+        type: {enum: [episodic, semantic, procedural, outcome]}
+        content: {type: string, maxLength: 2000}
+        source_kind: {enum: [agent_observation, user_input, code_analysis, consolidation, reflection, reconstruction, import]}
+        entities: {type: array, items: {type: string}}
+        tags: {type: array, items: {type: string}}
+        keywords: {type: array, maxItems: 3, items: {type: string, maxLength: 128}}
+        outcome:
+          type: object
+          additionalProperties: false
+          required: [result, approach, reason, linked_memories]
+          properties:
+            result: {enum: [success, failure, partial]}
+            approach: {type: string}
+            reason: {type: string}
+            linked_memories: {type: array, items: {type: string}}
+        confidence: {type: number, minimum: 0, maximum: 1}
+        storage_tier: {enum: [markdown, vector, vector+graph, document, cold]}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        score: {type: number, minimum: 0}
+    MemorySearchEnvelope:
+      type: object
+      additionalProperties: false
+      required: [ok, version, request_id, data]
+      properties:
+        ok: {const: true}
+        version: {const: v1}
+        request_id: {type: string}
+        data:
+          type: object
+          additionalProperties: false
+          required: [items]
+          properties:
+            items:
+              type: array
+              maxItems: 200
+              items: {$ref: "#/components/schemas/MemorySearchItem"}
+            next_cursor: {type: string, maxLength: 2048}
+    ProposalEvidence:
+      type: object
+      additionalProperties: false
+      required: [source_id, source_version, passage_id, citation_id]
+      properties:
+        source_id: {type: string, format: uuid}
+        source_version: {type: integer, minimum: 1}
+        passage_id: {type: string, minLength: 1}
+        citation_id: {type: string, minLength: 1}
+    SuccessEnvelope:
+      type: object
+      additionalProperties: false
+      required: [ok, version, request_id, data]
+      properties:
+        ok: {const: true}
+        version: {const: v1}
+        request_id: {type: string}
+        data: {}
+    ErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required: [ok, version, request_id, error]
+      properties:
+        ok: {const: false}
+        version: {const: v1}
+        request_id: {type: string}
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message, retryable]
+          properties:
+            code: {type: string}
+            message: {type: string}
+            retryable: {type: boolean}
+            recovery: {type: object}

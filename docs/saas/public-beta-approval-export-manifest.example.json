@@ -1,0 +1,14 @@
+{
+  "schema": "agent-memory-public-beta-approval-export-manifest-v1",
+  "export_id": "public-beta-approvals-2026-08",
+  "gate": "public_beta",
+  "exported_at": "2026-08-14T10:00:00Z",
+  "files": [
+    {"name": "beta_readiness.json", "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+    {"name": "external_signup.json", "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
+    {"name": "legal_pages.json", "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"},
+    {"name": "security_contact.json", "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"},
+    {"name": "status_page.json", "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"},
+    {"name": "support_policy.json", "sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"}
+  ]
+}

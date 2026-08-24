@@ -11,6 +11,7 @@ func TestWriteMemoryRequestValidate(t *testing.T) {
 		Content:   "OPS listens on orders.events",
 		Type:      core.SemanticMemory,
 		Workspace: "ws",
+		Keywords:  []string{"OPS", "orders.events"},
 		Source:    core.MemorySource{Type: core.SourceCodeAnalysis},
 	}
 	if err := ok.Validate(); err != nil {
@@ -24,6 +25,17 @@ func TestWriteMemoryRequestValidate(t *testing.T) {
 	}
 	if err := bad.Validate(); err == nil {
 		t.Fatalf("expected invalid request error")
+	}
+
+	tooManyKeywords := &WriteMemoryRequest{
+		Content:   "valid content",
+		Type:      core.SemanticMemory,
+		Workspace: "ws",
+		Keywords:  []string{"one", "two", "three", "four"},
+		Source:    core.MemorySource{Type: core.SourceCodeAnalysis},
+	}
+	if err := tooManyKeywords.Validate(); err == nil {
+		t.Fatal("expected more than three keywords to fail validation")
 	}
 }
 

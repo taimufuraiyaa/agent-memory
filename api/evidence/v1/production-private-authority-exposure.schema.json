@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-memory.local/schemas/evidence/v1/production-private-authority-exposure.schema.json",
+  "title": "Agent Memory production private-authority exposure receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "environment", "exposure_id", "inventory_id", "inventory_receipt_sha256", "change_id", "change_receipt_sha256", "generated_at", "firewall_export_sha256", "scan", "targets"],
+  "properties": {
+    "schema": {"const": "agent-memory-production-private-authority-exposure-v1"},
+    "environment": {"const": "production"},
+    "exposure_id": {"$ref": "#/$defs/opaque_id"},
+    "inventory_id": {"$ref": "#/$defs/opaque_id"},
+    "inventory_receipt_sha256": {"$ref": "#/$defs/sha256"},
+    "change_id": {"$ref": "#/$defs/opaque_id"},
+    "change_receipt_sha256": {"$ref": "#/$defs/sha256"},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "firewall_export_sha256": {"$ref": "#/$defs/sha256"},
+    "scan": {"$ref": "#/$defs/scan"},
+    "targets": {
+      "type": "array",
+      "minItems": 7,
+      "maxItems": 7,
+      "items": {"$ref": "#/$defs/target"}
+    }
+  },
+  "$defs": {
+    "opaque_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"},
+    "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "tool_value": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$"},
+    "scanner": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version"],
+      "properties": {
+        "name": {"$ref": "#/$defs/tool_value"},
+        "version": {"$ref": "#/$defs/tool_value"}
+      }
+    },
+    "scan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scanner", "scanned_at", "raw_output_sha256"],
+      "properties": {
+        "scanner": {"$ref": "#/$defs/scanner"},
+        "scanned_at": {"type": "string", "format": "date-time"},
+        "raw_output_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "outcome"],
+      "properties": {
+        "id": {"enum": ["postgres", "object_storage", "durable_queue", "secrets", "observability", "backup", "kubernetes_control"]},
+        "outcome": {"enum": ["blocked", "reachable", "inconclusive"]}
+      }
+    }
+  }
+}

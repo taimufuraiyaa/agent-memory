@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-memory.local/schemas/evidence/v1/staging-object-custody-receipt.schema.json",
+  "title": "Agent Memory normalized staging object-custody receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "classification", "environment", "review_id", "inventory_id", "inventory_receipt_sha256", "change_id", "change_receipt_sha256", "release_id", "release_receipt_sha256", "input_sha256", "ready", "generated_at", "collected_at", "review", "check_count", "passed_count", "failed_count", "checks"],
+  "properties": {
+    "schema": {"const": "agent-memory-staging-object-custody-receipt-v1"},
+    "classification": {"const": "staging_external"},
+    "environment": {"const": "staging"},
+    "review_id": {"$ref": "staging-object-custody-review.schema.json#/$defs/opaque_id"},
+    "inventory_id": {"$ref": "staging-object-custody-review.schema.json#/$defs/opaque_id"},
+    "inventory_receipt_sha256": {"$ref": "staging-object-custody-review.schema.json#/$defs/digest"},
+    "change_id": {"$ref": "staging-object-custody-review.schema.json#/$defs/opaque_id"},
+    "change_receipt_sha256": {"$ref": "staging-object-custody-review.schema.json#/$defs/digest"},
+    "release_id": {"$ref": "staging-object-custody-review.schema.json#/$defs/opaque_id"},
+    "release_receipt_sha256": {"$ref": "staging-object-custody-review.schema.json#/$defs/digest"},
+    "input_sha256": {"$ref": "staging-object-custody-review.schema.json#/$defs/digest"},
+    "ready": {"type": "boolean"},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "collected_at": {"type": "string", "format": "date-time"},
+    "review": {"$ref": "staging-object-custody-review.schema.json#/$defs/review_window"},
+    "check_count": {"const": 10},
+    "passed_count": {"type": "integer", "minimum": 0, "maximum": 10},
+    "failed_count": {"type": "integer", "minimum": 0, "maximum": 10},
+    "checks": {
+      "type": "array",
+      "minItems": 10,
+      "maxItems": 10,
+      "items": {"$ref": "staging-object-custody-review.schema.json#/$defs/check"}
+    }
+  }
+}

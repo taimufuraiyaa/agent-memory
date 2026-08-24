@@ -1,0 +1,29 @@
+{
+  "schema": "agent-memory-private-beta-approval-export-manifest-v1",
+  "export_id": "private-beta-export-2026",
+  "gate": "private_beta",
+  "exported_at": "2026-08-10T18:00:00Z",
+  "files": [
+    {
+      "name": "legal-review.json",
+      "sha256": "1111111111111111111111111111111111111111111111111111111111111111"
+    },
+    {
+      "name": "operations-review.json",
+      "sha256": "2222222222222222222222222222222222222222222222222222222222222222"
+    },
+    {
+      "name": "privacy-review.json",
+      "sha256": "3333333333333333333333333333333333333333333333333333333333333333"
+    },
+    {
+      "name": "product-review.json",
+      "sha256": "4444444444444444444444444444444444444444444444444444444444444444"
+    },
+    {
+      "name": "security-review.json",
+      "sha256": "5555555555555555555555555555555555555555555555555555555555555555"
+    }
+  ]
+}
+

@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/google/uuid"
 	"github.com/taimufuraiyaa/agent-memory/internal/core"
 	"github.com/taimufuraiyaa/agent-memory/internal/engine"
 )
@@ -22,7 +21,7 @@ func memoriesRecentHandler(svc *Service) http.HandlerFunc {
 		ws := workspaceFromRequest(r, svc.Workspace)
 		assets, err := svc.resolve(r.Context(), ws)
 		if err != nil {
-			writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
+			writeWorkspaceResolveError(w, err)
 			return
 		}
 		if assets.Store == nil {
@@ -117,16 +116,12 @@ func memoriesRecallHandler(svc *Service) http.HandlerFunc {
 		}
 		assets, err := svc.resolve(r.Context(), ws)
 		if err != nil {
-			writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
+			writeWorkspaceResolveError(w, err)
 			return
 		}
 		task := strings.TrimSpace(req.TaskDescription)
 		if task == "" {
 			task = strings.TrimSpace(req.Task)
-		}
-		requestID := uuid.New().String()
-		if assets.Store != nil {
-			_ = assets.Store.LogRetrievalRequest(r.Context(), requestID, ws, "recall", task)
 		}
 		budget := req.TokenBudget
 		if budget <= 0 {
@@ -146,7 +141,7 @@ func memoriesRecallHandler(svc *Service) http.HandlerFunc {
 			return
 		}
 		data := map[string]any{
-			"request_id":             requestID,
+			"request_id":             result.requestID,
 			"context_block":          result.contextBlock,
 			"tokens_used":            result.clip.UsedTokens + result.observationTokens,
 			"tokens_budget":          result.clip.Budget + result.observationTokens,
@@ -231,7 +226,7 @@ func memoriesRecallPreviewHandler(svc *Service) http.HandlerFunc {
 		}
 		assets, err := svc.resolve(r.Context(), ws)
 		if err != nil {
-			writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
+			writeWorkspaceResolveError(w, err)
 			return
 		}
 		task := strings.TrimSpace(req.TaskDescription)

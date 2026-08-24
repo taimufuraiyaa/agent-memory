@@ -1,0 +1,10 @@
+{
+  "schema": "agent-memory-final-mvp-readiness-input-v1",
+  "classification": "external_review",
+  "environment": "external",
+  "readiness_id": "mvp-readiness-2026-08",
+  "program_version": "p0-p12-v1",
+  "review_decision_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "generated_at": "2026-08-10T08:00:00Z",
+  "expected_ready": true
+}

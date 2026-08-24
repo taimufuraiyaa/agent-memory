@@ -19,9 +19,10 @@ import (
 
 // Store provides SQLite-backed persistence for memory entries.
 type Store struct {
-	db            *sql.DB
-	turbovecIndex *TurbovecIndex
-	useTurbovec   bool
+	db                  *sql.DB
+	turbovecIndex       *TurbovecIndex
+	useTurbovec         bool
+	migrationAdvisories []string // populated by migrations; for test observation
 }
 
 // ErrDuplicateContent indicates idempotency duplicate detection hit.
@@ -32,18 +33,18 @@ func Open(ctx context.Context, dbPath string) (*Store, error) {
 	// Add query parameters for WAL mode and busy timeout
 	// These need to be in the connection string for modernc.org/sqlite
 	connStr := dbPath + "?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(10000)"
-	
+
 	db, err := sql.Open("sqlite", connStr)
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite: %w", err)
 	}
-	
+
 	// Connection pool configuration for concurrent access
 	// WAL mode allows multiple readers + one writer concurrently
-	db.SetMaxOpenConns(10)             // Allow up to 10 concurrent connections
-	db.SetMaxIdleConns(5)              // Keep 5 warm connections in pool
-	db.SetConnMaxLifetime(time.Hour)   // Rotate connections every hour
-	
+	db.SetMaxOpenConns(10)           // Allow up to 10 concurrent connections
+	db.SetMaxIdleConns(5)            // Keep 5 warm connections in pool
+	db.SetConnMaxLifetime(time.Hour) // Rotate connections every hour
+
 	if err := ping(ctx, db); err != nil {
 		_ = db.Close()
 		return nil, err
@@ -84,8 +85,8 @@ func applyPragmas(ctx context.Context, db *sql.DB) error {
 		"PRAGMA foreign_keys = ON",
 		"PRAGMA journal_mode = WAL",
 		"PRAGMA synchronous = NORMAL",
-		"PRAGMA busy_timeout = 10000",  // 10 seconds for concurrent operations
-		"PRAGMA cache_size = -64000",    // 64MB cache
+		"PRAGMA busy_timeout = 10000", // 10 seconds for concurrent operations
+		"PRAGMA cache_size = -64000",  // 64MB cache
 	}
 	for _, stmt := range pragmas {
 		if _, err := db.ExecContext(ctx, stmt); err != nil {
@@ -127,8 +128,13 @@ func (s *Store) logSlowQuery(ctx context.Context, operation, workspace string, d
 	}
 }
 
-// Migrate applies schema changes idempotently.
+// Migrate applies schema changes exactly once per database, in version order.
 func (s *Store) Migrate(ctx context.Context) error {
+	return s.applyMigrations(ctx)
+}
+
+// migrateBaselineSchema applies the idempotent initial schema in one step.
+func migrateBaselineSchema(ctx context.Context, s *Store) error {
 	stmts := []string{
 		`CREATE TABLE IF NOT EXISTS schema_migrations (
 			version INTEGER PRIMARY KEY,
@@ -170,6 +176,130 @@ func (s *Store) Migrate(ctx context.Context) error {
 		`CREATE INDEX IF NOT EXISTS idx_memories_type ON memories(type)`,
 		`CREATE INDEX IF NOT EXISTS idx_memories_updated_at ON memories(updated_at DESC)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_memories_workspace_hash_unique ON memories(workspace, content_hash) WHERE content_hash != ''`,
+		`CREATE TABLE IF NOT EXISTS notes (
+			id TEXT PRIMARY KEY,
+			workspace TEXT NOT NULL,
+			path TEXT NOT NULL,
+			title TEXT NOT NULL,
+			body TEXT NOT NULL,
+			properties_json TEXT NOT NULL DEFAULT '{}',
+			revision INTEGER NOT NULL DEFAULT 1,
+			content_hash TEXT NOT NULL,
+			index_state TEXT NOT NULL DEFAULT 'pending',
+			indexed_revision INTEGER NOT NULL DEFAULT 0,
+			index_error TEXT NOT NULL DEFAULT '',
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL,
+			deleted_at TEXT
+		)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_notes_workspace_path_active
+			ON notes(workspace, path COLLATE NOCASE) WHERE deleted_at IS NULL`,
+		`CREATE INDEX IF NOT EXISTS idx_notes_workspace_updated
+			ON notes(workspace, updated_at DESC)`,
+		`CREATE TABLE IF NOT EXISTS note_revisions (
+			note_id TEXT NOT NULL,
+			workspace TEXT NOT NULL,
+			revision INTEGER NOT NULL,
+			path TEXT NOT NULL,
+			title TEXT NOT NULL,
+			body TEXT NOT NULL,
+			properties_json TEXT NOT NULL DEFAULT '{}',
+			content_hash TEXT NOT NULL,
+			author_kind TEXT NOT NULL DEFAULT 'human',
+			created_at TEXT NOT NULL,
+			PRIMARY KEY(note_id, revision),
+			FOREIGN KEY(note_id) REFERENCES notes(id) ON DELETE CASCADE
+		)`,
+		`CREATE TABLE IF NOT EXISTS note_links (
+			source_note_id TEXT NOT NULL,
+			workspace TEXT NOT NULL,
+			revision INTEGER NOT NULL,
+			target_note_id TEXT,
+			raw_target TEXT NOT NULL,
+			line INTEGER NOT NULL DEFAULT 1,
+			snippet TEXT NOT NULL DEFAULT '',
+			PRIMARY KEY(source_note_id, revision, raw_target, line),
+			FOREIGN KEY(source_note_id) REFERENCES notes(id) ON DELETE CASCADE,
+			FOREIGN KEY(target_note_id) REFERENCES notes(id) ON DELETE SET NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_note_links_target
+			ON note_links(workspace, target_note_id)`,
+		`CREATE TABLE IF NOT EXISTS note_memory_chunks (
+			workspace TEXT NOT NULL,
+			note_id TEXT NOT NULL,
+			revision INTEGER NOT NULL,
+			ordinal INTEGER NOT NULL,
+			heading TEXT NOT NULL DEFAULT '',
+			start_line INTEGER NOT NULL,
+			end_line INTEGER NOT NULL,
+			content_hash TEXT NOT NULL,
+			memory_id TEXT NOT NULL,
+			active INTEGER NOT NULL DEFAULT 0,
+			PRIMARY KEY(note_id, revision, ordinal),
+			FOREIGN KEY(note_id) REFERENCES notes(id) ON DELETE CASCADE,
+			FOREIGN KEY(memory_id) REFERENCES memories(id) ON DELETE CASCADE
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_note_memory_chunks_active
+			ON note_memory_chunks(workspace, note_id, active)`,
+		`CREATE TABLE IF NOT EXISTS memory_terms (
+			workspace TEXT NOT NULL,
+			memory_id TEXT NOT NULL,
+			normalized_term TEXT NOT NULL,
+			display_term TEXT NOT NULL DEFAULT '',
+			source TEXT NOT NULL,
+			ordinal INTEGER NOT NULL DEFAULT 0,
+			normalization_version TEXT NOT NULL,
+			extractor_version TEXT NOT NULL,
+			created_at TEXT NOT NULL,
+			PRIMARY KEY(workspace, memory_id, normalized_term, normalization_version),
+			FOREIGN KEY(memory_id) REFERENCES memories(id) ON DELETE CASCADE
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_memory_terms_workspace_term ON memory_terms(workspace, normalized_term)`,
+		`CREATE INDEX IF NOT EXISTS idx_memory_terms_workspace_memory ON memory_terms(workspace, memory_id)`,
+		`CREATE TABLE IF NOT EXISTS term_index_state (
+			workspace TEXT PRIMARY KEY,
+			bitmap BLOB,
+			state TEXT NOT NULL DEFAULT 'dirty',
+			format_version TEXT NOT NULL DEFAULT '',
+			normalization_version TEXT NOT NULL DEFAULT '',
+			extractor_version TEXT NOT NULL DEFAULT '',
+			hash_version TEXT NOT NULL DEFAULT '',
+			bit_count INTEGER NOT NULL DEFAULT 0,
+			hash_count INTEGER NOT NULL DEFAULT 0,
+			distinct_item_count INTEGER NOT NULL DEFAULT 0,
+			planned_capacity INTEGER NOT NULL DEFAULT 0,
+			estimated_fpp REAL NOT NULL DEFAULT 0,
+			stale_delete_count INTEGER NOT NULL DEFAULT 0,
+			corpus_generation INTEGER NOT NULL DEFAULT 0,
+			filter_generation INTEGER NOT NULL DEFAULT 0,
+			checksum TEXT NOT NULL DEFAULT '',
+			rebuild_reason TEXT NOT NULL DEFAULT '',
+			built_at TEXT NOT NULL DEFAULT '',
+			updated_at TEXT NOT NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_memory_terms_workspace_term ON memory_terms(workspace, normalized_term)`,
+		`CREATE INDEX IF NOT EXISTS idx_memory_terms_workspace_memory ON memory_terms(workspace, memory_id)`,
+		`CREATE TRIGGER IF NOT EXISTS trg_memory_terms_delete_state
+		AFTER DELETE ON memory_terms
+		BEGIN
+			INSERT INTO term_index_state (workspace, state, corpus_generation, updated_at)
+			VALUES (OLD.workspace, 'dirty', 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+			ON CONFLICT(workspace) DO UPDATE SET
+				state = 'dirty',
+				corpus_generation = term_index_state.corpus_generation + 1,
+				updated_at = excluded.updated_at;
+		END`,
+		`CREATE TRIGGER IF NOT EXISTS trg_memories_delete_pressure
+		AFTER DELETE ON memories
+		BEGIN
+			INSERT INTO term_index_state (workspace, state, corpus_generation, stale_delete_count, updated_at)
+			VALUES (OLD.workspace, 'dirty', 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+			ON CONFLICT(workspace) DO UPDATE SET
+				state = 'dirty',
+				corpus_generation = term_index_state.corpus_generation + 1,
+				stale_delete_count = term_index_state.stale_delete_count + 1,
+				updated_at = excluded.updated_at;
+		END`,
 		`CREATE TABLE IF NOT EXISTS memory_vectors (
 			memory_id TEXT PRIMARY KEY,
 			workspace TEXT NOT NULL,
@@ -262,6 +392,12 @@ func (s *Store) Migrate(ctx context.Context) error {
 			tool_name TEXT NOT NULL DEFAULT '',
 			summary TEXT NOT NULL,
 			content_hash TEXT NOT NULL DEFAULT '',
+			source_agent TEXT NOT NULL DEFAULT '',
+			source_adapter TEXT NOT NULL DEFAULT '',
+			hook_event TEXT NOT NULL DEFAULT '',
+			external_event_id TEXT NOT NULL DEFAULT '',
+			schema_version TEXT NOT NULL DEFAULT '',
+			capture_mode TEXT NOT NULL DEFAULT '',
 			created_at TEXT NOT NULL
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_observations_workspace_occurred ON observations(workspace, occurred_at DESC)`,
@@ -380,6 +516,188 @@ func (s *Store) Migrate(ctx context.Context) error {
 			created_at TEXT NOT NULL
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_retrieval_requests_workspace_created ON retrieval_requests(workspace, created_at)`,
+		`CREATE TABLE IF NOT EXISTS book_works (
+			id TEXT PRIMARY KEY,
+			title TEXT NOT NULL,
+			normalized_title TEXT NOT NULL,
+			created_at TEXT NOT NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_book_works_normalized_title ON book_works(normalized_title)`,
+		`CREATE TABLE IF NOT EXISTS book_editions (
+			id TEXT PRIMARY KEY,
+			work_id TEXT NOT NULL,
+			label TEXT NOT NULL,
+			language TEXT NOT NULL,
+			content_fingerprint TEXT NOT NULL,
+			created_at TEXT NOT NULL,
+			FOREIGN KEY(work_id) REFERENCES book_works(id) ON DELETE CASCADE,
+			UNIQUE(work_id, content_fingerprint)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_book_editions_work ON book_editions(work_id)`,
+		`CREATE TABLE IF NOT EXISTS source_assets (
+			id TEXT PRIMARY KEY,
+			edition_id TEXT NOT NULL,
+			format TEXT NOT NULL,
+			byte_fingerprint TEXT NOT NULL UNIQUE,
+			normalized_fingerprint TEXT NOT NULL,
+			parser_version TEXT NOT NULL,
+			policy_json TEXT NOT NULL,
+			imported_at TEXT NOT NULL,
+			FOREIGN KEY(edition_id) REFERENCES book_editions(id) ON DELETE CASCADE
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_source_assets_edition ON source_assets(edition_id)`,
+		`CREATE TABLE IF NOT EXISTS structural_nodes (
+			id TEXT PRIMARY KEY,
+			edition_id TEXT NOT NULL,
+			parent_id TEXT,
+			kind TEXT NOT NULL,
+			ordinal INTEGER NOT NULL,
+			title TEXT NOT NULL,
+			start_offset INTEGER NOT NULL DEFAULT 0,
+			end_offset INTEGER NOT NULL DEFAULT 0,
+			explicit INTEGER NOT NULL DEFAULT 0,
+			FOREIGN KEY(edition_id) REFERENCES book_editions(id) ON DELETE CASCADE
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_structural_nodes_edition_order ON structural_nodes(edition_id, ordinal)`,
+		`CREATE TABLE IF NOT EXISTS source_passages (
+			id TEXT PRIMARY KEY,
+			edition_id TEXT NOT NULL,
+			source_asset_id TEXT NOT NULL,
+			structural_node_id TEXT NOT NULL,
+			text TEXT NOT NULL,
+			locator_json TEXT NOT NULL,
+			fingerprint TEXT NOT NULL,
+			FOREIGN KEY(edition_id) REFERENCES book_editions(id) ON DELETE CASCADE,
+			FOREIGN KEY(source_asset_id) REFERENCES source_assets(id) ON DELETE CASCADE,
+			FOREIGN KEY(structural_node_id) REFERENCES structural_nodes(id) ON DELETE CASCADE
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_source_passages_edition ON source_passages(edition_id)`,
+		`CREATE TABLE IF NOT EXISTS source_citations (
+			id TEXT PRIMARY KEY,
+			passage_id TEXT NOT NULL,
+			citation_json TEXT NOT NULL,
+			created_at TEXT NOT NULL,
+			FOREIGN KEY(passage_id) REFERENCES source_passages(id) ON DELETE RESTRICT
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_source_citations_passage ON source_citations(passage_id)`,
+		`CREATE TABLE IF NOT EXISTS libraries (
+			id TEXT PRIMARY KEY,
+			kind TEXT NOT NULL,
+			owner_id TEXT NOT NULL,
+			owner_kind TEXT NOT NULL,
+			organization_id TEXT NOT NULL DEFAULT ''
+		)`,
+		`CREATE TABLE IF NOT EXISTS library_memberships (
+			library_id TEXT NOT NULL,
+			principal_id TEXT NOT NULL,
+			capabilities_json TEXT NOT NULL,
+			version TEXT NOT NULL,
+			active INTEGER NOT NULL DEFAULT 1,
+			PRIMARY KEY(library_id, principal_id),
+			FOREIGN KEY(library_id) REFERENCES libraries(id) ON DELETE CASCADE
+		)`,
+		`CREATE TABLE IF NOT EXISTS library_resources (
+			library_id TEXT NOT NULL,
+			resource_type TEXT NOT NULL,
+			resource_id TEXT NOT NULL,
+			policy_json TEXT NOT NULL,
+			PRIMARY KEY(resource_type, resource_id),
+			FOREIGN KEY(library_id) REFERENCES libraries(id) ON DELETE CASCADE
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_library_resources_library ON library_resources(library_id, resource_type)`,
+		`CREATE TABLE IF NOT EXISTS book_annotations (
+			id TEXT PRIMARY KEY,
+			edition_id TEXT NOT NULL,
+			citation_id TEXT NOT NULL DEFAULT '',
+			content TEXT NOT NULL,
+			owner_id TEXT NOT NULL,
+			owner_kind TEXT NOT NULL,
+			visibility TEXT NOT NULL,
+			organization_id TEXT NOT NULL DEFAULT '',
+			created_at TEXT NOT NULL,
+			FOREIGN KEY(edition_id) REFERENCES book_editions(id) ON DELETE CASCADE
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_book_annotations_edition ON book_annotations(edition_id, created_at)`,
+		`CREATE TABLE IF NOT EXISTS book_memory_proposals (
+			id TEXT PRIMARY KEY,
+			workspace TEXT NOT NULL,
+			status TEXT NOT NULL,
+			proposal_json TEXT NOT NULL,
+			created_at TEXT NOT NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_book_memory_proposals_workspace ON book_memory_proposals(workspace, status)`,
+		`CREATE TABLE IF NOT EXISTS book_memory_lineage (
+			memory_id TEXT PRIMARY KEY,
+			proposal_id TEXT NOT NULL,
+			lineage_json TEXT NOT NULL,
+			created_at TEXT NOT NULL,
+			FOREIGN KEY(memory_id) REFERENCES memories(id) ON DELETE CASCADE,
+			FOREIGN KEY(proposal_id) REFERENCES book_memory_proposals(id) ON DELETE RESTRICT
+		)`,
+		`CREATE TABLE IF NOT EXISTS study_sessions (
+			id TEXT PRIMARY KEY, workspace TEXT NOT NULL, session_json TEXT NOT NULL, created_at TEXT NOT NULL
+		)`,
+		`CREATE TABLE IF NOT EXISTS study_turns (
+			id TEXT PRIMARY KEY, session_id TEXT NOT NULL, turn_json TEXT NOT NULL, created_at TEXT NOT NULL,
+			FOREIGN KEY(session_id) REFERENCES study_sessions(id) ON DELETE CASCADE
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_study_turns_session ON study_turns(session_id,created_at)`,
+		`CREATE TABLE IF NOT EXISTS reading_progress (
+			principal_id TEXT NOT NULL, edition_id TEXT NOT NULL, progress_json TEXT NOT NULL, updated_at TEXT NOT NULL,
+			PRIMARY KEY(principal_id,edition_id), FOREIGN KEY(edition_id) REFERENCES book_editions(id) ON DELETE CASCADE
+		)`,
+		`CREATE TABLE IF NOT EXISTS knowledge_edges (
+			id TEXT PRIMARY KEY, from_id TEXT NOT NULL, to_id TEXT NOT NULL, edge_json TEXT NOT NULL, created_at TEXT NOT NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_knowledge_edges_from ON knowledge_edges(from_id,id)`,
+		`CREATE TABLE IF NOT EXISTS knowledge_reviews (id TEXT PRIMARY KEY, review_json TEXT NOT NULL, state TEXT NOT NULL, version INTEGER NOT NULL)`,
+		`CREATE TABLE IF NOT EXISTS knowledge_review_transitions (review_id TEXT NOT NULL, version INTEGER NOT NULL, transition_json TEXT NOT NULL, occurred_at TEXT NOT NULL, PRIMARY KEY(review_id,version), FOREIGN KEY(review_id) REFERENCES knowledge_reviews(id) ON DELETE RESTRICT)`,
+		`CREATE TABLE IF NOT EXISTS book_reconsolidations (id TEXT PRIMARY KEY, previous_memory_id TEXT NOT NULL, new_memory_id TEXT NOT NULL, record_json TEXT NOT NULL, created_at TEXT NOT NULL, FOREIGN KEY(previous_memory_id) REFERENCES memories(id) ON DELETE RESTRICT, FOREIGN KEY(new_memory_id) REFERENCES memories(id) ON DELETE RESTRICT)`,
+		`CREATE TABLE IF NOT EXISTS library_import_jobs (id TEXT PRIMARY KEY, workspace TEXT NOT NULL, state TEXT NOT NULL, job_json TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
+		`CREATE INDEX IF NOT EXISTS idx_library_import_jobs_workspace ON library_import_jobs(workspace,state)`,
+		`CREATE TABLE IF NOT EXISTS source_deletions (source_asset_id TEXT PRIMARY KEY, mode TEXT NOT NULL, deleted_at TEXT NOT NULL, FOREIGN KEY(source_asset_id) REFERENCES source_assets(id) ON DELETE CASCADE)`,
+		`CREATE TABLE IF NOT EXISTS audit_events (
+			id TEXT PRIMARY KEY,
+			schema_version TEXT NOT NULL DEFAULT 'v1',
+			workspace TEXT NOT NULL,
+			operation TEXT NOT NULL,
+			outcome TEXT NOT NULL,
+			actor TEXT NOT NULL DEFAULT '',
+			source TEXT NOT NULL DEFAULT '',
+			request_id TEXT NOT NULL DEFAULT '',
+			session_id TEXT NOT NULL DEFAULT '',
+			target_type TEXT NOT NULL DEFAULT '',
+			target_ids_json TEXT NOT NULL DEFAULT '[]',
+			target_count INTEGER NOT NULL DEFAULT 0,
+			reason TEXT NOT NULL DEFAULT '',
+			metadata_json TEXT NOT NULL DEFAULT '{}',
+			occurred_at TEXT NOT NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_audit_events_workspace_occurred ON audit_events(workspace, occurred_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_audit_events_workspace_operation ON audit_events(workspace, operation, occurred_at DESC)`,
+		`CREATE TABLE IF NOT EXISTS memory_observation_provenance (
+			memory_id TEXT NOT NULL,
+			observation_id TEXT NOT NULL,
+			created_at TEXT NOT NULL,
+			PRIMARY KEY(memory_id, observation_id)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_memory_observation_observation ON memory_observation_provenance(observation_id)`,
+		`CREATE TABLE IF NOT EXISTS replay_import_checkpoints (
+			workspace TEXT NOT NULL,
+			source_path TEXT NOT NULL,
+			line_number INTEGER NOT NULL DEFAULT 0,
+			updated_at TEXT NOT NULL,
+			PRIMARY KEY(workspace, source_path)
+		)`,
+		`CREATE TABLE IF NOT EXISTS connector_checkpoints (
+			connector_id TEXT PRIMARY KEY,
+			state_json TEXT NOT NULL,
+			updated_at TEXT NOT NULL,
+			last_error TEXT NOT NULL DEFAULT '',
+			emitted_count INTEGER NOT NULL DEFAULT 0,
+			coalesced_count INTEGER NOT NULL DEFAULT 0,
+			rescanned_count INTEGER NOT NULL DEFAULT 0
+		)`,
 	}
 	for _, stmt := range stmts {
 		if _, err := s.db.ExecContext(ctx, stmt); err != nil {
@@ -388,6 +706,19 @@ func (s *Store) Migrate(ctx context.Context) error {
 	}
 	if err := s.ensureColumn(ctx, "scheduler_workspace_state", "last_impacts", `ALTER TABLE scheduler_workspace_state ADD COLUMN last_impacts INTEGER NOT NULL DEFAULT 0`); err != nil {
 		return err
+	}
+	observationColumns := []struct{ name, sql string }{
+		{"source_agent", `ALTER TABLE observations ADD COLUMN source_agent TEXT NOT NULL DEFAULT ''`},
+		{"source_adapter", `ALTER TABLE observations ADD COLUMN source_adapter TEXT NOT NULL DEFAULT ''`},
+		{"hook_event", `ALTER TABLE observations ADD COLUMN hook_event TEXT NOT NULL DEFAULT ''`},
+		{"external_event_id", `ALTER TABLE observations ADD COLUMN external_event_id TEXT NOT NULL DEFAULT ''`},
+		{"schema_version", `ALTER TABLE observations ADD COLUMN schema_version TEXT NOT NULL DEFAULT ''`},
+		{"capture_mode", `ALTER TABLE observations ADD COLUMN capture_mode TEXT NOT NULL DEFAULT ''`},
+	}
+	for _, column := range observationColumns {
+		if err := s.ensureColumn(ctx, "observations", column.name, column.sql); err != nil {
+			return err
+		}
 	}
 	hasContentHash, err := s.hasColumn(ctx, "memories", "content_hash")
 	if err != nil {
@@ -524,6 +855,45 @@ func (s *Store) Migrate(ctx context.Context) error {
 	if err := s.ensureColumn(ctx, "retrieval_requests", "total_count", `ALTER TABLE retrieval_requests ADD COLUMN total_count INTEGER NOT NULL DEFAULT -1`); err != nil {
 		return err
 	}
+	if err := s.ensureColumn(ctx, "term_index_state", "extractor_version", `ALTER TABLE term_index_state ADD COLUMN extractor_version TEXT NOT NULL DEFAULT ''`); err != nil {
+		return err
+	}
+	if err := s.ensureColumn(ctx, "term_index_state", "stale_delete_count", `ALTER TABLE term_index_state ADD COLUMN stale_delete_count INTEGER NOT NULL DEFAULT 0`); err != nil {
+		return err
+	}
+	// Recreate the delete trigger so databases created before stale-delete tracking
+	// receive the same pressure accounting as new databases.
+	if _, err := s.db.ExecContext(ctx, `DROP TRIGGER IF EXISTS trg_memory_terms_delete_state`); err != nil {
+		return fmt.Errorf("drop legacy memory term delete trigger: %w", err)
+	}
+	if _, err := s.db.ExecContext(ctx, `CREATE TRIGGER trg_memory_terms_delete_state
+		AFTER DELETE ON memory_terms
+		BEGIN
+			INSERT INTO term_index_state (workspace, state, corpus_generation, updated_at)
+			VALUES (OLD.workspace, 'dirty', 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+			ON CONFLICT(workspace) DO UPDATE SET
+				state = 'dirty',
+				corpus_generation = term_index_state.corpus_generation + 1,
+				updated_at = excluded.updated_at;
+		END`); err != nil {
+		return fmt.Errorf("create memory term delete trigger: %w", err)
+	}
+	if _, err := s.db.ExecContext(ctx, `DROP TRIGGER IF EXISTS trg_memories_delete_pressure`); err != nil {
+		return fmt.Errorf("drop legacy memories delete pressure trigger: %w", err)
+	}
+	if _, err := s.db.ExecContext(ctx, `CREATE TRIGGER trg_memories_delete_pressure
+		AFTER DELETE ON memories
+		BEGIN
+			INSERT INTO term_index_state (workspace, state, corpus_generation, stale_delete_count, updated_at)
+			VALUES (OLD.workspace, 'dirty', 1, 1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+			ON CONFLICT(workspace) DO UPDATE SET
+				state = 'dirty',
+				corpus_generation = term_index_state.corpus_generation + 1,
+				stale_delete_count = term_index_state.stale_delete_count + 1,
+				updated_at = excluded.updated_at;
+		END`); err != nil {
+		return fmt.Errorf("create memories delete pressure trigger: %w", err)
+	}
 	// Add indexes for vector provenance columns
 	if _, err := s.db.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_memory_vectors_provider ON memory_vectors(embedding_provider)`); err != nil {
 		return fmt.Errorf("create embedding_provider index: %w", err)
@@ -531,22 +901,35 @@ func (s *Store) Migrate(ctx context.Context) error {
 	if _, err := s.db.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_memory_vectors_model_version ON memory_vectors(embedding_model_version)`); err != nil {
 		return fmt.Errorf("create embedding_model_version index: %w", err)
 	}
-	
-	// Migrate existing memory vectors from json to blob
-	if err := s.migrateJSONVectorsToBlobs(ctx); err != nil {
-		return fmt.Errorf("migrate JSON vectors to blobs: %w", err)
-	}
+
 	return nil
 }
 
-// UpsertMemory inserts or updates a memory entry by ID.
+// UpsertMemory inserts or updates a memory entry by ID. Lifecycle counters
+// (access_count, decay_score, useful_count, etc.) are preserved on update.
+// When Keywords is nil, existing terms are cleared to avoid stale rows.
 func (s *Store) UpsertMemory(ctx context.Context, m *core.MemoryEntry) error {
-	return s.upsertMemory(ctx, m, "")
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := s.upsertMemory(ctx, tx, m, ""); err != nil {
+		return err
+	}
+	terms := m.Keywords
+	if terms == nil {
+		terms = []core.MemoryTerm{}
+	}
+	if err := replaceMemoryTermsTx(ctx, tx, m.Workspace, m.ID, terms); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // InsertMemoryByHash inserts a memory while enforcing workspace+content_hash idempotency.
 // Returns ErrDuplicateContent when the hash already exists in the same workspace.
-func (s *Store) InsertMemoryByHash(ctx context.Context, m *core.MemoryEntry, contentHash string) error {
+func (s *Store) InsertMemoryByHash(ctx context.Context, m *core.MemoryEntry, contentHash string, termSets ...[]core.MemoryTerm) error {
 	if strings.TrimSpace(contentHash) == "" {
 		return errors.New("content hash is required")
 	}
@@ -578,13 +961,23 @@ func (s *Store) InsertMemoryByHash(ctx context.Context, m *core.MemoryEntry, con
 		m.CreatedAt = time.Now().UTC()
 	}
 	m.UpdatedAt = time.Now().UTC()
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback()
+		}
+	}()
 
 	query := `
-INSERT OR IGNORE INTO memories (id, type, content, diagram_lang, diagram_code, workspace, content_hash, source_json, entities_json, tags_json, confidence, storage_tier, pinned, superseded_by, access_count, last_accessed, decay_score, salience_score, suppression_score, useful_count, ignored_count, rejected_count, harmful_count, last_helpful_at, last_rejected_at, suppression_until, familiarity_band_last, outcome_json, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+INSERT OR IGNORE INTO memories (id, type, content, diagram_lang, diagram_code, workspace, content_hash, session_id, source_json, entities_json, tags_json, confidence, storage_tier, pinned, superseded_by, access_count, last_accessed, decay_score, salience_score, suppression_score, useful_count, ignored_count, rejected_count, harmful_count, last_helpful_at, last_rejected_at, suppression_until, familiarity_band_last, outcome_json, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	_startInsert := time.Now()
-	res, err := s.db.ExecContext(
+	res, err := tx.ExecContext(
 		ctx,
 		query,
 		m.ID,
@@ -594,6 +987,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 
 		nullDiagramCode(m),
 		m.Workspace,
 		contentHash,
+		m.Source.SessionID,
 		string(sourceJSON),
 		string(entitiesJSON),
 		string(tagsJSON),
@@ -618,7 +1012,6 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 
 		m.CreatedAt.Format(time.RFC3339Nano),
 		m.UpdatedAt.Format(time.RFC3339Nano),
 	)
-	s.logSlowQuery(ctx, "insert_memory", m.Workspace, time.Since(_startInsert))
 	if err != nil {
 		return fmt.Errorf("insert memory: %w", err)
 	}
@@ -626,6 +1019,16 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 
 	if err == nil && affected == 0 {
 		return ErrDuplicateContent
 	}
+	if len(termSets) > 0 {
+		if err := replaceMemoryTermsTx(ctx, tx, m.Workspace, m.ID, termSets[0]); err != nil {
+			return err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit insert memory: %w", err)
+	}
+	committed = true
+	s.logSlowQuery(ctx, "insert_memory", m.Workspace, time.Since(_startInsert))
 	return nil
 }
 
@@ -639,7 +1042,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 
 // the process crashed between two separate statements -- which the write
 // pipeline previously only guarded against with a manual compensating
 // delete after the fact.
-func (s *Store) InsertMemoryByHashWithVector(ctx context.Context, m *core.MemoryEntry, contentHash, embeddingProvider, embeddingModelVersion string, embedding []float32) error {
+func (s *Store) InsertMemoryByHashWithVector(ctx context.Context, m *core.MemoryEntry, contentHash, embeddingProvider, embeddingModelVersion string, embedding []float32, termSets ...[]core.MemoryTerm) error {
 	if strings.TrimSpace(contentHash) == "" {
 		return errors.New("content hash is required")
 	}
@@ -697,8 +1100,8 @@ func (s *Store) InsertMemoryByHashWithVector(ctx context.Context, m *core.Memory
 	res, err := tx.ExecContext(
 		ctx,
 		`
-INSERT OR IGNORE INTO memories (id, type, content, diagram_lang, diagram_code, workspace, content_hash, source_json, entities_json, tags_json, confidence, storage_tier, pinned, superseded_by, access_count, last_accessed, decay_score, salience_score, suppression_score, useful_count, ignored_count, rejected_count, harmful_count, last_helpful_at, last_rejected_at, suppression_until, familiarity_band_last, outcome_json, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+INSERT OR IGNORE INTO memories (id, type, content, diagram_lang, diagram_code, workspace, content_hash, session_id, source_json, entities_json, tags_json, confidence, storage_tier, pinned, superseded_by, access_count, last_accessed, decay_score, salience_score, suppression_score, useful_count, ignored_count, rejected_count, harmful_count, last_helpful_at, last_rejected_at, suppression_until, familiarity_band_last, outcome_json, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		m.ID,
 		string(m.Type),
 		m.Content,
@@ -706,6 +1109,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 
 		nullDiagramCode(m),
 		m.Workspace,
 		contentHash,
+		m.Source.SessionID,
 		string(sourceJSON),
 		string(entitiesJSON),
 		string(tagsJSON),
@@ -730,7 +1134,6 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 
 		m.CreatedAt.Format(time.RFC3339Nano),
 		m.UpdatedAt.Format(time.RFC3339Nano),
 	)
-	s.logSlowQuery(ctx, "insert_memory", m.Workspace, time.Since(_startInsert))
 	if err != nil {
 		return fmt.Errorf("insert memory: %w", err)
 	}
@@ -753,19 +1156,33 @@ ON CONFLICT(memory_id) DO UPDATE SET
 	embedding_model_version=excluded.embedding_model_version,
 	updated_at=excluded.updated_at
 `, m.ID, m.Workspace, string(embJSON), strings.TrimSpace(embeddingProvider), strings.TrimSpace(embeddingModelVersion), m.UpdatedAt.Format(time.RFC3339Nano))
-	s.logSlowQuery(ctx, "upsert_memory_vector", m.Workspace, time.Since(_startVec))
+	vecDuration := time.Since(_startVec)
 	if err != nil {
 		return fmt.Errorf("upsert memory vector: %w", err)
+	}
+	if len(termSets) > 0 {
+		if err := replaceMemoryTermsTx(ctx, tx, m.Workspace, m.ID, termSets[0]); err != nil {
+			return err
+		}
 	}
 
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit insert memory with vector: %w", err)
 	}
+	if s.useTurbovec && s.turbovecIndex != nil {
+		_ = s.turbovecIndex.Upsert(m.ID, embedding)
+	}
 	committed = true
+	s.logSlowQuery(ctx, "insert_memory", m.Workspace, time.Since(_startInsert))
+	s.logSlowQuery(ctx, "upsert_memory_vector", m.Workspace, vecDuration)
 	return nil
 }
 
-func (s *Store) upsertMemory(ctx context.Context, m *core.MemoryEntry, contentHash string) error {
+type sqlExecer interface {
+	ExecContext(context.Context, string, ...any) (sql.Result, error)
+}
+
+func (s *Store) upsertMemory(ctx context.Context, execer sqlExecer, m *core.MemoryEntry, contentHash string) error {
 	if err := m.Validate(); err != nil {
 		return err
 	}
@@ -795,15 +1212,16 @@ func (s *Store) upsertMemory(ctx context.Context, m *core.MemoryEntry, contentHa
 	m.UpdatedAt = time.Now().UTC()
 
 	query := `
-INSERT INTO memories (id, type, content, diagram_lang, diagram_code, workspace, content_hash, source_json, entities_json, tags_json, confidence, storage_tier, pinned, superseded_by, access_count, last_accessed, decay_score, salience_score, suppression_score, useful_count, ignored_count, rejected_count, harmful_count, last_helpful_at, last_rejected_at, suppression_until, familiarity_band_last, outcome_json, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-ON CONFLICT(id) DO UPDATE SET
+INSERT INTO memories (id, type, content, diagram_lang, diagram_code, workspace, content_hash, session_id, source_json, entities_json, tags_json, confidence, storage_tier, pinned, superseded_by, access_count, last_accessed, decay_score, salience_score, suppression_score, useful_count, ignored_count, rejected_count, harmful_count, last_helpful_at, last_rejected_at, suppression_until, familiarity_band_last, outcome_json, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	ON CONFLICT(id) DO UPDATE SET
 	type=excluded.type,
 	content=excluded.content,
 	diagram_lang=excluded.diagram_lang,
 	diagram_code=excluded.diagram_code,
 	workspace=excluded.workspace,
 	content_hash=excluded.content_hash,
+	session_id=excluded.session_id,
 	source_json=excluded.source_json,
 	entities_json=excluded.entities_json,
 	tags_json=excluded.tags_json,
@@ -811,23 +1229,10 @@ ON CONFLICT(id) DO UPDATE SET
 	storage_tier=excluded.storage_tier,
 	pinned=excluded.pinned,
 	superseded_by=excluded.superseded_by,
-	access_count=excluded.access_count,
-	last_accessed=excluded.last_accessed,
-	decay_score=excluded.decay_score,
-	salience_score=excluded.salience_score,
-	suppression_score=excluded.suppression_score,
-	useful_count=excluded.useful_count,
-	ignored_count=excluded.ignored_count,
-	rejected_count=excluded.rejected_count,
-	harmful_count=excluded.harmful_count,
-	last_helpful_at=excluded.last_helpful_at,
-	last_rejected_at=excluded.last_rejected_at,
-	suppression_until=excluded.suppression_until,
-	familiarity_band_last=excluded.familiarity_band_last,
 	outcome_json=excluded.outcome_json,
 	updated_at=excluded.updated_at`
 
-	_, err = s.db.ExecContext(
+	_, err = execer.ExecContext(
 		ctx,
 		query,
 		m.ID,
@@ -837,6 +1242,7 @@ ON CONFLICT(id) DO UPDATE SET
 		nullDiagramCode(m),
 		m.Workspace,
 		contentHash,
+		m.Source.SessionID,
 		string(sourceJSON),
 		string(entitiesJSON),
 		string(tagsJSON),
@@ -973,7 +1379,7 @@ func (s *Store) ListMemoriesByWorkspace(ctx context.Context, workspace string) (
 SELECT id, type, content, diagram_lang, diagram_code, workspace, source_json, entities_json, tags_json, confidence, storage_tier, pinned, superseded_by, access_count, last_accessed, decay_score, salience_score, suppression_score, useful_count, ignored_count, rejected_count, harmful_count, last_helpful_at, last_rejected_at, suppression_until, familiarity_band_last, outcome_json, created_at, updated_at
 FROM memories
 WHERE workspace = ?
-ORDER BY updated_at DESC`, workspace)
+ORDER BY updated_at DESC, rowid DESC`, workspace)
 	if err != nil {
 		s.logSlowQuery(ctx, "list_memories_by_workspace", workspace, time.Since(_startList))
 		return nil, err
@@ -1056,7 +1462,7 @@ func (s *Store) ListRecentMemoriesByWorkspace(ctx context.Context, workspace str
 SELECT id, type, content, diagram_lang, diagram_code, workspace, source_json, entities_json, tags_json, confidence, storage_tier, pinned, superseded_by, access_count, last_accessed, decay_score, salience_score, suppression_score, useful_count, ignored_count, rejected_count, harmful_count, last_helpful_at, last_rejected_at, suppression_until, familiarity_band_last, outcome_json, created_at, updated_at
 FROM memories
 WHERE workspace = ?
-ORDER BY created_at DESC
+ORDER BY created_at DESC, rowid DESC
 LIMIT ?`, workspace, limit)
 	if err != nil {
 		return nil, err
@@ -1157,9 +1563,9 @@ func (s *Store) PopulateSupersedesRelations(ctx context.Context, memories []core
 	}
 
 	query := fmt.Sprintf(`
-		SELECT source_id, target_id, weight, metadata_json 
-		FROM relations 
-		WHERE type = 'supersedes' AND source_id IN (%s)`, 
+		SELECT source_id, target_id, weight, metadata_json
+		FROM relations
+		WHERE type = 'supersedes' AND source_id IN (%s)`,
 		strings.Join(placeholders, ","),
 	)
 
@@ -1246,15 +1652,14 @@ func (s *Store) SetDecayScores(ctx context.Context, byID map[string]float64) err
 	if err != nil {
 		return err
 	}
-	stmt, err := tx.PrepareContext(ctx, `UPDATE memories SET decay_score = ?, updated_at = ? WHERE id = ?`)
+	stmt, err := tx.PrepareContext(ctx, `UPDATE memories SET decay_score = ? WHERE id = ?`)
 	if err != nil {
 		_ = tx.Rollback()
 		return err
 	}
 	defer func() { _ = stmt.Close() }()
-	now := time.Now().UTC().Format(time.RFC3339Nano)
 	for id, score := range byID {
-		if _, err := stmt.ExecContext(ctx, score, now, id); err != nil {
+		if _, err := stmt.ExecContext(ctx, score, id); err != nil {
 			_ = tx.Rollback()
 			return err
 		}
@@ -1349,7 +1754,7 @@ func (s *Store) GetSessionMemories(ctx context.Context, workspace, sessionID str
 	rows, err := s.db.QueryContext(ctx, `
 SELECT id, type, content, diagram_lang, diagram_code, workspace, source_json, entities_json, tags_json, confidence, storage_tier, pinned, superseded_by, access_count, last_accessed, decay_score, salience_score, suppression_score, useful_count, ignored_count, rejected_count, harmful_count, last_helpful_at, last_rejected_at, suppression_until, familiarity_band_last, outcome_json, created_at, updated_at
 FROM memories
-WHERE workspace = ? AND json_extract(source_json, '$.session_id') = ?
+WHERE workspace = ? AND session_id = ?
 ORDER BY created_at DESC`, workspace, sessionID)
 	if err != nil {
 		s.logSlowQuery(ctx, "get_session_memories", workspace, time.Since(_startList))
@@ -1673,7 +2078,9 @@ func (s *Store) migrateJSONVectorsToBlobs(ctx context.Context) error {
 	for _, item := range items {
 		var emb []float32
 		if err := json.Unmarshal([]byte(item.json), &emb); err != nil {
-			// If JSON is invalid, skip instead of failing the entire migration
+			// If JSON is invalid, log advisory and skip.
+			s.migrationAdvisories = append(s.migrationAdvisories, "vector "+item.id+": invalid JSON")
+			log.Printf("migration: memory_vectors row %s has invalid JSON, skipping", item.id)
 			continue
 		}
 		if len(emb) == 0 {
@@ -1713,4 +2120,3 @@ func (s *Store) hydrateTurbovecIndex(ctx context.Context) error {
 	}
 	return nil
 }
-

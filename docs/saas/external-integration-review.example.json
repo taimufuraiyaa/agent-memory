@@ -1,0 +1,30 @@
+{
+  "schema":"agent-memory-external-integration-review-input-v1",
+  "classification":"self_managed_external",
+  "environment":"staging",
+  "review_id":"external-integration-review-2026",
+  "policy_version":"policy-v1",
+  "traffic_review_version":"traffic-v1",
+  "inventory_id":"inventory-2026",
+  "inventory_receipt_sha256":"1111111111111111111111111111111111111111111111111111111111111111",
+  "data_policy_sha256":"2222222222222222222222222222222222222222222222222222222222222222",
+  "integration_manifest_sha256":"3333333333333333333333333333333333333333333333333333333333333333",
+  "review_decision_sha256":"4444444444444444444444444444444444444444444444444444444444444444",
+  "reviewed_at":"2026-08-10T18:00:00Z",
+  "generated_at":"2026-08-10T19:00:00Z",
+  "ready":true,
+  "integrations":[
+    {"kind":"payment","enabled":false,"configuration_version":"payment-v1","purpose_version":"billing-v1","configuration_sha256":"5555555555555555555555555555555555555555555555555555555555555555","purpose_decision_sha256":"6666666666666666666666666666666666666666666666666666666666666666","contract_or_disabled_state_sha256":"7777777777777777777777777777777777777777777777777777777777777777","retention_training_settings_sha256":"8888888888888888888888888888888888888888888888888888888888888888","traffic_export_sha256":"9999999999999999999999999999999999999999999999999999999999999999","exit_plan_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","approved_data_field_count":0,"sampled_request_count":0,"customer_content_byte_count":0,"unapproved_field_count":0,"unallowlisted_destination_count":0,"provider_training_enabled":false,"general_logging_enabled":false,"outcome":"passed"},
+    {"kind":"email","enabled":false,"configuration_version":"email-v1","purpose_version":"transactional-v1","configuration_sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","purpose_decision_sha256":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","contract_or_disabled_state_sha256":"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd","retention_training_settings_sha256":"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee","traffic_export_sha256":"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff","exit_plan_sha256":"1212121212121212121212121212121212121212121212121212121212121212","approved_data_field_count":0,"sampled_request_count":0,"customer_content_byte_count":0,"unapproved_field_count":0,"unallowlisted_destination_count":0,"provider_training_enabled":false,"general_logging_enabled":false,"outcome":"passed"},
+    {"kind":"model","enabled":false,"configuration_version":"model-v1","purpose_version":"model-route-v1","configuration_sha256":"1313131313131313131313131313131313131313131313131313131313131313","purpose_decision_sha256":"1414141414141414141414141414141414141414141414141414141414141414","contract_or_disabled_state_sha256":"1515151515151515151515151515151515151515151515151515151515151515","retention_training_settings_sha256":"1616161616161616161616161616161616161616161616161616161616161616","traffic_export_sha256":"1717171717171717171717171717171717171717171717171717171717171717","exit_plan_sha256":"1818181818181818181818181818181818181818181818181818181818181818","approved_data_field_count":0,"sampled_request_count":0,"customer_content_byte_count":0,"unapproved_field_count":0,"unallowlisted_destination_count":0,"provider_training_enabled":false,"general_logging_enabled":false,"outcome":"passed"}
+  ],
+  "checks":[
+    {"id":"inventory_binding_verified","outcome":"passed","evidence_sha256":"1919191919191919191919191919191919191919191919191919191919191919"},
+    {"id":"purpose_approved","outcome":"passed","evidence_sha256":"2020202020202020202020202020202020202020202020202020202020202020"},
+    {"id":"contract_or_disabled_state_reviewed","outcome":"passed","evidence_sha256":"2121212121212121212121212121212121212121212121212121212121212121"},
+    {"id":"retention_training_settings_reviewed","outcome":"passed","evidence_sha256":"2222222222222222222222222222222222222222222222222222222222222222"},
+    {"id":"traffic_allowlist_verified","outcome":"passed","evidence_sha256":"2323232323232323232323232323232323232323232323232323232323232323"},
+    {"id":"content_minimization_verified","outcome":"passed","evidence_sha256":"2424242424242424242424242424242424242424242424242424242424242424"},
+    {"id":"privacy_security_review_complete","outcome":"passed","evidence_sha256":"2525252525252525252525252525252525252525252525252525252525252525"}
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "schema": "agent-memory-self-managed-infrastructure-plan-v1",
+  "environment": "staging",
+  "plan_id": "replace-with-plan-id",
+  "inventory_id": "replace-with-inventory-id",
+  "inventory_receipt_sha256": "ff99aee26afbd65d252f7ddbcc101f4b8a397ac946c92e5d129cce908bd97ade",
+  "generated_at": "2026-08-10T01:00:00Z",
+  "source_revision": "replace-with-source-revision",
+  "source_bundle_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "raw_plan_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "toolchain": [
+    {"name": "kustomize", "version": "v5"},
+    {"name": "helm", "version": "v3"}
+  ],
+  "capabilities": [
+    {"id": "edge_ingress", "action": "no_change", "failure_domain_ids": ["replace-with-failure-domain"], "public_ingress": true},
+    {"id": "application_network", "action": "no_change", "failure_domain_ids": ["replace-with-failure-domain"], "public_ingress": false},
+    {"id": "data_network", "action": "no_change", "failure_domain_ids": ["replace-with-failure-domain"], "public_ingress": false},
+    {"id": "kubernetes_cluster", "action": "no_change", "failure_domain_ids": ["replace-with-failure-domain"], "public_ingress": false},
+    {"id": "oidc_identity", "action": "no_change", "failure_domain_ids": ["replace-with-failure-domain"], "public_ingress": true},
+    {"id": "postgres", "action": "no_change", "failure_domain_ids": ["replace-with-failure-domain"], "public_ingress": false},
+    {"id": "quarantine_bucket", "action": "no_change", "failure_domain_ids": ["replace-with-failure-domain"], "public_ingress": false},
+    {"id": "vault_bucket", "action": "no_change", "failure_domain_ids": ["replace-with-failure-domain"], "public_ingress": false},
+    {"id": "export_bucket", "action": "no_change", "failure_domain_ids": ["replace-with-failure-domain"], "public_ingress": false},
+    {"id": "durable_queue", "action": "no_change", "failure_domain_ids": ["replace-with-failure-domain"], "public_ingress": false},
+    {"id": "api_identity", "action": "no_change", "failure_domain_ids": ["replace-with-failure-domain"], "public_ingress": false},
+    {"id": "worker_identity", "action": "no_change", "failure_domain_ids": ["replace-with-failure-domain"], "public_ingress": false},
+    {"id": "reconciler_identity", "action": "no_change", "failure_domain_ids": ["replace-with-failure-domain"], "public_ingress": false},
+    {"id": "migration_identity", "action": "no_change", "failure_domain_ids": ["replace-with-failure-domain"], "public_ingress": false},
+    {"id": "api_secret", "action": "no_change", "failure_domain_ids": ["replace-with-failure-domain"], "public_ingress": false},
+    {"id": "worker_secret", "action": "no_change", "failure_domain_ids": ["replace-with-failure-domain"], "public_ingress": false},
+    {"id": "reconciler_secret", "action": "no_change", "failure_domain_ids": ["replace-with-failure-domain"], "public_ingress": false},
+    {"id": "migration_secret", "action": "no_change", "failure_domain_ids": ["replace-with-failure-domain"], "public_ingress": false},
+    {"id": "telemetry", "action": "no_change", "failure_domain_ids": ["replace-with-failure-domain"], "public_ingress": false},
+    {"id": "postgres_backup", "action": "no_change", "failure_domain_ids": ["replace-with-failure-domain"], "public_ingress": false},
+    {"id": "object_backup", "action": "no_change", "failure_domain_ids": ["replace-with-failure-domain"], "public_ingress": false}
+  ]
+}

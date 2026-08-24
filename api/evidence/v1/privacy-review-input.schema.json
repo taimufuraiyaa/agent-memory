@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-memory.local/schemas/evidence/v1/privacy-review-input.schema.json",
+  "title": "Agent Memory CP7-A Privacy and Counsel review input",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "classification", "environment", "review_id", "dashboard_build_version", "openapi_version", "receipt_manifest_version", "dashboard_build_manifest_sha256", "openapi_sha256", "receipt_schema_manifest_sha256", "privacy_signed_review_sha256", "counsel_signed_review_sha256", "review_started_at", "review_completed_at", "generated_at", "ready", "surfaces", "contracts", "checks"],
+  "properties": {
+    "schema": {"const": "agent-memory-privacy-review-input-v1"}, "classification": {"const": "external_business"}, "environment": {"const": "external"},
+    "review_id": {"$ref": "#/$defs/opaque"}, "dashboard_build_version": {"$ref": "#/$defs/opaque"}, "openapi_version": {"$ref": "#/$defs/opaque"}, "receipt_manifest_version": {"$ref": "#/$defs/opaque"},
+    "dashboard_build_manifest_sha256": {"$ref": "#/$defs/digest"}, "openapi_sha256": {"$ref": "#/$defs/digest"}, "receipt_schema_manifest_sha256": {"$ref": "#/$defs/digest"}, "privacy_signed_review_sha256": {"$ref": "#/$defs/digest"}, "counsel_signed_review_sha256": {"$ref": "#/$defs/digest"},
+    "review_started_at": {"type": "string", "format": "date-time"}, "review_completed_at": {"type": "string", "format": "date-time"}, "generated_at": {"type": "string", "format": "date-time"}, "ready": {"type": "boolean"},
+    "surfaces": {"type": "array", "minItems": 4, "maxItems": 4, "items": {"$ref": "#/$defs/surface"}}, "contracts": {"type": "array", "minItems": 5, "maxItems": 5, "items": {"$ref": "#/$defs/contract"}}, "checks": {"type": "array", "minItems": 8, "maxItems": 8, "items": {"$ref": "#/$defs/check"}}
+  },
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"}, "opaque": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"}, "outcome": {"enum": ["passed", "failed", "inconclusive"]},
+    "surface": {"type": "object", "additionalProperties": false, "required": ["id", "rendered_sha256", "copy_sha256", "accessibility_review_sha256", "outcome"], "properties": {"id": {"enum": ["privacy_overview", "source_custody", "source_details", "source_deletion"]}, "rendered_sha256": {"$ref": "#/$defs/digest"}, "copy_sha256": {"$ref": "#/$defs/digest"}, "accessibility_review_sha256": {"$ref": "#/$defs/digest"}, "outcome": {"$ref": "#/$defs/outcome"}}},
+    "contract": {"type": "object", "additionalProperties": false, "required": ["id", "schema_sha256", "compatibility_review_sha256", "outcome"], "properties": {"id": {"enum": ["rights_attestation", "privacy_overview", "source_deletion", "account_deletion", "portable_export"]}, "schema_sha256": {"$ref": "#/$defs/digest"}, "compatibility_review_sha256": {"$ref": "#/$defs/digest"}, "outcome": {"$ref": "#/$defs/outcome"}}},
+    "check": {"type": "object", "additionalProperties": false, "required": ["id", "outcome", "evidence_sha256"], "properties": {"id": {"enum": ["rendered_surface_coverage_complete", "customer_copy_review_complete", "accessibility_review_complete", "receipt_contract_coverage_complete", "revocation_and_purge_distinction_reviewed", "consent_and_export_disclosure_reviewed", "privacy_signed_review_complete", "counsel_signed_review_complete"]}, "outcome": {"$ref": "#/$defs/outcome"}, "evidence_sha256": {"$ref": "#/$defs/digest"}}}
+  }
+}

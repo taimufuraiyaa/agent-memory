@@ -22,6 +22,7 @@ const (
 	ModeRelate      RetrievalMode = "relate"
 	ModeOutcomes    RetrievalMode = "outcomes"
 	ModeGraphExpand RetrievalMode = "graph-expand"
+	ModeTerms       RetrievalMode = "terms"
 )
 
 // RetrievalOptions controls retrieval behavior.
@@ -79,12 +80,18 @@ const (
 )
 
 type RetrievalPolicy struct {
+	// MinSemanticScore is the absolute floor for cosine similarity before mixer blending.
+	// Hits below this threshold are excluded from ranking.
+	// Default per-mode (search: 0.30, recall: 0.25, relate: 0.35, outcomes: 0.15).
 	MinSemanticScore    *float64 `json:"min_semantic_score,omitempty"`
 	MinTotalScore       *float64 `json:"min_total_score,omitempty"`
 	RelativeScoreCutoff *float64 `json:"relative_score_cutoff,omitempty"`
 	WeakSemanticScore   *float64 `json:"weak_semantic_score,omitempty"`
 	WeakTotalScore      *float64 `json:"weak_total_score,omitempty"`
 	WeakRelativeCutoff  *float64 `json:"weak_relative_cutoff,omitempty"`
+	// SemanticScoreBand is the margin around MinSemanticScore within which a
+	// quantized-path score is re-checked on the float path. Default 0.03.
+	SemanticScoreBand *float64 `json:"semantic_score_band,omitempty"`
 }
 
 type RetrievalPolicySnapshot struct {
@@ -94,6 +101,7 @@ type RetrievalPolicySnapshot struct {
 	WeakSemanticScore   float64 `json:"weak_semantic_score"`
 	WeakTotalScore      float64 `json:"weak_total_score"`
 	WeakRelativeCutoff  float64 `json:"weak_relative_cutoff"`
+	SemanticScoreBand   float64 `json:"semantic_score_band"`
 }
 
 // RetrievalHit extends SearchHit with explain details.
@@ -139,6 +147,19 @@ func NewRetrievalEngine(vector *VectorSearcher) *RetrievalEngine {
 		vector: vector,
 		cache:  NewQueryCache(DefaultQueryCacheConfig()),
 		clock:  func() time.Time { return time.Now().UTC() },
+	}
+}
+
+// NewRetrievalEngineWithClock creates a retrieval engine with an explicit clock.
+// It is intended for deterministic parity and time-boundary verification.
+func NewRetrievalEngineWithClock(vector *VectorSearcher, clock func() time.Time) *RetrievalEngine {
+	if clock == nil {
+		clock = func() time.Time { return time.Now().UTC() }
+	}
+	return &RetrievalEngine{
+		vector: vector,
+		cache:  NewQueryCache(DefaultQueryCacheConfig()),
+		clock:  clock,
 	}
 }
 
@@ -190,15 +211,17 @@ func (e *RetrievalEngine) Retrieve(ctx context.Context, opt RetrievalOptions) (r
 			observability.SetSpanAttributes(ctx, observability.HitCountAttr(len(res.Hits)))
 			metrics.RetrievalHits.WithLabelValues(opt.Workspace, string(opt.Mode)).Observe(float64(len(res.Hits)))
 		}
-		metrics.RetrievalTotal.WithLabelValues(opt.Workspace, string(opt.Mode), status).Inc()
+		// RetrievalTotal is aggregate-only (no workspace label) to bound cardinality.
+		metrics.RetrievalTotal.WithLabelValues(string(opt.Mode), status).Inc()
 		timer.ObserveDuration(metrics.RetrievalDuration.WithLabelValues(opt.Workspace, string(opt.Mode)))
 	}()
 
 	// Check result cache first
 	if cachedHits := e.cache.GetResults(ctx, opt); cachedHits != nil {
+		AddCacheHitCount(1)
 		weights := modeWeights(opt.Mode)
 		policy := policyForMode(opt.Mode, opt.Policy)
-		
+
 		return &RetrievalResult{
 			Mode:       opt.Mode,
 			Weights:    weights,
@@ -208,7 +231,7 @@ func (e *RetrievalEngine) Retrieve(ctx context.Context, opt RetrievalOptions) (r
 			WeakHits:   filterWeakHits(cachedHits),
 		}, nil
 	}
-	
+
 	if opt.TopK <= 0 {
 		opt.TopK = 10
 	}
@@ -217,12 +240,12 @@ func (e *RetrievalEngine) Retrieve(ctx context.Context, opt RetrievalOptions) (r
 	}
 
 	if opt.Mode == ModeGraphExpand {
-		hits, err := e.retrieveGraphExpand(ctx, opt)
+		weights := modeWeights(opt.Mode)
+		policy := policyForMode(opt.Mode, opt.Policy)
+		hits, err := e.retrieveGraphExpand(ctx, opt, policy)
 		if err != nil {
 			return nil, err
 		}
-		weights := modeWeights(opt.Mode)
-		policy := policyForMode(opt.Mode, opt.Policy)
 		bestScore := 0.0
 		if len(hits) > 0 {
 			bestScore = hits[0].Score
@@ -285,6 +308,8 @@ func (e *RetrievalEngine) Retrieve(ctx context.Context, opt RetrievalOptions) (r
 	if err != nil {
 		return nil, err
 	}
+	AddCandidateCount(int64(len(baseHits)))
+	AddVectorSearchCount(1)
 	weights := modeWeights(opt.Mode)
 	policy := policyForMode(opt.Mode, opt.Policy)
 	now := e.clock()
@@ -294,7 +319,8 @@ func (e *RetrievalEngine) Retrieve(ctx context.Context, opt RetrievalOptions) (r
 		if !matchRetrievalFilters(h.Memory, opt.Filters) {
 			continue
 		}
-		if h.Score < policy.MinSemanticScore {
+		semanticScore := e.rescoreInBand(ctx, h.Score, h.Memory, opt.Query, policy)
+		if semanticScore < policy.MinSemanticScore {
 			continue
 		}
 		recency := recencyScore(now, h.Memory.UpdatedAt)
@@ -303,13 +329,13 @@ func (e *RetrievalEngine) Retrieve(ctx context.Context, opt RetrievalOptions) (r
 		tierBias := tierBiasScore(h.Memory.StorageTier)
 		salience := salienceSignal(now, h.Memory)
 		suppression := suppressionSignal(now, h.Memory)
-		activation := weights.Semantic*h.Score + weights.Recency*recency + weights.Outcome*outcome + weights.Decay*decay + weights.TierBias*tierBias + salience
+		activation := weights.Semantic*math.Max(0, semanticScore) + weights.Recency*recency + weights.Outcome*outcome + weights.Decay*decay + weights.TierBias*tierBias + salience
 		total := activation - suppression
 		ranked = append(ranked, RetrievalHit{
 			Memory: h.Memory,
 			Score:  total,
 			Breakdown: SignalBreakdown{
-				Semantic:    h.Score,
+				Semantic:    semanticScore,
 				Recency:     recency,
 				Outcome:     outcome,
 				Decay:       decay,
@@ -364,10 +390,10 @@ func (e *RetrievalEngine) Retrieve(ctx context.Context, opt RetrievalOptions) (r
 	if opt.Mode != ModeRecall {
 		visible = append(append([]RetrievalHit{}, strong...), weak...)
 	}
-	
+
 	// Store results in cache for future queries
 	e.cache.SetResults(ctx, opt, visible)
-	
+
 	return &RetrievalResult{
 		Mode:           opt.Mode,
 		Weights:        weights,
@@ -484,6 +510,7 @@ func policyForMode(mode RetrievalMode, override RetrievalPolicy) RetrievalPolicy
 		WeakSemanticScore:   defaults.WeakSemanticScore,
 		WeakTotalScore:      defaults.WeakTotalScore,
 		WeakRelativeCutoff:  defaults.WeakRelativeCutoff,
+		SemanticScoreBand:   defaults.SemanticScoreBand,
 	}
 	if override.MinSemanticScore != nil {
 		base.MinSemanticScore = *override.MinSemanticScore
@@ -502,6 +529,9 @@ func policyForMode(mode RetrievalMode, override RetrievalPolicy) RetrievalPolicy
 	}
 	if override.WeakRelativeCutoff != nil {
 		base.WeakRelativeCutoff = *override.WeakRelativeCutoff
+	}
+	if override.SemanticScoreBand != nil {
+		base.SemanticScoreBand = *override.SemanticScoreBand
 	}
 	return base
 }
@@ -676,7 +706,46 @@ func max(a, b int) int {
 	return b
 }
 
-func (e *RetrievalEngine) retrieveGraphExpand(ctx context.Context, opt RetrievalOptions) ([]RetrievalHit, error) {
+// rescoreInBand checks whether a hit's semantic score falls within the band
+// around MinSemanticScore. If so, it re-scores using the full-precision float
+// cosine path (embeddings.Cosine) to make the threshold decision deterministic
+// regardless of which search path (FWHT-quantized or float) produced the
+// original score. If re-scoring fails, the original score is returned unchanged
+// (fail-open).
+func (e *RetrievalEngine) rescoreInBand(ctx context.Context, score float64, memory core.MemoryEntry, queryText string, policy RetrievalPolicySnapshot) float64 {
+	band := policy.SemanticScoreBand
+	// A band of exactly zero means "no rescoring" (caller explicitly disabled).
+	// A negative or zero band from unset defaults is treated as unset → use 0.03.
+	// Since the default is 0.03, band==0 only happens from explicit override.
+	if band == 0 {
+		return score
+	}
+	low := policy.MinSemanticScore - band
+	high := policy.MinSemanticScore + band
+	if score < low || score >= high {
+		return score
+	}
+
+	// Re-score on the float path.
+	qv, err := e.vector.Provider().Embed(ctx, queryText)
+	if err != nil {
+		return score // fail-open
+	}
+
+	memoryText := memoryVectorText(memory)
+	mv, err := e.vector.Provider().Embed(ctx, memoryText)
+	if err != nil {
+		return score // fail-open
+	}
+
+	floatScore, err := embeddings.Cosine(qv, mv)
+	if err != nil {
+		return score // fail-open
+	}
+	return floatScore
+}
+
+func (e *RetrievalEngine) retrieveGraphExpand(ctx context.Context, opt RetrievalOptions, policy RetrievalPolicySnapshot) ([]RetrievalHit, error) {
 	// 1. Get seed memories via semantic search (limit to TopK seeds)
 	seedHits, err := e.vector.SearchWithOptions(ctx, VectorSearchOptions{
 		Workspace: opt.Workspace,
@@ -702,7 +771,7 @@ func (e *RetrievalEngine) retrieveGraphExpand(ctx context.Context, opt Retrieval
 	}
 
 	queue := make([]bfsNode, 0)
-	visited := make(map[string]int) // ID -> distance
+	visited := make(map[string]int)        // ID -> distance
 	pathWeight := make(map[string]float64) // ID -> max relation weight
 
 	for _, h := range seedHits {
@@ -792,10 +861,15 @@ func (e *RetrievalEngine) retrieveGraphExpand(ctx context.Context, opt Retrieval
 			score, _ = embeddings.Cosine(qv, mv)
 		}
 
+		// Band re-scoring: if semantic score is near MinSemanticScore,
+		// re-check on the float path for determinism regardless of
+		// which vector source was used.
+		score = e.rescoreInBand(ctx, score, *m, opt.Query, policy)
+
 		// Calculate total score using path distance and relationship weight
 		relWeight := pathWeight[id]
 		distanceFactor := 1.0 / (1.0 + float64(dist))
-		totalScore := score * distanceFactor * relWeight
+		totalScore := math.Max(0, score) * distanceFactor * relWeight
 
 		recency := recencyScore(now, m.UpdatedAt)
 		outcome := outcomeScore(opt.Mode, *m)
@@ -823,5 +897,3 @@ func (e *RetrievalEngine) retrieveGraphExpand(ctx context.Context, opt Retrieval
 	sort.Slice(ranked, func(i, j int) bool { return ranked[i].Score > ranked[j].Score })
 	return ranked, nil
 }
-
-

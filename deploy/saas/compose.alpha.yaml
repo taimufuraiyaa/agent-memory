@@ -1,0 +1,29 @@
+name: agent-memory-saas
+
+# Isolated local-alpha topology. The gate always supplies a unique Compose
+# project, so volumes, containers, and dynamically published loopback ports can
+# never overlap the developer's persistent local product profile.
+services:
+  postgres:
+    ports: !override
+      - "127.0.0.1::5432"
+
+  minio:
+    ports: !override
+      - "127.0.0.1::4566"
+
+  nats:
+    ports: !override
+      - "127.0.0.1::4222"
+
+  api:
+    ports: !override
+      - "127.0.0.1::8080"
+
+  edge:
+    ports: !override
+      - "127.0.0.1::8081"
+
+  oidc:
+    ports: !override
+      - "127.0.0.1::8082"

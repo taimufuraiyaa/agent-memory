@@ -1,21 +1,134 @@
 package cli
 
 import (
+	"bytes"
+	"context"
+	"net"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
+
+	"github.com/spf13/cobra"
 )
+
+func TestDiscoverHostedDashboardAcceptsOnlyHostedRuntimeManifest(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/dashboard/runtime.json" {
+			t.Fatalf("unexpected discovery path %q", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"schema":"agent-memory-dashboard-runtime-v1","mode":"hosted","api_prefix":"/v1","features":[]}`))
+	}))
+	defer server.Close()
+
+	url, ok := discoverHostedDashboard(context.Background(), server.Client(), server.URL)
+	if !ok {
+		t.Fatal("expected hosted dashboard discovery to succeed")
+	}
+	if want := server.URL + "/dashboard/"; url != want {
+		t.Fatalf("discovered URL %q, want %q", url, want)
+	}
+}
+
+func TestDiscoverHostedDashboardRejectsStandaloneAndMalformedRuntime(t *testing.T) {
+	responses := []string{
+		`{"schema":"agent-memory-dashboard-runtime-v1","mode":"standalone"}`,
+		`{"schema":"unknown","mode":"hosted"}`,
+		`not-json`,
+	}
+	for _, response := range responses {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte(response))
+		}))
+		if url, ok := discoverHostedDashboard(context.Background(), server.Client(), server.URL); ok || url != "" {
+			t.Fatalf("expected discovery rejection for %q, got url=%q ok=%v", response, url, ok)
+		}
+		server.Close()
+	}
+}
+
+func TestDashboardStartReusesDiscoveredHostedWebapp(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/dashboard/runtime.json" {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = w.Write([]byte(`{"schema":"agent-memory-dashboard-runtime-v1","mode":"hosted"}`))
+	}))
+	defer server.Close()
+	previousURL := localHostedDashboardBaseURL
+	localHostedDashboardBaseURL = server.URL
+	t.Cleanup(func() { localHostedDashboardBaseURL = previousURL })
+	t.Setenv("HOME", t.TempDir())
+
+	cmd := newDashboardCommand()
+	var stdout bytes.Buffer
+	cmd.SetOut(&stdout)
+	cmd.SetErr(&bytes.Buffer{})
+	cmd.SetArgs([]string{"--start", "--no-open"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("start dashboard: %v", err)
+	}
+	if want := server.URL + "/dashboard/\n"; stdout.String() != want {
+		t.Fatalf("dashboard output %q, want %q", stdout.String(), want)
+	}
+}
 
 func TestBuildDashboardProcessArgsOmitsWorkspaceWhenEmpty(t *testing.T) {
 	cfg := runtimeConfig{
 		dbPath:   "/tmp/dashboard.db",
 		modelDir: "/tmp/models",
 	}
-	args := buildDashboardProcessArgs(cfg, ":3210", "", "")
+	args := buildDashboardProcessArgs(cfg, ":3210", "", "", false)
 	for i := 0; i < len(args); i++ {
 		if args[i] == "--workspace" {
 			t.Fatalf("expected dashboard start args to omit --workspace when empty: %v", args)
 		}
+	}
+}
+
+func TestBuildDashboardProcessArgsForwardsHotReload(t *testing.T) {
+	cfg := runtimeConfig{dbPath: "/tmp/dashboard.db", modelDir: "/tmp/models"}
+	args := buildDashboardProcessArgs(cfg, ":3210", "", "", true)
+	for _, arg := range args {
+		if arg == "--hot-reload" {
+			return
+		}
+	}
+	t.Fatalf("expected child dashboard args to enable hot reload: %v", args)
+}
+
+func TestDashboardHotReloadFlagIsAvailable(t *testing.T) {
+	cmd := newDashboardCommand()
+	flag := cmd.Flags().Lookup("hot-reload")
+	if flag == nil {
+		t.Fatal("expected dashboard --hot-reload flag")
+	}
+	if flag.DefValue != "false" {
+		t.Fatalf("expected hot reload to default off, got %q", flag.DefValue)
+	}
+}
+
+func TestDashboardAddressDefaultsToPort3100(t *testing.T) {
+	cmd := newDashboardCommand()
+	flag := cmd.Flags().Lookup("addr")
+	if flag == nil {
+		t.Fatal("expected dashboard --addr flag")
+	}
+	if flag.DefValue != "127.0.0.1:3100" {
+		t.Fatalf("expected dashboard address to default to loopback port 3100, got %q", flag.DefValue)
+	}
+}
+
+func TestDashboardHotReloadBypassesEmbeddedAssets(t *testing.T) {
+	if shouldServeEmbeddedDashboard(true) {
+		t.Fatal("hot reload must bypass embedded dashboard assets")
+	}
+	if !shouldServeEmbeddedDashboard(false) {
+		t.Fatal("default dashboard mode must prefer embedded assets")
 	}
 }
 
@@ -113,7 +226,72 @@ func TestLooksLikeDashboardCommandLine(t *testing.T) {
 	}
 }
 
+func TestEmbeddedDashboardWrapperUsesBundledAssets(t *testing.T) {
+	if !(&embeddedDashboardWrapper{}).hasAssets() {
+		t.Fatal("expected embedded dashboard assets to be available")
+	}
+}
+
+func TestEmbeddedDashboardPublishesBackgroundStartHandshake(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer ln.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	pidPath := filepath.Join(t.TempDir(), "dashboard.pid")
+	cfg := runtimeConfig{workspace: "agent-memory"}
+	cmd := &cobra.Command{}
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	cmd.SetOut(&stdout)
+	cmd.SetErr(&stderr)
+	done := make(chan error, 1)
+	go func() {
+		done <- tryServeEmbeddedDashboard(
+			cmd,
+			ctx,
+			cfg,
+			ln,
+			"http://127.0.0.1:3210",
+			true,
+			pidPath,
+		)
+	}()
+
+	var pid dashboardPID
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		pid, err = readDashboardPID(pidPath)
+		if err == nil && pid.URL != "" {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if err != nil {
+		t.Fatalf("read handshake: %v", err)
+	}
+	if pid.PID != os.Getpid() {
+		t.Fatalf("expected child pid %d, got %d", os.Getpid(), pid.PID)
+	}
+	if pid.URL != "http://127.0.0.1:3210/dashboard/" {
+		t.Fatalf("expected dashboard URL in handshake, got %q", pid.URL)
+	}
+
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatalf("serve embedded dashboard: %v", err)
+	}
+	if _, err := os.Stat(pidPath); !os.IsNotExist(err) {
+		t.Fatalf("expected handshake file removal after shutdown, got %v", err)
+	}
+}
+
 func TestDashboardStopWhenNotRunning(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
 	cmd := newDashboardCommand()
 	cmd.SetArgs([]string{"--stop", "--addr", ":9999"})
 	err := cmd.Execute()

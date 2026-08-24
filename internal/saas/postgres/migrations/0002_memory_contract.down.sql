@@ -1,0 +1,14 @@
+DROP TABLE IF EXISTS saas_note_revisions;
+ALTER TABLE saas_feedback DROP COLUMN IF EXISTS successor_memory_id;
+ALTER TABLE saas_feedback DROP COLUMN IF EXISTS reconsolidation_action;
+ALTER TABLE saas_memories DROP CONSTRAINT IF EXISTS saas_memories_idempotency;
+ALTER TABLE saas_memories DROP COLUMN IF EXISTS request_hash;
+ALTER TABLE saas_memories DROP COLUMN IF EXISTS idempotency_key;
+ALTER TABLE saas_memories DROP COLUMN IF EXISTS session_id;
+ALTER TABLE saas_memories DROP COLUMN IF EXISTS storage_tier;
+ALTER TABLE saas_memories DROP COLUMN IF EXISTS confidence;
+ALTER TABLE saas_memories DROP COLUMN IF EXISTS outcome;
+ALTER TABLE saas_memories DROP COLUMN IF EXISTS keywords;
+ALTER TABLE saas_memories DROP COLUMN IF EXISTS tags;
+ALTER TABLE saas_memories DROP COLUMN IF EXISTS entities;
+ALTER TABLE saas_memories DROP COLUMN IF EXISTS source;

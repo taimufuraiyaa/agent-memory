@@ -45,13 +45,31 @@ type serveStatus struct {
 	StartedAt time.Time `json:"started_at,omitempty"`
 }
 
+const defaultServeAddr = "127.0.0.1:3211"
+
 func servePIDPath(cfg runtimeConfig) string {
 	base := filepath.Dir(cfg.dbPath)
-	name := "serve.pid"
-	if ws := strings.TrimSpace(cfg.workspace); ws != "" {
-		name = fmt.Sprintf("serve.%s.pid", ws)
+	return filepath.Join(base, "serve.pid")
+}
+
+func legacyServePIDPaths(baseDir string) ([]string, error) {
+	paths, err := filepath.Glob(filepath.Join(baseDir, "serve.*.pid"))
+	if err != nil {
+		return nil, err
 	}
-	return filepath.Join(base, name)
+	sort.Strings(paths)
+	return paths, nil
+}
+
+func firstRunningLegacyServe(baseDir string) (string, servePID, bool) {
+	paths, _ := legacyServePIDPaths(baseDir)
+	for _, path := range paths {
+		pid, err := readServePID(path)
+		if err == nil && isProcessAlive(pid.PID) {
+			return path, pid, true
+		}
+	}
+	return "", servePID{}, false
 }
 
 func readServePID(path string) (servePID, error) {
@@ -86,9 +104,6 @@ func buildServeProcessArgs(cfg runtimeConfig, addr string, pidFile string) []str
 		"--db", cfg.dbPath,
 		"--model-dir", cfg.modelDir,
 	}
-	if ws := strings.TrimSpace(cfg.workspace); ws != "" {
-		args = append(args, "--workspace", ws)
-	}
 	if strings.TrimSpace(pidFile) != "" {
 		args = append(args, "--pid-file", pidFile)
 	}
@@ -117,6 +132,16 @@ func resolveServeRuntime(flags commonFlags) (runtimeConfig, error) {
 	}
 	if cfg.apiURL != "" {
 		return runtimeConfig{}, errors.New("serve cannot proxy to another api via --api")
+	}
+	// Serve is a daemon-level command. The current directory may identify a
+	// workspace for ordinary CLI commands, but must never bind the daemon to it.
+	cfg.workspace = ""
+	if strings.TrimSpace(flags.dbPath) == "" {
+		baseDir, err := defaultDBBaseDir()
+		if err != nil {
+			return runtimeConfig{}, err
+		}
+		cfg.dbPath = filepath.Join(baseDir, ".serve-placeholder.db")
 	}
 	return cfg, nil
 }
@@ -147,6 +172,11 @@ func newServeCommand() *cobra.Command {
 			if (start && stop) || (start && status) || (stop && status) {
 				return errors.New("only one of --start, --stop, or --status can be set")
 			}
+			if !stop && !status {
+				if err := validateLocalListenAddr(addr); err != nil {
+					return err
+				}
+			}
 
 			pidPath := strings.TrimSpace(pidFile)
 			if pidPath == "" {
@@ -156,7 +186,11 @@ func newServeCommand() *cobra.Command {
 			if status {
 				out, err := readServeStatus(pidPath)
 				if err != nil {
-					out = serveStatus{Running: false, Healthy: false}
+					if legacyPath, _, ok := firstRunningLegacyServe(filepath.Dir(pidPath)); ok {
+						out, _ = readServeStatus(legacyPath)
+					} else {
+						out = serveStatus{Running: false, Healthy: false}
+					}
 				}
 				return writeSuccessEnvelope(cmd.OutOrStdout(), "serve", out)
 			}
@@ -164,7 +198,20 @@ func newServeCommand() *cobra.Command {
 			if stop {
 				v, err := readServePID(pidPath)
 				if err != nil {
-					return fmt.Errorf("serve stop: %w", err)
+					paths, _ := legacyServePIDPaths(filepath.Dir(pidPath))
+					stopped := 0
+					for _, path := range paths {
+						legacy, readErr := readServePID(path)
+						if readErr == nil && legacy.PID > 0 {
+							_ = stopProcess(legacy.PID)
+							stopped++
+						}
+						_ = os.Remove(path)
+					}
+					if stopped == 0 {
+						return fmt.Errorf("serve stop: %w", err)
+					}
+					return writeSuccessEnvelope(cmd.OutOrStdout(), "serve", map[string]any{"running": false, "healthy": false, "legacy_processes_stopped": stopped})
 				}
 				if v.PID > 0 {
 					_ = stopProcess(v.PID)
@@ -186,6 +233,9 @@ func newServeCommand() *cobra.Command {
 					return writeSuccessEnvelope(cmd.OutOrStdout(), "serve", out)
 				}
 				_ = os.Remove(pidPath)
+				if legacyPath, legacy, ok := firstRunningLegacyServe(filepath.Dir(pidPath)); ok {
+					return fmt.Errorf("legacy workspace service is running (pid %d, %s); run agent-memory serve --stop before starting the multi-workspace daemon", legacy.PID, legacyPath)
+				}
 				pid, err := startServeProcess(cfg, addr, pidPath)
 				if err != nil {
 					return err
@@ -230,10 +280,20 @@ func newServeCommand() *cobra.Command {
 				EmbeddingProvider: provider,
 				Scheduler:         scheduler,
 			}
+			if err := api.ConfigureLocalRightsAttestation(ctx, svc); err != nil {
+				return err
+			}
+			if err := api.ConfigureLocalClientProfiles(svc); err != nil {
+				return err
+			}
+			if err := api.ConfigureLocalDeploymentProfile(svc); err != nil {
+				return err
+			}
 			server := &http.Server{
 				Addr:    addr,
-				Handler: api.InstrumentedHandler(api.NewMux(svc)),
+				Handler: api.LocalRequestBoundary(api.InstrumentedHandler(api.NewMux(svc))),
 			}
+			defer func() { _ = svc.Close() }()
 			ln, err := net.Listen("tcp", addr)
 			if err != nil {
 				return err
@@ -278,7 +338,7 @@ func newServeCommand() *cobra.Command {
 
 	addCommonFlags(cmd, &flags)
 	_ = cmd.Flags().MarkHidden("workspace")
-	cmd.Flags().StringVar(&addr, "addr", ":3211", "HTTP listen address")
+	cmd.Flags().StringVar(&addr, "addr", defaultServeAddr, "HTTP listen address")
 	cmd.Flags().BoolVar(&noOpen, "no-open", false, "Do not open anything; just print the API URL")
 	cmd.Flags().BoolVar(&start, "start", false, "Start the local memory service in the background and exit")
 	cmd.Flags().BoolVar(&stop, "stop", false, "Stop the background memory service")

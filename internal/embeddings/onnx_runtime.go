@@ -1,3 +1,5 @@
+//go:build cgo
+
 package embeddings
 
 import (
@@ -15,19 +17,12 @@ import (
 
 var ortInitMu sync.Mutex
 
-type miniLMRuntime interface {
-	Embed(ctx context.Context, input TokenizedInput) ([]float32, error)
-	Close() error
-}
-
 type ortMiniLMRuntime struct {
 	modelPath string
 
 	mu      sync.Mutex
 	session *ort.DynamicAdvancedSession
 }
-
-type fakeTestMiniLMRuntime struct{}
 
 func newORTMiniLMRuntime(modelDir string) (miniLMRuntime, error) {
 	if strings.TrimSpace(modelDir) == "" {
@@ -36,13 +31,6 @@ func newORTMiniLMRuntime(modelDir string) (miniLMRuntime, error) {
 	return &ortMiniLMRuntime{
 		modelPath: filepath.Join(modelDir, "model.onnx"),
 	}, nil
-}
-
-func newFakeMiniLMRuntime(modelDir string) (miniLMRuntime, error) {
-	if strings.TrimSpace(modelDir) == "" {
-		return nil, errors.New("model dir is required")
-	}
-	return &fakeTestMiniLMRuntime{}, nil
 }
 
 func (r *ortMiniLMRuntime) Close() error {
@@ -54,22 +42,6 @@ func (r *ortMiniLMRuntime) Close() error {
 	err := r.session.Destroy()
 	r.session = nil
 	return err
-}
-
-func (f *fakeTestMiniLMRuntime) Close() error { return nil }
-
-func (f *fakeTestMiniLMRuntime) Embed(ctx context.Context, input TokenizedInput) ([]float32, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	vec := make([]float32, MiniLMDimension)
-	for _, token := range input.Tokens {
-		if strings.TrimSpace(token) == "" {
-			continue
-		}
-		addTokenVector(vec, token, 1.0)
-	}
-	return normalize(vec), nil
 }
 
 func (r *ortMiniLMRuntime) Embed(ctx context.Context, input TokenizedInput) ([]float32, error) {

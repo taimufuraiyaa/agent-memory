@@ -51,10 +51,10 @@ func NewLocalProvider(modelDir string) (*LocalProvider, error) {
 	return &LocalProvider{modelDir: modelDir}, nil
 }
 
-func (p *LocalProvider) Name() string          { return "local-minilm-scaffold" }
-func (p *LocalProvider) ModelVersion() string  { return "local-hash-v1" }
-func (p *LocalProvider) Dimension() int        { return MiniLMDimension }
-func (p *LocalProvider) ModelDir() string      { return p.modelDir }
+func (p *LocalProvider) Name() string         { return "local-minilm-scaffold" }
+func (p *LocalProvider) ModelVersion() string { return "local-hash-v1" }
+func (p *LocalProvider) Dimension() int       { return MiniLMDimension }
+func (p *LocalProvider) ModelDir() string     { return p.modelDir }
 
 // Embed returns a normalized deterministic vector with MiniLM-compatible dimensions.
 func (p *LocalProvider) Embed(ctx context.Context, text string) ([]float32, error) {

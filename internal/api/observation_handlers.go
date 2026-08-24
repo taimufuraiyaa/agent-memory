@@ -39,7 +39,7 @@ func observeHandler(svc *Service) http.HandlerFunc {
 		}
 		assets, err := svc.resolve(r.Context(), ws)
 		if err != nil {
-			writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
+			writeWorkspaceResolveError(w, err)
 			return
 		}
 		occurredAt, err := time.Parse(time.RFC3339Nano, strings.TrimSpace(req.OccurredAt))
@@ -60,13 +60,19 @@ func observeHandler(svc *Service) http.HandlerFunc {
 
 		hash := computeObservationHash(ws, req.SessionID, req.Kind, req.ToolName, summary)
 		obs, dedup, err := assets.Store.InsertObservationDedupWindow(r.Context(), sqlite.ObservationInsert{
-			Workspace:   ws,
-			SessionID:   req.SessionID,
-			OccurredAt:  occurredAt,
-			Kind:        strings.TrimSpace(req.Kind),
-			ToolName:    strings.TrimSpace(req.ToolName),
-			Summary:     summary,
-			ContentHash: hash,
+			Workspace:       ws,
+			SessionID:       req.SessionID,
+			OccurredAt:      occurredAt,
+			Kind:            strings.TrimSpace(req.Kind),
+			ToolName:        strings.TrimSpace(req.ToolName),
+			Summary:         summary,
+			ContentHash:     hash,
+			SourceAgent:     req.SourceAgent,
+			SourceAdapter:   req.SourceAdapter,
+			HookEvent:       req.HookEvent,
+			ExternalEventID: req.ExternalEventID,
+			SchemaVersion:   req.SchemaVersion,
+			CaptureMode:     req.CaptureMode,
 		}, 5*time.Minute)
 		if err != nil {
 			writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
@@ -111,7 +117,7 @@ func observationsHandler(svc *Service) http.HandlerFunc {
 		}
 		assets, err := svc.resolve(r.Context(), ws)
 		if err != nil {
-			writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
+			writeWorkspaceResolveError(w, err)
 			return
 		}
 		sessionID := strings.TrimSpace(r.URL.Query().Get("session_id"))
@@ -153,15 +159,12 @@ func observationsHandler(svc *Service) http.HandlerFunc {
 }
 
 // sessionsHandler implements GET /api/v1/sessions: lists recent sessions for
-// a workspace, gated behind observeEnabled().
+// a workspace. Reading existing session history remains available when capture
+// is disabled; the capture flag gates writes, not inspection.
 func sessionsHandler(svc *Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			writeErr(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
-			return
-		}
-		if !observeEnabled() {
-			writeErr(w, http.StatusNotFound, "not_found", "route not enabled")
 			return
 		}
 		ws := strings.TrimSpace(r.URL.Query().Get("workspace"))
@@ -170,7 +173,7 @@ func sessionsHandler(svc *Service) http.HandlerFunc {
 		}
 		assets, err := svc.resolve(r.Context(), ws)
 		if err != nil {
-			writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
+			writeWorkspaceResolveError(w, err)
 			return
 		}
 		limit := parseIntOrDefault(r.URL.Query().Get("limit"), 50)
@@ -254,7 +257,7 @@ func observationsPromoteHandler(svc *Service) http.HandlerFunc {
 		}
 		assets, err := svc.resolve(r.Context(), ws)
 		if err != nil {
-			writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
+			writeWorkspaceResolveError(w, err)
 			return
 		}
 		promoter := engine.NewObservationPromoter(assets.Store, assets.Writer)

@@ -75,17 +75,17 @@ func TestBuildCSVExport(t *testing.T) {
 			UpdatedAt: now.Add(-1 * time.Hour),
 		},
 	}
-	
+
 	csv, err := BuildCSVExport("test-project", memories)
 	if err != nil {
 		t.Fatalf("BuildCSVExport failed: %v", err)
 	}
-	
+
 	// Check header
 	if !strings.Contains(csv, "id,type,content,workspace") {
 		t.Errorf("CSV missing header")
 	}
-	
+
 	// Check content
 	if !strings.Contains(csv, "API uses JWT tokens") {
 		t.Errorf("CSV missing memory content")
@@ -102,7 +102,7 @@ func TestBuildCSVExport(t *testing.T) {
 	if !strings.Contains(csv, "direct migration") {
 		t.Errorf("CSV missing outcome approach")
 	}
-	
+
 	// Verify it's valid CSV with proper line count
 	lines := strings.Split(strings.TrimSpace(csv), "\n")
 	if len(lines) != 3 { // header + 2 memories
@@ -115,12 +115,12 @@ func TestBuildCSVExportHandlesEmptyMemories(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildCSVExport failed on empty: %v", err)
 	}
-	
+
 	// Should still have header
 	if !strings.Contains(csv, "id,type,content") {
 		t.Errorf("CSV missing header for empty export")
 	}
-	
+
 	lines := strings.Split(strings.TrimSpace(csv), "\n")
 	if len(lines) != 1 { // just header
 		t.Errorf("Expected 1 line (header only), got %d", len(lines))

@@ -1,0 +1,217 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-memory.local/schemas/evidence/v1/private-beta-approval-export-input.schema.json",
+  "title": "Agent Memory private-beta accountable approval export input",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "classification",
+    "environment",
+    "export_id",
+    "review_id",
+    "review_policy_version",
+    "inventory_id",
+    "inventory_receipt_sha256",
+    "plan_id",
+    "plan_receipt_sha256",
+    "change_id",
+    "change_receipt_sha256",
+    "release_id",
+    "release_receipt_sha256",
+    "security_closure_review_id",
+    "security_closure_receipt_sha256",
+    "alert_bundle_id",
+    "alert_receipt_sha256",
+    "blocker_review_id",
+    "blocker_receipt_sha256",
+    "capacity_assessment_id",
+    "capacity_receipt_sha256",
+    "supporting_evidence_manifest_sha256",
+    "private_beta_evidence_bundle_sha256",
+    "trust_bundle_sha256",
+    "approval_export_sha256",
+    "domain_review_sha256",
+    "exported_at",
+    "reviewed_at",
+    "generated_at",
+    "ready",
+    "checks"
+  ],
+  "properties": {
+    "schema": {
+      "const": "agent-memory-private-beta-approval-export-input-v1"
+    },
+    "classification": {
+      "const": "staging_external"
+    },
+    "environment": {
+      "const": "staging"
+    },
+    "export_id": {
+      "$ref": "#/$defs/opaque"
+    },
+    "review_id": {
+      "$ref": "#/$defs/opaque"
+    },
+    "review_policy_version": {
+      "$ref": "#/$defs/opaque"
+    },
+    "inventory_id": {
+      "$ref": "#/$defs/opaque"
+    },
+    "inventory_receipt_sha256": {
+      "$ref": "#/$defs/digest"
+    },
+    "plan_id": {
+      "$ref": "#/$defs/opaque"
+    },
+    "plan_receipt_sha256": {
+      "$ref": "#/$defs/digest"
+    },
+    "change_id": {
+      "$ref": "#/$defs/opaque"
+    },
+    "change_receipt_sha256": {
+      "$ref": "#/$defs/digest"
+    },
+    "release_id": {
+      "$ref": "#/$defs/opaque"
+    },
+    "release_receipt_sha256": {
+      "$ref": "#/$defs/digest"
+    },
+    "security_closure_review_id": {
+      "$ref": "#/$defs/opaque"
+    },
+    "security_closure_receipt_sha256": {
+      "$ref": "#/$defs/digest"
+    },
+    "alert_bundle_id": {
+      "$ref": "#/$defs/opaque"
+    },
+    "alert_receipt_sha256": {
+      "$ref": "#/$defs/digest"
+    },
+    "blocker_review_id": {
+      "$ref": "#/$defs/opaque"
+    },
+    "blocker_receipt_sha256": {
+      "$ref": "#/$defs/digest"
+    },
+    "capacity_assessment_id": {
+      "$ref": "#/$defs/opaque"
+    },
+    "capacity_receipt_sha256": {
+      "$ref": "#/$defs/digest"
+    },
+    "supporting_evidence_manifest_sha256": {
+      "$ref": "#/$defs/digest"
+    },
+    "private_beta_evidence_bundle_sha256": {
+      "$ref": "#/$defs/digest"
+    },
+    "trust_bundle_sha256": {
+      "$ref": "#/$defs/digest"
+    },
+    "approval_export_sha256": {
+      "$ref": "#/$defs/digest"
+    },
+    "domain_review_sha256": {
+      "$ref": "#/$defs/digest"
+    },
+    "exported_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "reviewed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "ready": {
+      "type": "boolean"
+    },
+    "checks": {
+      "type": "array",
+      "minItems": 9,
+      "maxItems": 9,
+      "items": {
+        "$ref": "#/$defs/check"
+      }
+    }
+  },
+  "$defs": {
+    "digest": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "opaque": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+    },
+    "outcome": {
+      "enum": [
+        "passed",
+        "failed",
+        "inconclusive"
+      ]
+    },
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "outcome",
+        "evidence_sha256"
+      ],
+      "properties": {
+        "id": {
+          "enum": [
+            "private_beta_prerequisite_receipts_ready",
+            "private_beta_common_staging_release",
+            "private_beta_evidence_bundle_derived",
+            "private_beta_trust_bundle_valid",
+            "private_beta_immutable_export_complete",
+            "private_beta_required_approvals_verified",
+            "private_beta_reviewed_evidence_bound",
+            "private_beta_approvals_current",
+            "private_beta_accountable_domain_review_complete"
+          ]
+        },
+        "outcome": {
+          "$ref": "#/$defs/outcome"
+        },
+        "evidence_sha256": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "control_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "control",
+        "outcome"
+      ],
+      "properties": {
+        "control": {
+          "enum": [
+            "legal_review",
+            "operations_review",
+            "privacy_review",
+            "product_review",
+            "security_review"
+          ]
+        },
+        "outcome": {
+          "$ref": "#/$defs/outcome"
+        }
+      }
+    }
+  }
+}
+

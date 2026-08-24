@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-memory.local/schemas/evidence/v1/staging-alert-routing-input.schema.json",
+  "title": "Agent Memory staging alert-routing input",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "classification", "environment", "bundle_id", "rule_set_version", "route_version", "roster_version", "target_version", "inventory_id", "inventory_receipt_sha256", "plan_id", "plan_receipt_sha256", "change_id", "change_receipt_sha256", "release_id", "release_receipt_sha256", "rule_export_sha256", "route_export_sha256", "owner_roster_sha256", "synthetic_report_sha256", "target_decision_sha256", "started_at", "completed_at", "generated_at", "ready", "alerts"],
+  "properties": {
+    "schema": {"const": "agent-memory-staging-alert-routing-input-v1"},
+    "classification": {"const": "staging_external"},
+    "environment": {"const": "staging"},
+    "bundle_id": {"$ref": "#/$defs/opaque_id"},
+    "rule_set_version": {"$ref": "#/$defs/opaque_id"},
+    "route_version": {"$ref": "#/$defs/opaque_id"},
+    "roster_version": {"$ref": "#/$defs/opaque_id"},
+    "target_version": {"$ref": "#/$defs/opaque_id"},
+    "inventory_id": {"$ref": "#/$defs/opaque_id"},
+    "inventory_receipt_sha256": {"$ref": "#/$defs/digest"},
+    "plan_id": {"$ref": "#/$defs/opaque_id"},
+    "plan_receipt_sha256": {"$ref": "#/$defs/digest"},
+    "change_id": {"$ref": "#/$defs/opaque_id"},
+    "change_receipt_sha256": {"$ref": "#/$defs/digest"},
+    "release_id": {"$ref": "#/$defs/opaque_id"},
+    "release_receipt_sha256": {"$ref": "#/$defs/digest"},
+    "rule_export_sha256": {"$ref": "#/$defs/digest"},
+    "route_export_sha256": {"$ref": "#/$defs/digest"},
+    "owner_roster_sha256": {"$ref": "#/$defs/digest"},
+    "synthetic_report_sha256": {"$ref": "#/$defs/digest"},
+    "target_decision_sha256": {"$ref": "#/$defs/digest"},
+    "started_at": {"type": "string", "format": "date-time"},
+    "completed_at": {"type": "string", "format": "date-time"},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "ready": {"type": "boolean"},
+    "alerts": {"type": "array", "minItems": 7, "maxItems": 7, "items": {"$ref": "#/$defs/alert"}}
+  },
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "opaque_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"},
+    "alert": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "severity", "owner_slot_version", "triggered_at", "delivered_at", "escalated_at", "acknowledged_at", "resolved_at", "maximum_delivery_seconds", "maximum_acknowledgement_seconds", "outcome", "evidence_sha256"],
+      "properties": {
+        "id": {"enum": ["api_error_budget_burn", "api_latency_high", "worker_failures", "queue_failures", "object_storage_failures", "model_gateway_failures", "cost_spike"]},
+        "severity": {"enum": ["page", "ticket"]},
+        "owner_slot_version": {"$ref": "#/$defs/opaque_id"},
+        "triggered_at": {"type": "string", "format": "date-time"},
+        "delivered_at": {"type": "string", "format": "date-time"},
+        "escalated_at": {"type": "string", "format": "date-time"},
+        "acknowledged_at": {"type": "string", "format": "date-time"},
+        "resolved_at": {"type": "string", "format": "date-time"},
+        "maximum_delivery_seconds": {"type": "integer", "minimum": 1, "maximum": 14400},
+        "maximum_acknowledgement_seconds": {"type": "integer", "minimum": 1, "maximum": 14400},
+        "outcome": {"enum": ["passed", "failed", "inconclusive"]},
+        "evidence_sha256": {"$ref": "#/$defs/digest"}
+      }
+    }
+  }
+}

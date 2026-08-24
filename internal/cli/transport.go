@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/taimufuraiyaa/agent-memory/internal/embeddings"
+	"github.com/taimufuraiyaa/agent-memory/internal/validation"
 )
 
 type apiEnvelope struct {
@@ -59,9 +60,15 @@ func resolveRuntime(flags commonFlags) (runtimeConfig, error) {
 
 func resolveWorkspace(flagWorkspace string) (string, error) {
 	if ws := strings.TrimSpace(flagWorkspace); ws != "" {
+		if err := validation.ValidateWorkspaceName(ws); err != nil {
+			return "", fmt.Errorf("invalid workspace: %w", err)
+		}
 		return ws, nil
 	}
 	if ws := strings.TrimSpace(os.Getenv("MEMORY_WORKSPACE")); ws != "" {
+		if err := validation.ValidateWorkspaceName(ws); err != nil {
+			return "", fmt.Errorf("invalid workspace: %w", err)
+		}
 		return ws, nil
 	}
 	cwd, err := os.Getwd()

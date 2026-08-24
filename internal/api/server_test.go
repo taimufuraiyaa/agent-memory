@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -55,8 +56,34 @@ func TestServerWriteSearchRecall(t *testing.T) {
 	ts := httptest.NewServer(NewMux(svc))
 	defer ts.Close()
 
-	postJSON(t, ts.URL+"/api/v1/memories/write", map[string]any{"type": "semantic", "content": "orders service publishes order.created"})
+	postJSON(t, ts.URL+"/api/v1/memories/write", map[string]any{
+		"type":     "semantic",
+		"content":  "orders service publishes order.created",
+		"keywords": []string{"Orders", "order.created"},
+	})
 	postJSON(t, ts.URL+"/api/v1/memories/write", map[string]any{"type": "semantic", "content": "orders service publishes order.cancelled"})
+	assets, err := svc.resolve(context.Background(), "ws")
+	if err != nil {
+		t.Fatalf("resolve written workspace: %v", err)
+	}
+	writtenMemories, err := assets.Store.ListMemoriesByWorkspace(context.Background(), "ws")
+	if err != nil {
+		t.Fatalf("list written memories: %v", err)
+	}
+	var createdID string
+	for _, memory := range writtenMemories {
+		if memory.Content == "orders service publishes order.created" {
+			createdID = memory.ID
+			break
+		}
+	}
+	terms, err := assets.Store.ListMemoryTerms(context.Background(), "ws", createdID)
+	if err != nil {
+		t.Fatalf("list API-written terms: %v", err)
+	}
+	if len(terms) != 2 || terms[0].Term != "orders" || terms[1].Term != "order.created" {
+		t.Fatalf("API keywords were not persisted: %#v", terms)
+	}
 
 	recent := getJSON(t, ts.URL+"/api/v1/memories/recent?workspace=ws&limit=1")
 	recentResults, _ := recent["results"].([]any)
@@ -71,6 +98,17 @@ func TestServerWriteSearchRecall(t *testing.T) {
 	searchResp := postJSON(t, ts.URL+"/api/v1/memories/search", map[string]any{"query": "order event", "top_k": 1, "mode": "search"})
 	if len(searchResp["results"].([]any)) == 0 {
 		t.Fatalf("expected search hits")
+	}
+	termResp := postJSON(t, ts.URL+"/api/v1/memories/search", map[string]any{
+		"query":     "#ORDERS order.created",
+		"workspace": "ws",
+		"top_k":     5,
+		"mode":      "terms",
+		"operator":  "and",
+	})
+	termResults, _ := termResp["results"].([]any)
+	if len(termResults) != 1 || termResp["strategy"] != "exact_terms" {
+		t.Fatalf("unexpected term search response: %+v", termResp)
 	}
 	searchExplainResp := postJSON(t, ts.URL+"/api/v1/memories/search", map[string]any{
 		"query":     "order event",
@@ -362,6 +400,61 @@ func TestServerWriteSearchRecall(t *testing.T) {
 	// TestServerDashboardRoute.
 	if res.StatusCode != http.StatusOK && res.StatusCode != http.StatusNotFound {
 		t.Fatalf("expected 200 or 404 for /dashboard/ in TestServerWriteSearchRecall, got %d", res.StatusCode)
+	}
+}
+
+func TestLocalRequestBoundaryRejectsUntrustedHostAndCrossSiteMutation(t *testing.T) {
+	handler := LocalRequestBoundary(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+
+	tests := []struct {
+		name   string
+		method string
+		host   string
+		origin string
+		want   int
+	}{
+		{name: "loopback", method: http.MethodPost, host: "127.0.0.1:3211", origin: "http://localhost:3100", want: http.StatusNoContent},
+		{name: "localhost", method: http.MethodGet, host: "localhost:3211", want: http.StatusNoContent},
+		{name: "forged host", method: http.MethodGet, host: "attacker.example", want: http.StatusForbidden},
+		{name: "cross site mutation", method: http.MethodPost, host: "127.0.0.1:3211", origin: "https://attacker.example", want: http.StatusForbidden},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(tt.method, "http://127.0.0.1/api/v1/memories", nil)
+			req.Host = tt.host
+			if tt.origin != "" {
+				req.Header.Set("Origin", tt.origin)
+			}
+			recorder := httptest.NewRecorder()
+			handler.ServeHTTP(recorder, req)
+			if recorder.Code != tt.want {
+				t.Fatalf("status=%d want %d body=%s", recorder.Code, tt.want, recorder.Body.String())
+			}
+		})
+	}
+}
+
+func TestProjectsInitIgnoresHTTPRulePathOverride(t *testing.T) {
+	base := t.TempDir()
+	cwd := filepath.Join(base, "project")
+	if err := os.MkdirAll(cwd, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	outside := filepath.Join(base, "outside.mdc")
+	body := fmt.Sprintf(`{"cwd":%q,"project_name":"safe-project","rule_path":%q}`, cwd, outside)
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/projects/init", strings.NewReader(body))
+	recorder := httptest.NewRecorder()
+	projectsInitHandler(&Service{BaseDir: filepath.Join(base, "data")}).ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("project init failed: %d %s", recorder.Code, recorder.Body.String())
+	}
+	if _, err := os.Stat(outside); !os.IsNotExist(err) {
+		t.Fatalf("HTTP rule_path override created outside file: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(cwd, ".cursor", "rules", "agent-memory.mdc")); err != nil {
+		t.Fatalf("default in-project rule missing: %v", err)
 	}
 }
 
@@ -663,6 +756,11 @@ func TestServerRecallAutoReconstruction(t *testing.T) {
 	}, "evict", ""); err != nil {
 		t.Fatalf("add tombstone 2: %v", err)
 	}
+	// Fresh tombstones sit in a 7-day cooldown; move them out so the
+	// recall-time reconstruction path sees them.
+	if err := assets.Store.SetTombstoneCooldownForWorkspace(context.Background(), "ws", time.Now().UTC().Add(-time.Hour)); err != nil {
+		t.Fatalf("expire tombstone cooldown: %v", err)
+	}
 
 	ts := httptest.NewServer(NewMux(svc))
 	defer ts.Close()
@@ -875,6 +973,81 @@ func TestServerProjectLifecycleRoutes(t *testing.T) {
 	})
 	if _, ok := deleteResp["archived_path"]; !ok {
 		t.Fatalf("expected archived path on keep_data delete")
+	}
+}
+
+func TestServerProjectStudyRouteRunsDryStudyWithinRegisteredRoot(t *testing.T) {
+	baseDir := t.TempDir()
+	cwd := t.TempDir()
+	if err := os.WriteFile(filepath.Join(cwd, "README.md"), []byte("# Project\n\nA durable project study fact.\n"), 0o644); err != nil {
+		t.Fatalf("write study source: %v", err)
+	}
+	modelDir := filepath.Join(t.TempDir(), "model")
+	if err := os.MkdirAll(modelDir, 0o755); err != nil {
+		t.Fatalf("mkdir model: %v", err)
+	}
+	provider, err := embeddings.NewLocalProvider(modelDir)
+	if err != nil {
+		t.Fatalf("provider: %v", err)
+	}
+	svc := &Service{BaseDir: baseDir, EmbeddingProvider: provider}
+	mux := NewMux(svc)
+
+	call := func(path string, payload map[string]any) map[string]any {
+		t.Helper()
+		body, _ := json.Marshal(payload)
+		recorder := httptest.NewRecorder()
+		mux.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, path, bytes.NewReader(body)))
+		var envelope map[string]any
+		if err := json.Unmarshal(recorder.Body.Bytes(), &envelope); err != nil {
+			t.Fatalf("decode %s: %v", path, err)
+		}
+		if recorder.Code != http.StatusOK || envelope["ok"] != true {
+			t.Fatalf("request %s failed: status=%d body=%s", path, recorder.Code, recorder.Body.String())
+		}
+		result, _ := envelope["data"].(map[string]any)
+		return result
+	}
+	call("/api/v1/projects/init", map[string]any{"cwd": cwd, "project_name": "study-project"})
+	result := call("/api/v1/projects/study", map[string]any{
+		"workspace": "study-project", "depth": "shallow", "dry_run": true, "max_files": 20,
+	})
+	if result["dry_run"] != true {
+		t.Fatalf("expected dry-run result, got %+v", result)
+	}
+	if scanned, _ := result["scanned_files"].(float64); scanned != 1 {
+		t.Fatalf("expected one scanned standard source, got %+v", result)
+	}
+	if written, ok := result["written_ids"].([]any); ok && len(written) != 0 {
+		t.Fatalf("dry run must not write memories, got %+v", written)
+	}
+}
+
+func TestServerProjectStudyRouteValidatesBoundedOptions(t *testing.T) {
+	svc := &Service{BaseDir: t.TempDir()}
+	mux := NewMux(svc)
+
+	for name, payload := range map[string]map[string]any{
+		"missing workspace": {"depth": "medium", "max_files": 20},
+		"invalid depth":     {"workspace": "missing", "depth": "exhaustive", "max_files": 20},
+		"unbounded files":   {"workspace": "missing", "depth": "medium", "max_files": engine.DefaultMaxFiles + 1},
+		"negative offset":   {"workspace": "missing", "depth": "medium", "max_files": 20, "offset": -1},
+		"unbounded offset":  {"workspace": "missing", "depth": "medium", "max_files": 20, "offset": engine.MaxStudyOffset + 1},
+	} {
+		t.Run(name, func(t *testing.T) {
+			body, _ := json.Marshal(payload)
+			recorder := httptest.NewRecorder()
+			mux.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/api/v1/projects/study", bytes.NewReader(body)))
+			if recorder.Code != http.StatusBadRequest {
+				t.Fatalf("expected 400, got %d: %s", recorder.Code, recorder.Body.String())
+			}
+		})
+	}
+
+	recorder := httptest.NewRecorder()
+	mux.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/projects/study", nil))
+	if recorder.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("expected 405, got %d", recorder.Code)
 	}
 }
 
@@ -1146,6 +1319,25 @@ func TestServerImportSanitizesAndFilters(t *testing.T) {
 	}
 	if !foundSecret {
 		t.Fatalf("expected mem-secret to be imported with redacted content, results=%+v", results)
+	}
+}
+
+func TestStandaloneImportRejectsOversizedBodyAndRecordCount(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	oversized := `{"version":"v1","memories":[],"padding":"` + strings.Repeat("x", standaloneImportBodyLimit) + `"}`
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/memories/import", strings.NewReader(oversized))
+	var bundle engine.ExportBundle
+	if status, err := decodeStandaloneImport(recorder, request, &bundle); err == nil || status != http.StatusRequestEntityTooLarge {
+		t.Fatalf("oversized body status=%d err=%v", status, err)
+	}
+
+	bundle.Memories = make([]core.MemoryEntry, standaloneImportMemoryLimit+1)
+	if err := validateStandaloneImportBundle(bundle); err == nil {
+		t.Fatal("expected excessive memory count to fail")
+	}
+	bundle.Memories = []core.MemoryEntry{{Content: strings.Repeat("x", standaloneImportContentLimit+1)}}
+	if err := validateStandaloneImportBundle(bundle); err == nil {
+		t.Fatal("expected excessive aggregate content to fail")
 	}
 }
 
@@ -1496,5 +1688,3 @@ func TestRequestFeedbackAPI(t *testing.T) {
 		t.Fatalf("expected to find both feedback entries in response list with correct useful/total counts, got: %v", listData)
 	}
 }
-
-

@@ -129,6 +129,36 @@ func TestObserveRejectsInvalidTimestamp(t *testing.T) {
 	}
 }
 
+func TestSessionsRemainReadableWhenObservationCaptureIsDisabled(t *testing.T) {
+	t.Setenv("AGENT_MEMORY_OBSERVE_ENABLED", "false")
+
+	baseDir := t.TempDir()
+	modelDir := filepath.Join(t.TempDir(), "model")
+	if err := os.MkdirAll(modelDir, 0o755); err != nil {
+		t.Fatalf("mkdir model: %v", err)
+	}
+	provider, err := embeddings.NewLocalProvider(modelDir)
+	if err != nil {
+		t.Fatalf("provider: %v", err)
+	}
+	svc := &Service{
+		Workspace:         "ws",
+		BaseDir:           baseDir,
+		EmbeddingProvider: provider,
+	}
+	ts := httptest.NewServer(NewMux(svc))
+	defer ts.Close()
+
+	res, err := http.Get(ts.URL + "/api/v1/sessions?workspace=ws&limit=12")
+	if err != nil {
+		t.Fatalf("get sessions: %v", err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("expected sessions to remain readable, got status %d", res.StatusCode)
+	}
+}
+
 func TestObservePromotionIsIdempotent(t *testing.T) {
 	t.Setenv("AGENT_MEMORY_OBSERVE_ENABLED", "true")
 
@@ -160,10 +190,10 @@ func TestObservePromotionIsIdempotent(t *testing.T) {
 	})
 
 	p1 := postJSON(t, ts.URL+"/api/v1/observations/promote", map[string]any{
-		"workspace":   "ws",
-		"session_id":  "s2",
-		"max_items":   50,
-		"type":        "episodic",
+		"workspace":  "ws",
+		"session_id": "s2",
+		"max_items":  50,
+		"type":       "episodic",
 	})
 	if p1["created_id"] == "" {
 		t.Fatalf("expected created_id, got %+v", p1)
@@ -173,10 +203,10 @@ func TestObservePromotionIsIdempotent(t *testing.T) {
 	}
 
 	p2 := postJSON(t, ts.URL+"/api/v1/observations/promote", map[string]any{
-		"workspace":   "ws",
-		"session_id":  "s2",
-		"max_items":   50,
-		"type":        "episodic",
+		"workspace":  "ws",
+		"session_id": "s2",
+		"max_items":  50,
+		"type":       "episodic",
 	})
 	if p2["created_id"] != p1["created_id"] {
 		t.Fatalf("expected same created_id due to dedup, got p1=%v p2=%v", p1["created_id"], p2["created_id"])
@@ -217,11 +247,11 @@ func TestRecallIncludesRecentObservations(t *testing.T) {
 	})
 
 	resp := postJSON(t, ts.URL+"/api/v1/memories/recall", map[string]any{
-		"workspace":             "ws",
-		"task_description":      "what happened?",
-		"token_budget":          200,
-		"include_observations":  true,
-		"observation_limit":     5,
+		"workspace":              "ws",
+		"task_description":       "what happened?",
+		"token_budget":           200,
+		"include_observations":   true,
+		"observation_limit":      5,
 		"observation_session_id": "s3",
 	})
 

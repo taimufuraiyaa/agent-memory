@@ -9,22 +9,22 @@ import (
 // LifecyclePlugin provides hooks into memory lifecycle events.
 type LifecyclePlugin interface {
 	Plugin
-	
+
 	// OnWrite is called before a memory is written.
 	OnWrite(ctx context.Context, mem *core.MemoryEntry) error
-	
+
 	// OnWriteComplete is called after a memory is successfully written.
 	OnWriteComplete(ctx context.Context, mem *core.MemoryEntry) error
-	
+
 	// OnRetrieve is called before memories are retrieved.
 	OnRetrieve(ctx context.Context, query string, workspace string) error
-	
+
 	// OnRetrieveComplete is called after memories are retrieved.
 	OnRetrieveComplete(ctx context.Context, query string, hits int) error
-	
+
 	// OnDelete is called before a memory is deleted.
 	OnDelete(ctx context.Context, memoryID string) error
-	
+
 	// OnDecay is called when decay scores are updated.
 	OnDecay(ctx context.Context, workspace string, count int) error
 }
@@ -118,7 +118,7 @@ func (m *LifecycleManager) TriggerOnWrite(ctx context.Context, mem *core.MemoryE
 		if err != nil {
 			continue
 		}
-		
+
 		if lp, ok := plugin.(LifecyclePlugin); ok {
 			if err := lp.OnWrite(ctx, mem); err != nil {
 				return err
@@ -136,7 +136,7 @@ func (m *LifecycleManager) TriggerOnWriteComplete(ctx context.Context, mem *core
 		if err != nil {
 			continue
 		}
-		
+
 		if lp, ok := plugin.(LifecyclePlugin); ok {
 			if err := lp.OnWriteComplete(ctx, mem); err != nil {
 				return err
@@ -154,7 +154,7 @@ func (m *LifecycleManager) TriggerOnRetrieve(ctx context.Context, query, workspa
 		if err != nil {
 			continue
 		}
-		
+
 		if lp, ok := plugin.(LifecyclePlugin); ok {
 			if err := lp.OnRetrieve(ctx, query, workspace); err != nil {
 				return err
@@ -172,7 +172,7 @@ func (m *LifecycleManager) TriggerOnRetrieveComplete(ctx context.Context, query 
 		if err != nil {
 			continue
 		}
-		
+
 		if lp, ok := plugin.(LifecyclePlugin); ok {
 			if err := lp.OnRetrieveComplete(ctx, query, hits); err != nil {
 				return err
@@ -190,7 +190,7 @@ func (m *LifecycleManager) TriggerOnDelete(ctx context.Context, memoryID string)
 		if err != nil {
 			continue
 		}
-		
+
 		if lp, ok := plugin.(LifecyclePlugin); ok {
 			if err := lp.OnDelete(ctx, memoryID); err != nil {
 				return err
@@ -208,7 +208,7 @@ func (m *LifecycleManager) TriggerOnDecay(ctx context.Context, workspace string,
 		if err != nil {
 			continue
 		}
-		
+
 		if lp, ok := plugin.(LifecyclePlugin); ok {
 			if err := lp.OnDecay(ctx, workspace, count); err != nil {
 				return err

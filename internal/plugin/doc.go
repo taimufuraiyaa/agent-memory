@@ -174,14 +174,14 @@
 //
 // # Best Practices
 //
-//   1. Plugin Naming: Use descriptive, unique names (e.g., "openai-embedder", "audit-logger")
-//   2. Versioning: Follow semantic versioning (major.minor.patch)
-//   3. Configuration: Accept configuration via Initialize() method
-//   4. Resource Cleanup: Release resources in Shutdown() method
-//   5. Error Handling: Return descriptive errors with context
-//   6. Thread Safety: Use mutexes if maintaining shared state
-//   7. Testing: Write comprehensive unit tests for plugins
-//   8. Documentation: Document configuration options and behavior
+//  1. Plugin Naming: Use descriptive, unique names (e.g., "openai-embedder", "audit-logger")
+//  2. Versioning: Follow semantic versioning (major.minor.patch)
+//  3. Configuration: Accept configuration via Initialize() method
+//  4. Resource Cleanup: Release resources in Shutdown() method
+//  5. Error Handling: Return descriptive errors with context
+//  6. Thread Safety: Use mutexes if maintaining shared state
+//  7. Testing: Write comprehensive unit tests for plugins
+//  8. Documentation: Document configuration options and behavior
 //
 // # Plugin Discovery
 //

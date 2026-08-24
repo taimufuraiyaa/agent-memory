@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List
@@ -287,6 +288,26 @@ def build_fixture_records(clusters: List[Cluster]) -> tuple[list[dict], dict[str
     return records, stable_ids_by_cluster
 
 
+def delexicalize_query(query: str, cluster_keywords: list[str]) -> str:
+    """Replace any cluster keyword appearing as a case-insensitive substring in *query*
+    with a redaction marker. Longest keywords are processed first to avoid partial
+    replacements (e.g. 'alter table' before 'alter')."""
+    result = query
+    for kw in sorted(cluster_keywords, key=len, reverse=True):
+        pattern = re.compile(re.escape(kw), re.IGNORECASE)
+        result = pattern.sub("[redacted]", result)
+    return result
+
+
+def assert_no_gold_keywords(query: str, keywords: list[str]) -> None:
+    """Property test: raise AssertionError if any keyword appears verbatim
+    (case-insensitive substring) in the query."""
+    haystack = query.lower()
+    for kw in keywords:
+        if kw.lower() in haystack:
+            raise AssertionError(f"Gold keyword {kw!r} found in de-lexicalized query: {query!r}")
+
+
 def required_keywords(cluster: Cluster, keyword_indices: List[int], adjacent_keyword: str) -> List[str]:
     values = [cluster.keywords[index] for index in keyword_indices]
     if adjacent_keyword:
@@ -324,6 +345,9 @@ def build_test_cases(
             body = blueprint["body"].format(**values)
             gold_ids = [fixture_ids_by_cluster[cluster.id][seed_index] for seed_index in blueprint["gold"]]
             partial_ids: list[str] = []
+            # Binary relevance grades: 3 = gold (directly relevant), 1 = partial (adjacent-cluster).
+            # Calibration note: this coarse {3,1,0} scale is intentional for deterministic fixture-based
+            # benchmarking. A finer graded scale (e.g. 0-4) would require human judgment per query.
             relevance_grades = {gold_id: 3 for gold_id in gold_ids}
             for adjacent_index, adjacent_cluster in enumerate(adjacent):
                 partial_seed_id = fixture_ids_by_cluster[adjacent_cluster.id][adjacent_index]
@@ -345,6 +369,10 @@ def build_test_cases(
                         expected_facts.append(value)
             for variant_index in range(variants_per_question):
                 case_id = stable_id(cluster.id, blueprint["id"], str(variant_index))
+                raw_prompt = build_prompt(body, variant_index)
+                prompt = delexicalize_query(raw_prompt, cluster.keywords)
+                # Property test: ensure no gold keyword leaked through
+                assert_no_gold_keywords(prompt, cluster.keywords)
                 cases.append(
                     {
                         "stable_case_id": case_id,
@@ -353,7 +381,7 @@ def build_test_cases(
                         "question_id": blueprint["id"],
                         "question_index": question_index,
                         "variant_index": variant_index,
-                        "prompt": build_prompt(body, variant_index),
+                        "prompt": prompt,
                         "prior_fixture_ids": gold_ids,
                         "expected_facts": expected_facts,
                         "expected_fact_groups": fact_groups,

@@ -1,6 +1,6 @@
 # agent-memory — System Design & Project Review
 
-*Reviewed: local repository at `/Users/time/timebooks/agent-memory` (Go 1.26, module `github.com/taimufuraiyaa/agent-memory`)*
+*Reviewed: local repository at `$HOME/timebooks/agent-memory` (Go 1.26, module `github.com/taimufuraiyaa/agent-memory`)*
 
 ---
 

@@ -1,0 +1,162 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-memory.local/schemas/evidence/v1/staging-internal-alpha-input.schema.json",
+  "title": "Agent Memory release-bound internal-alpha evidence input",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema", "classification", "environment", "cohort_id", "review_version",
+    "inventory_id", "inventory_receipt_sha256", "plan_id", "plan_receipt_sha256",
+    "change_id", "change_receipt_sha256", "release_id", "release_receipt_sha256",
+    "journey_receipt_sha256", "cohort_decision_sha256", "source_policy_sha256",
+    "support_policy_sha256", "deletion_manifest_sha256", "trace_audit_manifest_sha256",
+    "product_qa_operations_review_sha256", "started_at", "completed_at", "generated_at",
+    "ready", "account_count", "approved_source_count_cap", "approved_source_bytes_cap",
+    "source_count", "source_bytes", "formats", "stages", "support", "deletion", "checks"
+  ],
+  "properties": {
+    "schema": {"const": "agent-memory-staging-internal-alpha-input-v1"},
+    "classification": {"const": "staging_external"},
+    "environment": {"const": "staging"},
+    "cohort_id": {"$ref": "#/$defs/opaque"},
+    "review_version": {"$ref": "#/$defs/opaque"},
+    "inventory_id": {"$ref": "#/$defs/opaque"},
+    "inventory_receipt_sha256": {"$ref": "#/$defs/digest"},
+    "plan_id": {"$ref": "#/$defs/opaque"},
+    "plan_receipt_sha256": {"$ref": "#/$defs/digest"},
+    "change_id": {"$ref": "#/$defs/opaque"},
+    "change_receipt_sha256": {"$ref": "#/$defs/digest"},
+    "release_id": {"$ref": "#/$defs/opaque"},
+    "release_receipt_sha256": {"$ref": "#/$defs/digest"},
+    "journey_receipt_sha256": {"$ref": "#/$defs/digest"},
+    "cohort_decision_sha256": {"$ref": "#/$defs/digest"},
+    "source_policy_sha256": {"$ref": "#/$defs/digest"},
+    "support_policy_sha256": {"$ref": "#/$defs/digest"},
+    "deletion_manifest_sha256": {"$ref": "#/$defs/digest"},
+    "trace_audit_manifest_sha256": {"$ref": "#/$defs/digest"},
+    "product_qa_operations_review_sha256": {"$ref": "#/$defs/digest"},
+    "started_at": {"type": "string", "format": "date-time"},
+    "completed_at": {"type": "string", "format": "date-time"},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "ready": {"type": "boolean"},
+    "account_count": {"type": "integer", "minimum": 1, "maximum": 100},
+    "approved_source_count_cap": {"type": "integer", "minimum": 1, "maximum": 1000000},
+    "approved_source_bytes_cap": {"type": "integer", "minimum": 1, "maximum": 1099511627776},
+    "source_count": {"type": "integer", "minimum": 1, "maximum": 1000000},
+    "source_bytes": {"type": "integer", "minimum": 1, "maximum": 1099511627776},
+    "formats": {"$ref": "#/$defs/formats"},
+    "stages": {"$ref": "#/$defs/stages"},
+    "support": {"$ref": "#/$defs/support"},
+    "deletion": {"$ref": "#/$defs/deletion"},
+    "checks": {"$ref": "#/$defs/checks"}
+  },
+  "$defs": {
+    "opaque": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"},
+    "digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "outcome": {"enum": ["passed", "failed"]},
+    "format": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "source_count", "source_bytes", "indexed_count", "non_sensitive_count", "deleted_count", "evidence_sha256"],
+      "properties": {
+        "id": {"enum": ["pdf", "epub", "markdown", "text"]},
+        "source_count": {"type": "integer", "minimum": 1, "maximum": 1000000},
+        "source_bytes": {"type": "integer", "minimum": 1, "maximum": 1099511627776},
+        "indexed_count": {"type": "integer", "minimum": 0, "maximum": 1000000},
+        "non_sensitive_count": {"type": "integer", "minimum": 0, "maximum": 1000000},
+        "deleted_count": {"type": "integer", "minimum": 0, "maximum": 1000000},
+        "evidence_sha256": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "formats": {
+      "type": "array", "minItems": 4, "maxItems": 4, "uniqueItems": true,
+      "items": {"$ref": "#/$defs/format"},
+      "allOf": [
+        {"contains": {"properties": {"id": {"const": "pdf"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "epub"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "markdown"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "text"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1}
+      ]
+    },
+    "stage": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "outcome", "completed_at", "evidence_sha256"],
+      "properties": {
+        "id": {"enum": ["invitation_acceptance", "signup", "rights_consent", "source_upload", "indexing", "search_query", "memory_review", "export", "monthly_consent_renewal", "source_deletion", "account_deletion"]},
+        "outcome": {"$ref": "#/$defs/outcome"},
+        "completed_at": {"type": "string", "format": "date-time"},
+        "evidence_sha256": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "stages": {
+      "type": "array", "minItems": 11, "maxItems": 11, "uniqueItems": true,
+      "items": {"$ref": "#/$defs/stage"},
+      "allOf": [
+        {"contains": {"properties": {"id": {"const": "invitation_acceptance"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "signup"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "rights_consent"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "source_upload"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "indexing"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "search_query"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "memory_review"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "export"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "monthly_consent_renewal"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "source_deletion"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "account_deletion"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1}
+      ]
+    },
+    "support": {
+      "type": "object", "additionalProperties": false,
+      "required": ["case_count", "resolved_case_count", "open_case_count", "overdue_case_count", "sampled_case_count", "matched_sample_count", "acknowledgement_target_seconds", "resolution_target_seconds", "max_acknowledgement_seconds", "max_resolution_seconds", "evidence_sha256"],
+      "properties": {
+        "case_count": {"type": "integer", "minimum": 1, "maximum": 1000000},
+        "resolved_case_count": {"type": "integer", "minimum": 0, "maximum": 1000000},
+        "open_case_count": {"type": "integer", "minimum": 0, "maximum": 1000000},
+        "overdue_case_count": {"type": "integer", "minimum": 0, "maximum": 1000000},
+        "sampled_case_count": {"type": "integer", "minimum": 1, "maximum": 1000000},
+        "matched_sample_count": {"type": "integer", "minimum": 0, "maximum": 1000000},
+        "acknowledgement_target_seconds": {"type": "integer", "minimum": 1, "maximum": 2592000},
+        "resolution_target_seconds": {"type": "integer", "minimum": 1, "maximum": 2592000},
+        "max_acknowledgement_seconds": {"type": "integer", "minimum": 0, "maximum": 2592000},
+        "max_resolution_seconds": {"type": "integer", "minimum": 0, "maximum": 2592000},
+        "evidence_sha256": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "deletion": {
+      "type": "object", "additionalProperties": false,
+      "required": ["account_requested_count", "account_deleted_count", "account_pending_count", "source_requested_count", "source_deleted_count", "source_pending_count", "evidence_sha256"],
+      "properties": {
+        "account_requested_count": {"type": "integer", "minimum": 1, "maximum": 100},
+        "account_deleted_count": {"type": "integer", "minimum": 0, "maximum": 100},
+        "account_pending_count": {"type": "integer", "minimum": 0, "maximum": 100},
+        "source_requested_count": {"type": "integer", "minimum": 1, "maximum": 1000000},
+        "source_deleted_count": {"type": "integer", "minimum": 0, "maximum": 1000000},
+        "source_pending_count": {"type": "integer", "minimum": 0, "maximum": 1000000},
+        "evidence_sha256": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "check": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "outcome", "evidence_sha256"],
+      "properties": {
+        "id": {"enum": ["cohort_approval_complete", "source_caps_respected", "non_sensitive_sources_verified", "all_formats_processed", "lifecycle_complete", "support_process_exercised", "deletion_reconciled", "immutable_trace_audit_complete", "product_qa_operations_review_complete"]},
+        "outcome": {"$ref": "#/$defs/outcome"},
+        "evidence_sha256": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "checks": {
+      "type": "array", "minItems": 9, "maxItems": 9, "uniqueItems": true,
+      "items": {"$ref": "#/$defs/check"},
+      "allOf": [
+        {"contains": {"properties": {"id": {"const": "cohort_approval_complete"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "source_caps_respected"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "non_sensitive_sources_verified"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "all_formats_processed"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "lifecycle_complete"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "support_process_exercised"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "deletion_reconciled"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "immutable_trace_audit_complete"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"id": {"const": "product_qa_operations_review_complete"}}, "required": ["id"]}, "minContains": 1, "maxContains": 1}
+      ]
+    }
+  }
+}

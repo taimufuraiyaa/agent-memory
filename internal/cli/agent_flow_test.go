@@ -21,6 +21,8 @@ func TestCLIAsAgentDeterministicEnvelopeFlow(t *testing.T) {
 		"--workspace", "ws",
 		"--type", "semantic",
 		"--content", "service emits order.created",
+		"--keyword", "orders",
+		"--keyword", "order.created",
 		"--format", "json",
 	)
 	if write["command"] != "write" || write["version"] != envelopeMajor {
@@ -37,6 +39,21 @@ func TestCLIAsAgentDeterministicEnvelopeFlow(t *testing.T) {
 	)
 	if search["command"] != "search" || search["version"] != envelopeMajor {
 		t.Fatalf("unexpected search envelope: %+v", search)
+	}
+
+	termSearch := runCLIJSON(t,
+		"search",
+		"--db", dbPath,
+		"--workspace", "ws",
+		"--query", "ORDERS order.created",
+		"--mode", "terms",
+		"--operator", "and",
+		"--format", "json",
+	)
+	termData, _ := termSearch["data"].(map[string]any)
+	termHits, _ := termData["hits"].([]any)
+	if termData["strategy"] != "exact_terms" || len(termHits) != 1 {
+		t.Fatalf("unexpected term search envelope: %+v", termSearch)
 	}
 
 	stats := runCLIJSON(t,

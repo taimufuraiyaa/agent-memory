@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-memory.local/schemas/evidence/v1/staging-client-journey-bundle.schema.json",
+  "title": "Agent Memory staging client journey bundle receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "ready", "environment", "release_id", "release_receipt_sha256", "collected_at", "journeys"],
+  "properties": {
+    "schema": {"const": "agent-memory-staging-client-journey-bundle-v1"},
+    "ready": {"type": "boolean"},
+    "environment": {"const": "staging"},
+    "release_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"},
+    "release_receipt_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "collected_at": {"type": "string", "format": "date-time"},
+    "journeys": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/journey"},
+      "allOf": [
+        {"contains": {"properties": {"client_kind": {"const": "human_web"}}, "required": ["client_kind"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"client_kind": {"const": "scoped_agent"}}, "required": ["client_kind"]}, "minContains": 1, "maxContains": 1}
+      ]
+    }
+  },
+  "$defs": {
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "outcome", "request_id"],
+      "properties": {
+        "id": {"enum": ["identity_authenticated", "memory_write_audited", "memory_search_audited", "export_ready_audited", "client_cleanup"]},
+        "outcome": {"enum": ["passed", "failed"]},
+        "request_id": {"type": "string", "format": "uuid"}
+      }
+    },
+    "journey": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["client_kind", "input_sha256", "trace_id", "started_at", "completed_at", "checks"],
+      "properties": {
+        "client_kind": {"enum": ["human_web", "scoped_agent"]},
+        "input_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "trace_id": {"type": "string", "pattern": "^[a-f0-9]{32}$"},
+        "started_at": {"type": "string", "format": "date-time"},
+        "completed_at": {"type": "string", "format": "date-time"},
+        "checks": {"type": "array", "minItems": 5, "maxItems": 5, "uniqueItems": true, "items": {"$ref": "#/$defs/check"}}
+      }
+    }
+  }
+}

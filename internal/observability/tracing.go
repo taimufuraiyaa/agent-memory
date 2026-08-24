@@ -42,13 +42,13 @@ func InitTracing(config TracingConfig) (func(context.Context) error, error) {
 	if !config.Enabled {
 		return func(context.Context) error { return nil }, nil
 	}
-	
+
 	// Create stdout exporter (for development/testing)
 	exporter, err := stdouttrace.New(stdouttrace.WithPrettyPrint())
 	if err != nil {
 		return nil, fmt.Errorf("failed to create trace exporter: %w", err)
 	}
-	
+
 	// Create resource with service information
 	res, err := resource.Merge(
 		resource.Default(),
@@ -61,17 +61,17 @@ func InitTracing(config TracingConfig) (func(context.Context) error, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create resource: %w", err)
 	}
-	
+
 	// Create trace provider
 	tp := sdktrace.NewTracerProvider(
 		sdktrace.WithBatcher(exporter),
 		sdktrace.WithResource(res),
 		sdktrace.WithSampler(sdktrace.TraceIDRatioBased(config.SampleRate)),
 	)
-	
+
 	// Set global trace provider
 	otel.SetTracerProvider(tp)
-	
+
 	// Return shutdown function
 	return tp.Shutdown, nil
 }
@@ -114,36 +114,36 @@ func RecordSpanError(ctx context.Context, err error) {
 func TraceOperation(ctx context.Context, name string, fn func(context.Context) error, attrs ...attribute.KeyValue) error {
 	ctx, span := StartSpan(ctx, name)
 	defer span.End()
-	
+
 	if len(attrs) > 0 {
 		span.SetAttributes(attrs...)
 	}
-	
+
 	err := fn(ctx)
 	if err != nil {
 		RecordSpanError(ctx, err)
 		return err
 	}
-	
+
 	span.SetStatus(codes.Ok, "")
 	return nil
 }
 
 // Common attribute keys for agent-memory operations
 var (
-	AttrWorkspace     = attribute.Key("agent_memory.workspace")
-	AttrMemoryID      = attribute.Key("agent_memory.memory_id")
-	AttrMemoryType    = attribute.Key("agent_memory.memory_type")
-	AttrOperation     = attribute.Key("agent_memory.operation")
-	AttrQuery         = attribute.Key("agent_memory.query")
-	AttrTopK          = attribute.Key("agent_memory.top_k")
-	AttrMode          = attribute.Key("agent_memory.mode")
-	AttrHitCount      = attribute.Key("agent_memory.hit_count")
-	AttrTokenBudget   = attribute.Key("agent_memory.token_budget")
-	AttrTokensUsed    = attribute.Key("agent_memory.tokens_used")
-	AttrProvider      = attribute.Key("agent_memory.provider")
-	AttrBatchSize     = attribute.Key("agent_memory.batch_size")
-	AttrStorageTier   = attribute.Key("agent_memory.storage_tier")
+	AttrWorkspace   = attribute.Key("agent_memory.workspace")
+	AttrMemoryID    = attribute.Key("agent_memory.memory_id")
+	AttrMemoryType  = attribute.Key("agent_memory.memory_type")
+	AttrOperation   = attribute.Key("agent_memory.operation")
+	AttrQuery       = attribute.Key("agent_memory.query")
+	AttrTopK        = attribute.Key("agent_memory.top_k")
+	AttrMode        = attribute.Key("agent_memory.mode")
+	AttrHitCount    = attribute.Key("agent_memory.hit_count")
+	AttrTokenBudget = attribute.Key("agent_memory.token_budget")
+	AttrTokensUsed  = attribute.Key("agent_memory.tokens_used")
+	AttrProvider    = attribute.Key("agent_memory.provider")
+	AttrBatchSize   = attribute.Key("agent_memory.batch_size")
+	AttrStorageTier = attribute.Key("agent_memory.storage_tier")
 )
 
 // Helper functions for common attributes

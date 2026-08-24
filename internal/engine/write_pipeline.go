@@ -14,6 +14,7 @@ import (
 
 	"github.com/taimufuraiyaa/agent-memory/internal/core"
 	"github.com/taimufuraiyaa/agent-memory/internal/embeddings"
+	"github.com/taimufuraiyaa/agent-memory/internal/locator"
 	"github.com/taimufuraiyaa/agent-memory/internal/observability"
 	"github.com/taimufuraiyaa/agent-memory/internal/storage/markdown"
 	"github.com/taimufuraiyaa/agent-memory/internal/storage/sqlite"
@@ -38,15 +39,22 @@ const entityInferenceCandidateLimit = 500
 
 // WriteInput represents write pipeline input.
 type WriteInput struct {
-	Workspace string
-	Type      core.MemoryType
-	Content   string
-	Diagram   *core.Diagram
-	Source    core.MemorySource
-	Entities  []string
-	Tags      []string
-	Outcome   *core.Outcome
-	Mode      ExtractMode
+	ID              string
+	Workspace       string
+	Type            core.MemoryType
+	Content         string
+	Diagram         *core.Diagram
+	Source          core.MemorySource
+	Entities        []string
+	Tags            []string
+	Keywords        []string
+	Outcome         *core.Outcome
+	Mode            ExtractMode
+	ContentHashSalt string
+	// MaxConfidence, when set, caps the estimated confidence score.
+	// If nil (default), no cap is applied. Used by session-end extraction
+	// to prevent low-quality outcomes from bypassing the confidence gate.
+	MaxConfidence *float64
 }
 
 // WriteResult reports final write status.
@@ -193,7 +201,8 @@ func (p *WritePipeline) Write(ctx context.Context, in WriteInput) (res *WriteRes
 				metrics.WriteBytes.WithLabelValues(in.Workspace, string(in.Type)).Observe(float64(len(in.Content)))
 			}
 		}
-		metrics.WriteTotal.WithLabelValues(in.Workspace, string(in.Type), status).Inc()
+		// WriteTotal is aggregate-only (no workspace label) to bound cardinality.
+		metrics.WriteTotal.WithLabelValues(string(in.Type), status).Inc()
 		timer.ObserveDuration(metrics.WriteDuration.WithLabelValues(in.Workspace, string(in.Type)))
 	}()
 
@@ -242,6 +251,16 @@ func (p *WritePipeline) Write(ctx context.Context, in WriteInput) (res *WriteRes
 	if in.Diagram != nil && strings.TrimSpace(in.Diagram.Code) != "" {
 		validationContent = strings.TrimSpace(validationContent) + "\n" + in.Diagram.Code
 	}
+
+	// Redact secrets and PII from the content before running the security
+	// filter, so that the filter operates on already-sanitized content.
+	// This is the same order used by sanitizeImportedMemory in the API layer.
+	validationContent = RedactPrivateAndSecrets(validationContent)
+	in.Content = RedactPrivateAndSecrets(in.Content)
+	if in.Diagram != nil && in.Diagram.Code != "" {
+		in.Diagram.Code = RedactPrivateAndSecrets(in.Diagram.Code)
+	}
+
 	if err := p.filter.Validate(ctx, SecurityValidationInput{
 		Workspace: in.Workspace,
 		Content:   validationContent,
@@ -272,6 +291,15 @@ func (p *WritePipeline) Write(ctx context.Context, in WriteInput) (res *WriteRes
 	}
 
 	in.Content = content
+	keywords, err := locator.Extract(locator.Input{
+		Explicit: in.Keywords,
+		Content:  content,
+		Entities: in.Entities,
+		Tags:     in.Tags,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("invalid keywords: %w", err)
+	}
 
 	// Confidence gate — failures always bypass, everything else is scored.
 	var confidence float64
@@ -279,6 +307,14 @@ func (p *WritePipeline) Write(ctx context.Context, in WriteInput) (res *WriteRes
 		confidence = 1.0 // failures are always stored at full confidence
 	} else {
 		confidence = EstimateConfidence(ctx, in, p.store)
+	}
+
+	// Apply caller-supplied confidence cap (e.g. session-end extraction).
+	if in.MaxConfidence != nil && confidence > *in.MaxConfidence {
+		confidence = *in.MaxConfidence
+	}
+
+	if !isFailureOutcome(in) {
 		band := ClassifyConfidence(confidence)
 		if band == ConfidenceLow {
 			return &WriteResult{
@@ -291,11 +327,36 @@ func (p *WritePipeline) Write(ctx context.Context, in WriteInput) (res *WriteRes
 		}
 	}
 
-	hash := contentHash(in.Workspace, in.Type, content, in.Diagram)
+	hashContent := content
+	if strings.TrimSpace(in.ContentHashSalt) != "" {
+		hashContent += "\x00" + strings.TrimSpace(in.ContentHashSalt)
+	}
+	hash := contentHash(in.Workspace, in.Type, hashContent, in.Diagram)
 	decision := p.router.Decide(in)
+
+	// Dedup before embedding: check whether this content hash already exists.
+	// If it does, return the existing result immediately, skipping the costly
+	// embedding call entirely. The INSERT OR IGNORE below remains as a final
+	// concurrency guard for races between this lookup and the insert.
+	// Cardinality budget: 1 (aggregate) per family.
+	if existing, getErr := p.store.GetMemoryByHash(ctx, in.Workspace, hash); getErr == nil && existing != nil {
+		return &WriteResult{
+			ID:           existing.ID,
+			Deduplicated: true,
+			StorageTier:  existing.StorageTier,
+			RouteRule:    decision.Rule,
+			RouteReason:  decision.Reason,
+			ContentHash:  hash,
+		}, nil
+	}
+
 	tier := decision.Tier
+	entryID := strings.TrimSpace(in.ID)
+	if entryID == "" {
+		entryID = uuid.NewString()
+	}
 	entry := &core.MemoryEntry{
-		ID:          uuid.NewString(),
+		ID:          entryID,
 		Type:        in.Type,
 		Content:     content,
 		Diagram:     in.Diagram,
@@ -303,6 +364,7 @@ func (p *WritePipeline) Write(ctx context.Context, in WriteInput) (res *WriteRes
 		Source:      in.Source,
 		Entities:    in.Entities,
 		Tags:        in.Tags,
+		Keywords:    keywords,
 		Outcome:     in.Outcome,
 		Pinned:      containsPinned(in.Tags),
 		Confidence:  confidence,
@@ -366,7 +428,7 @@ func (p *WritePipeline) Write(ctx context.Context, in WriteInput) (res *WriteRes
 		// Insert the memory and its embedding atomically: either both are
 		// persisted, or neither is, so there's never a window where a memory
 		// row exists without its vector.
-		if err := p.store.InsertMemoryByHashWithVector(ctx, entry, hash, embedProvider, embedModelVer, vec); err != nil {
+		if err := p.store.InsertMemoryByHashWithVector(ctx, entry, hash, embedProvider, embedModelVer, vec, keywords); err != nil {
 			if errors.Is(err, sqlite.ErrDuplicateContent) {
 				return dedupResult()
 			}
@@ -375,7 +437,7 @@ func (p *WritePipeline) Write(ctx context.Context, in WriteInput) (res *WriteRes
 			return nil, fmt.Errorf("persist eager vector: insert memory %s: %w", entry.ID, err)
 		}
 	} else {
-		if err := p.store.InsertMemoryByHash(ctx, entry, hash); err != nil {
+		if err := p.store.InsertMemoryByHash(ctx, entry, hash, keywords); err != nil {
 			if errors.Is(err, sqlite.ErrDuplicateContent) {
 				return dedupResult()
 			}
@@ -397,6 +459,7 @@ func (p *WritePipeline) Write(ctx context.Context, in WriteInput) (res *WriteRes
 	if p.cache != nil {
 		p.cache.InvalidateWorkspace(entry.Workspace)
 	}
+	_, _ = p.store.AppendAuditEvent(ctx, sqlite.AuditEventInput{Workspace: entry.Workspace, Operation: "write", Outcome: "success", Actor: "pipeline", Source: string(entry.Source.Type), SessionID: entry.Source.SessionID, TargetType: "memory", TargetIDs: []string{entry.ID}, OccurredAt: time.Now().UTC()})
 
 	return &WriteResult{
 		ID:          entry.ID,

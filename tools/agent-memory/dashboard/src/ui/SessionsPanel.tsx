@@ -1,6 +1,7 @@
-import type { MemoryType, ObservationEntry, ObservationPromotionResult, SessionEntry } from '../lib/api'
+import type { MemoryType, ObservationEntry, ObservationPromotionResult, ReplayEvent, SessionEntry } from '../lib/api'
 import { formatLegendIndex, formatNumber, formatTS, toTitle } from './dashboardHelpers'
 import { BreakdownCard, DiagnosticRow } from './components'
+import { ReplayTimeline } from './ReplayTimeline'
 
 export function SessionsPanel({
   workspace,
@@ -16,6 +17,9 @@ export function SessionsPanel({
   promotionBusy,
   onSelectSession,
   onPromote,
+  replayEvents,
+  replayBusy,
+  replayErr,
 }: {
   workspace: string
   sessions: SessionEntry[]
@@ -30,6 +34,9 @@ export function SessionsPanel({
   promotionBusy: boolean
   onSelectSession: (sessionID: string) => void
   onPromote: (type?: MemoryType) => void
+  replayEvents: ReplayEvent[]
+  replayBusy: boolean
+  replayErr: string
 }) {
   const selectedSession = sessions.find((session) => session.session_id === selectedSessionID) ?? sessions[0]
 
@@ -181,6 +188,11 @@ export function SessionsPanel({
                   </div>
 
                   {observationsErr ? <div className="callout calloutBad">{observationsErr}</div> : null}
+
+                  <section className="timelineSection">
+                    <div className="comparisonHeader"><div><div className="breakdownTitle">Sanitized Session Replay</div><div className="breakdownSubtitle">Play, step, and filter captured or imported events while tracing promoted memory provenance.</div></div></div>
+                    <ReplayTimeline events={replayEvents} busy={replayBusy} error={replayErr} />
+                  </section>
 
                   <section className="timelineSection">
                     <div className="comparisonHeader">

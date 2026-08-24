@@ -2,6 +2,7 @@ package core
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 )
@@ -37,6 +38,7 @@ const (
 	SourceConsolidation    SourceType = "consolidation"
 	SourceReflection       SourceType = "reflection"
 	SourceReconstruction   SourceType = "reconstruction"
+	SourceImport           SourceType = "import"
 )
 
 // RelationType indicates relationship edges between memories.
@@ -95,6 +97,7 @@ type MemoryEntry struct {
 	Source     MemorySource `json:"source"`
 	Entities   []string     `json:"entities" db:"entities"`
 	Tags       []string     `json:"tags" db:"tags"`
+	Keywords   []MemoryTerm `json:"keywords,omitempty"`
 	Confidence float64      `json:"confidence" db:"confidence"`
 
 	CreatedAt           time.Time  `json:"created_at" db:"created_at"`
@@ -124,6 +127,27 @@ type MemoryEntry struct {
 	Relations []Relation `json:"relations,omitempty"`
 }
 
+// TermSource records how a memory locator term was selected.
+type TermSource string
+
+const (
+	TermSourceExplicit   TermSource = "explicit"
+	TermSourceHashtag    TermSource = "hashtag"
+	TermSourceEntity     TermSource = "entity"
+	TermSourceTag        TermSource = "tag"
+	TermSourceIdentifier TermSource = "identifier"
+)
+
+// MemoryTerm is a short, normalized locator used by exact term search.
+type MemoryTerm struct {
+	Term                 string     `json:"term"`
+	Display              string     `json:"display,omitempty"`
+	Source               TermSource `json:"source"`
+	Ordinal              int        `json:"ordinal"`
+	NormalizationVersion string     `json:"normalization_version"`
+	ExtractorVersion     string     `json:"extractor_version"`
+}
+
 type Diagram struct {
 	Lang string `json:"lang"`
 	Code string `json:"code"`
@@ -141,10 +165,14 @@ type MemoryPatch struct {
 
 // MemorySource describes where memory data came from.
 type MemorySource struct {
-	Type      SourceType `json:"type"`
-	SessionID string     `json:"session_id,omitempty"`
-	FilePath  string     `json:"file_path,omitempty"`
-	LineRange []int      `json:"line_range,omitempty"`
+	Type         SourceType `json:"type"`
+	SessionID    string     `json:"session_id,omitempty"`
+	FilePath     string     `json:"file_path,omitempty"`
+	LineRange    []int      `json:"line_range,omitempty"`
+	NoteID       string     `json:"note_id,omitempty"`
+	NoteRevision int        `json:"note_revision,omitempty"`
+	NotePath     string     `json:"note_path,omitempty"`
+	Heading      string     `json:"heading,omitempty"`
 }
 
 // Relation is a graph edge from this memory to another memory.
@@ -197,14 +225,20 @@ type StoreStats struct {
 }
 
 type Observation struct {
-	ID         string    `json:"id"`
-	Workspace  string    `json:"workspace"`
-	SessionID  string    `json:"session_id"`
-	OccurredAt time.Time `json:"occurred_at"`
-	Kind       string    `json:"kind"`
-	ToolName   *string   `json:"tool_name,omitempty"`
-	Summary    string    `json:"summary"`
-	CreatedAt  time.Time `json:"created_at"`
+	ID              string    `json:"id"`
+	Workspace       string    `json:"workspace"`
+	SessionID       string    `json:"session_id"`
+	OccurredAt      time.Time `json:"occurred_at"`
+	Kind            string    `json:"kind"`
+	ToolName        *string   `json:"tool_name,omitempty"`
+	Summary         string    `json:"summary"`
+	SourceAgent     string    `json:"source_agent,omitempty"`
+	SourceAdapter   string    `json:"source_adapter,omitempty"`
+	HookEvent       string    `json:"hook_event,omitempty"`
+	ExternalEventID string    `json:"external_event_id,omitempty"`
+	SchemaVersion   string    `json:"schema_version,omitempty"`
+	CaptureMode     string    `json:"capture_mode,omitempty"`
+	CreatedAt       time.Time `json:"created_at"`
 }
 
 type Session struct {
@@ -263,6 +297,9 @@ func (m *MemoryEntry) Validate() error {
 	}
 	if m.Confidence < 0 || m.Confidence > 1 {
 		return errors.New("confidence must be between 0 and 1")
+	}
+	if len(m.Keywords) > 3 {
+		return fmt.Errorf("%w: keywords must contain at most 3 terms", ErrInvalidInput)
 	}
 	return nil
 }

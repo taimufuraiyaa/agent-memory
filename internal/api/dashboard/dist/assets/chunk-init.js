@@ -1,16 +1,1 @@
-function initRange(domain, range) {
-  switch (arguments.length) {
-    case 0:
-      break;
-    case 1:
-      this.range(domain);
-      break;
-    default:
-      this.range(range).domain(domain);
-      break;
-  }
-  return this;
-}
-export {
-  initRange as i
-};
+function t(e,a){switch(arguments.length){case 0:break;case 1:this.range(e);break;default:this.range(a).domain(e);break}return this}export{t as i};

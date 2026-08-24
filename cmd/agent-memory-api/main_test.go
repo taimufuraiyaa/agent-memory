@@ -1,0 +1,111 @@
+package main
+
+import (
+	"context"
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+	"time"
+
+	"github.com/taimufuraiyaa/agent-memory/internal/saas/config"
+)
+
+type readinessPingerFunc func(context.Context) error
+
+func (f readinessPingerFunc) Ping(ctx context.Context) error { return f(ctx) }
+
+type readinessQueueFunc func(context.Context) error
+
+func (f readinessQueueFunc) FlushWithContext(ctx context.Context) error { return f(ctx) }
+
+func TestIdentityBoundaryUsesDevelopmentAuthenticatorOnlyInDevelopment(t *testing.T) {
+	authenticator, profiles, err := newIdentityBoundary(context.Background(), config.Config{
+		Environment: config.Development, IdentityMode: config.IdentityDevelopment,
+		DevAuthToken: "development-token", DevSubject: "development|member",
+		DevEmail: "member@example.test", DevDisplayName: "Member",
+	})
+	if err != nil || authenticator == nil || profiles == nil {
+		t.Fatalf("development identity boundary authenticator=%v profiles=%v err=%v", authenticator, profiles, err)
+	}
+}
+
+func TestIdentityBoundaryFailsClosedOnOIDCDiscoveryFailure(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "identity unavailable", http.StatusServiceUnavailable)
+	}))
+	defer server.Close()
+
+	_, _, err := newIdentityBoundary(context.Background(), config.Config{
+		Environment: config.Staging, IdentityMode: config.IdentityOIDC,
+		OIDCIssuer: server.URL, OIDCAudience: "agent-memory-web",
+	})
+	if err == nil {
+		t.Fatal("expected managed identity discovery failure")
+	}
+}
+
+func TestIdentityBoundaryUsesOIDCWhenExplicitlySelectedInDevelopment(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "identity unavailable", http.StatusServiceUnavailable)
+	}))
+	defer server.Close()
+
+	_, _, err := newIdentityBoundary(context.Background(), config.Config{
+		Environment: config.Development, IdentityMode: config.IdentityOIDC,
+		DevAuthToken: "would-be-unsafe-fallback", DevSubject: "development|member", DevEmail: "member@example.test",
+		OIDCIssuer: server.URL, OIDCAudience: "agent-memory-local",
+	})
+	if err == nil {
+		t.Fatal("explicit local OIDC mode fell back to development identity")
+	}
+}
+
+func TestCheckDependenciesRequiresDatabaseAndQueueWithoutAdministrativeObjectProbe(t *testing.T) {
+	ctx := context.Background()
+	database := readinessPingerFunc(func(context.Context) error { return nil })
+	queue := readinessQueueFunc(func(context.Context) error { return nil })
+	if err := checkDependencies(ctx, database, queue); err != nil {
+		t.Fatalf("healthy dependencies rejected: %v", err)
+	}
+
+	failures := []struct {
+		name     string
+		database readinessPinger
+		queue    readinessQueue
+	}{
+		{name: "database", database: readinessPingerFunc(func(context.Context) error { return errors.New("down") }), queue: queue},
+		{name: "queue", database: database, queue: readinessQueueFunc(func(context.Context) error { return errors.New("down") })},
+	}
+	for _, failure := range failures {
+		t.Run(failure.name, func(t *testing.T) {
+			if err := checkDependencies(ctx, failure.database, failure.queue); err == nil {
+				t.Fatal("unhealthy dependencies reported ready")
+			}
+		})
+	}
+}
+
+func TestSemanticRetrievalOptionsEnableRolesIndependently(t *testing.T) {
+	options, err := semanticRetrievalOptions(config.Config{})
+	if err != nil || len(options) != 0 {
+		t.Fatalf("disabled semantic options=%d err=%v", len(options), err)
+	}
+	options, err = semanticRetrievalOptions(config.Config{
+		QueryPlannerEnabled: true, QueryPlannerEndpoint: "http://127.0.0.1:11434", QueryPlannerModel: "qwen3:8b", QueryPlannerTimeout: 8 * time.Second,
+		RerankerEnabled: true, RerankerEndpoint: "http://127.0.0.1:11435", RerankerModel: "qwen3-reranker:0.6b", RerankerTimeout: 8 * time.Second, RerankerMinRelevance: 0.5,
+	})
+	if err != nil || len(options) != 2 {
+		t.Fatalf("enabled semantic options=%d err=%v", len(options), err)
+	}
+}
+
+func TestSemanticRetrievalOptionsPreservePlannerWhenWarmupIsUnavailable(t *testing.T) {
+	options, err := semanticRetrievalOptions(config.Config{
+		QueryPlannerEnabled: true, QueryPlannerEndpoint: "http://127.0.0.1:1", QueryPlannerModel: "qwen3:8b", QueryPlannerTimeout: time.Second,
+		QueryPlannerWarmupEnabled: true, QueryPlannerWarmupTimeout: time.Second, QueryPlannerKeepAlive: time.Minute,
+	})
+	if err != nil || len(options) != 1 {
+		t.Fatalf("planner warmup fallback options=%d err=%v", len(options), err)
+	}
+}

@@ -35,40 +35,40 @@ func (e *SimpleHashEmbedder) Embed(ctx context.Context, text string) ([]float32,
 	if text == "" {
 		return make([]float32, e.dimensions), nil
 	}
-	
+
 	// Normalize text
 	text = strings.ToLower(strings.TrimSpace(text))
-	
+
 	// Generate hash
 	hash := sha256.Sum256([]byte(text))
-	
+
 	// Create embedding vector
 	embedding := make([]float32, e.dimensions)
-	
+
 	// Use hash bytes to generate vector components
 	for i := 0; i < e.dimensions; i++ {
 		// Use different parts of hash for each dimension
 		offset := (i * 8) % len(hash)
 		value := binary.BigEndian.Uint64(hash[offset:])
-		
+
 		// Normalize to [-1, 1]
 		normalized := float64(value) / float64(math.MaxUint64)
 		embedding[i] = float32(normalized*2.0 - 1.0)
 	}
-	
+
 	// Normalize vector to unit length
 	magnitude := float32(0.0)
 	for _, v := range embedding {
 		magnitude += v * v
 	}
 	magnitude = float32(math.Sqrt(float64(magnitude)))
-	
+
 	if magnitude > 0 {
 		for i := range embedding {
 			embedding[i] /= magnitude
 		}
 	}
-	
+
 	return embedding, nil
 }
 
@@ -108,14 +108,14 @@ type CustomEmbedderPlugin struct {
 // NewCustomEmbedderPlugin creates a new custom embedder plugin.
 func NewCustomEmbedderPlugin(dimensions int) *CustomEmbedderPlugin {
 	provider := NewSimpleHashEmbedder(dimensions)
-	
+
 	base := plugin.NewBaseEmbeddingPlugin(
 		"custom-embedder",
 		"1.0.0",
 		"Example hash-based embedding provider (demo only)",
 		provider,
 	)
-	
+
 	return &CustomEmbedderPlugin{
 		BaseEmbeddingPlugin: base,
 	}
@@ -129,7 +129,7 @@ func (p *CustomEmbedderPlugin) Initialize(ctx context.Context, config map[string
 	if err := p.BaseEmbeddingPlugin.Initialize(ctx, config); err != nil {
 		return err
 	}
-	
+
 	// Get dimensions from config
 	if dims, ok := config["dimensions"].(int); ok {
 		if dims < 1 || dims > 4096 {
@@ -138,7 +138,7 @@ func (p *CustomEmbedderPlugin) Initialize(ctx context.Context, config map[string
 		// Note: Would need to recreate provider with new dimensions
 		// Kept simple for example
 	}
-	
+
 	return nil
 }
 
@@ -167,21 +167,21 @@ func (e *RealWorldEmbedder) Embed(ctx context.Context, text string) ([]float32, 
 	// 2. Handle rate limiting and retries
 	// 3. Parse response and extract embeddings
 	// 4. Return float32 slice
-	
+
 	// Placeholder
 	return nil, fmt.Errorf("not implemented: integrate with your embedding API")
-	
+
 	/* Example implementation:
 	req := &EmbeddingRequest{
 		Input: text,
 		Model: e.model,
 	}
-	
+
 	resp, err := e.client.CreateEmbedding(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("API error: %w", err)
 	}
-	
+
 	return resp.Data[0].Embedding, nil
 	*/
 }
@@ -192,7 +192,7 @@ func (e *RealWorldEmbedder) EmbedBatch(ctx context.Context, texts []string) ([][
 	// 1. Call batch embedding API
 	// 2. Handle rate limiting
 	// 3. Return all embeddings
-	
+
 	// Placeholder
 	return nil, fmt.Errorf("not implemented: integrate with your embedding API")
 }
@@ -214,7 +214,7 @@ func (e *RealWorldEmbedder) ModelVersion() string {
 
 // Ensure interfaces are implemented
 var (
-	_ embeddings.Provider     = (*SimpleHashEmbedder)(nil)
-	_ embeddings.Provider     = (*RealWorldEmbedder)(nil)
-	_ plugin.EmbeddingPlugin  = (*CustomEmbedderPlugin)(nil)
+	_ embeddings.Provider    = (*SimpleHashEmbedder)(nil)
+	_ embeddings.Provider    = (*RealWorldEmbedder)(nil)
+	_ plugin.EmbeddingPlugin = (*CustomEmbedderPlugin)(nil)
 )

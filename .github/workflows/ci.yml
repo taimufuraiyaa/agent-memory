@@ -17,9 +17,9 @@ jobs:
     name: build, vet, fmt, test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
           cache: true
@@ -48,21 +48,115 @@ jobs:
       - name: go build
         run: go build ./...
 
+      - name: hosted contract gate
+        run: make contracts-check
+
+      - name: hosted service tests with race detector
+        run: go test -race ./internal/saas/...
+
+      - name: hosted service binaries
+        env:
+          CGO_ENABLED: "0"
+        run: |
+          go build ./cmd/agent-memory-api
+          go build ./cmd/agent-memory-worker
+          go build ./cmd/agent-memory-reconciler
+          go build ./cmd/agent-memory-migrate
+
+      - name: dashboard checks
+        working-directory: tools/agent-memory/dashboard
+        run: |
+          npm ci
+          npm test
+          npm run typecheck
+          npm run build
+
+      - name: MCP adapter checks
+        working-directory: tools/agent-memory/mcp-server
+        run: |
+          npm test
+          npm run build
+
+      - name: local topology contract
+        run: |
+          docker compose -f deploy/saas/compose.yaml config --quiet
+          scripts/tests/saas-local-profiles_test.sh
+          scripts/tests/saas-local-alpha-gate_test.sh
+          go test ./cmd/agent-memory-local-evidence ./internal/saas/localevidence
+
+      - name: hosted Kubernetes policy and rollback contract
+        run: |
+          scripts/validate-saas-kubernetes.sh
+          scripts/tests/saas-kubernetes-release_test.sh
+          scripts/tests/saas-lifecycle-smoke_test.sh
+
       - name: go test
         run: go test ./...
+
+  benchmark:
+    name: python benchmark (core)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: build binary
+        run: go build -o /tmp/agent-memory ./cmd/agent-memory
+
+      - name: install agent-memory binary
+        run: sudo install -m 755 /tmp/agent-memory /usr/local/bin/agent-memory
+
+      - name: run benchmark tests
+        run: python3 -m unittest benchmark.test_benchmark -v
 
   lint:
     name: golangci-lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
           cache: true
 
-      - uses: golangci/golangci-lint-action@v6
+      - uses: golangci/golangci-lint-action@55c2c1448f86e01eaae002a5a3a9624417608d84 # v6
         with:
           version: v1.64.8
           args: --timeout=5m
+
+  saas-integration:
+    name: hosted PostgreSQL isolation
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_DB: agent_memory
+          POSTGRES_USER: agent_memory
+          POSTGRES_PASSWORD: ci-only-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U agent_memory -d agent_memory"
+          --health-interval 2s
+          --health-timeout 2s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: hosted contract and PostgreSQL integration gate
+        env:
+          AGENT_MEMORY_TEST_POSTGRES_URL: postgres://agent_memory:ci-only-password@127.0.0.1:5432/agent_memory?sslmode=disable
+        run: |
+          make contracts-check
+          go test -race -p 1 -count=1 ./internal/saas/...

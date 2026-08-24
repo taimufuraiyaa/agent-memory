@@ -1,0 +1,148 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-memory.dev/schemas/evidence/v1/kubernetes-release-receipt.schema.json",
+  "title": "Agent Memory Kubernetes Release Receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "environment",
+    "namespace",
+    "kubernetes_context",
+    "release_id",
+    "started_at",
+    "completed_at",
+    "outcome",
+    "images",
+    "migration",
+    "rollouts",
+    "deployments",
+    "rollback"
+  ],
+  "properties": {
+    "schema": {
+      "const": "agent-memory-kubernetes-release-receipt-v1"
+    },
+    "environment": {
+      "enum": ["staging", "production"]
+    },
+    "namespace": {
+      "pattern": "^agent-memory-(staging|production)$"
+    },
+    "kubernetes_context": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 253
+    },
+    "release_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "completed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "outcome": {
+      "enum": ["passed", "failed"]
+    },
+    "images": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["api", "worker", "reconciler", "migrate"],
+      "properties": {
+        "api": {"$ref": "#/$defs/imageOrUnavailable"},
+        "worker": {"$ref": "#/$defs/imageOrUnavailable"},
+        "reconciler": {"$ref": "#/$defs/imageOrUnavailable"},
+        "migrate": {"$ref": "#/$defs/imageOrUnavailable"}
+      }
+    },
+    "migration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["outcome"],
+      "properties": {
+        "outcome": {"enum": ["not_started", "failed", "complete"]}
+      }
+    },
+    "rollouts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["outcome"],
+      "properties": {
+        "outcome": {"enum": ["not_started", "failed", "healthy"]}
+      }
+    },
+    "deployments": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "revision"],
+        "properties": {
+          "name": {
+            "enum": ["agent-memory-api", "agent-memory-worker", "agent-memory-reconciler"]
+          },
+          "revision": {
+            "pattern": "^([1-9][0-9]*|unavailable)$"
+          }
+        }
+      }
+    },
+    "rollback": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["attempted", "succeeded"],
+      "properties": {
+        "attempted": {"type": "boolean"},
+        "succeeded": {"type": "boolean"}
+      }
+    }
+  },
+  "$defs": {
+    "image": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._:/-]+@sha256:[a-f0-9]{64}$"
+    },
+    "imageOrUnavailable": {
+      "oneOf": [
+        {"$ref": "#/$defs/image"},
+        {"const": "unavailable"}
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {"outcome": {"const": "passed"}},
+        "required": ["outcome"]
+      },
+      "then": {
+        "properties": {
+          "migration": {"properties": {"outcome": {"const": "complete"}}},
+          "rollouts": {"properties": {"outcome": {"const": "healthy"}}},
+          "images": {
+            "properties": {
+              "api": {"$ref": "#/$defs/image"},
+              "worker": {"$ref": "#/$defs/image"},
+              "reconciler": {"$ref": "#/$defs/image"},
+              "migrate": {"$ref": "#/$defs/image"}
+            }
+          },
+          "rollback": {
+            "properties": {
+              "attempted": {"const": false},
+              "succeeded": {"const": false}
+            }
+          }
+        }
+      }
+    }
+  ]
+}

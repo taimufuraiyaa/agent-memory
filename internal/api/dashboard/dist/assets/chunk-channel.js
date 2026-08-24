@@ -1,7 +1,1 @@
-import { ai as Utils, aj as Color } from "./app.js";
-const channel = (color, channel2) => {
-  return Utils.lang.round(Color.parse(color)[channel2]);
-};
-export {
-  channel as c
-};
+import{ag as o,ah as n}from"./app.js";const t=(a,r)=>o.lang.round(n.parse(a)[r]);export{t as c};

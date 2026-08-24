@@ -1,0 +1,25 @@
+{
+  "schema": "agent-memory-production-private-authority-exposure-v1",
+  "environment": "production",
+  "exposure_id": "replace-with-exposure-id",
+  "inventory_id": "replace-with-production-inventory-id",
+  "inventory_receipt_sha256": "7182f58be6da288610f64f8e706b044dd18a0e0029240a78d83367804cf3e80d",
+  "change_id": "replace-with-production-change-id",
+  "change_receipt_sha256": "62262a25a202d44219ba0a05be0a19091bc9ce1c5a3995b29e53b6f3cc16471f",
+  "generated_at": "2026-08-10T06:00:00Z",
+  "firewall_export_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+  "scan": {
+    "scanner": {"name": "replace-me", "version": "replace-me"},
+    "scanned_at": "2026-08-10T05:00:00Z",
+    "raw_output_sha256": "9999999999999999999999999999999999999999999999999999999999999999"
+  },
+  "targets": [
+    {"id": "postgres", "outcome": "blocked"},
+    {"id": "object_storage", "outcome": "blocked"},
+    {"id": "durable_queue", "outcome": "blocked"},
+    {"id": "secrets", "outcome": "blocked"},
+    {"id": "observability", "outcome": "blocked"},
+    {"id": "backup", "outcome": "blocked"},
+    {"id": "kubernetes_control", "outcome": "blocked"}
+  ]
+}

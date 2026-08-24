@@ -1,0 +1,9 @@
+DROP TABLE saas_vector_documents;
+ALTER TABLE saas_source_projections
+    DROP COLUMN claimed_until,
+    DROP COLUMN claim_token,
+    DROP CONSTRAINT saas_source_projections_state_check;
+ALTER TABLE saas_source_projections
+    ADD CONSTRAINT saas_source_projections_state_check
+    CHECK(state IN ('ready','failed'));
+DROP EXTENSION vector;

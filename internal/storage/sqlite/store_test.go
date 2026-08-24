@@ -611,3 +611,29 @@ func TestStorePopulateSupersedesRelations(t *testing.T) {
 	}
 }
 
+func TestListRecentMemoriesUsesInsertionOrderWhenCreatedAtTies(t *testing.T) {
+	ctx := context.Background()
+	store, err := Open(ctx, filepath.Join(t.TempDir(), "memory.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	createdAt := time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC)
+	for _, memory := range []*core.MemoryEntry{
+		{ID: "first", Type: core.SemanticMemory, Content: "first", Workspace: "ws", Source: core.MemorySource{Type: core.SourceUserInput}, Confidence: 0.8, StorageTier: core.TierVector, CreatedAt: createdAt},
+		{ID: "second", Type: core.SemanticMemory, Content: "second", Workspace: "ws", Source: core.MemorySource{Type: core.SourceUserInput}, Confidence: 0.8, StorageTier: core.TierVector, CreatedAt: createdAt},
+	} {
+		if err := store.UpsertMemory(ctx, memory); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	recent, err := store.ListRecentMemoriesByWorkspace(ctx, "ws", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(recent) != 1 || recent[0].ID != "second" {
+		t.Fatalf("expected later inserted tied memory first, got %+v", recent)
+	}
+}

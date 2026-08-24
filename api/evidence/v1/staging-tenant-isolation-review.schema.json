@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-memory.local/schemas/evidence/v1/staging-tenant-isolation-review.schema.json",
+  "title": "Agent Memory independent staging tenant-isolation review",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "classification", "environment", "review_id", "inventory_id", "inventory_receipt_sha256", "change_id", "change_receipt_sha256", "release_id", "release_receipt_sha256", "ready", "generated_at", "review", "domains"],
+  "properties": {
+    "schema": {"const": "agent-memory-staging-tenant-isolation-review-v1"},
+    "classification": {"const": "staging_external"},
+    "environment": {"const": "staging"},
+    "review_id": {"$ref": "#/$defs/opaque_id"},
+    "inventory_id": {"$ref": "#/$defs/opaque_id"},
+    "inventory_receipt_sha256": {"$ref": "#/$defs/digest"},
+    "change_id": {"$ref": "#/$defs/opaque_id"},
+    "change_receipt_sha256": {"$ref": "#/$defs/digest"},
+    "release_id": {"$ref": "#/$defs/opaque_id"},
+    "release_receipt_sha256": {"$ref": "#/$defs/digest"},
+    "ready": {"type": "boolean"},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "review": {"$ref": "#/$defs/review_window"},
+    "domains": {
+      "type": "array",
+      "minItems": 6,
+      "maxItems": 6,
+      "items": {"$ref": "#/$defs/domain"}
+    }
+  },
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "opaque_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"},
+    "review_window": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["started_at", "completed_at"],
+      "properties": {
+        "started_at": {"type": "string", "format": "date-time"},
+        "completed_at": {"type": "string", "format": "date-time"}
+      }
+    },
+    "domain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "outcome", "finding_count", "evidence_sha256"],
+      "properties": {
+        "id": {"enum": ["control_api_authorization_reviewed", "forced_rls_effectiveness_reviewed", "identifier_substitution_reviewed", "cache_namespace_reviewed", "concealment_and_error_behavior_reviewed", "timing_inference_reviewed"]},
+        "outcome": {"enum": ["passed", "failed", "inconclusive"]},
+        "finding_count": {"type": "integer", "minimum": 0, "maximum": 1000},
+        "evidence_sha256": {"$ref": "#/$defs/digest"}
+      }
+    }
+  }
+}

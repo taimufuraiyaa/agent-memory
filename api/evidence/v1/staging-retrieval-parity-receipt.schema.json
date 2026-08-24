@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-memory.local/schemas/evidence/v1/staging-retrieval-parity-receipt.schema.json",
+  "title": "Agent Memory representative staging retrieval-parity receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "classification", "environment", "evaluation_id", "threshold_version", "dataset_version", "inventory_id", "inventory_receipt_sha256", "plan_id", "plan_receipt_sha256", "change_id", "change_receipt_sha256", "release_id", "release_receipt_sha256", "threshold_decision_sha256", "parity_report_sha256", "input_sha256", "threshold_approved_at", "evaluation_started_at", "evaluation_completed_at", "generated_at", "collected_at", "case_count", "minimum_top_k_overlap", "maximum_normalized_score_delta", "observed_top_k_overlap", "observed_maximum_normalized_score_delta", "ready", "check_count", "passed_count", "failed_count", "inconclusive_count", "metric_breach_count", "checks"],
+  "properties": {
+    "schema": {"const": "agent-memory-staging-retrieval-parity-receipt-v1"},
+    "classification": {"const": "staging_external"},
+    "environment": {"const": "staging"},
+    "evaluation_id": {"$ref": "#/$defs/opaque_id"},
+    "threshold_version": {"$ref": "#/$defs/opaque_id"},
+    "dataset_version": {"$ref": "#/$defs/opaque_id"},
+    "inventory_id": {"$ref": "#/$defs/opaque_id"},
+    "inventory_receipt_sha256": {"$ref": "#/$defs/digest"},
+    "plan_id": {"$ref": "#/$defs/opaque_id"},
+    "plan_receipt_sha256": {"$ref": "#/$defs/digest"},
+    "change_id": {"$ref": "#/$defs/opaque_id"},
+    "change_receipt_sha256": {"$ref": "#/$defs/digest"},
+    "release_id": {"$ref": "#/$defs/opaque_id"},
+    "release_receipt_sha256": {"$ref": "#/$defs/digest"},
+    "threshold_decision_sha256": {"$ref": "#/$defs/digest"},
+    "parity_report_sha256": {"$ref": "#/$defs/digest"},
+    "input_sha256": {"$ref": "#/$defs/digest"},
+    "threshold_approved_at": {"type": "string", "format": "date-time"},
+    "evaluation_started_at": {"type": "string", "format": "date-time"},
+    "evaluation_completed_at": {"type": "string", "format": "date-time"},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "collected_at": {"type": "string", "format": "date-time"},
+    "case_count": {"type": "integer", "minimum": 1, "maximum": 1000000},
+    "minimum_top_k_overlap": {"type": "number", "exclusiveMinimum": 0, "maximum": 1},
+    "maximum_normalized_score_delta": {"type": "number", "minimum": 0, "maximum": 1},
+    "observed_top_k_overlap": {"type": "number", "minimum": 0, "maximum": 1},
+    "observed_maximum_normalized_score_delta": {"type": "number", "minimum": 0, "maximum": 1},
+    "ready": {"type": "boolean"},
+    "check_count": {"const": 8},
+    "passed_count": {"type": "integer", "minimum": 0, "maximum": 8},
+    "failed_count": {"type": "integer", "minimum": 0, "maximum": 8},
+    "inconclusive_count": {"type": "integer", "minimum": 0, "maximum": 8},
+    "metric_breach_count": {"type": "integer", "minimum": 0, "maximum": 2},
+    "checks": {"type": "array", "minItems": 8, "maxItems": 8, "items": {"$ref": "#/$defs/check"}}
+  },
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "opaque_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"},
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "outcome", "evidence_sha256"],
+      "properties": {
+        "id": {"enum": ["representative_dataset_approved", "top_k_overlap_threshold_met", "normalized_score_delta_threshold_met", "exact_term_winner_equivalent", "feedback_preference_equivalent", "decay_behavior_equivalent", "suppression_behavior_equivalent", "citation_resolution_equivalent"]},
+        "outcome": {"enum": ["passed", "failed", "inconclusive"]},
+        "evidence_sha256": {"$ref": "#/$defs/digest"}
+      }
+    }
+  }
+}

@@ -9,6 +9,11 @@ type AdaptivePolicyDefaults struct {
 	WeakSemanticScore   float64
 	WeakTotalScore      float64
 	WeakRelativeCutoff  float64
+	// SemanticScoreBand is the margin around MinSemanticScore within which
+	// a quantized-path score is re-checked on the float path. Derived from
+	// the expected quantization error bound (~1/127) plus a safety margin.
+	// Default 0.03; configurable via env override.
+	SemanticScoreBand float64
 }
 
 type AdaptiveSignalTuning struct {
@@ -55,6 +60,7 @@ func DefaultAdaptivePolicy(mode string) AdaptivePolicyDefaults {
 		WeakSemanticScore:   0,
 		WeakTotalScore:      0,
 		WeakRelativeCutoff:  0,
+		SemanticScoreBand:   0.03,
 	}
 	switch mode {
 	case "recall":

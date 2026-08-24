@@ -1,9 +1,9 @@
 package cli
 
 import (
-	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"time"
@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 
+	"github.com/taimufuraiyaa/agent-memory/internal/application"
 	"github.com/taimufuraiyaa/agent-memory/internal/config"
 	"github.com/taimufuraiyaa/agent-memory/internal/core"
 	"github.com/taimufuraiyaa/agent-memory/internal/embeddings"
@@ -38,6 +39,8 @@ func addCommonFlags(cmd *cobra.Command, f *commonFlags) {
 func newWriteCommand() *cobra.Command {
 	var flags commonFlags
 	var mType, content string
+	var keywords []string
+	var outcomeResult, outcomeApproach string
 	cmd := &cobra.Command{
 		Use:   "write",
 		Short: "Write one memory entry",
@@ -85,11 +88,19 @@ The memory will be automatically:
 				return err
 			}
 			if cfg.apiURL != "" {
+				body := map[string]any{
+					"type":     mType,
+					"content":  content,
+					"keywords": keywords,
+				}
+				if strings.TrimSpace(outcomeResult) != "" {
+					body["outcome_result"] = outcomeResult
+				}
+				if strings.TrimSpace(outcomeApproach) != "" {
+					body["outcome_approach"] = outcomeApproach
+				}
 				var out any
-				err := postAPI(ctx, cfg.apiURL, "/api/v1/memories/write", map[string]any{
-					"type":    mType,
-					"content": content,
-				}, &out)
+				err := postAPI(ctx, cfg.apiURL, "/api/v1/memories/write", body, &out)
 				if err != nil {
 					return err
 				}
@@ -105,14 +116,32 @@ The memory will be automatically:
 			checkAndWarnModelVersion(ctx, cfg.workspace, store, provider)
 
 			p := engine.NewWritePipelineWithEmbedder(store, provider)
+			app := application.NewMemoryService(store, p, nil)
 			mt := core.MemoryType(mType)
-			res, err := p.Write(ctx, engine.WriteInput{
+			in := engine.WriteInput{
 				Workspace: cfg.workspace,
 				Type:      mt,
 				Content:   content,
+				Keywords:  keywords,
 				Source:    core.MemorySource{Type: core.SourceUserInput},
 				Mode:      engine.ExtractFast,
-			})
+			}
+			if mt == core.OutcomeMemory {
+				o := &core.Outcome{}
+				hasOutcome := false
+				if strings.TrimSpace(outcomeResult) != "" {
+					o.Result = core.OutcomeResult(strings.ToLower(strings.TrimSpace(outcomeResult)))
+					hasOutcome = true
+				}
+				if strings.TrimSpace(outcomeApproach) != "" {
+					o.Approach = strings.TrimSpace(outcomeApproach)
+					hasOutcome = true
+				}
+				if hasOutcome {
+					in.Outcome = o
+				}
+			}
+			res, err := app.Write(ctx, in)
 			if err != nil {
 				return err
 			}
@@ -122,6 +151,9 @@ The memory will be automatically:
 	addCommonFlags(cmd, &flags)
 	cmd.Flags().StringVar(&mType, "type", "semantic", "Memory type: episodic|semantic|procedural|outcome")
 	cmd.Flags().StringVar(&content, "content", "", "Memory content")
+	cmd.Flags().StringSliceVar(&keywords, "keyword", nil, "Exact locator keyword (repeatable, maximum 3)")
+	cmd.Flags().StringVar(&outcomeResult, "outcome-result", "", "Outcome result: success|failure|partial (for type=outcome)")
+	cmd.Flags().StringVar(&outcomeApproach, "outcome-approach", "", "Approach description (for type=outcome)")
 	_ = cmd.MarkFlagRequired("content")
 	return cmd
 }
@@ -144,6 +176,7 @@ func newSearchCommand() *cobra.Command {
 	var from, to string
 	var tokenBudget int
 	var depth int
+	var operator string
 	cmd := &cobra.Command{
 		Use:   "search",
 		Short: "Semantic multi-signal search",
@@ -196,9 +229,9 @@ Use --explain to see per-signal score breakdowns.`,
 				_ = store.AddTokenMetricV2(ctx, cfg.workspace, "search", 0, 0, engine.RunLabel(), false)
 				return writeSuccessEnvelope(cmd.OutOrStdout(), "search", map[string]any{
 					"request_id": requestID,
-					"disabled":  true,
-					"workspace": cfg.workspace,
-					"results":   []any{},
+					"disabled":   true,
+					"workspace":  cfg.workspace,
+					"results":    []any{},
 				})
 			}
 			typed := make([]core.MemoryType, 0, len(types))
@@ -264,6 +297,16 @@ Use --explain to see per-signal score breakdowns.`,
 				}
 				dateTo = &t
 			}
+			retrievalFilters := engine.RetrievalFilters{
+				Types:         typed,
+				Tiers:         tiered,
+				OutcomeResult: outcome,
+				MinConfidence: minC,
+				MinDecayScore: minD,
+				Entities:      entities,
+				DateFrom:      dateFrom,
+				DateTo:        dateTo,
+			}
 			if cfg.apiURL != "" {
 				filters := map[string]any{}
 				if len(typed) > 0 {
@@ -302,6 +345,7 @@ Use --explain to see per-signal score breakdowns.`,
 					"top_k":        topK,
 					"token_budget": tokenBudget,
 					"mode":         mode,
+					"operator":     operator,
 					"explain":      explain,
 				}
 				if len(filters) > 0 {
@@ -314,6 +358,25 @@ Use --explain to see per-signal score breakdowns.`,
 				}
 				return writeSuccessEnvelope(cmd.OutOrStdout(), "search", out)
 			}
+			if engine.RetrievalMode(strings.ToLower(strings.TrimSpace(mode))) == engine.ModeTerms {
+				store, err := openStore(ctx, cfg)
+				if err != nil {
+					return err
+				}
+				defer func() { _ = store.Close() }()
+				app := application.NewMemoryService(store, nil, nil)
+				res, err := app.SearchTerms(ctx, application.TermSearchOptions{
+					Workspace: cfg.workspace,
+					Query:     query,
+					TopK:      topK,
+					Operator:  application.TermOperator(strings.ToLower(strings.TrimSpace(operator))),
+					Filters:   retrievalFilters,
+				})
+				if err != nil {
+					return err
+				}
+				return writeSuccessEnvelope(cmd.OutOrStdout(), "search", res)
+			}
 			store, provider, err := openDeps(ctx, cfg)
 			if err != nil {
 				return err
@@ -323,27 +386,16 @@ Use --explain to see per-signal score breakdowns.`,
 			// Check for model version mismatches and warn user
 			checkAndWarnModelVersion(ctx, cfg.workspace, store, provider)
 
-			requestID := uuid.New().String()
-			_ = store.LogRetrievalRequest(ctx, requestID, cfg.workspace, "search", query)
-
 			searcher := engine.NewVectorSearcher(store, provider)
 			retrieval := engine.NewRetrievalEngine(searcher)
-			res, err := retrieval.Retrieve(ctx, engine.RetrievalOptions{
+			app := application.NewMemoryService(store, nil, retrieval)
+			res, err := app.Search(ctx, engine.RetrievalOptions{
 				Workspace: cfg.workspace,
 				Query:     query,
 				TopK:      topK,
 				Mode:      engine.RetrievalMode(mode),
 				Depth:     depth,
-				Filters: engine.RetrievalFilters{
-					Types:         typed,
-					Tiers:         tiered,
-					OutcomeResult: outcome,
-					MinConfidence: minC,
-					MinDecayScore: minD,
-					Entities:      entities,
-					DateFrom:      dateFrom,
-					DateTo:        dateTo,
-				},
+				Filters:   retrievalFilters,
 				Policy: engine.RetrievalPolicy{
 					MinSemanticScore:    floatPtrIfChanged(cmd, "min-semantic-score", minSemanticScore),
 					MinTotalScore:       floatPtrIfChanged(cmd, "min-total-score", minTotalScore),
@@ -353,15 +405,14 @@ Use --explain to see per-signal score breakdowns.`,
 			if err != nil {
 				return err
 			}
-			res.RequestID = requestID
-			_ = store.AddTokenMetricV2(ctx, cfg.workspace, "search", sumHitTokens(res.Hits), sumHitTokens(res.Hits), engine.RunLabel(), true)
 			return writeSuccessEnvelope(cmd.OutOrStdout(), "search", res)
 		},
 	}
 	addCommonFlags(cmd, &flags)
 	cmd.Flags().StringVar(&query, "query", "", "Search query")
 	cmd.Flags().IntVar(&topK, "top-k", 10, "Top K results")
-	cmd.Flags().StringVar(&mode, "mode", string(engine.ModeSearch), "Mode: search|recall|relate|outcomes|graph-expand")
+	cmd.Flags().StringVar(&mode, "mode", string(engine.ModeSearch), "Mode: search|recall|relate|outcomes|graph-expand|terms")
+	cmd.Flags().StringVar(&operator, "operator", string(application.TermOperatorAND), "Term operator for mode=terms: and|or")
 	cmd.Flags().IntVar(&depth, "depth", 2, "Graph expansion depth limit (mode=graph-expand only)")
 	cmd.Flags().BoolVar(&explain, "explain", false, "Include per-signal score breakdown")
 	cmd.Flags().StringSliceVar(&tiers, "tier", nil, "Filter by storage tier (repeatable): markdown|vector|vector+graph|document")
@@ -678,15 +729,16 @@ func newFeedbackCommand() *cobra.Command {
 				}
 				at = parsed
 			}
-			updated, err := store.ApplyRetrievalFeedback(ctx, strings.TrimSpace(memoryID), feedback, at)
+			app := application.NewMemoryService(store, nil, nil)
+			updated, err := app.Feedback(ctx, application.FeedbackInput{
+				MemoryID:              memoryID,
+				Outcome:               feedback,
+				OccurredAt:            at,
+				ReconsolidationAction: recon,
+				SuccessorMemoryID:     successorMemoryID,
+			})
 			if err != nil {
 				return err
-			}
-			if recon != "" {
-				updated, err = store.ApplyReconsolidation(ctx, strings.TrimSpace(memoryID), recon, strings.TrimSpace(successorMemoryID), at)
-				if err != nil {
-					return err
-				}
 			}
 			return writeSuccessEnvelope(cmd.OutOrStdout(), "feedback", map[string]any{
 				"workspace":              cfg.workspace,
@@ -739,48 +791,6 @@ func floatPtrIfChanged(cmd *cobra.Command, name string, v float64) *float64 {
 	return &v
 }
 
-func buildRecentObservationBlockCLI(ctx context.Context, store *sqlite.Store, workspace string, preferredSessionID string, limit int) (string, string, int) {
-	if limit <= 0 {
-		limit = 10
-	}
-	if limit > 50 {
-		limit = 50
-	}
-	sessionID := strings.TrimSpace(preferredSessionID)
-	if sessionID == "" {
-		sessions, err := store.ListSessions(ctx, workspace, 1)
-		if err != nil || len(sessions) == 0 {
-			return "", "", 0
-		}
-		sessionID = sessions[0].SessionID
-	}
-	obs, err := store.ListObservations(ctx, workspace, sessionID, nil, nil, limit)
-	if err != nil || len(obs) == 0 {
-		return "", sessionID, 0
-	}
-	var b strings.Builder
-	b.WriteString("Session: ")
-	b.WriteString(sessionID)
-	b.WriteString("\n")
-	count := 0
-	for _, o := range obs {
-		if count >= limit {
-			break
-		}
-		line := strings.TrimSpace(o.Summary)
-		if line == "" {
-			continue
-		}
-		b.WriteString("- ")
-		b.WriteString(o.OccurredAt.UTC().Format(time.RFC3339))
-		b.WriteString(" ")
-		b.WriteString(engine.ClipString(line, 240))
-		b.WriteString("\n")
-		count++
-	}
-	return strings.TrimSpace(b.String()), sessionID, count
-}
-
 func newSessionEndCommand() *cobra.Command {
 	var flags commonFlags
 	var transcript string
@@ -796,6 +806,23 @@ func newSessionEndCommand() *cobra.Command {
 			if err := validateOutputFormat(flags.format, false); err != nil {
 				return err
 			}
+
+			// Read from stdin when --transcript is empty and stdin is a pipe
+			if strings.TrimSpace(transcript) == "" {
+				stat, _ := os.Stdin.Stat()
+				if (stat.Mode() & os.ModeCharDevice) == 0 {
+					b, err := io.ReadAll(os.Stdin)
+					if err != nil {
+						return fmt.Errorf("read stdin: %w", err)
+					}
+					transcript = string(b)
+				}
+			}
+
+			if strings.TrimSpace(transcript) == "" {
+				return errors.New("transcript is required (use --transcript or pipe via stdin)")
+			}
+
 			if !engine.MemoryEnabled() {
 				return writeSuccessEnvelope(cmd.OutOrStdout(), "session-end", map[string]any{
 					"skipped": true,
@@ -826,7 +853,6 @@ func newSessionEndCommand() *cobra.Command {
 		},
 	}
 	addCommonFlags(cmd, &flags)
-	cmd.Flags().StringVar(&transcript, "transcript", "", "Transcript text")
-	_ = cmd.MarkFlagRequired("transcript")
+	cmd.Flags().StringVar(&transcript, "transcript", "", "Transcript text (or omit to read from stdin)")
 	return cmd
 }

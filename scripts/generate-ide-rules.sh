@@ -139,7 +139,12 @@ workspace: agent-memory"
     generate_file "windsurfrules" \
         ".windsurfrules" \
         "# AI Agent Rules - agent-memory"
-    
+
+    # ZCode (AGENTS.md)
+    generate_file "zcode" \
+        "AGENTS.md" \
+        "# AI Agent Rules - agent-memory"
+
     echo ""
     success "All IDE rule files generated successfully!"
     echo ""
@@ -151,6 +156,7 @@ workspace: agent-memory"
     echo "  - .cursorrules"
     echo "  - .aierules"
     echo "  - .windsurfrules"
+    echo "  - AGENTS.md"
     echo ""
     info "To apply changes, commit the generated files"
 }

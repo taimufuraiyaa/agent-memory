@@ -4,6 +4,7 @@ import (
 	"context"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/taimufuraiyaa/agent-memory/internal/core"
 	"github.com/taimufuraiyaa/agent-memory/internal/storage/sqlite"
@@ -30,6 +31,9 @@ func TestReconstructionEngineWritesReconstructedMemory(t *testing.T) {
 		Type:      core.SemanticMemory,
 		Content:   "old-topic timeout behavior from previous release",
 	}, "evict", "")
+	// Fresh tombstones sit in a 7-day cooldown; move them out so the
+	// reconstruction path sees them.
+	_ = store.SetTombstoneCooldownForWorkspace(ctx, "ws", time.Now().UTC().Add(-time.Hour))
 
 	re := NewReconstructionEngine(store, NewWritePipeline(store))
 	out, err := re.Reconstruct(ctx, "ws", "old-topic", true)
@@ -65,6 +69,9 @@ func TestReconstructionEngineRequiresConfirmationAtMediumConfidence(t *testing.T
 	ctx := context.Background()
 	_ = store.AddTombstone(ctx, core.MemoryEntry{ID: "a1", Workspace: "ws", Type: core.SemanticMemory, Content: "legacy settings details"}, "evict", "")
 	_ = store.AddTombstone(ctx, core.MemoryEntry{ID: "a2", Workspace: "ws", Type: core.SemanticMemory, Content: "legacy fallback settings details"}, "evict", "")
+	// Fresh tombstones sit in a 7-day cooldown; move them out so the
+	// reconstruction path sees them.
+	_ = store.SetTombstoneCooldownForWorkspace(ctx, "ws", time.Now().UTC().Add(-time.Hour))
 
 	re := NewReconstructionEngine(store, NewWritePipeline(store))
 	out, err := re.Reconstruct(ctx, "ws", "nonmatching-query", false)

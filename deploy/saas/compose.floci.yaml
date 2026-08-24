@@ -1,0 +1,87 @@
+name: agent-memory-saas
+
+# Development-only AWS compatibility profile. This replaces the local MinIO
+# process with Floci's S3 API while retaining PostgreSQL and NATS. It does not
+# satisfy the MinIO least-privilege or any production release evidence gate.
+services:
+  floci-volume-init:
+    image: alpine:3.22
+    user: "0:0"
+    command: ["chown", "-R", "1001:1001", "/data"]
+    volumes:
+      - floci-data:/data
+
+  minio:
+    image: agent-memory-floci:1.6.0-hardened
+    build:
+      context: ../..
+      dockerfile: deploy/saas/Dockerfile.floci
+    command: !reset []
+    environment:
+      FLOCI_BASE_URL: http://minio:4566
+      FLOCI_HOSTNAME: minio
+      FLOCI_STORAGE_MODE: wal
+      FLOCI_STORAGE_PERSISTENT_PATH: /data
+    ports: !override
+      - "127.0.0.1:59000:4566"
+    volumes: !override
+      - floci-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/agent-memory-s3-init", "health", "http://localhost:4566/_localstack/health"]
+      interval: 2s
+      timeout: 2s
+      retries: 60
+    depends_on:
+      floci-volume-init:
+        condition: service_completed_successfully
+
+  object-init:
+    image: agent-memory-saas-s3-init
+    build:
+      context: ../..
+      dockerfile: deploy/saas/Dockerfile
+      args:
+        SERVICE: agent-memory-s3-init
+    entrypoint: ["/usr/local/bin/service"]
+    command: !reset []
+    environment:
+      AGENT_MEMORY_OBJECT_ENDPOINT: http://minio:4566
+      AGENT_MEMORY_OBJECT_ACCESS_KEY: test
+      AGENT_MEMORY_OBJECT_SECRET_KEY: test
+    volumes: !reset []
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      minio:
+        condition: service_healthy
+
+  api:
+    environment:
+      AGENT_MEMORY_OBJECT_ENDPOINT: http://minio:4566
+      AGENT_MEMORY_OBJECT_ACCESS_KEY: test
+      AGENT_MEMORY_OBJECT_SECRET_KEY: test
+
+  worker:
+    environment:
+      AGENT_MEMORY_OBJECT_ENDPOINT: http://minio:4566
+      AGENT_MEMORY_OBJECT_ACCESS_KEY: test
+      AGENT_MEMORY_OBJECT_SECRET_KEY: test
+
+  reconciler:
+    environment:
+      AGENT_MEMORY_OBJECT_ENDPOINT: http://minio:4566
+      AGENT_MEMORY_OBJECT_ACCESS_KEY: test
+      AGENT_MEMORY_OBJECT_SECRET_KEY: test
+
+volumes:
+  floci-data:

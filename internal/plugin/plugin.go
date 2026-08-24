@@ -11,16 +11,16 @@ import (
 type Plugin interface {
 	// Name returns the plugin name.
 	Name() string
-	
+
 	// Version returns the plugin version.
 	Version() string
-	
+
 	// Description returns a human-readable description.
 	Description() string
-	
+
 	// Initialize initializes the plugin with configuration.
 	Initialize(ctx context.Context, config map[string]any) error
-	
+
 	// Shutdown gracefully shuts down the plugin.
 	Shutdown(ctx context.Context) error
 }
@@ -29,11 +29,11 @@ type Plugin interface {
 type PluginType string
 
 const (
-	PluginTypeEmbedding   PluginType = "embedding"
-	PluginTypeStorage     PluginType = "storage"
-	PluginTypeLifecycle   PluginType = "lifecycle"
-	PluginTypeMiddleware  PluginType = "middleware"
-	PluginTypeExtension   PluginType = "extension"
+	PluginTypeEmbedding  PluginType = "embedding"
+	PluginTypeStorage    PluginType = "storage"
+	PluginTypeLifecycle  PluginType = "lifecycle"
+	PluginTypeMiddleware PluginType = "middleware"
+	PluginTypeExtension  PluginType = "extension"
 )
 
 // PluginMetadata contains plugin metadata.
@@ -81,22 +81,22 @@ func GetRegistry() *Registry {
 func (r *Registry) Register(plugin Plugin, metadata PluginMetadata) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	
+
 	name := plugin.Name()
 	if name == "" {
 		return fmt.Errorf("plugin name cannot be empty")
 	}
-	
+
 	if _, exists := r.plugins[name]; exists {
 		return fmt.Errorf("plugin %q already registered", name)
 	}
-	
+
 	r.plugins[name] = plugin
 	r.meta[name] = metadata
-	
+
 	// Track by type
 	r.types[metadata.Type] = append(r.types[metadata.Type], name)
-	
+
 	return nil
 }
 
@@ -104,22 +104,22 @@ func (r *Registry) Register(plugin Plugin, metadata PluginMetadata) error {
 func (r *Registry) Unregister(name string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	
+
 	plugin, exists := r.plugins[name]
 	if !exists {
 		return fmt.Errorf("plugin %q not found", name)
 	}
-	
+
 	// Shutdown the plugin
 	if err := plugin.Shutdown(context.Background()); err != nil {
 		return fmt.Errorf("shutdown failed: %w", err)
 	}
-	
+
 	// Remove from registry
 	meta := r.meta[name]
 	delete(r.plugins, name)
 	delete(r.meta, name)
-	
+
 	// Remove from type index
 	pluginType := meta.Type
 	plugins := r.types[pluginType]
@@ -129,7 +129,7 @@ func (r *Registry) Unregister(name string) error {
 			break
 		}
 	}
-	
+
 	return nil
 }
 
@@ -137,12 +137,12 @@ func (r *Registry) Unregister(name string) error {
 func (r *Registry) Get(name string) (Plugin, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	
+
 	plugin, exists := r.plugins[name]
 	if !exists {
 		return nil, fmt.Errorf("plugin %q not found", name)
 	}
-	
+
 	return plugin, nil
 }
 
@@ -150,12 +150,12 @@ func (r *Registry) Get(name string) (Plugin, error) {
 func (r *Registry) GetMetadata(name string) (PluginMetadata, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	
+
 	meta, exists := r.meta[name]
 	if !exists {
 		return PluginMetadata{}, fmt.Errorf("plugin %q not found", name)
 	}
-	
+
 	return meta, nil
 }
 
@@ -163,7 +163,7 @@ func (r *Registry) GetMetadata(name string) (PluginMetadata, error) {
 func (r *Registry) List() []string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	
+
 	names := make([]string, 0, len(r.plugins))
 	for name := range r.plugins {
 		names = append(names, name)
@@ -175,7 +175,7 @@ func (r *Registry) List() []string {
 func (r *Registry) ListByType(pluginType PluginType) []string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	
+
 	names := r.types[pluginType]
 	result := make([]string, len(names))
 	copy(result, names)
@@ -204,13 +204,13 @@ func (r *Registry) InitializeAll(ctx context.Context, config map[string]any) err
 		plugins = append(plugins, plugin)
 	}
 	r.mu.RUnlock()
-	
+
 	for _, plugin := range plugins {
 		if err := plugin.Initialize(ctx, config); err != nil {
 			return fmt.Errorf("failed to initialize plugin %q: %w", plugin.Name(), err)
 		}
 	}
-	
+
 	return nil
 }
 
@@ -222,17 +222,17 @@ func (r *Registry) ShutdownAll(ctx context.Context) error {
 		plugins = append(plugins, plugin)
 	}
 	r.mu.RUnlock()
-	
+
 	var errs []error
 	for _, plugin := range plugins {
 		if err := plugin.Shutdown(ctx); err != nil {
 			errs = append(errs, fmt.Errorf("plugin %q shutdown failed: %w", plugin.Name(), err))
 		}
 	}
-	
+
 	if len(errs) > 0 {
 		return fmt.Errorf("shutdown errors: %v", errs)
 	}
-	
+
 	return nil
 }

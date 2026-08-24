@@ -12,12 +12,16 @@ import (
 	"github.com/taimufuraiyaa/agent-memory/internal/core"
 )
 
+// tombstoneCooldownDuration is how long a removed memory stays in cooldown
+// before the gap detector may consider it again.
+const tombstoneCooldownDuration = 7 * 24 * time.Hour
+
 // AddTombstone stores a compact breadcrumb for a removed memory.
 func (s *Store) AddTombstone(ctx context.Context, m core.MemoryEntry, reason, lineageID string) error {
 	entityHash := tombstoneEntityHash(m)
 	summary := summarizeFragment(m.Content, 24)
 	evictedAt := time.Now().UTC()
-	cooldown := evictedAt
+	cooldown := evictedAt.Add(tombstoneCooldownDuration)
 	_, err := s.db.ExecContext(ctx, `
 INSERT INTO memory_tombstones (id, memory_id, workspace, type, entity_hash, fragment_summary, eviction_reason, lineage_memory_id, evicted_at, cooldown_until)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -64,6 +68,11 @@ FROM memory_tombstones WHERE workspace = ?`
 		t.Type = core.MemoryType(mt)
 		t.EvictedAt, _ = time.Parse(time.RFC3339Nano, evictedAt)
 		t.CooldownUntil, _ = time.Parse(time.RFC3339Nano, cooldown)
+		// Legacy rows store cooldown_until equal to evicted_at (old bug) or an
+		// empty value. Treat those as already out of cooldown (cooldown == evicted_at).
+		if t.CooldownUntil.IsZero() || t.CooldownUntil.Equal(t.EvictedAt) {
+			t.CooldownUntil = t.EvictedAt
+		}
 		out = append(out, t)
 	}
 	return out, rows.Err()

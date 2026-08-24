@@ -1,0 +1,59 @@
+{
+  "schema": "agent-memory-self-managed-architecture-review-input-v1",
+  "classification": "self_managed_external",
+  "environment": "staging",
+  "review_id": "architecture-review-v1",
+  "review_version": "joint-review-v1",
+  "inventory_id": "replace-with-inventory-id",
+  "inventory_receipt_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "topology_adr_manifest_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "service_adr_manifest_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "facility_inventory_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "failure_domain_review_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "data_flow_manifest_sha256": "6666666666666666666666666666666666666666666666666666666666666666",
+  "integration_contract_manifest_sha256": "7777777777777777777777777777777777777777777777777777777777777777",
+  "accountable_review_sha256": "8888888888888888888888888888888888888888888888888888888888888888",
+  "reviewed_at": "2026-08-10T05:00:00Z",
+  "generated_at": "2026-08-10T05:30:00Z",
+  "ready": true,
+  "facility_count": 1,
+  "reviewed_failure_domain_count": 1,
+  "independent_failure_domain_count": 1,
+  "components": [
+    {"kind":"kubernetes","declared_failure_domain_count":1,"service_adr_sha256":"2222222222222222222222222222222222222222222222222222222222222222","outcome":"passed","domains":[{"id":"ownership","outcome":"passed","evidence_sha256":"1111111111111111111111111111111111111111111111111111111111111111"},{"id":"custody","outcome":"passed","evidence_sha256":"1111111111111111111111111111111111111111111111111111111111111111"},{"id":"capacity","outcome":"passed","evidence_sha256":"1111111111111111111111111111111111111111111111111111111111111111"},{"id":"failure_isolation","outcome":"passed","evidence_sha256":"1111111111111111111111111111111111111111111111111111111111111111"},{"id":"cost","outcome":"passed","evidence_sha256":"1111111111111111111111111111111111111111111111111111111111111111"},{"id":"incident_response","outcome":"passed","evidence_sha256":"1111111111111111111111111111111111111111111111111111111111111111"}]},
+    {"kind":"identity","declared_failure_domain_count":1,"service_adr_sha256":"2222222222222222222222222222222222222222222222222222222222222222","outcome":"passed","domains":[{"id":"ownership","outcome":"passed","evidence_sha256":"1111111111111111111111111111111111111111111111111111111111111111"},{"id":"custody","outcome":"passed","evidence_sha256":"1111111111111111111111111111111111111111111111111111111111111111"},{"id":"capacity","outcome":"passed","evidence_sha256":"1111111111111111111111111111111111111111111111111111111111111111"},{"id":"failure_isolation","outcome":"passed","evidence_sha256":"1111111111111111111111111111111111111111111111111111111111111111"},{"id":"cost","outcome":"passed","evidence_sha256":"1111111111111111111111111111111111111111111111111111111111111111"},{"id":"incident_response","outcome":"passed","evidence_sha256":"1111111111111111111111111111111111111111111111111111111111111111"}]},
+    {"kind":"postgres","declared_failure_domain_count":1,"service_adr_sha256":"2222222222222222222222222222222222222222222222222222222222222222","outcome":"passed","domains":[{"id":"ownership","outcome":"passed","evidence_sha256":"1111111111111111111111111111111111111111111111111111111111111111"},{"id":"custody","outcome":"passed","evidence_sha256":"1111111111111111111111111111111111111111111111111111111111111111"},{"id":"capacity","outcome":"passed","evidence_sha256":"1111111111111111111111111111111111111111111111111111111111111111"},{"id":"failure_isolation","outcome":"passed","evidence_sha256":"1111111111111111111111111111111111111111111111111111111111111111"},{"id":"cost","outcome":"passed","evidence_sha256":"1111111111111111111111111111111111111111111111111111111111111111"},{"id":"incident_response","outcome":"passed","evidence_sha256":"1111111111111111111111111111111111111111111111111111111111111111"}]},
+    {"kind":"object_storage","declared_failure_domain_count":1,"service_adr_sha256":"2222222222222222222222222222222222222222222222222222222222222222","outcome":"passed","domains":[{"id":"ownership","outcome":"passed","evidence_sha256":"1111111111111111111111111111111111111111111111111111111111111111"},{"id":"custody","outcome":"passed","evidence_sha256":"1111111111111111111111111111111111111111111111111111111111111111"},{"id":"capacity","outcome":"passed","evidence_sha256":"1111111111111111111111111111111111111111111111111111111111111111"},{"id":"failure_isolation","outcome":"passed","evidence_sha256":"1111111111111111111111111111111111111111111111111111111111111111"},{"id":"cost","outcome":"passed","evidence_sha256":"1111111111111111111111111111111111111111111111111111111111111111"},{"id":"incident_response","outcome":"passed","evidence_sha256":"1111111111111111111111111111111111111111111111111111111111111111"}]},
+    {"kind":"queue","declared_failure_domain_count":1,"service_adr_sha256":"2222222222222222222222222222222222222222222222222222222222222222","outcome":"passed","domains":[{"id":"ownership","outcome":"passed","evidence_sha256":"1111111111111111111111111111111111111111111111111111111111111111"},{"id":"custody","outcome":"passed","evidence_sha256":"1111111111111111111111111111111111111111111111111111111111111111"},{"id":"capacity","outcome":"passed","evidence_sha256":"1111111111111111111111111111111111111111111111111111111111111111"},{"id":"failure_isolation","outcome":"passed","evidence_sha256":"1111111111111111111111111111111111111111111111111111111111111111"},{"id":"cost","outcome":"passed","evidence_sha256":"1111111111111111111111111111111111111111111111111111111111111111"},{"id":"incident_response","outcome":"passed","evidence_sha256":"1111111111111111111111111111111111111111111111111111111111111111"}]},
+    {"kind":"secrets","declared_failure_domain_count":1,"service_adr_sha256":"2222222222222222222222222222222222222222222222222222222222222222","outcome":"passed","domains":[{"id":"ownership","outcome":"passed","evidence_sha256":"1111111111111111111111111111111111111111111111111111111111111111"},{"id":"custody","outcome":"passed","evidence_sha256":"1111111111111111111111111111111111111111111111111111111111111111"},{"id":"capacity","outcome":"passed","evidence_sha256":"1111111111111111111111111111111111111111111111111111111111111111"},{"id":"failure_isolation","outcome":"passed","evidence_sha256":"1111111111111111111111111111111111111111111111111111111111111111"},{"id":"cost","outcome":"passed","evidence_sha256":"1111111111111111111111111111111111111111111111111111111111111111"},{"id":"incident_response","outcome":"passed","evidence_sha256":"1111111111111111111111111111111111111111111111111111111111111111"}]},
+    {"kind":"observability","declared_failure_domain_count":1,"service_adr_sha256":"2222222222222222222222222222222222222222222222222222222222222222","outcome":"passed","domains":[{"id":"ownership","outcome":"passed","evidence_sha256":"1111111111111111111111111111111111111111111111111111111111111111"},{"id":"custody","outcome":"passed","evidence_sha256":"1111111111111111111111111111111111111111111111111111111111111111"},{"id":"capacity","outcome":"passed","evidence_sha256":"1111111111111111111111111111111111111111111111111111111111111111"},{"id":"failure_isolation","outcome":"passed","evidence_sha256":"1111111111111111111111111111111111111111111111111111111111111111"},{"id":"cost","outcome":"passed","evidence_sha256":"1111111111111111111111111111111111111111111111111111111111111111"},{"id":"incident_response","outcome":"passed","evidence_sha256":"1111111111111111111111111111111111111111111111111111111111111111"}]},
+    {"kind":"backup","declared_failure_domain_count":1,"service_adr_sha256":"2222222222222222222222222222222222222222222222222222222222222222","outcome":"passed","domains":[{"id":"ownership","outcome":"passed","evidence_sha256":"1111111111111111111111111111111111111111111111111111111111111111"},{"id":"custody","outcome":"passed","evidence_sha256":"1111111111111111111111111111111111111111111111111111111111111111"},{"id":"capacity","outcome":"passed","evidence_sha256":"1111111111111111111111111111111111111111111111111111111111111111"},{"id":"failure_isolation","outcome":"passed","evidence_sha256":"1111111111111111111111111111111111111111111111111111111111111111"},{"id":"cost","outcome":"passed","evidence_sha256":"1111111111111111111111111111111111111111111111111111111111111111"},{"id":"incident_response","outcome":"passed","evidence_sha256":"1111111111111111111111111111111111111111111111111111111111111111"}]}
+  ],
+  "data_flows": [
+    {"id":"edge_identity","outcome":"passed","evidence_sha256":"3333333333333333333333333333333333333333333333333333333333333333"},
+    {"id":"source_ingestion","outcome":"passed","evidence_sha256":"3333333333333333333333333333333333333333333333333333333333333333"},
+    {"id":"authoritative_storage","outcome":"passed","evidence_sha256":"3333333333333333333333333333333333333333333333333333333333333333"},
+    {"id":"asynchronous_processing","outcome":"passed","evidence_sha256":"3333333333333333333333333333333333333333333333333333333333333333"},
+    {"id":"retrieval_model_routing","outcome":"passed","evidence_sha256":"3333333333333333333333333333333333333333333333333333333333333333"},
+    {"id":"audit_export","outcome":"passed","evidence_sha256":"3333333333333333333333333333333333333333333333333333333333333333"},
+    {"id":"deletion_backup","outcome":"passed","evidence_sha256":"3333333333333333333333333333333333333333333333333333333333333333"},
+    {"id":"external_integrations","outcome":"passed","evidence_sha256":"3333333333333333333333333333333333333333333333333333333333333333"}
+  ],
+  "integrations": [
+    {"kind":"payment","enabled":false,"disposition":"disabled_decision","outcome":"passed","evidence_sha256":"4444444444444444444444444444444444444444444444444444444444444444"},
+    {"kind":"email","enabled":false,"disposition":"disabled_decision","outcome":"passed","evidence_sha256":"4444444444444444444444444444444444444444444444444444444444444444"},
+    {"kind":"model","enabled":false,"disposition":"disabled_decision","outcome":"passed","evidence_sha256":"4444444444444444444444444444444444444444444444444444444444444444"}
+  ],
+  "checks": [
+    {"id":"inventory_binding_verified","outcome":"passed","evidence_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+    {"id":"component_review_coverage_complete","outcome":"passed","evidence_sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
+    {"id":"ownership_review_passed","outcome":"passed","evidence_sha256":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"},
+    {"id":"custody_review_passed","outcome":"passed","evidence_sha256":"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"},
+    {"id":"capacity_cost_review_passed","outcome":"passed","evidence_sha256":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"},
+    {"id":"failure_isolation_review_passed","outcome":"passed","evidence_sha256":"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"},
+    {"id":"incident_response_review_passed","outcome":"passed","evidence_sha256":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"},
+    {"id":"data_flow_review_passed","outcome":"passed","evidence_sha256":"6666666666666666666666666666666666666666666666666666666666666666"},
+    {"id":"integration_contract_review_passed","outcome":"passed","evidence_sha256":"7777777777777777777777777777777777777777777777777777777777777777"},
+    {"id":"architecture_security_privacy_operations_review_complete","outcome":"passed","evidence_sha256":"8888888888888888888888888888888888888888888888888888888888888888"}
+  ]
+}

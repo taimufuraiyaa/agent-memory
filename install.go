@@ -102,7 +102,7 @@ func parseFlags() config {
 	flag.BoolVar(&cfg.quiet, "quiet", false, "less chatter")
 	flag.BoolVar(&cfg.initHere, "init-here", false, "run per-project setup in the current directory after install (init new project, reinstall existing)")
 	flag.StringVar(&cfg.projectName, "project-name", "", "project name for --init-here setup (default: cwd basename)")
-	flag.Var(&cfg.ideTargets, "ide", "IDE rule targets for --init-here project setup (repeatable): cursor|antigravity|claude|aierules|cursorrules|trae|windsurfrules|generic|all")
+	flag.Var(&cfg.ideTargets, "ide", "IDE rule targets for --init-here project setup (repeatable): cursor|antigravity|claude|zcode|aierules|cursorrules|trae|windsurfrules|generic|all")
 	flag.Parse()
 
 	if cfg.binDir == "" {
@@ -171,9 +171,9 @@ func runInstall(cfg config) {
 
 	if cfg.writeEnvFile {
 		vars := map[string]string{
-			"AGENT_MEMORY_UPGRADE_YES":     "1",
 			"AGENT_MEMORY_OBSERVE_ENABLED": "1",
 			"AGENT_MEMORY_ENABLED":         "1",
+			"AGENT_MEMORY_TERM_BLOOM_MODE": "shadow",
 		}
 		if strings.TrimSpace(runtimePath) != "" {
 			vars["AGENT_MEMORY_ONNX_RUNTIME_PATH"] = runtimePath
@@ -216,6 +216,7 @@ func runStatus(cfg config) {
 		modelStatus = "✓ validated " + modelDir
 	}
 	fmt.Fprintf(os.Stderr, "  binary      : %s\n", existsLabel(binPath))
+	fmt.Fprintf(os.Stderr, "  concise CLI : %s\n", existsLabel(filepath.Join(cfg.binDir, conciseBinNameWithExt())))
 	fmt.Fprintf(os.Stderr, "  data dir    : %s\n", existsLabel(cfg.dataDir))
 	fmt.Fprintf(os.Stderr, "  runtime     : %s\n", existsLabel(runtimePath))
 	fmt.Fprintf(os.Stderr, "  model       : %s\n", modelStatus)
@@ -237,11 +238,17 @@ func runUninstall(cfg config) {
 		warn(cfg, "could not remove %s: %v", binPath, err)
 		return
 	}
+	aliasPath := filepath.Join(cfg.binDir, conciseBinNameWithExt())
+	if err := removeIfExists(aliasPath); err != nil {
+		warn(cfg, "could not remove %s: %v", aliasPath, err)
+		return
+	}
 	if fileExists(binPath) {
 		warn(cfg, "binary still present (permission denied?): %s", binPath)
 		return
 	}
 	ok(cfg, "removed binary: %s", binPath)
+	ok(cfg, "removed concise executable: %s", aliasPath)
 	info(cfg, "data preserved at %s", cfg.dataDir)
 }
 
@@ -307,9 +314,51 @@ func buildAndInstall(cfg config) (string, error) {
 	if err := os.Chmod(finalBin, 0755); err != nil {
 		return "", err
 	}
+	if _, err := publishConciseExecutable(finalBin); err != nil {
+		return "", err
+	}
 	return finalBin, nil
 }
 
+func conciseBinNameWithExt() string {
+	if runtime.GOOS == "windows" {
+		return "am.exe"
+	}
+	return "am"
+}
+
+func publishConciseExecutable(canonicalPath string) (string, error) {
+	aliasPath := filepath.Join(filepath.Dir(canonicalPath), conciseBinNameWithExt())
+	in, err := os.Open(canonicalPath)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = in.Close() }()
+	out, err := os.CreateTemp(filepath.Dir(aliasPath), ".am-install.*")
+	if err != nil {
+		return "", err
+	}
+	tmp := out.Name()
+	_, copyErr := io.Copy(out, in)
+	closeErr := out.Close()
+	if copyErr != nil {
+		_ = os.Remove(tmp)
+		return "", copyErr
+	}
+	if closeErr != nil {
+		_ = os.Remove(tmp)
+		return "", closeErr
+	}
+	if err := os.Chmod(tmp, 0o755); err != nil {
+		_ = os.Remove(tmp)
+		return "", err
+	}
+	if err := os.Rename(tmp, aliasPath); err != nil {
+		_ = os.Remove(tmp)
+		return "", err
+	}
+	return aliasPath, nil
+}
 
 func existsLabel(p string) string {
 	if fileExists(p) || dirExists(p) {
@@ -419,9 +468,9 @@ func printNextSteps(cfg config, binPath string) {
 	fmt.Fprintf(os.Stderr, "  1) Confirm:   %s --help\n", binPath)
 	fmt.Fprintln(os.Stderr, "  2) Wire a project (run inside each repo you want to enable):")
 	fmt.Fprintln(os.Stderr, "       cd <project>")
-	fmt.Fprintln(os.Stderr, "       agent-memory init --project-name <name>        # new project")
-	fmt.Fprintln(os.Stderr, "       agent-memory reinstall --project-name <name>   # existing project")
-	fmt.Fprintln(os.Stderr, "       agent-memory reinstall --project-name <name> --ide trae")
+	fmt.Fprintln(os.Stderr, "       am init --project-name <name>        # new project")
+	fmt.Fprintln(os.Stderr, "       am reinstall --project-name <name>   # existing project")
+	fmt.Fprintln(os.Stderr, "       am reinstall --project-name <name> --ide trae")
 	fmt.Fprintln(os.Stderr, "     Or do it now: go run install.go --init-here --ide trae")
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "  3) Dashboard env (standalone React UI):")
@@ -436,7 +485,7 @@ func printNextSteps(cfg config, binPath string) {
 	}
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "  4) Inspect adaptive runtime tuning:")
-	fmt.Fprintln(os.Stderr, "       agent-memory tuning")
+	fmt.Fprintln(os.Stderr, "       am tuning")
 }
 
 func detectRepoRoot(cfg config) string {
@@ -504,6 +553,9 @@ func mergeEnvFile(path string, vars map[string]string) (string, error) {
 		}
 		newLine := formatEnvAssignment(k, v)
 		if at, ok := index[k]; ok {
+			if k == "AGENT_MEMORY_TERM_BLOOM_MODE" {
+				continue
+			}
 			lines[at] = newLine
 		} else {
 			lines = append(lines, newLine)
@@ -513,6 +565,7 @@ func mergeEnvFile(path string, vars map[string]string) (string, error) {
 
 	out := strings.TrimRight(strings.Join(lines, "\n"), "\n") + "\n"
 	out = amconfig.EnsureAdaptiveTuningEnvGuidance(out)
+	out = amconfig.EnsureTermBloomEnvGuidance(out)
 	return out, nil
 }
 

@@ -1,0 +1,94 @@
+package main
+
+import (
+	"encoding/json"
+	"flag"
+	"fmt"
+	"io"
+	"os"
+	"strings"
+	"time"
+
+	"github.com/taimufuraiyaa/agent-memory/internal/saas/retrievalrisk"
+)
+
+const reportSchemaV1 = "agent-memory-staging-retrieval-risk-report-v1"
+
+type collectFunc func(string, string, string, string, string, time.Time) (retrievalrisk.Receipt, error)
+type dependencies struct {
+	now     func() time.Time
+	collect collectFunc
+}
+type report struct {
+	Schema                          string `json:"schema"`
+	Ready                           bool   `json:"ready"`
+	ReceiptWritten                  bool   `json:"receipt_written"`
+	TenantCount                     int    `json:"tenant_count"`
+	CaseCount                       int    `json:"case_count"`
+	TimingSampleCountPerClass       int    `json:"timing_sample_count_per_class"`
+	ResultLeakCount                 int    `json:"result_leak_count"`
+	CountLeakCount                  int    `json:"count_leak_count"`
+	CacheLeakCount                  int    `json:"cache_leak_count"`
+	MaximumTimingDeltaMicroseconds  int64  `json:"maximum_timing_delta_microseconds"`
+	ObservedTimingDeltaMicroseconds int64  `json:"observed_timing_delta_microseconds"`
+	DomainCount                     int    `json:"domain_count"`
+	PassedCount                     int    `json:"passed_count"`
+	FailedCount                     int    `json:"failed_count"`
+	InconclusiveCount               int    `json:"inconclusive_count"`
+	FindingCount                    int    `json:"finding_count"`
+	RiskBreachCount                 int    `json:"risk_breach_count"`
+}
+
+func main() { os.Exit(run(os.Args[1:], os.Stdout, os.Stderr)) }
+func run(args []string, stdout, stderr io.Writer) int {
+	return runWithDependencies(args, stdout, stderr, dependencies{})
+}
+func runWithDependencies(args []string, stdout, stderr io.Writer, deps dependencies) int {
+	flags := flag.NewFlagSet("agent-memory-retrieval-risk", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	inventoryPath := flags.String("inventory", "", "Path to the self-managed platform inventory receipt")
+	planPath := flags.String("plan", "", "Path to the self-managed infrastructure plan receipt")
+	changePath := flags.String("change", "", "Path to the ready self-managed infrastructure change receipt")
+	releasePath := flags.String("release", "", "Path to the passed staging Kubernetes release receipt")
+	reviewPath := flags.String("review", "", "Path to the content-free independent retrieval-risk review")
+	receiptPath := flags.String("receipt", "", "New path for the normalized retrieval-risk receipt")
+	if err := flags.Parse(args); err != nil {
+		return 2
+	}
+	if flags.NArg() != 0 || anyBlank(*inventoryPath, *planPath, *changePath, *releasePath, *reviewPath, *receiptPath) {
+		fmt.Fprintln(stderr, "inventory, plan, change, release, review, and receipt are required")
+		return 2
+	}
+	if deps.now == nil {
+		deps.now = time.Now
+	}
+	if deps.collect == nil {
+		deps.collect = retrievalrisk.Collect
+	}
+	receipt, err := deps.collect(*inventoryPath, *planPath, *changePath, *releasePath, *reviewPath, deps.now().UTC())
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	if err := retrievalrisk.Publish(*receiptPath, receipt); err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	result := report{Schema: reportSchemaV1, Ready: receipt.Ready, ReceiptWritten: true, TenantCount: receipt.TenantCount, CaseCount: receipt.CaseCount, TimingSampleCountPerClass: receipt.TimingSampleCountPerClass, ResultLeakCount: receipt.ResultLeakCount, CountLeakCount: receipt.CountLeakCount, CacheLeakCount: receipt.CacheLeakCount, MaximumTimingDeltaMicroseconds: receipt.MaximumTimingDeltaMicroseconds, ObservedTimingDeltaMicroseconds: receipt.ObservedTimingDeltaMicroseconds, DomainCount: receipt.DomainCount, PassedCount: receipt.PassedCount, FailedCount: receipt.FailedCount, InconclusiveCount: receipt.InconclusiveCount, FindingCount: receipt.FindingCount, RiskBreachCount: receipt.RiskBreachCount}
+	if err := json.NewEncoder(stdout).Encode(result); err != nil {
+		fmt.Fprintln(stderr, "encode retrieval risk report")
+		return 1
+	}
+	if !receipt.Ready {
+		return 3
+	}
+	return 0
+}
+func anyBlank(values ...string) bool {
+	for _, value := range values {
+		if strings.TrimSpace(value) == "" {
+			return true
+		}
+	}
+	return false
+}
