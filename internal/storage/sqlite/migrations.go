@@ -26,6 +26,23 @@ var schemaMigrations = []migrationStep{
 	{6, "solution-working-state", migrateSolutionWorkingState},
 	{7, "solution-transition-idempotency", migrateSolutionTransitionIdempotency},
 	{8, "solution-reference-scope", migrateSolutionReferenceScope},
+	{9, "solution-summaries", migrateSolutionSummaries},
+}
+
+func migrateSolutionSummaries(ctx context.Context, s *Store) error {
+	_, err := s.db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS solution_summaries (
+		id TEXT PRIMARY KEY, episode_id TEXT NOT NULL, version INTEGER NOT NULL, episode_version INTEGER NOT NULL,
+		outcome TEXT NOT NULL, summary TEXT NOT NULL, decisive_step_ids_json TEXT NOT NULL, useful_failure_step_ids_json TEXT NOT NULL,
+		evidence_json TEXT NOT NULL, risks_json TEXT NOT NULL, next_guidance TEXT NOT NULL, validation TEXT NOT NULL,
+		superseded_by TEXT NOT NULL DEFAULT '', snapshot_hash TEXT NOT NULL, idempotency_key TEXT NOT NULL, request_hash TEXT NOT NULL,
+		created_at TEXT NOT NULL, UNIQUE(episode_id, version), UNIQUE(episode_id, idempotency_key),
+		FOREIGN KEY(episode_id) REFERENCES solution_episodes(id) ON DELETE CASCADE
+	)`)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_solution_summaries_episode_version ON solution_summaries(episode_id, version DESC)`)
+	return err
 }
 
 func migrateSolutionReferenceScope(ctx context.Context, s *Store) error {

@@ -15,6 +15,8 @@ const (
 	MaxSolutionReferenceTargetBytes  = 2048
 	MaxSolutionReferencesPerStep     = 64
 	MaxSolutionStateItems            = 100
+	MaxSolutionSummaryBytes          = 16 * 1024
+	MaxSolutionSummaryStepIDs        = 100
 )
 
 type SolutionEpisodeStatus string
@@ -484,9 +486,59 @@ type SolutionSummary struct {
 	Summary              string                  `json:"summary"`
 	DecisiveStepIDs      []string                `json:"decisive_step_ids,omitempty"`
 	UsefulFailureStepIDs []string                `json:"useful_failure_step_ids,omitempty"`
+	Evidence             []SolutionReference     `json:"evidence,omitempty"`
+	Risks                []string                `json:"risks,omitempty"`
+	NextGuidance         string                  `json:"next_guidance,omitempty"`
 	Validation           SolutionValidationState `json:"validation"`
 	SupersededBy         string                  `json:"superseded_by,omitempty"`
 	CreatedAt            time.Time               `json:"created_at"`
+}
+
+func (s SolutionSummary) Validate() error {
+	if err := requireSolutionText("summary id", s.ID, 256); err != nil {
+		return err
+	}
+	if err := requireSolutionText("summary episode_id", s.EpisodeID, 256); err != nil {
+		return err
+	}
+	if s.Version < 1 {
+		return errors.New("solution summary version must be at least 1")
+	}
+	if s.Outcome != OutcomeSuccess && s.Outcome != OutcomeFailure && s.Outcome != OutcomePartial {
+		return fmt.Errorf("invalid solution summary outcome %q", s.Outcome)
+	}
+	if err := requireSolutionText("summary", s.Summary, MaxSolutionSummaryBytes); err != nil {
+		return err
+	}
+	if s.Validation != SolutionValidationProposed && s.Validation != SolutionValidationVerified && s.Validation != SolutionValidationRejected {
+		return fmt.Errorf("invalid solution summary validation %q", s.Validation)
+	}
+	if len(s.DecisiveStepIDs) > MaxSolutionSummaryStepIDs || len(s.UsefulFailureStepIDs) > MaxSolutionSummaryStepIDs {
+		return errors.New("solution summary step identifiers exceed bound")
+	}
+	if len(s.Evidence) > MaxSolutionReferencesPerStep {
+		return errors.New("solution summary evidence exceeds bound")
+	}
+	for i, evidence := range s.Evidence {
+		if err := evidence.Validate(); err != nil {
+			return fmt.Errorf("summary evidence[%d]: %w", i, err)
+		}
+	}
+	if len(s.Risks) > MaxSolutionStateItems {
+		return errors.New("solution summary risks exceed bound")
+	}
+	for _, risk := range s.Risks {
+		if len(risk) > MaxSolutionStateItemBytes {
+			return errors.New("solution summary risk exceeds bound")
+		}
+	}
+	if len(s.NextGuidance) > MaxSolutionStateItemBytes {
+		return errors.New("solution summary next guidance exceeds bound")
+	}
+	if s.CreatedAt.IsZero() {
+		return errors.New("solution summary created_at is required")
+	}
+	return nil
 }
 
 type SolutionPromotionKind string

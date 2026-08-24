@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -172,6 +173,91 @@ func TestSolutionServiceCorrelationProposesOnlyUnambiguousEvidence(t *testing.T)
 	}
 	if exact.Ambiguous || len(exact.Proposals) != 1 || exact.Proposals[0].Basis != "external_event_id" {
 		t.Fatalf("unexpected exact proposal: %+v", exact)
+	}
+}
+
+func TestSolutionFinalizationIsDeterministicIdempotentAndVersioned(t *testing.T) {
+	ctx := context.Background()
+	store := openSolutionServiceStore(t)
+	defer func() { _ = store.Close() }()
+	svc := NewSolutionService(store, engine.NewSolutionAdmissionPolicy())
+	episode, _, err := svc.Start(ctx, safeSolutionStart("finalize"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	steps := []SolutionAppendStepInput{
+		{Kind: core.SolutionStepDecision, Status: core.SolutionStepCompleted, Summary: "Use additive summary storage.", RationaleSummary: "Historical summaries remain immutable."},
+		{Kind: core.SolutionStepAction, Status: core.SolutionStepFailed, Summary: "Tried rewriting the prior summary in place."},
+		{Kind: core.SolutionStepResult, Status: core.SolutionStepCompleted, Summary: "Focused finalization tests pass."},
+	}
+	steps[2].References = []core.SolutionReference{{Kind: core.SolutionReferenceArtifact, TargetID: "focused-report", Locator: "reports/focused.json"}}
+	for i := range steps {
+		steps[i].Workspace, steps[i].PrincipalID, steps[i].EpisodeID = "ws", "principal-1", episode.ID
+		steps[i].Source, steps[i].Confidence, steps[i].Sensitivity = "agent", 0.9, core.SolutionSensitivityInternal
+		steps[i].IdempotencyKey = fmt.Sprintf("final-step-%d", i)
+		if _, _, err := svc.AppendStep(ctx, steps[i]); err != nil {
+			t.Fatal(err)
+		}
+	}
+	terminal, err := svc.Transition(ctx, SolutionTransitionInput{Workspace: "ws", PrincipalID: "principal-1", EpisodeID: episode.ID, ExpectedVersion: 4, Status: core.SolutionEpisodeCompleted, IdempotencyKey: "terminal"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := svc.Finalize(ctx, SolutionFinalizeInput{Workspace: "ws", PrincipalID: "principal-1", EpisodeID: episode.ID, ExpectedVersion: terminal.Version, IdempotencyKey: "finalize-1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Outcome != core.OutcomeSuccess || first.Version != 1 || len(first.DecisiveStepIDs) != 2 || len(first.UsefulFailureStepIDs) != 1 || first.NextGuidance == "" {
+		t.Fatalf("unexpected summary: %+v", first)
+	}
+	retrySvc := NewSolutionService(store, engine.NewSolutionAdmissionPolicy())
+	retry, err := retrySvc.Finalize(ctx, SolutionFinalizeInput{Workspace: "ws", PrincipalID: "principal-1", EpisodeID: episode.ID, ExpectedVersion: terminal.Version, IdempotencyKey: "finalize-1"})
+	if err != nil || retry.ID != first.ID {
+		t.Fatalf("retry changed result: first=%+v retry=%+v err=%v", first, retry, err)
+	}
+	if len(first.Evidence) != 1 || first.Evidence[0].Resolution != core.SolutionReferenceScoped {
+		t.Fatalf("partial artifact evidence was lost: %+v", first.Evidence)
+	}
+	second, err := svc.Finalize(ctx, SolutionFinalizeInput{Workspace: "ws", PrincipalID: "principal-1", EpisodeID: episode.ID, ExpectedVersion: terminal.Version, IdempotencyKey: "finalize-2"})
+	if err != nil || second.Version != 2 || second.ID == first.ID {
+		t.Fatalf("refinalize: %+v err=%v", second, err)
+	}
+	superseded, err := store.GetSolutionSummary(ctx, first.ID)
+	if err != nil || superseded.SupersededBy != second.ID {
+		t.Fatalf("prior summary not superseded: %+v err=%v", superseded, err)
+	}
+}
+
+func TestSolutionFinalizationRejectsNonTerminalAndBoundsSummary(t *testing.T) {
+	ctx := context.Background()
+	store := openSolutionServiceStore(t)
+	defer func() { _ = store.Close() }()
+	svc := NewSolutionService(store, engine.NewSolutionAdmissionPolicy())
+	episode, _, err := svc.Start(ctx, safeSolutionStart("bounded-finalize"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Finalize(ctx, SolutionFinalizeInput{Workspace: "ws", PrincipalID: "principal-1", EpisodeID: episode.ID, ExpectedVersion: 1, IdempotencyKey: "too-early"}); err == nil {
+		t.Fatal("expected active episode rejection")
+	}
+	for i := 0; i < 8; i++ {
+		_, _, err = svc.AppendStep(ctx, SolutionAppendStepInput{Workspace: "ws", PrincipalID: "principal-1", EpisodeID: episode.ID,
+			Kind: core.SolutionStepResult, Status: core.SolutionStepCompleted, Summary: strings.Repeat(string(rune('a'+i)), 3000), Source: "agent",
+			Confidence: 0.8, Sensitivity: core.SolutionSensitivityInternal, IdempotencyKey: fmt.Sprintf("large-%d", i)})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	terminal, err := svc.Transition(ctx, SolutionTransitionInput{Workspace: "ws", PrincipalID: "principal-1", EpisodeID: episode.ID, ExpectedVersion: 9, Status: core.SolutionEpisodePartial, IdempotencyKey: "partial"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	summary, err := svc.Finalize(ctx, SolutionFinalizeInput{Workspace: "ws", PrincipalID: "principal-1", EpisodeID: episode.ID, ExpectedVersion: terminal.Version, IdempotencyKey: "bounded"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(summary.Summary) > core.MaxSolutionSummaryBytes {
+		t.Fatalf("summary exceeded bound: %d", len(summary.Summary))
 	}
 }
 

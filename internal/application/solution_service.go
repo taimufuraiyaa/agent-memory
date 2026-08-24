@@ -2,11 +2,15 @@ package application
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/taimufuraiyaa/agent-memory/internal/core"
 	"github.com/taimufuraiyaa/agent-memory/internal/engine"
@@ -430,6 +434,154 @@ func (s *SolutionService) ClearWorkingState(ctx context.Context, workspace, prin
 
 func (s *SolutionService) CleanupExpiredWorkingState(ctx context.Context, limit int) (int, error) {
 	return s.store.CleanupExpiredSolutionWorkingState(ctx, s.now().UTC(), limit)
+}
+
+type SolutionFinalizeInput struct {
+	Workspace       string
+	PrincipalID     string
+	EpisodeID       string
+	ExpectedVersion int64
+	IdempotencyKey  string
+}
+
+func (s *SolutionService) Finalize(ctx context.Context, input SolutionFinalizeInput) (core.SolutionSummary, error) {
+	episode, err := s.authorizedEpisode(ctx, input.Workspace, input.PrincipalID, input.EpisodeID)
+	if err != nil {
+		return core.SolutionSummary{}, err
+	}
+	if episode.Version != input.ExpectedVersion {
+		return core.SolutionSummary{}, errors.New("solution episode version conflict")
+	}
+	if !episode.Status.Terminal() {
+		return core.SolutionSummary{}, errors.New("solution episode must be terminal before finalization")
+	}
+	steps, err := s.loadFinalizationSteps(ctx, episode.ID)
+	if err != nil {
+		return core.SolutionSummary{}, err
+	}
+	assembled := assembleSolutionSummary(episode, steps)
+	snapshotPayload, err := json.Marshal(struct {
+		Episode core.SolutionEpisode
+		Steps   []core.SolutionStep
+	}{episode, steps})
+	if err != nil {
+		return core.SolutionSummary{}, err
+	}
+	snapshotSum := sha256.Sum256(snapshotPayload)
+	assembled.SnapshotHash = hex.EncodeToString(snapshotSum[:])
+	assembled.IdempotencyKey = input.IdempotencyKey
+	assembled.ExpectedEpisodeVersion = input.ExpectedVersion
+	assembled.CreatedAt = s.now().UTC()
+	summary, _, err := s.store.CreateSolutionSummary(ctx, assembled)
+	if err == nil {
+		s.audit(ctx, episode.Workspace, episode.SessionID, episode.PrincipalID, episode.ClientID, input.IdempotencyKey,
+			"solution_finalize", "success", string(summary.Outcome), summary.ID, map[string]any{"summary_version": summary.Version, "episode_version": input.ExpectedVersion})
+	}
+	return summary, err
+}
+
+func (s *SolutionService) loadFinalizationSteps(ctx context.Context, episodeID string) ([]core.SolutionStep, error) {
+	const maxSteps = 500
+	steps := make([]core.SolutionStep, 0, 64)
+	var after int64
+	for len(steps) < maxSteps {
+		page, err := s.store.ListSolutionSteps(ctx, episodeID, after, 200)
+		if err != nil {
+			return nil, err
+		}
+		steps = append(steps, page...)
+		if len(page) < 200 {
+			return steps, nil
+		}
+		after = page[len(page)-1].Ordinal
+	}
+	probe, err := s.store.ListSolutionSteps(ctx, episodeID, after, 1)
+	if err != nil {
+		return nil, err
+	}
+	if len(probe) > 0 {
+		return nil, errors.New("solution episode exceeds 500-step finalization bound")
+	}
+	return steps, nil
+}
+
+func assembleSolutionSummary(episode core.SolutionEpisode, steps []core.SolutionStep) sqlite.SolutionSummaryInsert {
+	result := sqlite.SolutionSummaryInsert{EpisodeID: episode.ID, Outcome: solutionOutcome(episode.Status), Validation: core.SolutionValidationVerified}
+	seenEvidence := make(map[string]struct{})
+	lastGuidance := episode.GoalSummary
+	var builder strings.Builder
+	appendSolutionSummaryLine(&builder, "Goal: "+episode.GoalSummary)
+	appendSolutionSummaryLine(&builder, "Outcome: "+string(result.Outcome))
+	for _, step := range steps {
+		if step.Status == core.SolutionStepFailed && len(result.UsefulFailureStepIDs) < core.MaxSolutionSummaryStepIDs {
+			result.UsefulFailureStepIDs = append(result.UsefulFailureStepIDs, step.ID)
+			if len(result.Risks) < core.MaxSolutionStateItems {
+				result.Risks = append(result.Risks, clipSolutionText(step.Summary, core.MaxSolutionStateItemBytes))
+			}
+			appendSolutionSummaryLine(&builder, "Useful failure: "+step.Summary)
+		}
+		if step.Status == core.SolutionStepCompleted && (step.Kind == core.SolutionStepDecision || step.Kind == core.SolutionStepResult || step.Kind == core.SolutionStepCheckpoint) {
+			if len(result.DecisiveStepIDs) < core.MaxSolutionSummaryStepIDs {
+				result.DecisiveStepIDs = append(result.DecisiveStepIDs, step.ID)
+			}
+			appendSolutionSummaryLine(&builder, "Decisive step: "+step.Summary)
+			lastGuidance = step.Summary
+		}
+		for _, reference := range step.References {
+			key := string(reference.Kind) + "\x00" + reference.TargetID
+			if _, exists := seenEvidence[key]; exists || len(result.Evidence) >= core.MaxSolutionReferencesPerStep {
+				continue
+			}
+			seenEvidence[key] = struct{}{}
+			result.Evidence = append(result.Evidence, reference)
+		}
+	}
+	if len(result.Risks) == 0 && episode.Status != core.SolutionEpisodeCompleted {
+		result.Risks = []string{"The episode ended without a fully successful outcome."}
+	}
+	result.NextGuidance = clipSolutionText(lastGuidance, core.MaxSolutionStateItemBytes)
+	result.Summary = builder.String()
+	return result
+}
+
+func solutionOutcome(status core.SolutionEpisodeStatus) core.OutcomeResult {
+	switch status {
+	case core.SolutionEpisodeCompleted:
+		return core.OutcomeSuccess
+	case core.SolutionEpisodePartial:
+		return core.OutcomePartial
+	default:
+		return core.OutcomeFailure
+	}
+}
+
+func appendSolutionSummaryLine(builder *strings.Builder, line string) {
+	if builder.Len() >= core.MaxSolutionSummaryBytes {
+		return
+	}
+	remaining := core.MaxSolutionSummaryBytes - builder.Len()
+	line = strings.TrimSpace(line) + "\n"
+	if len(line) > remaining {
+		line = clipSolutionText(line, remaining)
+	}
+	builder.WriteString(line)
+}
+
+func clipSolutionText(value string, limit int) string {
+	if len(value) <= limit {
+		return value
+	}
+	if limit <= 3 {
+		for limit > 0 && !utf8.ValidString(value[:limit]) {
+			limit--
+		}
+		return value[:limit]
+	}
+	end := limit - 3
+	for end > 0 && !utf8.ValidString(value[:end]) {
+		end--
+	}
+	return strings.TrimSpace(value[:end]) + "..."
 }
 
 func (s *SolutionService) authorizedEpisode(ctx context.Context, workspace, principalID, episodeID string) (core.SolutionEpisode, error) {

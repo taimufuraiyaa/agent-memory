@@ -67,7 +67,7 @@
   - Files: reference repository, correlation service, provenance queries, tests.
   - Estimated scope: Medium.
 
-- [ ] **Task 8: Add deterministic solution-path finalization**
+- [x] **Task 8: Add deterministic solution-path finalization**
   - Acceptance: A terminal snapshot yields a versioned summary of outcome, decisive steps, useful failures, evidence, risks, and next guidance; retry and supersession are idempotent.
   - Verify: golden structured episodes, partial evidence, crash retry, re-finalization, and bounded-size tests.
   - Dependencies: Task 7.
