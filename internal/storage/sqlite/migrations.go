@@ -29,6 +29,18 @@ var schemaMigrations = []migrationStep{
 	{9, "solution-summaries", migrateSolutionSummaries},
 	{10, "solution-promotions", migrateSolutionPromotions},
 	{11, "solution-tool-learning", migrateSolutionToolLearning},
+	{12, "tool-lesson-promotions", migrateToolLessonPromotions},
+}
+
+func migrateToolLessonPromotions(ctx context.Context, s *Store) error {
+	_, err := s.db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS solution_tool_lesson_promotions (
+		id TEXT PRIMARY KEY, lesson_id TEXT NOT NULL, episode_id TEXT NOT NULL, memory_id TEXT NOT NULL DEFAULT '',
+		state TEXT NOT NULL, error TEXT NOT NULL DEFAULT '', idempotency_key TEXT NOT NULL, policy_identity TEXT NOT NULL,
+		created_at TEXT NOT NULL, updated_at TEXT NOT NULL, UNIQUE(lesson_id, idempotency_key),
+		FOREIGN KEY(lesson_id) REFERENCES solution_tool_lessons(id) ON DELETE CASCADE,
+		FOREIGN KEY(episode_id) REFERENCES solution_episodes(id) ON DELETE CASCADE
+	)`)
+	return err
 }
 
 func migrateSolutionToolLearning(ctx context.Context, s *Store) error {

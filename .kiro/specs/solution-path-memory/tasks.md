@@ -96,7 +96,7 @@
   - Files: tool contracts, derivation service, repository, tests.
   - Estimated scope: Medium.
 
-- [ ] **Task 11: Connect tool lessons to skill distillation**
+- [x] **Task 11: Connect tool lessons to skill distillation**
   - Acceptance: Reviewed or success-evidenced lessons can seed procedural memory and skill packaging with source-episode provenance and without duplicating skill contents.
   - Verify: `go test ./internal/workspace ./internal/cli -run 'Test.*Distill|TestToolLessonPromotion'`.
   - Dependencies: Task 10.

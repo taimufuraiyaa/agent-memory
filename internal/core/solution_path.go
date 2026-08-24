@@ -510,24 +510,25 @@ const (
 )
 
 type SolutionToolLesson struct {
-	ID             string                  `json:"id"`
-	Workspace      string                  `json:"workspace"`
-	ToolName       string                  `json:"tool_name"`
-	ToolVersions   []string                `json:"tool_versions,omitempty"`
-	Capability     string                  `json:"capability"`
-	Preconditions  []string                `json:"preconditions,omitempty"`
-	Limitations    []string                `json:"limitations,omitempty"`
-	FailureModes   []string                `json:"failure_modes,omitempty"`
-	Fallback       string                  `json:"fallback,omitempty"`
-	Confidence     float64                 `json:"confidence"`
-	Validation     SolutionValidationState `json:"validation"`
-	SourceStepIDs  []string                `json:"source_step_ids"`
-	SourceEventIDs []string                `json:"source_event_ids"`
-	Evidence       []SolutionReference     `json:"evidence,omitempty"`
-	SuccessCount   int                     `json:"success_count"`
-	Version        int64                   `json:"version"`
-	SupersededBy   string                  `json:"superseded_by,omitempty"`
-	CreatedAt      time.Time               `json:"created_at"`
+	ID               string                  `json:"id"`
+	Workspace        string                  `json:"workspace"`
+	ToolName         string                  `json:"tool_name"`
+	ToolVersions     []string                `json:"tool_versions,omitempty"`
+	Capability       string                  `json:"capability"`
+	Preconditions    []string                `json:"preconditions,omitempty"`
+	Limitations      []string                `json:"limitations,omitempty"`
+	FailureModes     []string                `json:"failure_modes,omitempty"`
+	Fallback         string                  `json:"fallback,omitempty"`
+	Confidence       float64                 `json:"confidence"`
+	Validation       SolutionValidationState `json:"validation"`
+	SourceStepIDs    []string                `json:"source_step_ids"`
+	SourceEventIDs   []string                `json:"source_event_ids"`
+	SourceEpisodeIDs []string                `json:"source_episode_ids"`
+	Evidence         []SolutionReference     `json:"evidence,omitempty"`
+	SuccessCount     int                     `json:"success_count"`
+	Version          int64                   `json:"version"`
+	SupersededBy     string                  `json:"superseded_by,omitempty"`
+	CreatedAt        time.Time               `json:"created_at"`
 }
 
 func (l SolutionToolLesson) Validate() error {
@@ -546,8 +547,8 @@ func (l SolutionToolLesson) Validate() error {
 	if l.Validation != SolutionValidationProposed && l.Validation != SolutionValidationVerified && l.Validation != SolutionValidationRejected {
 		return errors.New("invalid solution tool lesson validation")
 	}
-	if len(l.SourceStepIDs) == 0 || len(l.SourceEventIDs) == 0 {
-		return errors.New("solution tool lesson source steps and events are required")
+	if len(l.SourceStepIDs) == 0 || len(l.SourceEventIDs) == 0 || len(l.SourceEpisodeIDs) == 0 {
+		return errors.New("solution tool lesson source episodes, steps, and events are required")
 	}
 	if l.Version < 1 || l.CreatedAt.IsZero() {
 		return errors.New("solution tool lesson version and created_at are required")
@@ -640,6 +641,7 @@ type SolutionPromotion struct {
 	ID             string                 `json:"id"`
 	EpisodeID      string                 `json:"episode_id"`
 	SummaryID      string                 `json:"summary_id"`
+	ToolLessonID   string                 `json:"tool_lesson_id,omitempty"`
 	Kind           SolutionPromotionKind  `json:"kind"`
 	MemoryType     MemoryType             `json:"memory_type,omitempty"`
 	TargetID       string                 `json:"target_id"`

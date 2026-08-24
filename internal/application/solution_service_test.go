@@ -354,7 +354,7 @@ func TestSolutionPromotionReportsExactPartialPipelineRejection(t *testing.T) {
 	}
 }
 
-func TestToolLessonDerivationSeparatesConsiderationVerificationAndVersionConflict(t *testing.T) {
+func TestToolLessonPromotionSeparatesConsiderationVerificationAndVersionConflict(t *testing.T) {
 	ctx := context.Background()
 	store := openSolutionServiceStore(t)
 	defer func() { _ = store.Close() }()
@@ -407,6 +407,19 @@ func TestToolLessonDerivationSeparatesConsiderationVerificationAndVersionConflic
 	}
 	if lesson.Validation != core.SolutionValidationVerified || lesson.SuccessCount != 2 {
 		t.Fatalf("repeated verified success was not learned: %+v", lesson)
+	}
+	verifiedLesson := lesson
+	promotion, err := svc.PromoteToolLesson(ctx, ToolLessonPromotionInput{Workspace: "ws", PrincipalID: "principal-1", LessonID: verifiedLesson.ID, IdempotencyKey: "lesson-promotion"})
+	if err != nil || promotion.State != core.SolutionPromotionPublished || promotion.TargetID == "" {
+		t.Fatalf("tool lesson promotion: %+v err=%v", promotion, err)
+	}
+	promotedMemory, err := store.GetMemory(ctx, promotion.TargetID)
+	if err != nil || promotedMemory.Type != core.ProceduralMemory || !strings.Contains(promotedMemory.Content, "Run focused Go tests") {
+		t.Fatalf("unexpected promoted lesson memory: %+v err=%v", promotedMemory, err)
+	}
+	retryPromotion, err := svc.PromoteToolLesson(ctx, ToolLessonPromotionInput{Workspace: "ws", PrincipalID: "principal-1", LessonID: verifiedLesson.ID, IdempotencyKey: "lesson-promotion"})
+	if err != nil || retryPromotion.TargetID != promotion.TargetID {
+		t.Fatalf("lesson promotion retry: %+v err=%v", retryPromotion, err)
 	}
 
 	failedV2 := record("event-failed-v2", appendStep("failed-v2-step", "Version 2 failed to start.", core.SolutionStepFailed), core.SolutionToolResult, core.SolutionToolResultFailure, "2.0", false)

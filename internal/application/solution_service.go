@@ -671,7 +671,7 @@ func (s *SolutionService) DeriveToolLesson(ctx context.Context, input SolutionTo
 	first := events[0]
 	lesson := core.SolutionToolLesson{Workspace: first.Workspace, ToolName: first.ToolName, Capability: first.Capability,
 		Validation: core.SolutionValidationProposed, Confidence: 0.5, SourceEventIDs: append([]string(nil), input.EventIDs...), CreatedAt: s.now().UTC()}
-	versions, steps, operations := map[string]struct{}{}, map[string]struct{}{}, map[string]struct{}{}
+	versions, episodes, steps, operations := map[string]struct{}{}, map[string]struct{}{}, map[string]struct{}{}, map[string]struct{}{}
 	successVersions, failedVersions := map[string]struct{}{}, map[string]struct{}{}
 	evidence := []core.SolutionReference{}
 	for _, event := range events {
@@ -681,6 +681,7 @@ func (s *SolutionService) DeriveToolLesson(ctx context.Context, input SolutionTo
 		if event.ToolVersion != "" {
 			versions[event.ToolVersion] = struct{}{}
 		}
+		episodes[event.EpisodeID] = struct{}{}
 		steps[event.StepID] = struct{}{}
 		operations[event.Operation] = struct{}{}
 		evidence = append(evidence, event.Evidence...)
@@ -698,6 +699,7 @@ func (s *SolutionService) DeriveToolLesson(ctx context.Context, input SolutionTo
 		}
 	}
 	lesson.ToolVersions = sortedSolutionSet(versions)
+	lesson.SourceEpisodeIDs = sortedSolutionSet(episodes)
 	lesson.SourceStepIDs = sortedSolutionSet(steps)
 	lesson.Preconditions = sortedSolutionSet(operations)
 	lesson.Evidence = deduplicateSolutionReferences(evidence, core.MaxSolutionReferencesPerStep)
@@ -756,6 +758,85 @@ func deduplicateSolutionReferences(values []core.SolutionReference, limit int) [
 		}
 	}
 	return result
+}
+
+type ToolLessonPromotionInput struct{ Workspace, PrincipalID, LessonID, IdempotencyKey string }
+
+func (s *SolutionService) PromoteToolLesson(ctx context.Context, input ToolLessonPromotionInput) (core.SolutionPromotion, error) {
+	if strings.TrimSpace(input.IdempotencyKey) == "" {
+		return core.SolutionPromotion{}, errors.New("tool lesson promotion idempotency key is required")
+	}
+	lesson, err := s.store.GetSolutionToolLesson(ctx, input.LessonID)
+	if err != nil || lesson.Workspace != strings.TrimSpace(input.Workspace) {
+		return core.SolutionPromotion{}, errors.New("tool lesson not authorized")
+	}
+	if lesson.Validation != core.SolutionValidationVerified {
+		return core.SolutionPromotion{}, errors.New("tool lesson requires verified success evidence or review")
+	}
+	var episode core.SolutionEpisode
+	for index, eventID := range lesson.SourceEventIDs {
+		event, eventErr := s.store.GetSolutionToolEvent(ctx, eventID)
+		if eventErr != nil {
+			return core.SolutionPromotion{}, eventErr
+		}
+		authorized, authErr := s.authorizedEpisode(ctx, input.Workspace, input.PrincipalID, event.EpisodeID)
+		if authErr != nil {
+			return core.SolutionPromotion{}, authErr
+		}
+		if index == 0 {
+			episode = authorized
+		}
+	}
+	promotion, replay, err := s.store.BeginToolLessonPromotion(ctx, lesson.ID, episode.ID, input.IdempotencyKey, "tool-lesson-promotion-v1", s.now().UTC())
+	if err != nil {
+		return core.SolutionPromotion{}, err
+	}
+	if replay && promotion.State == core.SolutionPromotionPublished {
+		promotion.SourceStepIDs, promotion.ObservationIDs = lesson.SourceStepIDs, toolLessonObservationIDs(lesson)
+		return promotion, nil
+	}
+	content := formatToolLessonProceduralMemory(lesson)
+	written, writeErr := s.writer.Write(ctx, engine.WriteInput{Workspace: lesson.Workspace, Type: core.ProceduralMemory, Content: content,
+		Tags: []string{"tool-lesson", "solution-path"}, Keywords: []string{lesson.ToolName, "tool-lesson"},
+		Source: core.MemorySource{Type: core.SourceAgentObservation, SessionID: episode.SessionID}, Mode: engine.ExtractFast,
+		ContentHashSalt: "tool-lesson:" + lesson.ID})
+	observationIDs := toolLessonObservationIDs(lesson)
+	if writeErr != nil {
+		promotion, err = s.store.CompleteToolLessonPromotion(ctx, promotion.ID, promotion.TargetID, core.SolutionPromotionFailed, writeErr.Error())
+	} else if written.Rejected {
+		promotion, err = s.store.CompleteToolLessonPromotion(ctx, promotion.ID, "", core.SolutionPromotionFailed, written.RejectReason)
+	} else if linkErr := s.store.LinkMemoryObservations(ctx, written.ID, observationIDs); linkErr != nil {
+		promotion, err = s.store.CompleteToolLessonPromotion(ctx, promotion.ID, written.ID, core.SolutionPromotionFailed, linkErr.Error())
+	} else {
+		promotion, err = s.store.CompleteToolLessonPromotion(ctx, promotion.ID, written.ID, core.SolutionPromotionPublished, "")
+	}
+	if err != nil {
+		return core.SolutionPromotion{}, err
+	}
+	promotion.SourceStepIDs, promotion.ObservationIDs = lesson.SourceStepIDs, observationIDs
+	return promotion, nil
+}
+
+func toolLessonObservationIDs(lesson core.SolutionToolLesson) []string {
+	ids := make([]string, 0)
+	for _, evidence := range lesson.Evidence {
+		if evidence.Kind == core.SolutionReferenceObservation && evidence.Resolution == core.SolutionReferenceVerified {
+			ids = append(ids, evidence.TargetID)
+		}
+	}
+	return ids
+}
+
+func formatToolLessonProceduralMemory(lesson core.SolutionToolLesson) string {
+	var builder strings.Builder
+	for _, line := range []string{"Tool: " + lesson.ToolName, "Capability: " + lesson.Capability,
+		"Preconditions: " + strings.Join(lesson.Preconditions, "; "), "Limitations: " + strings.Join(lesson.Limitations, "; "),
+		"Failure modes: " + strings.Join(lesson.FailureModes, "; "), "Fallback: " + lesson.Fallback} {
+		if !strings.HasSuffix(line, ": ") {
+			appendSolutionSummaryLine(&builder, line)
+		}
+	}
+	return builder.String()
 }
 
 func (s *SolutionService) loadFinalizationSteps(ctx context.Context, episodeID string) ([]core.SolutionStep, error) {

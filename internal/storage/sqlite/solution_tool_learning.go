@@ -164,3 +164,83 @@ func (s *Store) GetSolutionToolLesson(ctx context.Context, id string) (core.Solu
 	lesson.SupersededBy = supersededBy
 	return lesson, nil
 }
+
+func (s *Store) BeginToolLessonPromotion(ctx context.Context, lessonID, episodeID, key, policy string, at time.Time) (core.SolutionPromotion, bool, error) {
+	if err := requireSolutionIdempotencyKey(key); err != nil {
+		return core.SolutionPromotion{}, false, err
+	}
+	if at.IsZero() {
+		at = time.Now().UTC()
+	}
+	promotion := core.SolutionPromotion{ID: uuid.NewString(), EpisodeID: episodeID, ToolLessonID: lessonID, Kind: core.SolutionPromotionMemory,
+		MemoryType: core.ProceduralMemory, State: core.SolutionPromotionPending, PolicyIdentity: policy, CreatedAt: at}
+	result, err := s.db.ExecContext(ctx, `INSERT INTO solution_tool_lesson_promotions (id, lesson_id, episode_id, memory_id, state, error,
+		idempotency_key, policy_identity, created_at, updated_at) VALUES (?, ?, ?, '', ?, '', ?, ?, ?, ?)
+		ON CONFLICT(lesson_id, idempotency_key) DO NOTHING`, promotion.ID, lessonID, episodeID, promotion.State, key, policy,
+		at.UTC().Format(time.RFC3339Nano), at.UTC().Format(time.RFC3339Nano))
+	if err != nil {
+		return core.SolutionPromotion{}, false, err
+	}
+	inserted, _ := result.RowsAffected()
+	if inserted == 1 {
+		return promotion, false, nil
+	}
+	existing, err := s.GetToolLessonPromotionByKey(ctx, lessonID, key)
+	return existing, true, err
+}
+
+func (s *Store) CompleteToolLessonPromotion(ctx context.Context, id, memoryID string, state core.SolutionPromotionState, failure string) (core.SolutionPromotion, error) {
+	_, err := s.db.ExecContext(ctx, `UPDATE solution_tool_lesson_promotions SET memory_id = ?, state = ?, error = ?, updated_at = ? WHERE id = ?`,
+		memoryID, state, failure, time.Now().UTC().Format(time.RFC3339Nano), id)
+	if err != nil {
+		return core.SolutionPromotion{}, err
+	}
+	return s.GetToolLessonPromotion(ctx, id)
+}
+
+func (s *Store) GetToolLessonPromotion(ctx context.Context, id string) (core.SolutionPromotion, error) {
+	return scanToolLessonPromotion(s.db.QueryRowContext(ctx, toolLessonPromotionSelect+` WHERE id = ?`, id))
+}
+
+func (s *Store) GetToolLessonPromotionByKey(ctx context.Context, lessonID, key string) (core.SolutionPromotion, error) {
+	return scanToolLessonPromotion(s.db.QueryRowContext(ctx, toolLessonPromotionSelect+` WHERE lesson_id = ? AND idempotency_key = ?`, lessonID, key))
+}
+
+const toolLessonPromotionSelect = `SELECT id, lesson_id, episode_id, memory_id, state, error, policy_identity, created_at FROM solution_tool_lesson_promotions`
+
+func scanToolLessonPromotion(row *sql.Row) (core.SolutionPromotion, error) {
+	promotion := core.SolutionPromotion{Kind: core.SolutionPromotionMemory, MemoryType: core.ProceduralMemory}
+	var createdAt string
+	err := row.Scan(&promotion.ID, &promotion.ToolLessonID, &promotion.EpisodeID, &promotion.TargetID, &promotion.State, &promotion.Error, &promotion.PolicyIdentity, &createdAt)
+	if err != nil {
+		return core.SolutionPromotion{}, err
+	}
+	promotion.CreatedAt, _ = time.Parse(time.RFC3339Nano, createdAt)
+	return promotion, nil
+}
+
+func (s *Store) ListPublishedToolLessonPromotionMemoryIDs(ctx context.Context, lessonIDs []string) ([]string, error) {
+	seen := make(map[string]struct{})
+	result := make([]string, 0, len(lessonIDs))
+	for _, lessonID := range lessonIDs {
+		rows, err := s.db.QueryContext(ctx, `SELECT memory_id FROM solution_tool_lesson_promotions WHERE lesson_id = ? AND state = ? AND memory_id != '' ORDER BY created_at`, strings.TrimSpace(lessonID), core.SolutionPromotionPublished)
+		if err != nil {
+			return nil, err
+		}
+		for rows.Next() {
+			var id string
+			if err := rows.Scan(&id); err != nil {
+				_ = rows.Close()
+				return nil, err
+			}
+			if _, ok := seen[id]; !ok {
+				seen[id] = struct{}{}
+				result = append(result, id)
+			}
+		}
+		if err := rows.Close(); err != nil {
+			return nil, err
+		}
+	}
+	return result, nil
+}

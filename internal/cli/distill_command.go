@@ -15,6 +15,7 @@ func newDistillCommand() *cobra.Command {
 	var dataDir string
 	var force bool
 	var format string
+	var sourceMemoryIDs, sourceToolLessonIDs []string
 
 	cmd := &cobra.Command{
 		Use:   "distill",
@@ -46,10 +47,12 @@ memories into an Antigravity-compatible Custom Agent Skill (.agents/skills/<name
 			}
 
 			res, err := mgr.Distill(cmd.Context(), cwd, workspace.DistillOptions{
-				Workspace:   targetWorkspace,
-				SkillName:   skillName,
-				Description: description,
-				Force:       force,
+				Workspace:           targetWorkspace,
+				SkillName:           skillName,
+				Description:         description,
+				Force:               force,
+				SourceMemoryIDs:     sourceMemoryIDs,
+				SourceToolLessonIDs: sourceToolLessonIDs,
 			})
 			if err != nil {
 				return err
@@ -71,6 +74,8 @@ memories into an Antigravity-compatible Custom Agent Skill (.agents/skills/<name
 	cmd.Flags().StringVar(&dataDir, "data-dir", "", "Registry data directory (default: ~/.agent-memory)")
 	cmd.Flags().BoolVar(&force, "force", false, "Overwrite the skill files if they already exist")
 	cmd.Flags().StringVarP(&format, "format", "f", "text", "Output format: json|text")
+	cmd.Flags().StringSliceVar(&sourceMemoryIDs, "memory-id", nil, "Source memory ID for a focused skill seed (repeatable)")
+	cmd.Flags().StringSliceVar(&sourceToolLessonIDs, "tool-lesson-id", nil, "Source tool lesson ID recorded in provenance (repeatable)")
 
 	_ = cmd.MarkFlagRequired("name")
 
