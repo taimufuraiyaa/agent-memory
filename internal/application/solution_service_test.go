@@ -74,6 +74,107 @@ func TestSolutionServiceStartAppendAndCrossScopeProtection(t *testing.T) {
 	}
 }
 
+func TestSolutionServiceLinksOnlySameSessionObservationAndArtifacts(t *testing.T) {
+	ctx := context.Background()
+	store := openSolutionServiceStore(t)
+	defer func() { _ = store.Close() }()
+	svc := NewSolutionService(store, engine.NewSolutionAdmissionPolicy())
+	episode, _, err := svc.Start(ctx, safeSolutionStart("evidence-links"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	observation, _, err := store.InsertObservationDedupWindow(ctx, sqlite.ObservationInsert{
+		Workspace: "ws", SessionID: "session-1", Kind: "tool_result", ToolName: "go",
+		Summary: "Focused tests passed.", ExternalEventID: "event-1",
+	}, time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	step, _, err := svc.AppendStep(ctx, SolutionAppendStepInput{
+		Workspace: "ws", PrincipalID: "principal-1", EpisodeID: episode.ID,
+		Kind: core.SolutionStepResult, Status: core.SolutionStepCompleted, Summary: "Focused tests passed.", Source: "agent",
+		Confidence: 0.9, Sensitivity: core.SolutionSensitivityInternal, IdempotencyKey: "linked-step",
+		References: []core.SolutionReference{
+			{Kind: core.SolutionReferenceObservation, TargetID: observation.ID},
+			{Kind: core.SolutionReferenceArtifact, TargetID: "test-report", Locator: "reports/focused.json"},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, ref := range step.References {
+		wantResolution := core.SolutionReferenceVerified
+		if ref.Kind == core.SolutionReferenceArtifact {
+			wantResolution = core.SolutionReferenceScoped
+		}
+		if ref.Workspace != "ws" || ref.SessionID != "session-1" || ref.Resolution != wantResolution {
+			t.Fatalf("reference was not scope-bound: %+v", ref)
+		}
+	}
+
+	other, _, err := store.InsertObservationDedupWindow(ctx, sqlite.ObservationInsert{
+		Workspace: "ws", SessionID: "session-2", Kind: "tool_result", Summary: "Other session event.",
+	}, time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _, err = svc.AppendStep(ctx, SolutionAppendStepInput{
+		Workspace: "ws", PrincipalID: "principal-1", EpisodeID: episode.ID, Kind: core.SolutionStepObservation,
+		Status: core.SolutionStepCompleted, Summary: "Try cross-session evidence.", Source: "agent", Confidence: 0.5,
+		Sensitivity: core.SolutionSensitivityInternal, IdempotencyKey: "cross-session",
+		References: []core.SolutionReference{{Kind: core.SolutionReferenceObservation, TargetID: other.ID}},
+	})
+	if err == nil || !strings.Contains(err.Error(), "not authorized") {
+		t.Fatalf("expected scoped denial, got %v", err)
+	}
+	otherWorkspace, _, err := store.InsertObservationDedupWindow(ctx, sqlite.ObservationInsert{
+		Workspace: "other", SessionID: "session-1", Kind: "tool_result", Summary: "Other workspace event.",
+	}, time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _, err = svc.AppendStep(ctx, SolutionAppendStepInput{
+		Workspace: "ws", PrincipalID: "principal-1", EpisodeID: episode.ID, Kind: core.SolutionStepObservation,
+		Status: core.SolutionStepCompleted, Summary: "Try cross-workspace evidence.", Source: "agent", Confidence: 0.5,
+		Sensitivity: core.SolutionSensitivityInternal, IdempotencyKey: "cross-workspace-reference",
+		References: []core.SolutionReference{{Kind: core.SolutionReferenceObservation, TargetID: otherWorkspace.ID}},
+	})
+	if err == nil || !strings.Contains(err.Error(), "not authorized") {
+		t.Fatalf("expected workspace-scoped denial, got %v", err)
+	}
+}
+
+func TestSolutionServiceCorrelationProposesOnlyUnambiguousEvidence(t *testing.T) {
+	ctx := context.Background()
+	store := openSolutionServiceStore(t)
+	defer func() { _ = store.Close() }()
+	svc := NewSolutionService(store, engine.NewSolutionAdmissionPolicy())
+	episode, _, err := svc.Start(ctx, safeSolutionStart("correlation"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, eventID := range []string{"event-a", "event-b"} {
+		_, _, err = store.InsertObservationDedupWindow(ctx, sqlite.ObservationInsert{Workspace: "ws", SessionID: "session-1", Kind: "tool_result", ToolName: "go", Summary: "Go result " + eventID, ExternalEventID: eventID, OccurredAt: time.Now().Add(time.Duration(i) * time.Second)}, time.Minute)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	ambiguous, err := svc.ProposeObservationLinks(ctx, SolutionCorrelationInput{Workspace: "ws", PrincipalID: "principal-1", EpisodeID: episode.ID, ToolName: "go", Limit: 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ambiguous.Ambiguous || len(ambiguous.Proposals) != 0 {
+		t.Fatalf("ambiguous events must remain unlinked: %+v", ambiguous)
+	}
+	exact, err := svc.ProposeObservationLinks(ctx, SolutionCorrelationInput{Workspace: "ws", PrincipalID: "principal-1", EpisodeID: episode.ID, ExternalEventID: "event-a", Limit: 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if exact.Ambiguous || len(exact.Proposals) != 1 || exact.Proposals[0].Basis != "external_event_id" {
+		t.Fatalf("unexpected exact proposal: %+v", exact)
+	}
+}
+
 func TestSolutionServicePreventsAccidentalSecondActiveEpisode(t *testing.T) {
 	ctx := context.Background()
 	store := openSolutionServiceStore(t)

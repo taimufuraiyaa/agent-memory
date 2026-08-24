@@ -112,6 +112,33 @@ func TestAppendSolutionStepAssignsStableOrdinalAndRoundTripsReferences(t *testin
 	}
 }
 
+func TestSolutionObservationReferenceBecomesTombstonedAfterEvidenceDeletion(t *testing.T) {
+	ctx := context.Background()
+	store, episodeID := openSolutionTestStore(t, "solution-tombstone.db")
+	defer func() { _ = store.Close() }()
+	observation, _, err := store.InsertObservationDedupWindow(ctx, ObservationInsert{Workspace: "ws", SessionID: "session-1", Kind: "tool_result", Summary: "The test passed."}, time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _, err = store.AppendSolutionStep(ctx, SolutionStepInsert{EpisodeID: episodeID, Kind: core.SolutionStepResult, Status: core.SolutionStepCompleted,
+		Summary: "Verified the result.", Source: "agent", Confidence: 0.9, Sensitivity: core.SolutionSensitivityInternal, IdempotencyKey: "tombstone-step",
+		References: []core.SolutionReference{{Kind: core.SolutionReferenceObservation, TargetID: observation.ID, Workspace: "ws", SessionID: "session-1", Resolution: core.SolutionReferenceVerified}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.db.ExecContext(ctx, `DELETE FROM observations WHERE id = ?`, observation.ID); err != nil {
+		t.Fatal(err)
+	}
+	steps, err := store.ListSolutionSteps(ctx, episodeID, 0, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := steps[0].References[0].Resolution; got != core.SolutionReferenceTombstoned {
+		t.Fatalf("expected tombstoned reference, got %q", got)
+	}
+}
+
 func TestAppendSolutionStepsConcurrentOrderingAndPaging(t *testing.T) {
 	ctx := context.Background()
 	store, episodeID := openSolutionTestStore(t, "solution-concurrent.db")

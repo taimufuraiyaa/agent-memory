@@ -60,7 +60,7 @@
 
 ## Phase 3 — Evidence and Finalization
 
-- [ ] **Task 7: Link observations and artifacts to solution steps**
+- [x] **Task 7: Link observations and artifacts to solution steps**
   - Acceptance: Explicit references validate same-workspace/session scope, preserve tombstoned evidence, and support bounded correlation proposals without asserting causality.
   - Verify: explicit link, ambiguous correlation, deleted observation, cross-session, and cross-workspace tests.
   - Dependencies: Checkpoint B.

@@ -25,6 +25,22 @@ var schemaMigrations = []migrationStep{
 	{5, "solution-path-episodes", migrateSolutionPathEpisodes},
 	{6, "solution-working-state", migrateSolutionWorkingState},
 	{7, "solution-transition-idempotency", migrateSolutionTransitionIdempotency},
+	{8, "solution-reference-scope", migrateSolutionReferenceScope},
+}
+
+func migrateSolutionReferenceScope(ctx context.Context, s *Store) error {
+	columns := []struct{ name, ddl string }{
+		{"workspace", `ALTER TABLE solution_step_references ADD COLUMN workspace TEXT NOT NULL DEFAULT ''`},
+		{"session_id", `ALTER TABLE solution_step_references ADD COLUMN session_id TEXT NOT NULL DEFAULT ''`},
+		{"resolution_state", `ALTER TABLE solution_step_references ADD COLUMN resolution_state TEXT NOT NULL DEFAULT 'unverified'`},
+	}
+	for _, column := range columns {
+		if err := s.ensureColumn(ctx, "solution_step_references", column.name, column.ddl); err != nil {
+			return err
+		}
+	}
+	_, err := s.db.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_solution_step_references_scope ON solution_step_references(workspace, session_id, kind, target_id)`)
+	return err
 }
 
 var migrateMu sync.Mutex

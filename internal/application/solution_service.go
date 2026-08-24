@@ -117,10 +117,20 @@ func (s *SolutionService) AppendStep(ctx context.Context, input SolutionAppendSt
 			return core.SolutionStep{}, false, err
 		}
 	}
+	for _, parentID := range input.ParentStepIDs {
+		parent, parentErr := s.store.GetSolutionStep(ctx, parentID)
+		if parentErr != nil || parent.EpisodeID != episode.ID {
+			return core.SolutionStep{}, false, errors.New("solution reference not authorized")
+		}
+	}
+	references, err := s.bindSolutionReferences(ctx, episode, input.References)
+	if err != nil {
+		return core.SolutionStep{}, false, err
+	}
 	step, deduplicated, err := s.store.AppendSolutionStep(ctx, sqlite.SolutionStepInsert{
 		EpisodeID: episode.ID, Kind: input.Kind, Status: input.Status, Summary: summary,
 		RationaleSummary: rationale, Source: input.Source, ParentStepIDs: input.ParentStepIDs,
-		References: input.References, Confidence: input.Confidence, Sensitivity: input.Sensitivity,
+		References: references, Confidence: input.Confidence, Sensitivity: input.Sensitivity,
 		IdempotencyKey: input.IdempotencyKey, CreatedAt: s.now().UTC(),
 	})
 	if err == nil && !deduplicated {
@@ -129,6 +139,105 @@ func (s *SolutionService) AppendStep(ctx context.Context, input SolutionAppendSt
 			map[string]any{"kind": step.Kind, "ordinal": step.Ordinal})
 	}
 	return step, deduplicated, err
+}
+
+func (s *SolutionService) bindSolutionReferences(ctx context.Context, episode core.SolutionEpisode, references []core.SolutionReference) ([]core.SolutionReference, error) {
+	bound := append([]core.SolutionReference(nil), references...)
+	for i := range bound {
+		bound[i].Workspace, bound[i].SessionID = episode.Workspace, episode.SessionID
+		switch bound[i].Kind {
+		case core.SolutionReferenceObservation:
+			observation, err := s.store.GetObservation(ctx, bound[i].TargetID)
+			if err != nil || observation.Workspace != episode.Workspace || observation.SessionID != episode.SessionID {
+				return nil, errors.New("solution reference not authorized")
+			}
+			bound[i].Resolution = core.SolutionReferenceVerified
+		case core.SolutionReferenceMemory:
+			memory, err := s.store.GetMemory(ctx, bound[i].TargetID)
+			if err != nil || memory.Workspace != episode.Workspace || (memory.SessionID != nil && *memory.SessionID != episode.SessionID) {
+				return nil, errors.New("solution reference not authorized")
+			}
+			bound[i].Resolution = core.SolutionReferenceVerified
+		case core.SolutionReferenceStep:
+			step, err := s.store.GetSolutionStep(ctx, bound[i].TargetID)
+			if err != nil || step.EpisodeID != episode.ID {
+				return nil, errors.New("solution reference not authorized")
+			}
+			bound[i].Resolution = core.SolutionReferenceVerified
+		default:
+			bound[i].Resolution = core.SolutionReferenceScoped
+		}
+	}
+	return bound, nil
+}
+
+type SolutionCorrelationInput struct {
+	Workspace       string
+	PrincipalID     string
+	EpisodeID       string
+	ToolName        string
+	ExternalEventID string
+	OccurredAround  time.Time
+	Window          time.Duration
+	Limit           int
+}
+
+func (s *SolutionService) ProposeObservationLinks(ctx context.Context, input SolutionCorrelationInput) (core.SolutionCorrelationResult, error) {
+	episode, err := s.authorizedEpisode(ctx, input.Workspace, input.PrincipalID, input.EpisodeID)
+	if err != nil {
+		return core.SolutionCorrelationResult{}, err
+	}
+	if strings.TrimSpace(input.ToolName) == "" && strings.TrimSpace(input.ExternalEventID) == "" {
+		return core.SolutionCorrelationResult{}, errors.New("tool_name or external_event_id is required")
+	}
+	window := input.Window
+	if window <= 0 {
+		window = 5 * time.Minute
+	}
+	if window > 15*time.Minute {
+		return core.SolutionCorrelationResult{}, errors.New("solution correlation window exceeds 15 minutes")
+	}
+	around := input.OccurredAround.UTC()
+	if around.IsZero() {
+		around = s.now().UTC()
+	}
+	from, to := around.Add(-window), around.Add(window)
+	limit := input.Limit
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 50 {
+		limit = 50
+	}
+	observations, err := s.store.ListObservations(ctx, episode.Workspace, episode.SessionID, &from, &to, limit)
+	if err != nil {
+		return core.SolutionCorrelationResult{}, err
+	}
+	matches := make([]core.Observation, 0, len(observations))
+	basis, confidence := "tool_and_time_window", 0.7
+	if eventID := strings.TrimSpace(input.ExternalEventID); eventID != "" {
+		basis, confidence = "external_event_id", 1.0
+		for _, observation := range observations {
+			if observation.ExternalEventID == eventID {
+				matches = append(matches, observation)
+			}
+		}
+	} else {
+		toolName := strings.TrimSpace(input.ToolName)
+		for _, observation := range observations {
+			if observation.ToolName != nil && *observation.ToolName == toolName {
+				matches = append(matches, observation)
+			}
+		}
+	}
+	result := core.SolutionCorrelationResult{Examined: len(observations), Ambiguous: len(matches) > 1}
+	if len(matches) == 1 {
+		result.Proposals = []core.SolutionCorrelationProposal{{Reference: core.SolutionReference{
+			Kind: core.SolutionReferenceObservation, TargetID: matches[0].ID, Workspace: episode.Workspace,
+			SessionID: episode.SessionID, Resolution: core.SolutionReferenceVerified,
+		}, Basis: basis, Confidence: confidence}}
+	}
+	return result, nil
 }
 
 type SolutionTransitionInput struct {

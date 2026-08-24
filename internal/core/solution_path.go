@@ -211,9 +211,25 @@ func (k SolutionReferenceKind) Valid() bool {
 }
 
 type SolutionReference struct {
-	Kind     SolutionReferenceKind `json:"kind"`
-	TargetID string                `json:"target_id"`
-	Locator  string                `json:"locator,omitempty"`
+	Kind       SolutionReferenceKind       `json:"kind"`
+	TargetID   string                      `json:"target_id"`
+	Locator    string                      `json:"locator,omitempty"`
+	Workspace  string                      `json:"workspace,omitempty"`
+	SessionID  string                      `json:"session_id,omitempty"`
+	Resolution SolutionReferenceResolution `json:"resolution,omitempty"`
+}
+
+type SolutionReferenceResolution string
+
+const (
+	SolutionReferenceUnverified SolutionReferenceResolution = "unverified"
+	SolutionReferenceVerified   SolutionReferenceResolution = "verified"
+	SolutionReferenceScoped     SolutionReferenceResolution = "scoped"
+	SolutionReferenceTombstoned SolutionReferenceResolution = "tombstoned"
+)
+
+func (r SolutionReferenceResolution) Valid() bool {
+	return r == SolutionReferenceUnverified || r == SolutionReferenceVerified || r == SolutionReferenceScoped || r == SolutionReferenceTombstoned
 }
 
 func (r SolutionReference) Validate() error {
@@ -226,7 +242,25 @@ func (r SolutionReference) Validate() error {
 	if len(r.Locator) > MaxSolutionReferenceTargetBytes {
 		return fmt.Errorf("solution reference locator exceeds %d bytes", MaxSolutionReferenceTargetBytes)
 	}
+	if r.Resolution != "" && !r.Resolution.Valid() {
+		return fmt.Errorf("invalid solution reference resolution %q", r.Resolution)
+	}
+	if (strings.TrimSpace(r.Workspace) == "") != (strings.TrimSpace(r.SessionID) == "") {
+		return errors.New("solution reference workspace and session_id must be set together")
+	}
 	return nil
+}
+
+type SolutionCorrelationProposal struct {
+	Reference  SolutionReference `json:"reference"`
+	Basis      string            `json:"basis"`
+	Confidence float64           `json:"confidence"`
+}
+
+type SolutionCorrelationResult struct {
+	Proposals []SolutionCorrelationProposal `json:"proposals"`
+	Ambiguous bool                          `json:"ambiguous"`
+	Examined  int                           `json:"examined"`
 }
 
 type SolutionStep struct {

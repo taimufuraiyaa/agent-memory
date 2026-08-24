@@ -380,9 +380,13 @@ func (s *Store) AppendSolutionStep(ctx context.Context, in SolutionStepInsert) (
 		return core.SolutionStep{}, false, err
 	}
 	for i, reference := range step.References {
+		resolution := reference.Resolution
+		if resolution == "" {
+			resolution = core.SolutionReferenceUnverified
+		}
 		if _, err := tx.ExecContext(ctx, `INSERT INTO solution_step_references
-			(step_id, ordinal, kind, target_id, locator) VALUES (?, ?, ?, ?, ?)`,
-			step.ID, i+1, reference.Kind, reference.TargetID, reference.Locator); err != nil {
+			(step_id, ordinal, kind, target_id, locator, workspace, session_id, resolution_state) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			step.ID, i+1, reference.Kind, reference.TargetID, reference.Locator, reference.Workspace, reference.SessionID, resolution); err != nil {
 			return core.SolutionStep{}, false, err
 		}
 	}
@@ -436,14 +440,14 @@ func getSolutionStepTx(ctx context.Context, tx *sql.Tx, id string) (core.Solutio
 	if err != nil {
 		return core.SolutionStep{}, err
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT kind, target_id, locator FROM solution_step_references WHERE step_id = ? ORDER BY ordinal`, id)
+	rows, err := tx.QueryContext(ctx, `SELECT kind, target_id, locator, workspace, session_id, resolution_state FROM solution_step_references WHERE step_id = ? ORDER BY ordinal`, id)
 	if err != nil {
 		return core.SolutionStep{}, err
 	}
 	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var reference core.SolutionReference
-		if err := rows.Scan(&reference.Kind, &reference.TargetID, &reference.Locator); err != nil {
+		if err := rows.Scan(&reference.Kind, &reference.TargetID, &reference.Locator, &reference.Workspace, &reference.SessionID, &reference.Resolution); err != nil {
 			return core.SolutionStep{}, err
 		}
 		step.References = append(step.References, reference)
@@ -467,7 +471,7 @@ func scanSolutionStep(row solutionRowScanner) (core.SolutionStep, error) {
 }
 
 func (s *Store) listSolutionStepReferences(ctx context.Context, stepID string) ([]core.SolutionReference, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT kind, target_id, locator FROM solution_step_references
+	rows, err := s.db.QueryContext(ctx, `SELECT kind, target_id, locator, workspace, session_id, resolution_state FROM solution_step_references
 		WHERE step_id = ? ORDER BY ordinal`, stepID)
 	if err != nil {
 		return nil, err
@@ -476,12 +480,31 @@ func (s *Store) listSolutionStepReferences(ctx context.Context, stepID string) (
 	references := make([]core.SolutionReference, 0)
 	for rows.Next() {
 		var reference core.SolutionReference
-		if err := rows.Scan(&reference.Kind, &reference.TargetID, &reference.Locator); err != nil {
+		if err := rows.Scan(&reference.Kind, &reference.TargetID, &reference.Locator, &reference.Workspace, &reference.SessionID, &reference.Resolution); err != nil {
 			return nil, err
+		}
+		if reference.Kind == core.SolutionReferenceObservation && reference.Resolution == core.SolutionReferenceVerified {
+			var exists int
+			err := s.db.QueryRowContext(ctx, `SELECT 1 FROM observations WHERE id = ? AND workspace = ? AND session_id = ?`, reference.TargetID, reference.Workspace, reference.SessionID).Scan(&exists)
+			if errors.Is(err, sql.ErrNoRows) {
+				reference.Resolution = core.SolutionReferenceTombstoned
+			} else if err != nil {
+				return nil, err
+			}
 		}
 		references = append(references, reference)
 	}
 	return references, rows.Err()
+}
+
+func (s *Store) GetSolutionStep(ctx context.Context, id string) (core.SolutionStep, error) {
+	row := s.db.QueryRowContext(ctx, `SELECT id, episode_id, ordinal, kind, status, summary, rationale_summary, source, parent_step_ids_json, confidence, sensitivity, created_at FROM solution_steps WHERE id = ?`, strings.TrimSpace(id))
+	step, err := scanSolutionStep(row)
+	if err != nil {
+		return core.SolutionStep{}, err
+	}
+	step.References, err = s.listSolutionStepReferences(ctx, step.ID)
+	return step, err
 }
 
 func requireSolutionIdempotencyKey(key string) error {
