@@ -32,6 +32,31 @@ var schemaMigrations = []migrationStep{
 	{12, "tool-lesson-promotions", migrateToolLessonPromotions},
 	{13, "how-retrieval-feedback", migrateHowRetrievalFeedback},
 	{14, "distilled-skill-metadata", migrateDistilledSkillMetadata},
+	{15, "solution-activity-review", migrateSolutionActivityReview},
+}
+
+func migrateSolutionActivityReview(ctx context.Context, s *Store) error {
+	statements := []string{
+		`CREATE TABLE IF NOT EXISTS solution_episode_reviews (
+			episode_id TEXT PRIMARY KEY, workspace TEXT NOT NULL, pinned INTEGER NOT NULL DEFAULT 0,
+			updated_at TEXT NOT NULL, FOREIGN KEY(episode_id) REFERENCES solution_episodes(id) ON DELETE CASCADE
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_solution_episode_reviews_workspace ON solution_episode_reviews(workspace, pinned, updated_at DESC)`,
+		`CREATE TABLE IF NOT EXISTS solution_step_reviews (
+			step_id TEXT PRIMARY KEY, episode_id TEXT NOT NULL, workspace TEXT NOT NULL,
+			misleading INTEGER NOT NULL DEFAULT 0, redacted INTEGER NOT NULL DEFAULT 0,
+			reason TEXT NOT NULL DEFAULT '', reason_class TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL,
+			FOREIGN KEY(step_id) REFERENCES solution_steps(id) ON DELETE CASCADE,
+			FOREIGN KEY(episode_id) REFERENCES solution_episodes(id) ON DELETE CASCADE
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_solution_step_reviews_episode ON solution_step_reviews(episode_id, updated_at DESC)`,
+	}
+	for _, statement := range statements {
+		if _, err := s.db.ExecContext(ctx, statement); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func migrateDistilledSkillMetadata(ctx context.Context, s *Store) error {

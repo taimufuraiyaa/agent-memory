@@ -3,6 +3,7 @@ import {
   deleteNotePermanently,
   deleteMemories as deleteStandaloneMemories,
   getStats,
+  getSolutionEpisode as getStandaloneSolutionEpisode,
   getNote as getStandaloneNote,
   importLibraryBook,
   listFeedback,
@@ -10,8 +11,10 @@ import {
   listProjects,
   listRecentMemories,
   listSessions,
+  listSolutionEpisodes,
   recallPreview,
   restoreNote as restoreStandaloneNote,
+  reviewSolutionEpisode as reviewStandaloneSolutionEpisode,
   retryNoteIndex as retryStandaloneNoteIndex,
   searchMemories,
   setMemoryPinned,
@@ -21,6 +24,8 @@ import {
   updateNote as updateStandaloneNote,
   type MemoryEntry,
   type RightsBasis,
+  type SolutionEpisodeDetailRecord,
+  type SolutionEpisodeRecord,
 } from '../api'
 import {
   type ActivityItem,
@@ -30,6 +35,7 @@ import {
   type KnowledgeResult,
   type NoteSummary,
   type SourceSummary,
+  type SolutionEpisodeDetail,
   type StudyResult,
   type WorkspaceSummary,
   type WorkspaceNote,
@@ -55,6 +61,45 @@ function memoryResult(memory: MemoryEntry, score?: number, explanation?: string)
 function numericCursor(cursor?: string): number {
   const value = Number.parseInt(cursor || '0', 10)
   return Number.isFinite(value) && value >= 0 ? value : 0
+}
+
+function solutionActivityItem(record: SolutionEpisodeRecord): ActivityItem {
+  const episode = record.episode
+  const state = episode.status === 'active' || episode.status === 'paused' ? 'running' : episode.status === 'abandoned' || episode.status === 'cancelled' ? 'failed' : 'completed'
+  return {
+    id: `episode:${episode.id}`,
+    workspaceId: episode.workspace,
+    kind: 'episode',
+    title: episode.goal_summary,
+    state,
+    updatedAt: episode.updated_at,
+    episode: {
+      id: episode.id, workspaceId: episode.workspace, principalId: episode.principal_id, sessionId: episode.session_id,
+      goal: episode.goal_summary, status: episode.status, retention: episode.retention_class, version: episode.version,
+      supersededBy: episode.superseded_by, outcome: record.summary?.outcome, summary: record.summary?.summary,
+      validation: record.summary?.validation, pinned: record.pinned, stepCount: record.step_count,
+      createdAt: episode.created_at, updatedAt: episode.updated_at,
+    },
+  }
+}
+
+function solutionDetail(record: SolutionEpisodeDetailRecord): SolutionEpisodeDetail {
+  const summary = solutionActivityItem(record).episode!
+  const reviews = new Map(record.step_reviews.map((review) => [review.step_id, review]))
+  return {
+    ...summary,
+    steps: record.steps.map((step) => {
+      const review = reviews.get(step.id)
+      return { id: step.id, ordinal: step.ordinal, kind: step.kind, status: step.status, summary: step.summary,
+        rationale: step.rationale_summary, confidence: step.confidence, createdAt: step.created_at,
+        references: (step.references || []).map((reference) => ({ kind: reference.kind, targetId: reference.target_id, locator: reference.locator, resolution: reference.resolution })),
+        misleading: Boolean(review?.misleading), redacted: Boolean(review?.redacted), reviewReason: review?.reason, reasonClass: review?.reason_class }
+    }),
+    evidence: (record.summary?.evidence || []).map((reference) => ({ kind: reference.kind, targetId: reference.target_id, locator: reference.locator, resolution: reference.resolution })),
+    risks: record.summary?.risks || [],
+    nextGuidance: record.summary?.next_guidance,
+    promotions: record.promotions.map((promotion) => ({ id: promotion.id, kind: promotion.kind, memoryType: promotion.memory_type, targetId: promotion.target_id, state: promotion.state, createdAt: promotion.created_at })),
+  }
 }
 
 function sourceFormat(file: File): 'pdf' | 'epub' | 'markdown' | 'text' {
@@ -227,9 +272,10 @@ export function createStandaloneKnowledgeGateway(): KnowledgeGateway {
       await retryStandaloneNoteIndex({ workspace: scope.workspaceId, note_id: noteId })
     },
     async listActivity(scope, cursor) {
-      const [sessionsResponse, feedback] = await Promise.all([listSessions({ workspace: scope.workspaceId, limit: 100 }), listFeedback({ workspace: scope.workspaceId })])
+	  const [sessionsResponse, feedback, solutions] = await Promise.all([listSessions({ workspace: scope.workspaceId, limit: 100 }), listFeedback({ workspace: scope.workspaceId }), listSolutionEpisodes({ workspace: scope.workspaceId, limit: 100 })])
       const items: ActivityItem[] = [
         ...runtimeActivity.filter((item) => item.workspaceId === scope.workspaceId),
+		...solutions.episodes.map(solutionActivityItem),
         ...sessionsResponse.sessions.map((session) => ({ id: `session:${session.session_id}`, workspaceId: scope.workspaceId, kind: 'session' as const, title: `Agent session ${session.session_id}`, state: session.ended_at ? 'completed' as const : 'running' as const, updatedAt: session.last_seen_at })),
         ...feedback.map((request) => ({
           id: `retrieval:${request.id}`,
@@ -255,6 +301,14 @@ export function createStandaloneKnowledgeGateway(): KnowledgeGateway {
     },
     async retryActivity() {
       throw new Error('This activity cannot be retried from the unified timeline.')
+    },
+    async getSolutionEpisode(scope, episodeId) {
+      return solutionDetail((await getStandaloneSolutionEpisode({ workspace: scope.workspaceId, episode_id: episodeId })).detail)
+    },
+    async reviewSolutionEpisode(scope, input) {
+      await reviewStandaloneSolutionEpisode({ workspace: scope.workspaceId, principal_id: input.principalId, episode_id: input.episodeId, action: input.action,
+        step_id: input.stepId, reason: input.reason, reason_class: input.reasonClass, summary: input.summary,
+        successor_episode_id: input.successorEpisodeId, idempotency_key: input.idempotencyKey, pinned: input.pinned })
     },
     async submitFeedback(scope, requestId, score, reason) {
       await submitRequestFeedback({ workspace: scope.workspaceId, request_id: requestId, score, reason })

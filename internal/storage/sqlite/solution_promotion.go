@@ -2,7 +2,6 @@ package sqlite
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -80,7 +79,7 @@ func (s *Store) GetSolutionPromotionByKey(ctx context.Context, summaryID, key st
 const solutionPromotionSelect = `SELECT id, episode_id, summary_id, kind, memory_type, target_id, source_step_ids_json,
 	observation_ids_json, state, error, policy_identity, created_at FROM solution_promotions`
 
-func scanSolutionPromotion(row *sql.Row) (core.SolutionPromotion, error) {
+func scanSolutionPromotion(row solutionRowScanner) (core.SolutionPromotion, error) {
 	var promotion core.SolutionPromotion
 	var sourceJSON, observationJSON, createdAt string
 	err := row.Scan(&promotion.ID, &promotion.EpisodeID, &promotion.SummaryID, &promotion.Kind, &promotion.MemoryType,

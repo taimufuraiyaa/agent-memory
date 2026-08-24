@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -75,6 +76,20 @@ type solutionHandoffRequest struct {
 	TargetPrincipalID string `json:"target_principal_id"`
 	TargetSessionID   string `json:"target_session_id"`
 	IdempotencyKey    string `json:"idempotency_key"`
+}
+
+type solutionReviewRequest struct {
+	Workspace          string `json:"workspace"`
+	PrincipalID        string `json:"principal_id"`
+	EpisodeID          string `json:"episode_id"`
+	Action             string `json:"action"`
+	StepID             string `json:"step_id,omitempty"`
+	Reason             string `json:"reason,omitempty"`
+	ReasonClass        string `json:"reason_class,omitempty"`
+	Summary            string `json:"summary,omitempty"`
+	SuccessorEpisodeID string `json:"successor_episode_id,omitempty"`
+	IdempotencyKey     string `json:"idempotency_key,omitempty"`
+	Pinned             bool   `json:"pinned,omitempty"`
 }
 
 func solutionStartHandler(svc *Service) http.HandlerFunc {
@@ -229,6 +244,82 @@ func solutionHandoffHandler(svc *Service) http.HandlerFunc {
 			return
 		}
 		writeOK(w, http.StatusOK, map[string]any{"episode": episode})
+	}
+}
+
+func solutionActivityHandler(svc *Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			writeErr(w, 405, "method_not_allowed", "method not allowed")
+			return
+		}
+		ws, service, ok := resolveSolutionService(w, r, svc, r.URL.Query().Get("workspace"))
+		if !ok {
+			return
+		}
+		if episodeID := strings.TrimSpace(r.URL.Query().Get("episode_id")); episodeID != "" {
+			detail, err := service.GetActivityEpisode(r.Context(), ws, episodeID)
+			if err != nil {
+				writeSolutionError(w, err)
+				return
+			}
+			writeOK(w, http.StatusOK, map[string]any{"detail": detail})
+			return
+		}
+		limit := 20
+		if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+			var err error
+			if limit, err = strconv.Atoi(raw); err != nil {
+				writeErr(w, 400, "bad_request", "invalid activity limit")
+				return
+			}
+		}
+		items, err := service.ListActivityEpisodes(r.Context(), ws, limit)
+		if err != nil {
+			writeSolutionError(w, err)
+			return
+		}
+		writeOK(w, http.StatusOK, map[string]any{"episodes": items})
+	}
+}
+
+func solutionReviewHandler(svc *Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeErr(w, 405, "method_not_allowed", "method not allowed")
+			return
+		}
+		var req solutionReviewRequest
+		if !decodeSolutionRequest(w, r, &req) {
+			return
+		}
+		ws, service, ok := resolveSolutionService(w, r, svc, req.Workspace)
+		if !ok {
+			return
+		}
+		var result any
+		var err error
+		switch strings.TrimSpace(req.Action) {
+		case "pin":
+			err = service.SetEpisodePinned(r.Context(), application.SolutionEpisodePinInput{Workspace: ws, PrincipalID: req.PrincipalID, EpisodeID: req.EpisodeID, Pinned: req.Pinned})
+		case "misleading":
+			err = service.MarkStepMisleading(r.Context(), application.SolutionStepReviewInput{Workspace: ws, PrincipalID: req.PrincipalID, EpisodeID: req.EpisodeID, StepID: req.StepID, Reason: req.Reason})
+		case "redact":
+			err = service.RedactStep(r.Context(), application.SolutionStepRedactInput{Workspace: ws, PrincipalID: req.PrincipalID, EpisodeID: req.EpisodeID, StepID: req.StepID, ReasonClass: req.ReasonClass})
+		case "correct":
+			result, err = service.CorrectSummary(r.Context(), application.SolutionSummaryCorrectionInput{Workspace: ws, PrincipalID: req.PrincipalID, EpisodeID: req.EpisodeID, Summary: req.Summary, IdempotencyKey: req.IdempotencyKey})
+		case "supersede":
+			err = service.SupersedeEpisode(r.Context(), application.SolutionEpisodeSupersedeInput{Workspace: ws, PrincipalID: req.PrincipalID, EpisodeID: req.EpisodeID, SuccessorEpisodeID: req.SuccessorEpisodeID})
+		case "delete":
+			err = service.DeleteEpisode(r.Context(), application.SolutionEpisodeDeleteInput{Workspace: ws, PrincipalID: req.PrincipalID, EpisodeID: req.EpisodeID, Reason: req.Reason})
+		default:
+			err = errors.New("invalid solution review action")
+		}
+		if err != nil {
+			writeSolutionError(w, err)
+			return
+		}
+		writeOK(w, http.StatusOK, map[string]any{"reviewed": true, "result": result})
 	}
 }
 

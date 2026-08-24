@@ -201,6 +201,12 @@ export function createHostedKnowledgeGateway(connection: HostedConnection): Know
       if (isRegisteredProject(scope.workspaceId)) throw new Error('This retrieval activity cannot be retried.')
       await retryHostedSource({ ...connection, workspace: scope.workspaceId }, activityId)
     },
+    async getSolutionEpisode() {
+      throw new Error('Solution episode inspection requires registered-project routing.')
+    },
+    async reviewSolutionEpisode() {
+      throw new Error('Solution episode review requires registered-project routing.')
+    },
     async submitFeedback(scope, requestId, score, reason) {
       if (!isRegisteredProject(scope.workspaceId)) throw new Error('Hosted feedback uses the memory feedback control.')
       await submitHostedRetrievalFeedback(connection, { workspace: scope.workspaceId, request_id: requestId, score, reason })

@@ -118,7 +118,7 @@
 
 ## Phase 5 — Product Surface and Hosted Parity
 
-- [ ] **Task 13: Add Activity episode inspection and review**
+- [x] **Task 13: Add Activity episode inspection and review**
   - Acceptance: The unified Workspace Activity surface lists and opens episodes, shows only safe steps and provenance, and supports correction, misleading-step feedback, pin, supersession, redaction, and deletion.
   - Verify: dashboard component, keyboard, responsive, redaction, and cross-workspace gateway tests.
   - Dependencies: Checkpoint D.

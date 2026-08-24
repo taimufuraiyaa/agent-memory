@@ -664,6 +664,17 @@ type DistilledSkillMetadata struct {
 	CreatedAt     time.Time `json:"created_at"`
 }
 
+type SolutionStepReview struct {
+	StepID      string    `json:"step_id"`
+	EpisodeID   string    `json:"episode_id"`
+	Workspace   string    `json:"workspace"`
+	Misleading  bool      `json:"misleading"`
+	Redacted    bool      `json:"redacted"`
+	Reason      string    `json:"reason,omitempty"`
+	ReasonClass string    `json:"reason_class,omitempty"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
 func requireSolutionText(field, value string, maxBytes int) error {
 	if strings.TrimSpace(value) == "" {
 		return fmt.Errorf("solution %s is required", field)

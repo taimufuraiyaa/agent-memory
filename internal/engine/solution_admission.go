@@ -61,6 +61,7 @@ type SolutionAdmissionField string
 
 const (
 	SolutionFieldGoalSummary       SolutionAdmissionField = "goal_summary"
+	SolutionFieldFinalSummary      SolutionAdmissionField = "final_summary"
 	SolutionFieldStepSummary       SolutionAdmissionField = "step_summary"
 	SolutionFieldRationaleSummary  SolutionAdmissionField = "rationale_summary"
 	SolutionFieldWorkingStateItem  SolutionAdmissionField = "working_state_item"
@@ -72,6 +73,8 @@ func (f SolutionAdmissionField) maxBytes() (int, bool) {
 	switch f {
 	case SolutionFieldGoalSummary:
 		return maxSolutionAdmissionGoalBytes, true
+	case SolutionFieldFinalSummary:
+		return core.MaxSolutionSummaryBytes, true
 	case SolutionFieldStepSummary:
 		return maxSolutionAdmissionStepBytes, true
 	case SolutionFieldRationaleSummary:

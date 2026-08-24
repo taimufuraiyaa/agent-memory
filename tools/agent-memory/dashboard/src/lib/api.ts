@@ -1061,6 +1061,75 @@ export type RetrievalRequestLog = {
   created_at: string
 }
 
+export type SolutionEpisodeRecord = {
+  episode: {
+    id: string
+    workspace: string
+    session_id: string
+    principal_id: string
+    client_id: string
+    goal_summary: string
+    status: 'active' | 'paused' | 'completed' | 'partial' | 'abandoned' | 'cancelled'
+    retention_class: 'transient' | 'standard' | 'pinned'
+    version: number
+    superseded_by?: string
+    created_at: string
+    updated_at: string
+  }
+  summary?: {
+    id: string
+    outcome: 'success' | 'failure' | 'partial'
+    summary: string
+    evidence: Array<{ kind: string; target_id: string; locator?: string; resolution?: string }>
+    risks?: string[]
+    next_guidance?: string
+    validation: 'proposed' | 'verified' | 'rejected'
+    created_at: string
+  }
+  pinned: boolean
+  step_count: number
+}
+
+export type SolutionEpisodeDetailRecord = SolutionEpisodeRecord & {
+  steps: Array<{
+    id: string
+    ordinal: number
+    kind: string
+    status: string
+    summary: string
+    rationale_summary?: string
+    confidence: number
+    references?: Array<{ kind: string; target_id: string; locator?: string; resolution?: string }>
+    created_at: string
+  }>
+  promotions: Array<{ id: string; kind: string; memory_type?: string; target_id?: string; state: string; created_at: string }>
+  step_reviews: Array<{ step_id: string; misleading: boolean; redacted: boolean; reason?: string; reason_class?: string; updated_at: string }>
+}
+
+export function listSolutionEpisodes(input: { workspace: string; limit?: number }): Promise<{ episodes: SolutionEpisodeRecord[] }> {
+  return api(`/api/v1/solutions/activity?workspace=${encodeURIComponent(input.workspace)}&limit=${input.limit || 100}`, { method: 'GET' })
+}
+
+export function getSolutionEpisode(input: { workspace: string; episode_id: string }): Promise<{ detail: SolutionEpisodeDetailRecord }> {
+  return api(`/api/v1/solutions/activity?workspace=${encodeURIComponent(input.workspace)}&episode_id=${encodeURIComponent(input.episode_id)}`, { method: 'GET' })
+}
+
+export function reviewSolutionEpisode(input: {
+  workspace: string
+  principal_id: string
+  episode_id: string
+  action: 'pin' | 'misleading' | 'redact' | 'correct' | 'supersede' | 'delete'
+  step_id?: string
+  reason?: string
+  reason_class?: string
+  summary?: string
+  successor_episode_id?: string
+  idempotency_key?: string
+  pinned?: boolean
+}): Promise<{ reviewed: boolean; result?: unknown }> {
+  return api('/api/v1/solutions/review', { method: 'POST', body: JSON.stringify(input) })
+}
+
 export function listFeedback(input: { workspace: string }): Promise<RetrievalRequestLog[]> {
   return api(`/api/v1/feedback?workspace=${encodeURIComponent(input.workspace)}`, {
     method: 'GET',

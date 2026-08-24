@@ -97,7 +97,7 @@ export type WorkspaceNote = NoteSummary & {
 export type ActivityItem = {
   id: string
   workspaceId: string
-  kind: 'study' | 'upload' | 'indexing' | 'session' | 'retrieval' | 'feedback' | 'deletion'
+  kind: 'study' | 'upload' | 'indexing' | 'session' | 'episode' | 'retrieval' | 'feedback' | 'deletion'
   title: string
   state: 'queued' | 'running' | 'completed' | 'failed'
   updatedAt: string
@@ -112,6 +112,47 @@ export type ActivityItem = {
     usefulCount?: number
     totalCount?: number
   }
+  episode?: SolutionEpisodeSummary
+}
+
+export type SolutionEpisodeSummary = {
+  id: string
+  workspaceId: string
+  principalId: string
+  sessionId: string
+  goal: string
+  status: 'active' | 'paused' | 'completed' | 'partial' | 'abandoned' | 'cancelled'
+  retention: 'transient' | 'standard' | 'pinned'
+  version: number
+  supersededBy?: string
+  outcome?: 'success' | 'failure' | 'partial'
+  summary?: string
+  validation?: 'proposed' | 'verified' | 'rejected'
+  pinned: boolean
+  stepCount: number
+  createdAt: string
+  updatedAt: string
+}
+
+export type SolutionEpisodeDetail = SolutionEpisodeSummary & {
+  steps: Array<{ id: string; ordinal: number; kind: string; status: string; summary: string; rationale?: string; confidence: number; references: Array<{ kind: string; targetId: string; locator?: string; resolution?: string }>; createdAt: string; misleading: boolean; redacted: boolean; reviewReason?: string; reasonClass?: string }>
+  evidence: Array<{ kind: string; targetId: string; locator?: string; resolution?: string }>
+  risks: string[]
+  nextGuidance?: string
+  promotions: Array<{ id: string; kind: string; memoryType?: string; targetId?: string; state: string; createdAt: string }>
+}
+
+export type SolutionEpisodeReviewInput = {
+  principalId: string
+  episodeId: string
+  action: 'pin' | 'misleading' | 'redact' | 'correct' | 'supersede' | 'delete'
+  stepId?: string
+  reason?: string
+  reasonClass?: string
+  summary?: string
+  successorEpisodeId?: string
+  idempotencyKey?: string
+  pinned?: boolean
 }
 
 export type SourceUploadInput = {
@@ -146,6 +187,8 @@ export interface KnowledgeGateway {
   retryNoteIndex(scope: WorkspaceScope, noteId: string): Promise<void>
   listActivity(scope: WorkspaceScope, cursor?: string, signal?: AbortSignal): Promise<CursorPage<ActivityItem>>
   retryActivity(scope: WorkspaceScope, activityId: string): Promise<void>
+  getSolutionEpisode(scope: WorkspaceScope, episodeId: string, signal?: AbortSignal): Promise<SolutionEpisodeDetail>
+  reviewSolutionEpisode(scope: WorkspaceScope, input: SolutionEpisodeReviewInput): Promise<void>
   submitFeedback(scope: WorkspaceScope, requestId: string, score: number, reason: string): Promise<void>
   getSettings(scope: WorkspaceScope, signal?: AbortSignal): Promise<Record<string, unknown>>
   importMigration(scope: WorkspaceScope, file: File, passphrase: string, idempotencyKey: string): Promise<{ imported: number; merged: number; skipped: number; failed: number }>

@@ -87,3 +87,44 @@ func TestSolutionStateRejectsPriorPrincipalAfterHandoff(t *testing.T) {
 		t.Fatalf("expected forbidden, got %d: %#v", response.StatusCode, body)
 	}
 }
+
+func TestSolutionActivityReviewHTTPContractAndWorkspaceIsolation(t *testing.T) {
+	svc := &Service{Workspace: "ws", BaseDir: t.TempDir()}
+	server := httptest.NewServer(NewMux(svc))
+	t.Cleanup(func() { server.Close(); _ = svc.Close() })
+	started := postJSON(t, server.URL+"/api/v1/solutions/start", map[string]any{
+		"workspace": "ws", "session_id": "activity-session", "principal_id": "reviewer", "client_id": "codex",
+		"goal_summary": "Inspect this safe episode.", "capture_policy": "structured", "retention_class": "standard", "idempotency_key": "activity-start",
+	})
+	episodeID := started["episode"].(map[string]any)["id"].(string)
+	step := postJSON(t, server.URL+"/api/v1/solutions/steps", map[string]any{
+		"workspace": "ws", "principal_id": "reviewer", "episode_id": episodeID, "kind": "decision", "status": "completed",
+		"summary": "Use the inspected approach.", "source": "agent", "confidence": .8, "sensitivity": "internal", "idempotency_key": "activity-step",
+	})
+	stepID := step["step"].(map[string]any)["id"].(string)
+
+	list := getJSON(t, server.URL+"/api/v1/solutions/activity?workspace=ws&limit=20")
+	if len(list["episodes"].([]any)) != 1 {
+		t.Fatalf("episode missing from activity: %#v", list)
+	}
+	detail := getJSON(t, server.URL+"/api/v1/solutions/activity?workspace=ws&episode_id="+episodeID)
+	if len(detail["detail"].(map[string]any)["steps"].([]any)) != 1 {
+		t.Fatalf("safe path missing from detail: %#v", detail)
+	}
+	postJSON(t, server.URL+"/api/v1/solutions/review", map[string]any{"workspace": "ws", "principal_id": "reviewer", "episode_id": episodeID, "action": "pin", "pinned": true})
+	postJSON(t, server.URL+"/api/v1/solutions/review", map[string]any{"workspace": "ws", "principal_id": "reviewer", "episode_id": episodeID, "step_id": stepID, "action": "misleading", "reason": "This requires correction."})
+	postJSON(t, server.URL+"/api/v1/solutions/review", map[string]any{"workspace": "ws", "principal_id": "reviewer", "episode_id": episodeID, "step_id": stepID, "action": "redact", "reason_class": "incorrect"})
+	detail = getJSON(t, server.URL+"/api/v1/solutions/activity?workspace=ws&episode_id="+episodeID)
+	if detail["detail"].(map[string]any)["pinned"] != true || detail["detail"].(map[string]any)["steps"].([]any)[0].(map[string]any)["summary"] != "[REDACTED: incorrect]" {
+		t.Fatalf("review state missing: %#v", detail)
+	}
+
+	response, err := http.Get(server.URL + "/api/v1/solutions/activity?workspace=other&episode_id=" + episodeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode >= 200 && response.StatusCode < 300 {
+		t.Fatalf("expected cross-workspace denial, got %d", response.StatusCode)
+	}
+}

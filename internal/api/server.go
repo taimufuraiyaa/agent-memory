@@ -287,6 +287,8 @@ func NewMux(svc *Service) *http.ServeMux {
 	mux.HandleFunc("/api/v1/solutions/state", solutionStateHandler(svc))
 	mux.HandleFunc("/api/v1/solutions/transition", solutionTransitionHandler(svc))
 	mux.HandleFunc("/api/v1/solutions/handoff", solutionHandoffHandler(svc))
+	mux.HandleFunc("/api/v1/solutions/activity", solutionActivityHandler(svc))
+	mux.HandleFunc("/api/v1/solutions/review", solutionReviewHandler(svc))
 	mux.HandleFunc("/api/v1/projects/init", projectsInitHandler(svc))
 	mux.HandleFunc("/api/v1/projects/rename", projectsRenameHandler(svc))
 	mux.HandleFunc("/api/v1/projects/list", projectsListHandler(svc))
