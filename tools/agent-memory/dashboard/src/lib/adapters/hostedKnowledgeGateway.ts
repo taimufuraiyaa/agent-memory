@@ -176,7 +176,23 @@ export function createHostedKnowledgeGateway(connection: HostedConnection): Know
     async listActivity(scope) {
       if (isRegisteredProject(scope.workspaceId)) {
         const response = await listHostedRetrievalFeedback(connection, scope.workspaceId)
-        return { items: response.feedback.map<ActivityItem>((request) => ({ id: request.id, workspaceId: scope.workspaceId, kind: request.score >= 0 ? 'feedback' : 'retrieval', title: request.query, state: 'completed', updatedAt: request.created_at })) }
+        return { items: response.feedback.map<ActivityItem>((request) => ({
+          id: request.id,
+          workspaceId: scope.workspaceId,
+          kind: request.score >= 0 ? 'feedback' : 'retrieval',
+          title: request.query,
+          state: 'completed',
+          updatedAt: request.created_at,
+          feedback: {
+            requestId: request.id,
+            requestType: request.request_type,
+            query: request.query,
+            score: request.score,
+            reason: request.reason,
+            usefulCount: request.useful_count,
+            totalCount: request.total_count,
+          },
+        })) }
       }
       const tasks = await listHostedProcessingTasks({ ...connection, workspace: scope.workspaceId })
       return { items: tasks.map<ActivityItem>((task) => ({ id: task.id, workspaceId: scope.workspaceId, kind: task.kind === 'source_deletion' ? 'deletion' : 'upload', title: task.title, state: task.state, updatedAt: task.updated_at, progress: task.progress.percent, failure: task.failure ? { message: task.failure.message || task.failure.code || 'Task failed.', retryAllowed: task.failure.retry_allowed } : undefined })) }

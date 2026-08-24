@@ -231,7 +231,23 @@ export function createStandaloneKnowledgeGateway(): KnowledgeGateway {
       const items: ActivityItem[] = [
         ...runtimeActivity.filter((item) => item.workspaceId === scope.workspaceId),
         ...sessionsResponse.sessions.map((session) => ({ id: `session:${session.session_id}`, workspaceId: scope.workspaceId, kind: 'session' as const, title: `Agent session ${session.session_id}`, state: session.ended_at ? 'completed' as const : 'running' as const, updatedAt: session.last_seen_at })),
-        ...feedback.map((request) => ({ id: `retrieval:${request.id}`, workspaceId: scope.workspaceId, kind: request.score >= 0 ? 'feedback' as const : 'retrieval' as const, title: request.query, state: 'completed' as const, updatedAt: request.created_at })),
+        ...feedback.map((request) => ({
+          id: `retrieval:${request.id}`,
+          workspaceId: scope.workspaceId,
+          kind: request.score >= 0 ? 'feedback' as const : 'retrieval' as const,
+          title: request.query,
+          state: 'completed' as const,
+          updatedAt: request.created_at,
+          feedback: {
+            requestId: request.id,
+            requestType: request.request_type,
+            query: request.query,
+            score: request.score,
+            reason: request.reason,
+            usefulCount: request.useful_count,
+            totalCount: request.total_count,
+          },
+        })),
       ].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
       const offset = numericCursor(cursor)
       const page = items.slice(offset, offset + 20)

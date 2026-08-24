@@ -103,6 +103,15 @@ export type ActivityItem = {
   updatedAt: string
   progress?: number
   failure?: { message: string; retryAllowed: boolean }
+  feedback?: {
+    requestId: string
+    requestType: string
+    query: string
+    score: number
+    reason: string
+    usefulCount?: number
+    totalCount?: number
+  }
 }
 
 export type SourceUploadInput = {

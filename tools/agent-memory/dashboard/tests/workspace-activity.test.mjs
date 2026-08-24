@@ -18,3 +18,19 @@ test('failed work can retry and retrievals accept scored feedback', async () => 
   assert.match(source, /Score \(0–5\)/)
   assert.match(source, /replace\(\/\^retrieval:/)
 })
+
+test('feedback cards open full retrieval details without losing Activity context', async () => {
+  const [view, contract, standalone, hosted] = await Promise.all([
+    read('ui/workspace/ActivityView.tsx'),
+    read('lib/knowledgeGateway.ts'),
+    read('lib/adapters/standaloneKnowledgeGateway.ts'),
+    read('lib/adapters/hostedKnowledgeGateway.ts'),
+  ])
+  assert.match(contract, /feedback\?: \{[\s\S]*requestId:[\s\S]*requestType:[\s\S]*query:[\s\S]*score:[\s\S]*reason:[\s\S]*usefulCount\?:[\s\S]*totalCount\?:/)
+  for (const adapter of [standalone, hosted]) {
+    for (const field of ['requestId', 'requestType', 'query', 'score', 'reason', 'usefulCount', 'totalCount']) assert.match(adapter, new RegExp(field))
+  }
+  assert.match(view, /<Drawer[\s\S]*title="Feedback details"/)
+  assert.match(view, /Open feedback details for \$\{item\.title\}/)
+  for (const label of ['Question / task', 'Quality score', 'Feedback reason', 'Useful hits', 'Total hits', 'Request type', 'Request ID', 'Logged time']) assert.match(view, new RegExp(label))
+})
