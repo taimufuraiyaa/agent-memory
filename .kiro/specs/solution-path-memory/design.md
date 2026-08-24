@@ -204,6 +204,13 @@ This adds schema and client complexity but produces a provider-independent, insp
 
 Rollback disables episode capture and how-oriented recall. Additive tables remain inert; no existing memory data requires reversal.
 
+## First-release product decisions
+
+- Working state expires after 24 hours by default and callers may shorten it or extend it to a hard maximum of seven days. Query-time expiry is authoritative.
+- Completed steps remain append-only in the first release. Finalization reads a bounded 500-step snapshot and produces a size-bounded summary; destructive step compaction is deferred until retention evidence supports it.
+- Deterministic finalization is the default. Model-assisted proposals remain explicitly requested and must pass the same schema, citation, admission, and duplication checks before publication.
+- Editing is limited to superseding summary correction, misleading-step feedback, typed redaction, pinning, episode supersession, and deletion. Stored historical steps are not silently rewritten.
+
 ## Verification and Release Gates
 
 Release requires domain invariant tests, migration round trips, concurrent append tests, stale working-state conflicts, expiry tests with a controllable clock, policy rejection and redaction fixtures, idempotent finalization, partial promotion recovery, provenance integrity, local registered-project routing, hosted two-tenant isolation, CLI/MCP contracts, dashboard accessibility, import/export compatibility, and full regression tests.

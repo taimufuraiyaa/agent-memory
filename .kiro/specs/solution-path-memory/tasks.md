@@ -132,7 +132,7 @@
   - Files: hosted service and handlers, local-project adapter, authorization tests, contract fixtures.
   - Estimated scope: Medium.
 
-- [ ] **Task 15: Integrate session-end and compatibility fallback**
+- [x] **Task 15: Integrate session-end and compatibility fallback**
   - Acceptance: Structured active episodes finalize through the new path, sessions without episodes retain current heuristic extraction, and both flows report explicit partial failures.
   - Verify: current session-end golden tests plus structured, mixed-client, retry, and no-provider fixtures.
   - Dependencies: Tasks 8-9 and 14.
@@ -141,8 +141,8 @@
 
 ### Final Checkpoint — Release Gate
 
-- [ ] Core, storage, engine, application, CLI, API, hosted, MCP, and dashboard focused suites pass.
-- [ ] `go test ./...`, dashboard type checking, production build, and embedded dashboard verification pass.
-- [ ] Security gates cover raw-reasoning rejection, secret redaction, prompt injection, session privacy, tenant isolation, registered-root resolution, export, and deletion.
-- [ ] Evaluation shows better interrupted-task resume and similar-task reuse without increased sensitive-content retention.
-- [ ] Product review resolves default working-state expiry, completed-step compaction, model-assisted finalization default, and first-release editing scope.
+- [x] Core, storage, engine, application, CLI, API, hosted, MCP, and dashboard focused suites pass.
+- [x] `go test ./...`, dashboard type checking, production build, and embedded dashboard verification pass.
+- [x] Security gates cover raw-reasoning rejection, secret redaction, prompt injection, session privacy, tenant isolation, registered-root resolution, export, and deletion.
+- [x] Evaluation shows better interrupted-task resume and similar-task reuse without increased sensitive-content retention.
+- [x] Product review resolves default working-state expiry, completed-step compaction, model-assisted finalization default, and first-release editing scope.

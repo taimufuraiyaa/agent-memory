@@ -255,6 +255,15 @@ func (s *Store) FindActiveSolutionEpisode(ctx context.Context, workspace, sessio
 	return episode, err
 }
 
+func (s *Store) FindLatestSolutionEpisode(ctx context.Context, workspace, sessionID, principalID string) (core.SolutionEpisode, error) {
+	row := s.db.QueryRowContext(ctx, `SELECT id, workspace, session_id, principal_id, client_id,
+		goal_summary, status, capture_policy, retention_class, version, superseded_by, created_at, updated_at
+		FROM solution_episodes WHERE workspace = ? AND session_id = ? AND principal_id = ?
+		ORDER BY updated_at DESC LIMIT 1`, strings.TrimSpace(workspace), strings.TrimSpace(sessionID), strings.TrimSpace(principalID))
+	episode, _, err := scanSolutionEpisode(row, false)
+	return episode, err
+}
+
 func (s *Store) getSolutionEpisodeByIdempotency(ctx context.Context, workspace, clientID, key string) (core.SolutionEpisode, string, error) {
 	row := s.db.QueryRowContext(ctx, `SELECT id, workspace, session_id, principal_id, client_id,
 		goal_summary, status, capture_policy, retention_class, version, superseded_by, created_at, updated_at, request_hash
