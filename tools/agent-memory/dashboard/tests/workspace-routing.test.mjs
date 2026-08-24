@@ -20,3 +20,10 @@ test('workspace shell has explicit desktop, tablet, and mobile layouts', () => {
   assert.match(cssSource, /@media \(max-width: 520px\)/)
   assert.match(cssSource, /min-width:\s*0/)
 })
+
+test('direct workspace routes wait for discovery before mounting scoped views', () => {
+  assert.match(workspaceAppSource, /const workspaceReady = Boolean\(workspace\)/)
+  for (const view of ['AskView', 'MemoryExplorer', 'SourcesView', 'NotesView', 'ActivityView', 'SettingsView', 'SourceImportDialog']) {
+    assert.match(workspaceAppSource, new RegExp(`workspaceReady \\? <${view}`))
+  }
+})

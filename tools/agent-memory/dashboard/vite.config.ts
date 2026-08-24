@@ -14,6 +14,9 @@ export default defineConfig({
     needsInterop: ['dayjs'],
   },
   server: {
+    // Permit the documented development domain without disabling Vite's
+    // protection against arbitrary Host headers.
+    allowedHosts: ['agentmemory.build'],
     proxy: {
       '/api': {
         target: apiTarget,

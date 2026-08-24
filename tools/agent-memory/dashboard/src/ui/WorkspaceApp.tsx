@@ -9,7 +9,9 @@ import {
   Button,
   Drawer,
   Group,
+  Loader,
   NavLink,
+  Paper,
   SegmentedControl,
   Select,
   Stack,
@@ -109,6 +111,7 @@ export function WorkspaceApp({ runtime, gateway }: { runtime: DashboardRuntime; 
   }
 
   const workspace = workspaces.find((item) => item.id === workspaceId)
+  const workspaceReady = Boolean(workspace)
   const activeDestination = primaryDestinations.find((item) => item.id === destination)
   const workspaceOptions = workspaces.map((item) => ({ value: item.id, label: `${item.name} · ${item.memoryCount} memories` }))
 
@@ -155,7 +158,7 @@ export function WorkspaceApp({ runtime, gateway }: { runtime: DashboardRuntime; 
           onChange={(value) => { if (value) changeWorkspace(value) }}
         />
         <TextInput className="workspaceGlobalSearch" type="search" aria-label="Global workspace search" placeholder="Search this workspace…" leftSection={<IconSearch size={17} />} />
-        {gateway.capabilities.has('source') ? <Button className="workspaceAddSource" aria-label="Add source" leftSection={<IconPlus size={17} />} onClick={() => { navigate('knowledge', 'sources'); setImportOpen(true) }}>Add source</Button> : null}
+        {gateway.capabilities.has('source') ? <Button className="workspaceAddSource" aria-label="Add source" leftSection={<IconPlus size={17} />} disabled={!workspaceReady} onClick={() => { navigate('knowledge', 'sources'); setImportOpen(true) }}>Add source</Button> : null}
         <ActionIcon className="workspaceAccount" variant="subtle" color="gray" size="lg" aria-label={runtime.mode === 'hosted' ? 'Account' : 'Local owner'}>
           <IconUserCircle size={23} />
         </ActionIcon>
@@ -192,16 +195,17 @@ export function WorkspaceApp({ runtime, gateway }: { runtime: DashboardRuntime; 
           /> : null}
         </Group>
         {error ? <Alert className="workspaceError" color="red" title="Workspace unavailable" role="alert">{error}</Alert> : null}
+        {!error && workspaceId && !workspaceReady ? <Paper withBorder p="xl" radius="lg"><Group justify="center"><Loader size="sm" /><Text c="dimmed">Loading workspace…</Text></Group></Paper> : null}
         {destination === 'home' && workspace ? <HomeView workspace={workspace} onAddSource={() => { navigate('knowledge', 'sources'); setImportOpen(true) }} onNavigate={(target) => { if (target === 'ask') navigate('ask'); else if (target === 'sources') navigate('knowledge', 'sources'); else if (target === 'activity') navigate('activity'); else { setMemoryInitialView(target); navigate('knowledge', 'memories') } }} /> : null}
-        {destination === 'ask' && workspaceId ? <AskView gateway={gateway} workspaceId={workspaceId} onOpenSearch={() => navigate('knowledge', 'memories')} onOpenSources={() => navigate('knowledge', 'sources')} /> : null}
-        {destination === 'knowledge' && knowledgeView === 'memories' && workspaceId ? <MemoryExplorer gateway={gateway} workspaceId={workspaceId} initialView={memoryInitialView} /> : null}
-        {destination === 'knowledge' && knowledgeView === 'sources' && workspaceId ? <SourcesView gateway={gateway} workspaceId={workspaceId} importedSource={importedSource} onNavigate={(target) => { if (target === 'ask') navigate('ask'); else { setMemoryInitialView(target); navigate('knowledge', 'memories') } }} /> : null}
-        {destination === 'knowledge' && knowledgeView === 'notes' && workspaceId ? <NotesView gateway={gateway} workspaceId={workspaceId} /> : null}
-        {destination === 'activity' && workspaceId ? <ActivityView gateway={gateway} workspaceId={workspaceId} /> : null}
-        {destination === 'settings' && workspaceId ? <SettingsView gateway={gateway} workspaceId={workspaceId} /> : null}
+        {destination === 'ask' && workspaceReady ? <AskView gateway={gateway} workspaceId={workspaceId} onOpenSearch={() => navigate('knowledge', 'memories')} onOpenSources={() => navigate('knowledge', 'sources')} /> : null}
+        {destination === 'knowledge' && knowledgeView === 'memories' && workspaceReady ? <MemoryExplorer gateway={gateway} workspaceId={workspaceId} initialView={memoryInitialView} /> : null}
+        {destination === 'knowledge' && knowledgeView === 'sources' && workspaceReady ? <SourcesView gateway={gateway} workspaceId={workspaceId} importedSource={importedSource} onNavigate={(target) => { if (target === 'ask') navigate('ask'); else { setMemoryInitialView(target); navigate('knowledge', 'memories') } }} /> : null}
+        {destination === 'knowledge' && knowledgeView === 'notes' && workspaceReady ? <NotesView gateway={gateway} workspaceId={workspaceId} /> : null}
+        {destination === 'activity' && workspaceReady ? <ActivityView gateway={gateway} workspaceId={workspaceId} /> : null}
+        {destination === 'settings' && workspaceReady ? <SettingsView gateway={gateway} workspaceId={workspaceId} /> : null}
         {destination !== 'home' && destination !== 'ask' && destination !== 'activity' && destination !== 'settings' && !(destination === 'knowledge' && (knowledgeView === 'memories' || knowledgeView === 'sources' || knowledgeView === 'notes')) ? <section className="workspacePlaceholder"><p>{destination === 'knowledge' ? `${knowledgeView} in ${workspace?.name || 'this workspace'}` : `${destination} for ${workspace?.name || 'this workspace'}`}</p></section> : null}
       </Box>
     </AppShell.Main>
-    {workspaceId ? <SourceImportDialog gateway={gateway} workspaceId={workspaceId} open={importOpen} onClose={() => setImportOpen(false)} onImported={setImportedSource} onCreateNote={() => { setImportOpen(false); navigate('knowledge', 'notes') }} /> : null}
+    {workspaceReady ? <SourceImportDialog gateway={gateway} workspaceId={workspaceId} open={importOpen} onClose={() => setImportOpen(false)} onImported={setImportedSource} onCreateNote={() => { setImportOpen(false); navigate('knowledge', 'notes') }} /> : null}
   </AppShell>
 }
