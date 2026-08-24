@@ -45,7 +45,7 @@
   - Files: core working-state contract, SQLite repository, application service, tests.
   - Estimated scope: Medium.
 
-- [ ] **Task 6: Expose local CLI and MCP continuation operations**
+- [x] **Task 6: Expose local CLI and MCP continuation operations**
   - Acceptance: Clients can start an episode, append safe steps, checkpoint state, inspect current state, and end or hand off using stable JSON contracts; old MCP profiles remain compatible.
   - Verify: `go test ./internal/cli -run 'TestWork'` and `npm --prefix tools/agent-memory/mcp-server test`.
   - Dependencies: Tasks 4-5.
@@ -54,9 +54,9 @@
 
 ### Checkpoint B — Interrupted Task Resume
 
-- [ ] A local session can checkpoint, restart, and recover bounded current state without transcript replay.
-- [ ] Another principal cannot read active state without an audited handoff.
-- [ ] Existing clients operate unchanged when episode capability is absent.
+- [x] A local session can checkpoint, restart, and recover bounded current state without transcript replay.
+- [x] Another principal cannot read active state without an audited handoff.
+- [x] Existing clients operate unchanged when episode capability is absent.
 
 ## Phase 3 — Evidence and Finalization
 

@@ -108,6 +108,37 @@ const allTools = [
     workspace: { type: "string" },
     session_id: { type: "string" },
   }, ["transcript"]),
+  tool("solution_start", "Start a bounded solution episode", {
+    workspace: { type: "string" }, session_id: { type: "string" }, principal_id: { type: "string" }, client_id: { type: "string" },
+    goal_summary: { type: "string" }, capture_policy: { type: "string", enum: ["structured", "summary_only"] },
+    retention_class: { type: "string", enum: ["transient", "standard", "pinned"] }, idempotency_key: { type: "string" },
+  }, ["session_id", "principal_id", "client_id", "goal_summary"]),
+  tool("solution_step", "Append a safe structured solution step", {
+    workspace: { type: "string" }, principal_id: { type: "string" }, episode_id: { type: "string" },
+    kind: { type: "string", enum: ["hypothesis", "action", "observation", "decision", "checkpoint", "result", "handoff"] },
+    status: { type: "string", enum: ["proposed", "running", "completed", "failed", "skipped"] }, summary: { type: "string" },
+    rationale_summary: { type: "string" }, source: { type: "string" }, parent_step_ids: { type: "array", items: { type: "string" } },
+    references: { type: "array", items: { type: "object" } }, confidence: { type: "number", minimum: 0, maximum: 1 },
+    sensitivity: { type: "string", enum: ["public", "internal", "sensitive", "restricted"] }, idempotency_key: { type: "string" },
+  }, ["principal_id", "episode_id", "kind", "status", "summary"]),
+  tool("solution_checkpoint", "Checkpoint expiring bounded continuation state", {
+    workspace: { type: "string" }, principal_id: { type: "string" }, episode_id: { type: "string" }, expected_generation: { type: "integer", minimum: 0 },
+    goal_summary: { type: "string" }, constraints: { type: "array", items: { type: "string" } }, plan_items: { type: "array", items: { type: "object" } },
+    completed_items: { type: "array", items: { type: "string" } }, open_questions: { type: "array", items: { type: "string" } }, next_action: { type: "string" },
+    artifacts: { type: "array", items: { type: "object" } }, sensitivity: { type: "string", enum: ["public", "internal", "sensitive", "restricted"] },
+    ttl_seconds: { type: "integer", minimum: 1, maximum: 604800 },
+  }, ["principal_id", "episode_id", "goal_summary"]),
+  tool("solution_state", "Recover authorized current continuation state", {
+    workspace: { type: "string" }, principal_id: { type: "string" }, episode_id: { type: "string" },
+  }, ["principal_id", "episode_id"]),
+  tool("solution_transition", "Resume, pause, or end a solution episode", {
+    workspace: { type: "string" }, principal_id: { type: "string" }, episode_id: { type: "string" }, expected_version: { type: "integer", minimum: 1 },
+    status: { type: "string", enum: ["active", "paused", "completed", "partial", "abandoned", "cancelled"] }, idempotency_key: { type: "string" },
+  }, ["principal_id", "episode_id", "expected_version", "status"]),
+  tool("solution_handoff", "Transfer a solution episode to another principal and session", {
+    workspace: { type: "string" }, principal_id: { type: "string" }, episode_id: { type: "string" }, expected_version: { type: "integer", minimum: 1 },
+    target_principal_id: { type: "string" }, target_session_id: { type: "string" }, idempotency_key: { type: "string" },
+  }, ["principal_id", "episode_id", "expected_version", "target_principal_id", "target_session_id"]),
 ];
 const defaultToolNames = new Set([
   "memory_write",
@@ -256,9 +287,43 @@ async function callTool(name, args) {
         return requestService(`/v1/sessions/${encodeURIComponent(args.session_id)}/end`, { body: { workspace_id: args.workspace, transcript: args.transcript } });
       }
       return requestService("/api/v1/memories/session-end", { body: args });
+    case "solution_start":
+      requireLocalSolutionTool();
+      return requestService("/api/v1/solutions/start", { body: {
+        ...args, capture_policy: args.capture_policy || "structured", retention_class: args.retention_class || "standard",
+        idempotency_key: args.idempotency_key || randomUUID(),
+      } });
+    case "solution_step":
+      requireLocalSolutionTool();
+      return requestService("/api/v1/solutions/steps", { body: {
+        ...args, source: args.source || "agent", confidence: args.confidence ?? 0.5,
+        sensitivity: args.sensitivity || "internal", idempotency_key: args.idempotency_key || randomUUID(),
+      } });
+    case "solution_checkpoint":
+      requireLocalSolutionTool();
+      return requestService("/api/v1/solutions/checkpoint", { body: {
+        ...args, expected_generation: args.expected_generation ?? 0, sensitivity: args.sensitivity || "internal",
+        ttl_seconds: args.ttl_seconds || 86400,
+      } });
+    case "solution_state": {
+      requireLocalSolutionTool();
+      const query = new URLSearchParams({ principal_id: args.principal_id, episode_id: args.episode_id });
+      if (args.workspace) query.set("workspace", args.workspace);
+      return requestService(`/api/v1/solutions/state?${query}`, { method: "GET" });
+    }
+    case "solution_transition":
+      requireLocalSolutionTool();
+      return requestService("/api/v1/solutions/transition", { body: { ...args, idempotency_key: args.idempotency_key || randomUUID() } });
+    case "solution_handoff":
+      requireLocalSolutionTool();
+      return requestService("/api/v1/solutions/handoff", { body: { ...args, idempotency_key: args.idempotency_key || randomUUID() } });
     default:
       throw new Error(`tool execution is not available for ${name}`);
   }
+}
+
+function requireLocalSolutionTool() {
+  if (serviceMode === "hosted") throw new Error("solution continuation tools are available only in local mode");
 }
 
 async function dispatch(message) {

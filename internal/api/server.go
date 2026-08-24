@@ -58,6 +58,7 @@ type workspaceAssets struct {
 	Retrieval   *engine.RetrievalEngine
 	Application *application.MemoryService
 	Notes       *application.NoteService
+	Solutions   *application.SolutionService
 	Clipper     *engine.TokenClipper
 }
 
@@ -118,6 +119,7 @@ func (s *Service) resolve(ctx context.Context, ws string) (*workspaceAssets, err
 		Retrieval:   retrieval,
 		Application: application.NewMemoryService(store, writer, retrieval),
 		Notes:       application.NewNoteService(store, writer),
+		Solutions:   application.NewSolutionService(store, engine.NewSolutionAdmissionPolicy()),
 		Clipper:     engine.NewTokenClipper(nil),
 	}
 	if s.stores == nil {
@@ -279,6 +281,12 @@ func NewMux(svc *Service) *http.ServeMux {
 	sessionEnd := sessionEndHandler(svc)
 	mux.HandleFunc("/api/v1/memories/session-end", sessionEnd)
 	mux.HandleFunc("/api/v1/sessions/end", sessionEnd)
+	mux.HandleFunc("/api/v1/solutions/start", solutionStartHandler(svc))
+	mux.HandleFunc("/api/v1/solutions/steps", solutionStepHandler(svc))
+	mux.HandleFunc("/api/v1/solutions/checkpoint", solutionCheckpointHandler(svc))
+	mux.HandleFunc("/api/v1/solutions/state", solutionStateHandler(svc))
+	mux.HandleFunc("/api/v1/solutions/transition", solutionTransitionHandler(svc))
+	mux.HandleFunc("/api/v1/solutions/handoff", solutionHandoffHandler(svc))
 	mux.HandleFunc("/api/v1/projects/init", projectsInitHandler(svc))
 	mux.HandleFunc("/api/v1/projects/rename", projectsRenameHandler(svc))
 	mux.HandleFunc("/api/v1/projects/list", projectsListHandler(svc))

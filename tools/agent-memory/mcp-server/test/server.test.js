@@ -71,7 +71,41 @@ test("lists operational tools only in the expanded profile", async (t) => {
     "memory_feedback",
     "memory_sessions",
     "memory_session_end",
+    "solution_start",
+    "solution_step",
+    "solution_checkpoint",
+    "solution_state",
+    "solution_transition",
+    "solution_handoff",
   ]);
+});
+
+test("proxies expanded solution continuation tools without changing the default profile", async (t) => {
+  const requests = [];
+  const server = http.createServer((request, response) => {
+    let body = "";
+    request.on("data", (chunk) => { body += chunk; });
+    request.on("end", () => {
+      requests.push({ method: request.method, url: request.url, body: body ? JSON.parse(body) : null });
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({ ok: true, version: "v1", data: { episode: { id: "ep-1", status: "active" } } }));
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => server.close());
+  const child = startServer({ AGENT_MEMORY_MCP_PROFILE: "expanded", AGENT_MEMORY_URL: `http://127.0.0.1:${server.address().port}` });
+  t.after(() => child.kill());
+
+  child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 22, method: "tools/call", params: { name: "solution_start", arguments: {
+    workspace: "ws", session_id: "s1", principal_id: "p1", client_id: "codex", goal_summary: "Continue safely", idempotency_key: "start-1",
+  } } })}\n`);
+  const response = await readMessage(child);
+
+  assert.equal(response.result.structuredContent.episode.id, "ep-1");
+  assert.deepEqual(requests[0], {
+    method: "POST", url: "/api/v1/solutions/start",
+    body: { workspace: "ws", session_id: "s1", principal_id: "p1", client_id: "codex", goal_summary: "Continue safely", idempotency_key: "start-1", capture_policy: "structured", retention_class: "standard" },
+  });
 });
 
 test("rejects calls to tools hidden from the default profile", async (t) => {
@@ -119,8 +153,9 @@ test("resolves distinct persisted profiles by client id before listing tools", a
 
   const [codexResponse, claudeResponse] = await Promise.all([readMessage(codex), readMessage(claude)]);
   assert.equal(codexResponse.result.tools.length, 5);
-  assert.equal(claudeResponse.result.tools.length, 7);
+  assert.equal(claudeResponse.result.tools.length, 13);
   assert.ok(claudeResponse.result.tools.some((tool) => tool.name === "memory_sessions"));
+  assert.ok(claudeResponse.result.tools.some((tool) => tool.name === "solution_checkpoint"));
 });
 
 test("persisted client profile is authoritative over the legacy profile variable", async (t) => {

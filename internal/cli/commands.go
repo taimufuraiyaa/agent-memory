@@ -36,6 +36,15 @@ func addCommonFlags(cmd *cobra.Command, f *commonFlags) {
 	cmd.Flags().StringVar(&f.apiURL, "api", "", "HTTP API base URL (overrides in-process mode)")
 }
 
+func addCommonPersistentFlags(cmd *cobra.Command, f *commonFlags) {
+	cmd.PersistentFlags().StringVar(&f.dbPath, "db", "", "Path to SQLite database file")
+	cmd.PersistentFlags().StringVarP(&f.workspace, "workspace", "w", "", "Workspace name")
+	home, _ := os.UserHomeDir()
+	cmd.PersistentFlags().StringVar(&f.modelDir, "model-dir", embeddings.DefaultModelDir(home), "Path to local embedding model directory")
+	cmd.PersistentFlags().StringVarP(&f.format, "format", "f", formatJSON, "Output format: json|raw")
+	cmd.PersistentFlags().StringVar(&f.apiURL, "api", "", "HTTP API base URL (overrides in-process mode)")
+}
+
 func newWriteCommand() *cobra.Command {
 	var flags commonFlags
 	var mType, content string
