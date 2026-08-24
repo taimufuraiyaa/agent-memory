@@ -561,9 +561,12 @@ type SolutionPromotion struct {
 	EpisodeID      string                 `json:"episode_id"`
 	SummaryID      string                 `json:"summary_id"`
 	Kind           SolutionPromotionKind  `json:"kind"`
+	MemoryType     MemoryType             `json:"memory_type,omitempty"`
 	TargetID       string                 `json:"target_id"`
 	SourceStepIDs  []string               `json:"source_step_ids,omitempty"`
+	ObservationIDs []string               `json:"observation_ids,omitempty"`
 	State          SolutionPromotionState `json:"state"`
+	Error          string                 `json:"error,omitempty"`
 	PolicyIdentity string                 `json:"policy_identity"`
 	CreatedAt      time.Time              `json:"created_at"`
 }

@@ -25,6 +25,7 @@ const (
 type SolutionService struct {
 	store     *sqlite.Store
 	admission *engine.SolutionAdmissionPolicy
+	writer    *engine.WritePipeline
 	now       func() time.Time
 }
 
@@ -38,11 +39,19 @@ func WithSolutionClock(now func() time.Time) SolutionServiceOption {
 	}
 }
 
+func WithSolutionWriter(writer *engine.WritePipeline) SolutionServiceOption {
+	return func(service *SolutionService) {
+		if writer != nil {
+			service.writer = writer
+		}
+	}
+}
+
 func NewSolutionService(store *sqlite.Store, admission *engine.SolutionAdmissionPolicy, options ...SolutionServiceOption) *SolutionService {
 	if admission == nil {
 		admission = engine.NewSolutionAdmissionPolicy()
 	}
-	service := &SolutionService{store: store, admission: admission, now: time.Now}
+	service := &SolutionService{store: store, admission: admission, writer: engine.NewWritePipeline(store), now: time.Now}
 	for _, option := range options {
 		option(service)
 	}
@@ -478,6 +487,112 @@ func (s *SolutionService) Finalize(ctx context.Context, input SolutionFinalizeIn
 			"solution_finalize", "success", string(summary.Outcome), summary.ID, map[string]any{"summary_version": summary.Version, "episode_version": input.ExpectedVersion})
 	}
 	return summary, err
+}
+
+type SolutionPromotionTarget struct {
+	MemoryType    core.MemoryType
+	Content       string
+	SourceStepIDs []string
+}
+
+type SolutionPromoteInput struct {
+	Workspace, PrincipalID, EpisodeID, SummaryID, IdempotencyKey string
+	Targets                                                      []SolutionPromotionTarget
+}
+
+type SolutionPromotionResult struct {
+	Promotions []core.SolutionPromotion `json:"promotions"`
+	Partial    bool                     `json:"partial"`
+}
+
+func (s *SolutionService) Promote(ctx context.Context, input SolutionPromoteInput) (SolutionPromotionResult, error) {
+	if strings.TrimSpace(input.IdempotencyKey) == "" {
+		return SolutionPromotionResult{}, errors.New("solution promotion idempotency key is required")
+	}
+	episode, err := s.authorizedEpisode(ctx, input.Workspace, input.PrincipalID, input.EpisodeID)
+	if err != nil {
+		return SolutionPromotionResult{}, err
+	}
+	summary, err := s.store.GetSolutionSummary(ctx, input.SummaryID)
+	if err != nil || summary.EpisodeID != episode.ID {
+		return SolutionPromotionResult{}, errors.New("solution summary not authorized")
+	}
+	if summary.SupersededBy != "" {
+		return SolutionPromotionResult{}, errors.New("superseded solution summary cannot be promoted")
+	}
+	if len(input.Targets) == 0 || len(input.Targets) > 8 {
+		return SolutionPromotionResult{}, errors.New("solution promotion requires 1 to 8 targets")
+	}
+	observationIDs := make([]string, 0)
+	for _, evidence := range summary.Evidence {
+		if evidence.Kind == core.SolutionReferenceObservation && evidence.Resolution == core.SolutionReferenceVerified {
+			observationIDs = append(observationIDs, evidence.TargetID)
+		}
+	}
+	result := SolutionPromotionResult{Promotions: make([]core.SolutionPromotion, 0, len(input.Targets))}
+	for index, target := range input.Targets {
+		if !core.IsMemoryType(target.MemoryType) {
+			return SolutionPromotionResult{}, fmt.Errorf("invalid promotion memory type %q", target.MemoryType)
+		}
+		for _, stepID := range target.SourceStepIDs {
+			step, stepErr := s.store.GetSolutionStep(ctx, stepID)
+			if stepErr != nil || step.EpisodeID != episode.ID {
+				return SolutionPromotionResult{}, errors.New("solution promotion step not authorized")
+			}
+		}
+		itemKey := fmt.Sprintf("%s:%d:%s", strings.TrimSpace(input.IdempotencyKey), index, target.MemoryType)
+		promotion, replay, err := s.store.BeginSolutionPromotion(ctx, sqlite.SolutionPromotionInsert{EpisodeID: episode.ID, SummaryID: summary.ID,
+			MemoryType: target.MemoryType, SourceStepIDs: target.SourceStepIDs, ObservationIDs: observationIDs,
+			IdempotencyKey: itemKey, PolicyIdentity: "solution-promotion-v1", CreatedAt: s.now().UTC()})
+		if err != nil {
+			return result, err
+		}
+		if replay && promotion.State == core.SolutionPromotionPublished {
+			result.Promotions = append(result.Promotions, promotion)
+			continue
+		}
+		content := strings.TrimSpace(target.Content)
+		if content == "" {
+			content = defaultSolutionPromotionContent(summary, target.MemoryType)
+		}
+		writeInput := engine.WriteInput{Workspace: episode.Workspace, Type: target.MemoryType, Content: content,
+			Tags: []string{"solution-path", "promoted"}, Keywords: []string{"solution-path"},
+			Source: core.MemorySource{Type: core.SourceAgentObservation, SessionID: episode.SessionID}, Mode: engine.ExtractFast,
+			ContentHashSalt: "solution:" + summary.ID + ":" + itemKey}
+		if target.MemoryType == core.OutcomeMemory {
+			writeInput.Outcome = &core.Outcome{Result: summary.Outcome, Approach: summary.NextGuidance, Reason: strings.Join(summary.Risks, "; ")}
+		}
+		written, writeErr := s.writer.Write(ctx, writeInput)
+		if writeErr != nil {
+			promotion, err = s.store.CompleteSolutionPromotion(ctx, promotion.ID, promotion.TargetID, core.SolutionPromotionFailed, writeErr.Error())
+		} else if written.Rejected {
+			promotion, err = s.store.CompleteSolutionPromotion(ctx, promotion.ID, "", core.SolutionPromotionFailed, written.RejectReason)
+		} else {
+			if linkErr := s.store.LinkMemoryObservations(ctx, written.ID, observationIDs); linkErr != nil {
+				promotion, err = s.store.CompleteSolutionPromotion(ctx, promotion.ID, written.ID, core.SolutionPromotionFailed, linkErr.Error())
+			} else {
+				promotion, err = s.store.CompleteSolutionPromotion(ctx, promotion.ID, written.ID, core.SolutionPromotionPublished, "")
+			}
+		}
+		if err != nil {
+			return result, err
+		}
+		if promotion.State == core.SolutionPromotionFailed {
+			result.Partial = true
+		}
+		result.Promotions = append(result.Promotions, promotion)
+	}
+	s.audit(ctx, episode.Workspace, episode.SessionID, episode.PrincipalID, episode.ClientID, input.IdempotencyKey,
+		"solution_promote", "success", map[bool]string{true: "partial", false: "published"}[result.Partial], summary.ID,
+		map[string]any{"target_count": len(result.Promotions), "partial": result.Partial})
+	return result, nil
+}
+
+func defaultSolutionPromotionContent(summary core.SolutionSummary, memoryType core.MemoryType) string {
+	if memoryType == core.ProceduralMemory && strings.TrimSpace(summary.NextGuidance) != "" {
+		return "Next guidance: " + summary.NextGuidance + "\n\n" + summary.Summary
+	}
+	return summary.Summary
 }
 
 func (s *SolutionService) loadFinalizationSteps(ctx context.Context, episodeID string) ([]core.SolutionStep, error) {

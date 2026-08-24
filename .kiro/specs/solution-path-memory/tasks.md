@@ -74,7 +74,7 @@
   - Files: finalizer, summary repository, assembler, tests.
   - Estimated scope: Medium.
 
-- [ ] **Task 9: Promote validated paths through the existing write pipeline**
+- [x] **Task 9: Promote validated paths through the existing write pipeline**
   - Acceptance: Selected summaries create existing episodic, semantic, procedural, or outcome memories with episode/step/observation provenance; failures report exact partial state and retry safely.
   - Verify: promotion matrix, poison-policy parity, duplicate retry, provenance integrity, and partial write tests.
   - Dependencies: Tasks 3 and 8.
@@ -83,9 +83,9 @@
 
 ### Checkpoint C — Remember How
 
-- [ ] A successful episode becomes an inspectable, evidence-linked solution path and selected durable memories.
-- [ ] A failed episode can record an avoid lesson without claiming success.
-- [ ] No finalization path bypasses admission, provenance, or existing memory lifecycle rules.
+- [x] A successful episode becomes an inspectable, evidence-linked solution path and selected durable memories.
+- [x] A failed episode can record an avoid lesson without claiming success.
+- [x] No finalization path bypasses admission, provenance, or existing memory lifecycle rules.
 
 ## Phase 4 — Tool Learning and How Recall
 

@@ -119,7 +119,7 @@ func (s *Service) resolve(ctx context.Context, ws string) (*workspaceAssets, err
 		Retrieval:   retrieval,
 		Application: application.NewMemoryService(store, writer, retrieval),
 		Notes:       application.NewNoteService(store, writer),
-		Solutions:   application.NewSolutionService(store, engine.NewSolutionAdmissionPolicy()),
+		Solutions:   application.NewSolutionService(store, engine.NewSolutionAdmissionPolicy(), application.WithSolutionWriter(writer)),
 		Clipper:     engine.NewTokenClipper(nil),
 	}
 	if s.stores == nil {
