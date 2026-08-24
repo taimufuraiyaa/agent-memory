@@ -19,6 +19,10 @@ const (
 	MaxSolutionSummaryStepIDs        = 100
 )
 
+func (k SolutionToolEventKind) Valid() bool {
+	return k == SolutionToolDiscovery || k == SolutionToolSelection || k == SolutionToolInvocation || k == SolutionToolResult
+}
+
 type SolutionEpisodeStatus string
 
 const (
@@ -29,6 +33,10 @@ const (
 	SolutionEpisodeAbandoned SolutionEpisodeStatus = "abandoned"
 	SolutionEpisodeCancelled SolutionEpisodeStatus = "cancelled"
 )
+
+func (r SolutionToolResultClass) Valid() bool {
+	return r == SolutionToolResultSuccess || r == SolutionToolResultFailure || r == SolutionToolResultPartial || r == SolutionToolResultCancelled || r == SolutionToolResultUnknown
+}
 
 func (s SolutionEpisodeStatus) Valid() bool {
 	switch s {
@@ -442,16 +450,55 @@ const (
 
 type SolutionToolInvocationRecord struct {
 	ID           string                  `json:"id"`
+	Workspace    string                  `json:"workspace"`
+	EpisodeID    string                  `json:"episode_id"`
 	StepID       string                  `json:"step_id"`
 	Kind         SolutionToolEventKind   `json:"kind"`
 	ToolName     string                  `json:"tool_name"`
+	ToolVersion  string                  `json:"tool_version,omitempty"`
 	Operation    string                  `json:"operation"`
 	Capability   string                  `json:"capability"`
 	InputSummary string                  `json:"input_summary,omitempty"`
 	ResultClass  SolutionToolResultClass `json:"result_class"`
+	TaskVerified bool                    `json:"task_verified"`
 	DurationMS   int64                   `json:"duration_ms,omitempty"`
 	Evidence     []SolutionReference     `json:"evidence,omitempty"`
 	OccurredAt   time.Time               `json:"occurred_at"`
+}
+
+func (r SolutionToolInvocationRecord) Validate() error {
+	for field, value := range map[string]string{"id": r.ID, "workspace": r.Workspace, "episode_id": r.EpisodeID, "step_id": r.StepID, "tool_name": r.ToolName, "operation": r.Operation} {
+		if err := requireSolutionText("tool event "+field, value, 256); err != nil {
+			return err
+		}
+	}
+	if !r.Kind.Valid() || !r.ResultClass.Valid() {
+		return errors.New("invalid solution tool event classification")
+	}
+	if err := requireSolutionText("tool event capability", r.Capability, MaxSolutionStateItemBytes); err != nil {
+		return err
+	}
+	if len(r.InputSummary) > MaxSolutionStateItemBytes {
+		return errors.New("solution tool event input_summary exceeds bound")
+	}
+	if r.DurationMS < 0 {
+		return errors.New("solution tool event duration_ms cannot be negative")
+	}
+	if r.TaskVerified && (r.Kind != SolutionToolResult || r.ResultClass != SolutionToolResultSuccess) {
+		return errors.New("only a successful tool result can be task verified")
+	}
+	if len(r.Evidence) > MaxSolutionReferencesPerStep {
+		return errors.New("solution tool event evidence exceeds bound")
+	}
+	for _, evidence := range r.Evidence {
+		if err := evidence.Validate(); err != nil {
+			return err
+		}
+	}
+	if r.OccurredAt.IsZero() {
+		return errors.New("solution tool event occurred_at is required")
+	}
+	return nil
 }
 
 type SolutionValidationState string
@@ -463,19 +510,52 @@ const (
 )
 
 type SolutionToolLesson struct {
-	ID            string                  `json:"id"`
-	Workspace     string                  `json:"workspace"`
-	ToolName      string                  `json:"tool_name"`
-	Capability    string                  `json:"capability"`
-	Preconditions []string                `json:"preconditions,omitempty"`
-	Limitations   []string                `json:"limitations,omitempty"`
-	FailureModes  []string                `json:"failure_modes,omitempty"`
-	Fallback      string                  `json:"fallback,omitempty"`
-	Confidence    float64                 `json:"confidence"`
-	Validation    SolutionValidationState `json:"validation"`
-	SourceStepIDs []string                `json:"source_step_ids"`
-	Version       int64                   `json:"version"`
-	CreatedAt     time.Time               `json:"created_at"`
+	ID             string                  `json:"id"`
+	Workspace      string                  `json:"workspace"`
+	ToolName       string                  `json:"tool_name"`
+	ToolVersions   []string                `json:"tool_versions,omitempty"`
+	Capability     string                  `json:"capability"`
+	Preconditions  []string                `json:"preconditions,omitempty"`
+	Limitations    []string                `json:"limitations,omitempty"`
+	FailureModes   []string                `json:"failure_modes,omitempty"`
+	Fallback       string                  `json:"fallback,omitempty"`
+	Confidence     float64                 `json:"confidence"`
+	Validation     SolutionValidationState `json:"validation"`
+	SourceStepIDs  []string                `json:"source_step_ids"`
+	SourceEventIDs []string                `json:"source_event_ids"`
+	Evidence       []SolutionReference     `json:"evidence,omitempty"`
+	SuccessCount   int                     `json:"success_count"`
+	Version        int64                   `json:"version"`
+	SupersededBy   string                  `json:"superseded_by,omitempty"`
+	CreatedAt      time.Time               `json:"created_at"`
+}
+
+func (l SolutionToolLesson) Validate() error {
+	for field, value := range map[string]string{"id": l.ID, "workspace": l.Workspace, "tool_name": l.ToolName, "capability": l.Capability} {
+		limit := 256
+		if field == "capability" {
+			limit = MaxSolutionStateItemBytes
+		}
+		if err := requireSolutionText("tool lesson "+field, value, limit); err != nil {
+			return err
+		}
+	}
+	if l.Confidence < 0 || l.Confidence > 1 {
+		return errors.New("solution tool lesson confidence must be between 0 and 1")
+	}
+	if l.Validation != SolutionValidationProposed && l.Validation != SolutionValidationVerified && l.Validation != SolutionValidationRejected {
+		return errors.New("invalid solution tool lesson validation")
+	}
+	if len(l.SourceStepIDs) == 0 || len(l.SourceEventIDs) == 0 {
+		return errors.New("solution tool lesson source steps and events are required")
+	}
+	if l.Version < 1 || l.CreatedAt.IsZero() {
+		return errors.New("solution tool lesson version and created_at are required")
+	}
+	if len(l.Fallback) > MaxSolutionStateItemBytes {
+		return errors.New("solution tool lesson fallback exceeds bound")
+	}
+	return nil
 }
 
 type SolutionSummary struct {

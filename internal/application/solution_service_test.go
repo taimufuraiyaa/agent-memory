@@ -354,6 +354,71 @@ func TestSolutionPromotionReportsExactPartialPipelineRejection(t *testing.T) {
 	}
 }
 
+func TestToolLessonDerivationSeparatesConsiderationVerificationAndVersionConflict(t *testing.T) {
+	ctx := context.Background()
+	store := openSolutionServiceStore(t)
+	defer func() { _ = store.Close() }()
+	svc := NewSolutionService(store, engine.NewSolutionAdmissionPolicy())
+	episode, _, err := svc.Start(ctx, safeSolutionStart("tool-lessons"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	appendStep := func(key, summary string, status core.SolutionStepStatus) core.SolutionStep {
+		step, _, appendErr := svc.AppendStep(ctx, SolutionAppendStepInput{Workspace: "ws", PrincipalID: "principal-1", EpisodeID: episode.ID,
+			Kind: core.SolutionStepAction, Status: status, Summary: summary, Source: "agent", Confidence: 0.8,
+			Sensitivity: core.SolutionSensitivityInternal, IdempotencyKey: key})
+		if appendErr != nil {
+			t.Fatal(appendErr)
+		}
+		return step
+	}
+	record := func(key string, step core.SolutionStep, kind core.SolutionToolEventKind, result core.SolutionToolResultClass, version string, verified bool) core.SolutionToolInvocationRecord {
+		event, recordErr := svc.RecordToolEvent(ctx, SolutionToolEventInput{Workspace: "ws", PrincipalID: "principal-1", EpisodeID: episode.ID,
+			StepID: step.ID, Kind: kind, ToolName: "go-test", ToolVersion: version, Operation: "test", Capability: "Run focused Go tests",
+			ResultClass: result, TaskVerified: verified, InputSummary: step.Summary, IdempotencyKey: key})
+		if recordErr != nil {
+			t.Fatal(recordErr)
+		}
+		return event
+	}
+	considered := record("event-selection", appendStep("considered-step", "Consider the Go test runner.", core.SolutionStepCompleted), core.SolutionToolSelection, core.SolutionToolResultUnknown, "1.0", false)
+	lesson, err := svc.DeriveToolLesson(ctx, SolutionToolLessonInput{Workspace: "ws", PrincipalID: "principal-1", EventIDs: []string{considered.ID}, Fallback: "Inspect tests manually."})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lesson.Validation != core.SolutionValidationProposed || lesson.SuccessCount != 0 {
+		t.Fatalf("consideration was treated as success: %+v", lesson)
+	}
+
+	unverified := record("event-unverified", appendStep("unverified-step", "Tool returned success without task verification.", core.SolutionStepCompleted), core.SolutionToolResult, core.SolutionToolResultSuccess, "1.0", false)
+	lesson, err = svc.DeriveToolLesson(ctx, SolutionToolLessonInput{Workspace: "ws", PrincipalID: "principal-1", EventIDs: []string{unverified.ID}, Fallback: "Run an independent check."})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lesson.Validation != core.SolutionValidationProposed {
+		t.Fatalf("unverified tool success was promoted: %+v", lesson)
+	}
+
+	verified1 := record("event-verified-1", appendStep("verified-step-1", "First task-level verification passed.", core.SolutionStepCompleted), core.SolutionToolResult, core.SolutionToolResultSuccess, "1.0", true)
+	verified2 := record("event-verified-2", appendStep("verified-step-2", "Second task-level verification passed.", core.SolutionStepCompleted), core.SolutionToolResult, core.SolutionToolResultSuccess, "1.0", true)
+	lesson, err = svc.DeriveToolLesson(ctx, SolutionToolLessonInput{Workspace: "ws", PrincipalID: "principal-1", EventIDs: []string{verified1.ID, verified2.ID}, Fallback: "Run tests manually."})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lesson.Validation != core.SolutionValidationVerified || lesson.SuccessCount != 2 {
+		t.Fatalf("repeated verified success was not learned: %+v", lesson)
+	}
+
+	failedV2 := record("event-failed-v2", appendStep("failed-v2-step", "Version 2 failed to start.", core.SolutionStepFailed), core.SolutionToolResult, core.SolutionToolResultFailure, "2.0", false)
+	conflict, err := svc.DeriveToolLesson(ctx, SolutionToolLessonInput{Workspace: "ws", PrincipalID: "principal-1", EventIDs: []string{verified1.ID, verified2.ID, failedV2.ID}, Fallback: "Pin version 1.0."})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if conflict.Validation != core.SolutionValidationProposed || len(conflict.FailureModes) == 0 || len(conflict.ToolVersions) != 2 {
+		t.Fatalf("version conflict was hidden: %+v", conflict)
+	}
+}
+
 func TestSolutionServicePreventsAccidentalSecondActiveEpisode(t *testing.T) {
 	ctx := context.Background()
 	store := openSolutionServiceStore(t)

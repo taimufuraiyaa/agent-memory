@@ -89,7 +89,7 @@
 
 ## Phase 4 — Tool Learning and How Recall
 
-- [ ] **Task 10: Derive validated tool lessons**
+- [x] **Task 10: Derive validated tool lessons**
   - Acceptance: Tool discovery, selection, invocation, and result remain distinct; lessons state capability, preconditions, limitations, failures, fallback, evidence, and validation state.
   - Verify: considered-only, failed invocation, task-unverified success, repeated success, and conflicting-version tests.
   - Dependencies: Checkpoint C.

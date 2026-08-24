@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -593,6 +594,168 @@ func defaultSolutionPromotionContent(summary core.SolutionSummary, memoryType co
 		return "Next guidance: " + summary.NextGuidance + "\n\n" + summary.Summary
 	}
 	return summary.Summary
+}
+
+type SolutionToolEventInput struct {
+	Workspace, PrincipalID, EpisodeID, StepID, ToolName, ToolVersion, Operation, Capability, InputSummary, IdempotencyKey string
+	Kind                                                                                                                  core.SolutionToolEventKind
+	ResultClass                                                                                                           core.SolutionToolResultClass
+	TaskVerified                                                                                                          bool
+	DurationMS                                                                                                            int64
+	Evidence                                                                                                              []core.SolutionReference
+}
+
+func (s *SolutionService) RecordToolEvent(ctx context.Context, input SolutionToolEventInput) (core.SolutionToolInvocationRecord, error) {
+	episode, err := s.authorizedEpisode(ctx, input.Workspace, input.PrincipalID, input.EpisodeID)
+	if err != nil {
+		return core.SolutionToolInvocationRecord{}, err
+	}
+	step, err := s.store.GetSolutionStep(ctx, input.StepID)
+	if err != nil || step.EpisodeID != episode.ID {
+		return core.SolutionToolInvocationRecord{}, errors.New("solution tool event step not authorized")
+	}
+	if !input.Kind.Valid() || !input.ResultClass.Valid() {
+		return core.SolutionToolInvocationRecord{}, errors.New("invalid solution tool event classification")
+	}
+	if input.Kind != core.SolutionToolResult && input.TaskVerified {
+		return core.SolutionToolInvocationRecord{}, errors.New("only a tool result can be task verified")
+	}
+	if strings.TrimSpace(input.ToolName) == "" || strings.TrimSpace(input.Operation) == "" {
+		return core.SolutionToolInvocationRecord{}, errors.New("tool_name and operation are required")
+	}
+	capability, err := s.admit(ctx, episode.Workspace, episode.SessionID, episode.PrincipalID, episode.ClientID, input.IdempotencyKey, engine.SolutionOriginAgent, engine.SolutionFieldWorkingStateItem, input.Capability)
+	if err != nil {
+		return core.SolutionToolInvocationRecord{}, err
+	}
+	inputSummary := ""
+	if strings.TrimSpace(input.InputSummary) != "" {
+		inputSummary, err = s.admit(ctx, episode.Workspace, episode.SessionID, episode.PrincipalID, episode.ClientID, input.IdempotencyKey, engine.SolutionOriginAgent, engine.SolutionFieldWorkingStateItem, input.InputSummary)
+		if err != nil {
+			return core.SolutionToolInvocationRecord{}, err
+		}
+	}
+	evidence, err := s.bindSolutionReferences(ctx, episode, input.Evidence)
+	if err != nil {
+		return core.SolutionToolInvocationRecord{}, err
+	}
+	record, _, err := s.store.InsertSolutionToolEvent(ctx, sqlite.SolutionToolEventInsert{Record: core.SolutionToolInvocationRecord{
+		Workspace: episode.Workspace, EpisodeID: episode.ID, StepID: step.ID, Kind: input.Kind, ToolName: strings.TrimSpace(input.ToolName),
+		ToolVersion: strings.TrimSpace(input.ToolVersion), Operation: strings.TrimSpace(input.Operation), Capability: capability,
+		InputSummary: inputSummary, ResultClass: input.ResultClass, TaskVerified: input.TaskVerified, DurationMS: input.DurationMS,
+		Evidence: evidence, OccurredAt: s.now().UTC(),
+	}, IdempotencyKey: input.IdempotencyKey})
+	return record, err
+}
+
+type SolutionToolLessonInput struct {
+	Workspace, PrincipalID, Fallback string
+	EventIDs                         []string
+	Reviewed                         bool
+}
+
+func (s *SolutionService) DeriveToolLesson(ctx context.Context, input SolutionToolLessonInput) (core.SolutionToolLesson, error) {
+	if len(input.EventIDs) == 0 || len(input.EventIDs) > 100 {
+		return core.SolutionToolLesson{}, errors.New("tool lesson requires 1 to 100 source events")
+	}
+	events := make([]core.SolutionToolInvocationRecord, 0, len(input.EventIDs))
+	for _, eventID := range input.EventIDs {
+		event, err := s.store.GetSolutionToolEvent(ctx, eventID)
+		if err != nil {
+			return core.SolutionToolLesson{}, err
+		}
+		if _, err := s.authorizedEpisode(ctx, input.Workspace, input.PrincipalID, event.EpisodeID); err != nil {
+			return core.SolutionToolLesson{}, err
+		}
+		events = append(events, event)
+	}
+	first := events[0]
+	lesson := core.SolutionToolLesson{Workspace: first.Workspace, ToolName: first.ToolName, Capability: first.Capability,
+		Validation: core.SolutionValidationProposed, Confidence: 0.5, SourceEventIDs: append([]string(nil), input.EventIDs...), CreatedAt: s.now().UTC()}
+	versions, steps, operations := map[string]struct{}{}, map[string]struct{}{}, map[string]struct{}{}
+	successVersions, failedVersions := map[string]struct{}{}, map[string]struct{}{}
+	evidence := []core.SolutionReference{}
+	for _, event := range events {
+		if event.Workspace != first.Workspace || event.ToolName != first.ToolName || event.Capability != first.Capability {
+			return core.SolutionToolLesson{}, errors.New("tool lesson events must share workspace, tool_name, and capability")
+		}
+		if event.ToolVersion != "" {
+			versions[event.ToolVersion] = struct{}{}
+		}
+		steps[event.StepID] = struct{}{}
+		operations[event.Operation] = struct{}{}
+		evidence = append(evidence, event.Evidence...)
+		if event.Kind == core.SolutionToolResult && event.ResultClass == core.SolutionToolResultSuccess && event.TaskVerified {
+			lesson.SuccessCount++
+			successVersions[event.ToolVersion] = struct{}{}
+		}
+		if event.Kind == core.SolutionToolResult && (event.ResultClass == core.SolutionToolResultFailure || event.ResultClass == core.SolutionToolResultPartial) {
+			failedVersions[event.ToolVersion] = struct{}{}
+			failure := strings.TrimSpace(event.InputSummary)
+			if failure == "" {
+				failure = "Tool result was " + string(event.ResultClass)
+			}
+			lesson.FailureModes = append(lesson.FailureModes, clipSolutionText(failure, core.MaxSolutionStateItemBytes))
+		}
+	}
+	lesson.ToolVersions = sortedSolutionSet(versions)
+	lesson.SourceStepIDs = sortedSolutionSet(steps)
+	lesson.Preconditions = sortedSolutionSet(operations)
+	lesson.Evidence = deduplicateSolutionReferences(evidence, core.MaxSolutionReferencesPerStep)
+	conflictingVersion := false
+	for version := range failedVersions {
+		if _, sameSucceeded := successVersions[version]; !sameSucceeded && len(successVersions) > 0 {
+			conflictingVersion = true
+		}
+	}
+	if lesson.SuccessCount == 0 {
+		lesson.Limitations = append(lesson.Limitations, "No task-verified successful result is present.")
+	}
+	if conflictingVersion {
+		lesson.Limitations = append(lesson.Limitations, "Tool behavior conflicts across recorded versions.")
+	}
+	if input.Reviewed || (lesson.SuccessCount >= 2 && !conflictingVersion) {
+		lesson.Validation = core.SolutionValidationVerified
+		lesson.Confidence = 0.9
+	}
+	fallback := strings.TrimSpace(input.Fallback)
+	if fallback == "" {
+		fallback = "Use an alternative tool or complete the workflow manually."
+	}
+	admittedFallback, err := s.admit(ctx, first.Workspace, "", input.PrincipalID, "", "", engine.SolutionOriginAgent, engine.SolutionFieldWorkingStateItem, fallback)
+	if err != nil {
+		return core.SolutionToolLesson{}, err
+	}
+	lesson.Fallback = admittedFallback
+	stored, _, err := s.store.PutSolutionToolLesson(ctx, lesson)
+	return stored, err
+}
+
+func sortedSolutionSet(values map[string]struct{}) []string {
+	result := make([]string, 0, len(values))
+	for value := range values {
+		if strings.TrimSpace(value) != "" {
+			result = append(result, value)
+		}
+	}
+	sort.Strings(result)
+	return result
+}
+
+func deduplicateSolutionReferences(values []core.SolutionReference, limit int) []core.SolutionReference {
+	seen := make(map[string]struct{})
+	result := make([]core.SolutionReference, 0, len(values))
+	for _, value := range values {
+		key := string(value.Kind) + "\x00" + value.TargetID
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		result = append(result, value)
+		if len(result) >= limit {
+			break
+		}
+	}
+	return result
 }
 
 func (s *SolutionService) loadFinalizationSteps(ctx context.Context, episodeID string) ([]core.SolutionStep, error) {

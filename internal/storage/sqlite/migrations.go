@@ -28,6 +28,29 @@ var schemaMigrations = []migrationStep{
 	{8, "solution-reference-scope", migrateSolutionReferenceScope},
 	{9, "solution-summaries", migrateSolutionSummaries},
 	{10, "solution-promotions", migrateSolutionPromotions},
+	{11, "solution-tool-learning", migrateSolutionToolLearning},
+}
+
+func migrateSolutionToolLearning(ctx context.Context, s *Store) error {
+	statements := []string{
+		`CREATE TABLE IF NOT EXISTS solution_tool_events (id TEXT PRIMARY KEY, workspace TEXT NOT NULL, episode_id TEXT NOT NULL,
+			step_id TEXT NOT NULL, kind TEXT NOT NULL, tool_name TEXT NOT NULL, tool_version TEXT NOT NULL DEFAULT '', operation TEXT NOT NULL,
+			capability TEXT NOT NULL, input_summary TEXT NOT NULL DEFAULT '', result_class TEXT NOT NULL, task_verified INTEGER NOT NULL DEFAULT 0,
+			duration_ms INTEGER NOT NULL DEFAULT 0, evidence_json TEXT NOT NULL, idempotency_key TEXT NOT NULL, request_hash TEXT NOT NULL,
+			occurred_at TEXT NOT NULL, UNIQUE(episode_id, idempotency_key), FOREIGN KEY(episode_id) REFERENCES solution_episodes(id) ON DELETE CASCADE,
+			FOREIGN KEY(step_id) REFERENCES solution_steps(id) ON DELETE CASCADE)`,
+		`CREATE INDEX IF NOT EXISTS idx_solution_tool_events_identity ON solution_tool_events(workspace, tool_name, operation, occurred_at DESC)`,
+		`CREATE TABLE IF NOT EXISTS solution_tool_lessons (id TEXT PRIMARY KEY, workspace TEXT NOT NULL, tool_name TEXT NOT NULL,
+			capability TEXT NOT NULL, version INTEGER NOT NULL, lesson_json TEXT NOT NULL, source_hash TEXT NOT NULL, superseded_by TEXT NOT NULL DEFAULT '',
+			created_at TEXT NOT NULL, UNIQUE(workspace, tool_name, capability, version), UNIQUE(workspace, source_hash))`,
+		`CREATE INDEX IF NOT EXISTS idx_solution_tool_lessons_identity ON solution_tool_lessons(workspace, tool_name, capability, version DESC)`,
+	}
+	for _, statement := range statements {
+		if _, err := s.db.ExecContext(ctx, statement); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func migrateSolutionPromotions(ctx context.Context, s *Store) error {
