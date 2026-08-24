@@ -22,6 +22,7 @@ var schemaMigrations = []migrationStep{
 	{2, "json-vectors-to-blobs", func(ctx context.Context, s *Store) error { return s.migrateJSONVectorsToBlobs(ctx) }},
 	{3, "session-column-and-order-indexes", migrateSessionColumnAndIndexes},
 	{4, "source-attestation-provenance", migrateSourceAttestationProvenance},
+	{5, "solution-path-episodes", migrateSolutionPathEpisodes},
 }
 
 var migrateMu sync.Mutex
@@ -134,4 +135,78 @@ func migrateSourceAttestationProvenance(ctx context.Context, s *Store) error {
 		FOREIGN KEY(source_asset_id) REFERENCES source_assets(id) ON DELETE CASCADE
 	)`)
 	return err
+}
+
+func migrateSolutionPathEpisodes(ctx context.Context, s *Store) error {
+	statements := []string{
+		`CREATE TABLE IF NOT EXISTS solution_episodes (
+			id TEXT PRIMARY KEY,
+			workspace TEXT NOT NULL,
+			session_id TEXT NOT NULL,
+			principal_id TEXT NOT NULL,
+			client_id TEXT NOT NULL,
+			goal_summary TEXT NOT NULL,
+			status TEXT NOT NULL,
+			capture_policy TEXT NOT NULL,
+			retention_class TEXT NOT NULL,
+			version INTEGER NOT NULL DEFAULT 1,
+			next_step_ordinal INTEGER NOT NULL DEFAULT 1,
+			superseded_by TEXT NOT NULL DEFAULT '',
+			idempotency_key TEXT NOT NULL,
+			request_hash TEXT NOT NULL,
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL,
+			UNIQUE(workspace, client_id, idempotency_key)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_solution_episodes_workspace_status_updated
+			ON solution_episodes(workspace, status, updated_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_solution_episodes_workspace_session
+			ON solution_episodes(workspace, session_id, updated_at DESC)`,
+		`CREATE TABLE IF NOT EXISTS solution_step_requests (
+			episode_id TEXT NOT NULL,
+			idempotency_key TEXT NOT NULL,
+			request_hash TEXT NOT NULL,
+			step_id TEXT NOT NULL,
+			created_at TEXT NOT NULL,
+			PRIMARY KEY(episode_id, idempotency_key),
+			UNIQUE(step_id),
+			FOREIGN KEY(episode_id) REFERENCES solution_episodes(id) ON DELETE CASCADE
+		)`,
+		`CREATE TABLE IF NOT EXISTS solution_steps (
+			id TEXT PRIMARY KEY,
+			episode_id TEXT NOT NULL,
+			ordinal INTEGER NOT NULL,
+			kind TEXT NOT NULL,
+			status TEXT NOT NULL,
+			summary TEXT NOT NULL,
+			rationale_summary TEXT NOT NULL DEFAULT '',
+			source TEXT NOT NULL,
+			parent_step_ids_json TEXT NOT NULL DEFAULT '[]',
+			confidence REAL NOT NULL,
+			sensitivity TEXT NOT NULL,
+			created_at TEXT NOT NULL,
+			UNIQUE(episode_id, ordinal),
+			FOREIGN KEY(episode_id) REFERENCES solution_episodes(id) ON DELETE CASCADE,
+			FOREIGN KEY(id) REFERENCES solution_step_requests(step_id) ON DELETE CASCADE
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_solution_steps_episode_ordinal
+			ON solution_steps(episode_id, ordinal)`,
+		`CREATE TABLE IF NOT EXISTS solution_step_references (
+			step_id TEXT NOT NULL,
+			ordinal INTEGER NOT NULL,
+			kind TEXT NOT NULL,
+			target_id TEXT NOT NULL,
+			locator TEXT NOT NULL DEFAULT '',
+			PRIMARY KEY(step_id, ordinal),
+			FOREIGN KEY(step_id) REFERENCES solution_steps(id) ON DELETE CASCADE
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_solution_step_references_target
+			ON solution_step_references(kind, target_id)`,
+	}
+	for _, statement := range statements {
+		if _, err := s.db.ExecContext(ctx, statement); err != nil {
+			return err
+		}
+	}
+	return nil
 }
