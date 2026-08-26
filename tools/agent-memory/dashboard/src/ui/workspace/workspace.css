@@ -109,6 +109,10 @@ body.light .workspaceApp {
 .knowledgeResultBody[data-openable] { cursor: pointer; }
 .knowledgeResultActions { padding: 8px 12px; border-top: 1px solid var(--workspace-border); }
 .askCopyStatus:empty { display: none; }
+.askAnswerToolbar { min-width: 0; gap: 10px; }
+.askAnswerToolbar > * { min-width: 0; }
+.askTranslationControl { flex: 0 0 auto; }
+.askTranslationMenu { display: grid; gap: 12px; padding: 8px 12px 12px; }
 .evidenceDetail { max-height: min(72vh, 760px); overflow-y: auto; }
 .memorySelectable { position: relative; padding-top: 30px; }
 .memorySelectControl { position: absolute; z-index: 2; top: 4px; right: 4px; }
@@ -202,6 +206,12 @@ body.light .workspaceApp {
   .knowledgeResultBody { padding: 14px; }
   .howTreeRootButton { padding: 14px; }
   .howTreeBranches { padding: 0 12px 14px 24px; }
+}
+
+@media (max-width: 480px) {
+  .askAnswerToolbar { align-items: stretch; }
+  .askAnswerToolbar > * { width: 100%; justify-content: space-between; }
+  .askTranslationControl { width: 100%; }
 }
 
 @media (prefers-reduced-motion: reduce) {

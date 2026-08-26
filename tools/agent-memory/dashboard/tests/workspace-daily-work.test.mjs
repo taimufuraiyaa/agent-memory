@@ -69,6 +69,6 @@ test('memory actions support selection, safe bulk export, print, and deletion', 
 test('workspace changes abort stale Ask and memory requests', () => {
   assert.match(askSource, /AbortController/)
   assert.match(memorySource, /AbortController/)
-  assert.match(askSource, /return \(\) => \{ sourceController\.abort\(\); controllerRef\.current\?\.abort\(\) \}/)
+  assert.match(askSource, /return \(\) => \{ sourceController\.abort\(\); controllerRef\.current\?\.abort\(\); translationControllerRef\.current\?\.abort\(\) \}/)
   assert.match(memorySource, /return \(\) => controllerRef\.current\?\.abort\(\)/)
 })

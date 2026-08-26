@@ -1,4 +1,4 @@
-import type { ClientKind, ClientProfile, ClientToolProfile, SchedulerRunHistory, SchedulerSummary, SkillInfo } from './api'
+import type { ClientKind, ClientProfile, ClientToolProfile, LocalLLMConfig, LocalLLMStatus, SchedulerRunHistory, SchedulerSummary, SkillInfo } from './api'
 
 export type KnowledgeCapability =
   | 'workspace'
@@ -13,6 +13,7 @@ export type KnowledgeCapability =
   | 'lifecycle'
   | 'clients'
   | 'skills'
+  | 'translation'
 
 export type WorkspaceScope = { workspaceId: string; sourceId?: string }
 
@@ -56,6 +57,8 @@ export type AskResponse = {
   weakContext: KnowledgeResult[]
   unavailableReason?: string
 }
+
+export type TranslationResult = { text: string; targetLanguage: string; provider: string; model: string }
 
 export type SourceSummary = {
   id: string
@@ -179,6 +182,10 @@ export interface KnowledgeGateway {
   supports(capability: KnowledgeCapability, scope: WorkspaceScope): boolean
   listWorkspaces(signal?: AbortSignal): Promise<WorkspaceSummary[]>
   ask(scope: WorkspaceScope, question: string, signal?: AbortSignal): Promise<AskResponse>
+  translateAnswer(scope: WorkspaceScope, text: string, targetLanguage: string, signal?: AbortSignal): Promise<TranslationResult>
+  getTranslationStatus(): Promise<LocalLLMStatus>
+  testTranslationSettings(input: LocalLLMConfig): Promise<LocalLLMStatus>
+  saveTranslationSettings(input: LocalLLMConfig): Promise<LocalLLMStatus>
   search(scope: WorkspaceScope, query: string, cursor?: string, signal?: AbortSignal): Promise<CursorPage<KnowledgeResult>>
   browse(scope: WorkspaceScope, mode: 'recent' | 'pinned' | 'type' | 'ungrouped', cursor?: string, signal?: AbortSignal): Promise<CursorPage<KnowledgeResult>>
   getMemory(scope: WorkspaceScope, memoryId: string, signal?: AbortSignal): Promise<KnowledgeResult>

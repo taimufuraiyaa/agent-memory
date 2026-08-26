@@ -339,6 +339,7 @@ func NewMux(svc *Service) *http.ServeMux {
 	mux.HandleFunc("/api/v1/library/imports", libraryImportHandler(svc))
 	mux.HandleFunc("/api/v1/library/local-llm", libraryLocalLLMHandler(svc))
 	mux.HandleFunc("/api/v1/library/local-llm/test", libraryLocalLLMTestHandler(svc))
+	mux.HandleFunc("/api/v1/library/local-llm/translate", libraryLocalLLMTranslateHandler(svc))
 	mux.HandleFunc("/api/v1/library/jobs", libraryJobHandler(svc))
 	mux.HandleFunc("/api/v1/library/structure", libraryStructureHandler(svc))
 	mux.HandleFunc("/api/v1/library/query", libraryQueryHandler(svc))

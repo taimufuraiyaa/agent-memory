@@ -146,6 +146,13 @@ export type LocalLLMStatus = {
   error?: string
 }
 
+export type LocalTranslationResult = {
+  text: string
+  target_language: string
+  provider: string
+  model: string
+}
+
 export type LibraryStructuralNode = {
   id: string
   edition_id: string
@@ -892,6 +899,10 @@ export function testLibraryLocalLLM(input: LocalLLMConfig): Promise<LocalLLMStat
 
 export function saveLibraryLocalLLM(input: LocalLLMConfig): Promise<LocalLLMStatus> {
   return api('/api/v1/library/local-llm', { method: 'PUT', body: JSON.stringify(input) })
+}
+
+export function translateLibraryAnswer(input: { workspace: string; text: string; target_language: string }, signal?: AbortSignal): Promise<LocalTranslationResult> {
+  return api('/api/v1/library/local-llm/translate', { method: 'POST', body: JSON.stringify(input), signal })
 }
 
 export function getLibraryStructure(input: { workspace: string; principal_id?: string; edition_id: string }): Promise<{ edition_id: string; nodes: LibraryStructuralNode[] }> {

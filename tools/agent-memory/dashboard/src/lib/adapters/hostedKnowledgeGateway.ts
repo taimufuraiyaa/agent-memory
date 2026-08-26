@@ -156,6 +156,10 @@ export function createHostedKnowledgeGateway(connection: HostedConnection, optio
       const synthesis = evidenceResult.status === 'fulfilled' ? evidenceResult.value.synthesis : undefined
       return { answerable: Boolean(sourceEvidence.length || durableMemory.length), answer: synthesis || (durableMemory.length ? durableMemory.map((item) => item.content).join('\n\n') : undefined), sourceEvidence, durableMemory, weakContext: [], unavailableReason: sourceEvidence.length || durableMemory.length ? undefined : 'No grounded source evidence or durable memory was found.' }
     },
+    async translateAnswer() { throw new Error('Local translation is unavailable in this runtime.') },
+    async getTranslationStatus() { throw new Error('Local translation is unavailable in this runtime.') },
+    async testTranslationSettings() { throw new Error('Local translation is unavailable in this runtime.') },
+    async saveTranslationSettings() { throw new Error('Local translation is unavailable in this runtime.') },
     async search(scope, query, cursor) {
       if (isRegisteredProject(scope.workspaceId)) {
         const response = await searchHostedProjectMemories(connection, { workspace: scope.workspaceId, query, limit: 20, cursor })

@@ -17,6 +17,7 @@ import {
   listSessions,
   listSolutionEpisodes,
   listSkills,
+  getLibraryLocalLLMStatus,
   recallPreview,
   restoreNote as restoreStandaloneNote,
   reviewSolutionEpisode as reviewStandaloneSolutionEpisode,
@@ -25,6 +26,9 @@ import {
   setMemoryPinned,
   studyProject,
   submitRequestFeedback,
+  saveLibraryLocalLLM,
+  testLibraryLocalLLM,
+  translateLibraryAnswer,
   trashNote as trashStandaloneNote,
   updateNote as updateStandaloneNote,
   updateClientProfile,
@@ -90,7 +94,7 @@ function workspaceNote(note: import('../api').NoteDocument): WorkspaceNote {
 
 export function createStandaloneKnowledgeGateway(): KnowledgeGateway {
   const runtimeActivity: ActivityItem[] = []
-  const capabilities = new Set<import('../knowledgeGateway').KnowledgeCapability>(['workspace', 'ask', 'search', 'browse', 'source', 'study', 'note', 'activity', 'settings', 'lifecycle', 'clients', 'skills'])
+  const capabilities = new Set<import('../knowledgeGateway').KnowledgeCapability>(['workspace', 'ask', 'search', 'browse', 'source', 'study', 'note', 'activity', 'settings', 'lifecycle', 'clients', 'skills', 'translation'])
   const recordActivity = (item: Omit<ActivityItem, 'updatedAt'>) => runtimeActivity.unshift({ ...item, updatedAt: new Date().toISOString() })
   return {
     runtime: 'standalone',
@@ -124,6 +128,13 @@ export function createStandaloneKnowledgeGateway(): KnowledgeGateway {
         unavailableReason: durableMemory.length ? undefined : 'No grounded durable memory was found in this workspace.',
       } satisfies AskResponse
     },
+    async translateAnswer(scope, text, targetLanguage, signal) {
+      const result = await translateLibraryAnswer({ workspace: scope.workspaceId, text, target_language: targetLanguage }, signal)
+      return { text: result.text, targetLanguage: result.target_language, provider: result.provider, model: result.model }
+    },
+    async getTranslationStatus() { return getLibraryLocalLLMStatus() },
+    async testTranslationSettings(input) { return testLibraryLocalLLM(input) },
+    async saveTranslationSettings(input) { return saveLibraryLocalLLM(input) },
     async search(scope, query, cursor) {
       const offset = numericCursor(cursor)
       const limit = 20
@@ -241,10 +252,10 @@ export function createStandaloneKnowledgeGateway(): KnowledgeGateway {
       await retryStandaloneNoteIndex({ workspace: scope.workspaceId, note_id: noteId })
     },
     async listActivity(scope, cursor, filter: ActivityFilter = 'all') {
-	  const [sessionsResponse, feedback, solutions] = await Promise.all([listSessions({ workspace: scope.workspaceId, limit: 100 }), listFeedback({ workspace: scope.workspaceId }), listSolutionEpisodes({ workspace: scope.workspaceId, limit: 100 })])
+    const [sessionsResponse, feedback, solutions] = await Promise.all([listSessions({ workspace: scope.workspaceId, limit: 100 }), listFeedback({ workspace: scope.workspaceId }), listSolutionEpisodes({ workspace: scope.workspaceId, limit: 100 })])
       const items: ActivityItem[] = [
         ...runtimeActivity.filter((item) => item.workspaceId === scope.workspaceId),
-		...solutions.episodes.map(solutionActivityItem),
+    ...solutions.episodes.map(solutionActivityItem),
         ...sessionsResponse.sessions.map((session) => ({ id: `session:${session.session_id}`, workspaceId: scope.workspaceId, kind: 'session' as const, title: `Agent session ${session.session_id}`, state: session.ended_at ? 'completed' as const : 'running' as const, updatedAt: session.last_seen_at })),
         ...feedback.map((request) => ({
           id: `retrieval:${request.id}`,
