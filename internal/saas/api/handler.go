@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/taimufuraiyaa/agent-memory/internal/application"
 	"github.com/taimufuraiyaa/agent-memory/internal/attestation"
 	"github.com/taimufuraiyaa/agent-memory/internal/core"
 	"github.com/taimufuraiyaa/agent-memory/internal/saas/audit"
@@ -91,6 +92,9 @@ type Dependencies struct {
 	LocalOwner        LocalOwnerService
 	LocalSessionToken string
 	LocalProjects     LocalProjectService
+	GraphOperations   application.GraphOperationController
+	GraphAuthorizer   GraphWorkspaceAuthorizer
+	GraphExperience   GraphExperienceStore
 }
 
 func NewHandler(deps Dependencies) (http.Handler, error) {
@@ -141,6 +145,21 @@ func NewHandler(deps Dependencies) (http.Handler, error) {
 	protected.HandleFunc("GET /v1/sources", listSources(deps.SourceCatalog))
 	protected.HandleFunc("GET /v1/source-statuses", listSourceStatuses(deps.SourceCatalog))
 	protected.HandleFunc("GET /v1/processing-tasks", listProcessingTasks(deps.SourceCatalog))
+	if deps.GraphOperations != nil && deps.GraphAuthorizer != nil {
+		protected.HandleFunc("GET /v1/graph-index/readiness", hostedGraphReadiness(deps.GraphOperations, deps.GraphAuthorizer))
+		protected.HandleFunc("GET /v1/graph-index/status", hostedGraphStatus(deps.GraphOperations, deps.GraphAuthorizer))
+		protected.HandleFunc("POST /v1/graph-index/operations", hostedGraphOperation(deps.GraphOperations, deps.GraphAuthorizer))
+	}
+	if deps.GraphExperience != nil && deps.GraphAuthorizer != nil {
+		var graphObserver GraphObserver
+		if observer, ok := deps.Telemetry.(GraphObserver); ok {
+			graphObserver = observer
+		}
+		protected.HandleFunc("GET /v1/graph-index/explorer", hostedGraphExplorer(deps.GraphExperience, deps.GraphAuthorizer))
+		protected.HandleFunc("POST /v1/graph-index/recall", hostedGraphRecall(deps.GraphExperience, deps.MemorySearch, deps.GraphAuthorizer, deps.Audit, graphObserver))
+		protected.HandleFunc("POST /v1/graph-index/review", hostedGraphReview(deps.GraphExperience, deps.GraphAuthorizer))
+		protected.HandleFunc("POST /v1/graph-index/feedback", hostedGraphFeedback(deps.GraphExperience, deps.GraphAuthorizer))
+	}
 	if deps.LocalOwner != nil && deps.LocalProjects != nil {
 		protected.Handle("GET /v1/local-projects", localProjectBoundary("memory:read", listLocalProjects(deps.LocalProjects)))
 		protected.Handle("POST /v1/local-projects/study", localProjectBoundary("memory:write", studyLocalProject(deps.LocalProjects)))

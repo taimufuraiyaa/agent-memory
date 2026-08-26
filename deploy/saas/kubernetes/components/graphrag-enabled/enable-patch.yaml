@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agent-memory-graph-worker
+spec:
+  replicas: 1
+  template:
+    spec:
+      containers:
+        - name: graph-worker
+          env:
+            - name: AGENT_MEMORY_GRAPHRAG_ENABLED
+              value: "true"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agent-memory-worker
+spec:
+  template:
+    spec:
+      containers:
+        - name: worker
+          env:
+            - name: AGENT_MEMORY_GRAPHRAG_ENABLED
+              value: "true"

@@ -5,12 +5,12 @@ repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 base_dir="$repo_dir/deploy/saas/kubernetes"
 kubectl_cmd="${KUBECTL:-kubectl}"
 
-for environment in staging production; do
+for environment in staging production staging-graphrag production-graphrag; do
   rendered="$(mktemp)"
   trap 'rm -f "$rendered"' EXIT
   "$kubectl_cmd" kustomize "$base_dir/overlays/$environment" > "$rendered"
 
-  expected_namespace="agent-memory-$environment"
+  expected_namespace="agent-memory-${environment%-graphrag}"
   grep -q "namespace: $expected_namespace" "$rendered"
   grep -q 'name: default-deny' "$rendered"
   grep -q 'readOnlyRootFilesystem: true' "$rendered"
@@ -33,8 +33,18 @@ for environment in staging production; do
   trap - EXIT
 done
 
+for environment in staging production; do
+  disabled="$($kubectl_cmd kustomize "$base_dir/overlays/$environment")"
+  enabled="$($kubectl_cmd kustomize "$base_dir/overlays/$environment-graphrag")"
+  awk '$0 == "kind: Deployment" { deployment=1 } deployment && $0 == "  name: agent-memory-graph-worker" { target=1 } target && /replicas:/ { print; exit }' <<<"$disabled" | grep -q 'replicas: 0'
+  grep -q 'kind: HorizontalPodAutoscaler' <<<"$enabled"
+  grep -q 'maxReplicas: 4' <<<"$enabled"
+  grep -q 'kind: PodDisruptionBudget' <<<"$enabled"
+  grep -q 'name: agent-memory-graph-worker-secrets' <<<"$enabled"
+done
+
 accounts="$("$kubectl_cmd" kustomize "$base_dir/overlays/staging" | awk '/^kind: ServiceAccount$/{found=1} found && /^  name: agent-memory-/{print $2; found=0}')"
-for account in agent-memory-api agent-memory-worker agent-memory-reconciler agent-memory-migration; do
+for account in agent-memory-api agent-memory-worker agent-memory-reconciler agent-memory-migration agent-memory-graph-worker; do
   grep -qx "$account" <<<"$accounts"
 done
 

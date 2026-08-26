@@ -10,6 +10,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nats-io/nats.go"
+	"github.com/taimufuraiyaa/agent-memory/internal/application"
 	"github.com/taimufuraiyaa/agent-memory/internal/attestation"
 	baseobservability "github.com/taimufuraiyaa/agent-memory/internal/observability"
 	"github.com/taimufuraiyaa/agent-memory/internal/saas/api"
@@ -26,6 +27,7 @@ import (
 	"github.com/taimufuraiyaa/agent-memory/internal/saas/launch"
 	"github.com/taimufuraiyaa/agent-memory/internal/saas/memory"
 	"github.com/taimufuraiyaa/agent-memory/internal/saas/modelgateway"
+	"github.com/taimufuraiyaa/agent-memory/internal/saas/postgres"
 	"github.com/taimufuraiyaa/agent-memory/internal/saas/privacy"
 	"github.com/taimufuraiyaa/agent-memory/internal/saas/retention"
 	"github.com/taimufuraiyaa/agent-memory/internal/saas/retrieval"
@@ -89,6 +91,7 @@ func run(cfg config.Config) error {
 	}
 	defer queueConnection.Close()
 	accounts := control.NewPostgresStore(pool)
+	graphRepository := postgres.NewGraphIndexRepository(pool)
 	memoryRepository := memory.NewPostgresRepository(pool)
 	credentials := credential.NewService(credential.NewPostgresRepository(pool), nil)
 	objects, err := exportservice.NewMinIOStore(cfg.ObjectEndpoint, cfg.ObjectAccessKey, cfg.ObjectSecretKey)
@@ -182,6 +185,9 @@ func run(cfg config.Config) error {
 		LocalOwner:        localOwner,
 		LocalSessionToken: cfg.DevAuthToken,
 		LocalProjects:     localProjects,
+		GraphOperations:   application.NewGraphOperationService(graphRepository),
+		GraphAuthorizer:   accounts,
+		GraphExperience:   graphRepository,
 	})
 	if err != nil {
 		return err

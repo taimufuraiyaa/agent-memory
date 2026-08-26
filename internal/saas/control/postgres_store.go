@@ -207,5 +207,6 @@ func capabilitiesForRole(role string) []string {
 	return []string{
 		"account:manage", "credential:manage", "memory:read", "memory:write",
 		"source:read", "source:write", "source:delete", "tenant:export",
+		"graph:read", "graph:review", "graph:operate",
 	}
 }

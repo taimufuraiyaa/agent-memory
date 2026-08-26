@@ -1,0 +1,23 @@
+{
+  "annotations": {"list": []},
+  "editable": false,
+  "panels": [
+    {"title": "Queue age p95", "description": "Owner: graph-index-oncall. Content-free job age.", "type": "timeseries", "targets": [{"expr": "histogram_quantile(0.95, sum by (le) (rate(agent_memory_graph_queue_age_seconds_bucket[15m])))"}], "gridPos": {"h": 8, "w": 8, "x": 0, "y": 0}},
+    {"title": "Operations by stage and outcome", "description": "Owner: graph-index-oncall.", "type": "timeseries", "targets": [{"expr": "sum by (stage, mode, outcome) (increase(agent_memory_graph_operations_total[15m]))"}], "gridPos": {"h": 8, "w": 8, "x": 8, "y": 0}},
+    {"title": "Revision freshness", "description": "Owner: graph-index-oncall.", "type": "timeseries", "targets": [{"expr": "max by (freshness) (agent_memory_graph_revision_age_seconds)"}], "gridPos": {"h": 8, "w": 8, "x": 16, "y": 0}},
+    {"title": "Projection, coalescing, and normalized records", "description": "Owner: graph-index-oncall. Counts only; no entity names or text.", "type": "timeseries", "targets": [{"expr": "sum by (kind, outcome) (increase(agent_memory_graph_records_total[1h]))"}, {"expr": "sum by (mode) (increase(agent_memory_graph_coalesced_records_total[1h]))"}], "gridPos": {"h": 8, "w": 8, "x": 0, "y": 8}},
+    {"title": "Index tokens and USD", "description": "Owner: product-finance.", "type": "timeseries", "targets": [{"expr": "sum by (mode) (increase(agent_memory_graph_tokens_total[1h]))"}, {"expr": "sum by (mode) (increase(agent_memory_graph_cost_microusd_total[1h])) / 1000000"}], "gridPos": {"h": 8, "w": 8, "x": 8, "y": 8}},
+    {"title": "Derived storage by custody class", "description": "Owner: storage-oncall.", "type": "timeseries", "targets": [{"expr": "sum by (class) (agent_memory_graph_storage_bytes)"}], "gridPos": {"h": 8, "w": 8, "x": 16, "y": 8}},
+    {"title": "Query latency p95", "description": "Owner: retrieval-oncall.", "type": "timeseries", "targets": [{"expr": "histogram_quantile(0.95, sum by (route, le) (rate(agent_memory_graph_duration_seconds_bucket{stage=\"query\"}[15m])))"}], "gridPos": {"h": 8, "w": 8, "x": 0, "y": 16}},
+    {"title": "Fallbacks and cache", "description": "Owner: retrieval-oncall.", "type": "timeseries", "targets": [{"expr": "sum by (route, reason) (increase(agent_memory_graph_fallbacks_total[1h]))"}, {"expr": "sum by (route, outcome) (increase(agent_memory_graph_cache_total[1h]))"}], "gridPos": {"h": 8, "w": 8, "x": 8, "y": 16}},
+    {"title": "Dead letters and quality feedback", "description": "Owner: graph-index-oncall and product.", "type": "timeseries", "targets": [{"expr": "increase(agent_memory_graph_dead_letters_total[1h])"}, {"expr": "sum by (route, outcome) (increase(agent_memory_graph_quality_feedback_total[24h]))"}], "gridPos": {"h": 8, "w": 8, "x": 16, "y": 16}}
+  ],
+  "schemaVersion": 39,
+  "tags": ["agent-memory", "graphrag", "derived-index"],
+  "templating": {"list": []},
+  "time": {"from": "now-24h", "to": "now"},
+  "timezone": "browser",
+  "title": "Agent Memory Graph Derived Index",
+  "uid": "agent-memory-graph-index",
+  "version": 1
+}

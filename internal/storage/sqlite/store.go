@@ -924,6 +924,9 @@ func (s *Store) UpsertMemory(ctx context.Context, m *core.MemoryEntry) error {
 	if err := replaceMemoryTermsTx(ctx, tx, m.Workspace, m.ID, terms); err != nil {
 		return err
 	}
+	if err := appendGraphChangesForMemoryTx(ctx, tx, m, "upsert", m.UpdatedAt); err != nil {
+		return err
+	}
 	return tx.Commit()
 }
 
@@ -1023,6 +1026,9 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 
 		if err := replaceMemoryTermsTx(ctx, tx, m.Workspace, m.ID, termSets[0]); err != nil {
 			return err
 		}
+	}
+	if err := appendGraphChangesForMemoryTx(ctx, tx, m, "create", m.UpdatedAt); err != nil {
+		return err
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit insert memory: %w", err)
@@ -1164,6 +1170,9 @@ ON CONFLICT(memory_id) DO UPDATE SET
 		if err := replaceMemoryTermsTx(ctx, tx, m.Workspace, m.ID, termSets[0]); err != nil {
 			return err
 		}
+	}
+	if err := appendGraphChangesForMemoryTx(ctx, tx, m, "create", m.UpdatedAt); err != nil {
+		return err
 	}
 
 	if err := tx.Commit(); err != nil {

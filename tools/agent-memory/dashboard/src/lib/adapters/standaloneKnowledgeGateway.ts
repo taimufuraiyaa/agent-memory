@@ -18,7 +18,12 @@ import {
   listSolutionEpisodes,
   listSkills,
   getLibraryLocalLLMStatus,
+  getGraphReadiness,
+  getGraphSnapshot,
+  getGraphStatus,
   recallPreview,
+  operateGraph,
+  reviewGraph,
   restoreNote as restoreStandaloneNote,
   reviewSolutionEpisode as reviewStandaloneSolutionEpisode,
   retryNoteIndex as retryStandaloneNoteIndex,
@@ -26,6 +31,7 @@ import {
   setMemoryPinned,
   studyProject,
   submitRequestFeedback,
+  submitGraphFeedback,
   saveLibraryLocalLLM,
   testLibraryLocalLLM,
   translateLibraryAnswer,
@@ -94,7 +100,7 @@ function workspaceNote(note: import('../api').NoteDocument): WorkspaceNote {
 
 export function createStandaloneKnowledgeGateway(): KnowledgeGateway {
   const runtimeActivity: ActivityItem[] = []
-  const capabilities = new Set<import('../knowledgeGateway').KnowledgeCapability>(['workspace', 'ask', 'search', 'browse', 'source', 'study', 'note', 'activity', 'settings', 'lifecycle', 'clients', 'skills', 'translation'])
+  const capabilities = new Set<import('../knowledgeGateway').KnowledgeCapability>(['workspace', 'ask', 'search', 'browse', 'source', 'study', 'note', 'activity', 'settings', 'lifecycle', 'clients', 'skills', 'translation', 'graph'])
   const recordActivity = (item: Omit<ActivityItem, 'updatedAt'>) => runtimeActivity.unshift({ ...item, updatedAt: new Date().toISOString() })
   return {
     runtime: 'standalone',
@@ -114,17 +120,20 @@ export function createStandaloneKnowledgeGateway(): KnowledgeGateway {
         capabilities: ['workspace', 'ask', 'search', 'browse', 'source', 'study', 'note', 'activity', 'settings'],
       }))
     },
-    async ask(scope, question) {
-      const response = await recallPreview({ workspace: scope.workspaceId, task_description: question, top_k: 50, token_budget: 4000, explain: true, include_memories: true })
+    async ask(scope, question, options = { mode: 'basic' }, signal) {
+      const response = await recallPreview({ workspace: scope.workspaceId, task_description: question, top_k: 50, token_budget: 4000, explain: true, include_memories: true, graph_mode: options.mode, graph_required: options.required, graph_allow_stale: options.allowStale }, signal)
       const inSource = (memory: MemoryEntry) => !scope.sourceId || (scope.sourceId.startsWith('codebase:') ? !memory.source?.note_id : memory.source?.note_id === scope.sourceId)
       const durableMemory = (response.memories_included_full || []).filter(inSource).map((memory) => memoryResult(memory))
       const weakContext = (response.weak_memories || []).filter(inSource).map((memory) => memoryResult(memory))
       return {
+        requestId: response.graph_request_id,
         answerable: durableMemory.length > 0,
         answer: durableMemory.length ? (scope.sourceId ? durableMemory.map((memory) => memory.content).join('\n\n') : response.context_block) : undefined,
         sourceEvidence: [],
         durableMemory,
         weakContext,
+        graphRoute: response.graph_route,
+        graphContext: response.graph_context,
         unavailableReason: durableMemory.length ? undefined : 'No grounded durable memory was found in this workspace.',
       } satisfies AskResponse
     },
@@ -312,6 +321,12 @@ export function createStandaloneKnowledgeGateway(): KnowledgeGateway {
     async getSettings(scope) {
       return getStats(scope.workspaceId)
     },
+    async getGraphReadiness(scope, signal) { return getGraphReadiness(scope, signal) },
+    async getGraphStatus(scope, signal) { return getGraphStatus(scope, signal) },
+    async getGraphSnapshot(scope, signal) { return getGraphSnapshot(scope, signal) },
+    async operateGraph(scope, configurationId, action, expectedRevision, jobId) { return operateGraph(scope, configurationId, action, expectedRevision, jobId) },
+    async reviewGraph(scope, input) { return reviewGraph(scope, input) },
+    async submitGraphFeedback(scope, requestId, targetKind, targetId, outcome, reason) { return submitGraphFeedback(scope, requestId, targetKind, targetId, outcome, reason) },
     async importMigration() {
       throw new Error('Standalone workspaces export migration copies from System > Migration.')
     },

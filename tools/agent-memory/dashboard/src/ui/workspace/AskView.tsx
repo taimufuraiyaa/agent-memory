@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { Alert, Badge, Button, Group, Menu, Modal, NumberInput, Paper, Select, Stack, Switch, Text, Textarea, TextInput, Title } from '@mantine/core'
 import { IconArrowRight, IconBooks, IconChevronDown, IconLanguage, IconMessageCircleQuestion, IconSearch, IconSettings, IconSparkles } from '@tabler/icons-react'
-import type { AskResponse, KnowledgeGateway, KnowledgeResult, SourceSummary, TranslationResult, WorkspaceScope } from '../../lib/knowledgeGateway'
+import type { AskResponse, GraphQueryMode, KnowledgeGateway, KnowledgeResult, SourceSummary, TranslationResult, WorkspaceScope } from '../../lib/knowledgeGateway'
 import { KnowledgeResultCard } from './KnowledgeResultCard'
+import { GraphContext } from './GraphContext'
 
 const translationLanguages = [
   { value: 'en', label: 'English' }, { value: 'vi', label: 'Vietnamese' }, { value: 'zh', label: 'Chinese' },
@@ -27,6 +28,8 @@ export function AskView({ gateway, workspaceId, onOpenSearch, onOpenSources }: {
   const [error, setError] = useState('')
   const [sources, setSources] = useState<SourceSummary[]>([])
   const [sourceId, setSourceId] = useState('')
+  const [graphMode, setGraphMode] = useState<GraphQueryMode>('basic')
+  const [allowStaleGraph, setAllowStaleGraph] = useState(false)
   const [selectedEvidence, setSelectedEvidence] = useState<KnowledgeResult | null>(null)
   const [copiedEvidenceId, setCopiedEvidenceId] = useState('')
   const [copyStatus, setCopyStatus] = useState('')
@@ -82,7 +85,7 @@ export function AskView({ gateway, workspaceId, onOpenSearch, onOpenSources }: {
     setTranslationError('')
     setTranslationSuppressed(false)
     try {
-      const next = await gateway.ask(scope, question, controller.signal)
+      const next = await gateway.ask(scope, question, { mode: graphMode, required: graphMode === 'local_graph' || graphMode === 'global', allowStale: allowStaleGraph }, controller.signal)
       if (!controller.signal.aborted) setResponse(next)
     } catch (reason) {
       if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : 'Ask could not complete.')
@@ -133,6 +136,7 @@ export function AskView({ gateway, workspaceId, onOpenSearch, onOpenSources }: {
         <Stack gap="md">
           <Group justify="space-between" align="flex-start"><div><Text c="memory" size="xs" fw={700} tt="uppercase">Grounded workspace conversation</Text><Title order={2}>Ask this workspace</Title></div><IconMessageCircleQuestion size={28} color="var(--mantine-color-memory-5)" /></Group>
           <Select aria-label="Narrow Ask to source" label="Knowledge scope" data={sourceOptions} value={sourceId} onChange={(value) => { translationControllerRef.current?.abort(); setSourceId(value || ''); setResponse(null); setSelectedEvidence(null); setCopiedEvidenceId(''); setCopyStatus(''); setTranslatedAnswer(null); setTranslationBusy(false); setTranslationError(''); setTranslationSuppressed(false) }} searchable />
+          <Group align="flex-end" grow><Select aria-label="Retrieval route" label="Retrieval route" description="Basic is the default. Auto uses graph only for relational or corpus-wide questions." value={graphMode} onChange={(value) => { setGraphMode((value || 'basic') as GraphQueryMode); setResponse(null) }} data={[{ value: 'basic', label: 'Basic' }, { value: 'auto', label: 'Auto' }, { value: 'local_graph', label: 'Local Graph' }, { value: 'global', label: 'Global' }]} /><Switch mb={8} label="Allow stale graph" description="Always shown as degraded" checked={allowStaleGraph} disabled={graphMode === 'basic'} onChange={(event) => setAllowStaleGraph(event.currentTarget.checked)} /></Group>
           <Textarea id="workspace-question" label="Question" value={question} onChange={(event) => setQuestion(event.currentTarget.value)} placeholder="Ask about decisions, code, documents, or notes…" autosize minRows={4} maxRows={10} />
           <Group justify="flex-end"><Button type="submit" loading={busy} disabled={!question.trim()} leftSection={<IconSparkles size={17} />}>Ask</Button></Group>
         </Stack>
@@ -149,6 +153,7 @@ export function AskView({ gateway, workspaceId, onOpenSearch, onOpenSources }: {
       <Text lh={1.7} style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{displayedAnswer}</Text>
       {translationError ? <Alert color="orange" title="Local translation unavailable" role="alert"><Stack gap="xs"><Text size="sm">{translationError}</Text><Button variant="light" size="compact-sm" onClick={() => setTranslationSettingsOpened(true)}>Open translation settings</Button></Stack></Alert> : null}
     </Stack></Paper> : null : <Alert color="yellow" title="No grounded answer" aria-live="polite"><Stack gap="md"><Text>{response.unavailableReason || 'The selected workspace does not have enough trusted context.'}</Text><Group><Button variant="light" leftSection={<IconSearch size={16} />} onClick={onOpenSearch}>Search memories</Button><Button variant="default" leftSection={<IconBooks size={16} />} onClick={onOpenSources}>Review Sources</Button></Group></Stack></Alert> : null}
+      {response?.graphRoute ? <GraphContext gateway={gateway} workspaceId={workspaceId} response={response} /> : null}
     </Stack>
     {response && hasEvidence ? <Stack className="askEvidence" gap="xl" aria-live="polite">
       {response.sourceEvidence.length ? <ResultSection title="Source evidence" items={response.sourceEvidence} previewLines={5} copiedEvidenceId={copiedEvidenceId} onOpen={setSelectedEvidence} onCopy={(evidence) => void copyEvidence(evidence)} /> : null}

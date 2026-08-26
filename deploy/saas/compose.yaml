@@ -73,7 +73,7 @@ services:
     command:
       - |
         mc alias set local http://minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}"
-        mc mb --ignore-existing local/agent-memory-quarantine local/agent-memory-vault local/agent-memory-exports
+        mc mb --ignore-existing local/agent-memory-quarantine local/agent-memory-vault local/agent-memory-exports local/agent-memory-graph-projections local/agent-memory-graph-artifacts
         mc mb --with-lock --ignore-existing local/agent-memory-audit
         mc admin user info local "$${API_ACCESS_KEY}" >/dev/null 2>&1 || mc admin user add local "$${API_ACCESS_KEY}" "$${API_SECRET_KEY}"
         mc admin user info local "$${WORKER_ACCESS_KEY}" >/dev/null 2>&1 || mc admin user add local "$${WORKER_ACCESS_KEY}" "$${WORKER_SECRET_KEY}"
@@ -81,9 +81,12 @@ services:
         mc admin policy create local agent-memory-api /policies/api.json
         mc admin policy create local agent-memory-worker /policies/worker.json
         mc admin policy create local agent-memory-reconciler /policies/reconciler.json
+        mc admin user info local agent-memory-graph-worker >/dev/null 2>&1 || mc admin user add local agent-memory-graph-worker graph-worker-local-development-only
+        mc admin policy create local agent-memory-graph-worker /policies/graph-worker.json
         mc admin policy attach local agent-memory-api --user "$${API_ACCESS_KEY}"
         mc admin policy attach local agent-memory-worker --user "$${WORKER_ACCESS_KEY}"
         mc admin policy attach local agent-memory-reconciler --user "$${RECONCILER_ACCESS_KEY}"
+        mc admin policy attach local agent-memory-graph-worker --user agent-memory-graph-worker
     volumes:
       - ./minio/policies:/policies:ro
     depends_on:
@@ -195,6 +198,8 @@ services:
       AGENT_MEMORY_SAAS_SERVICE: worker
       AGENT_MEMORY_OBJECT_ACCESS_KEY: agent-memory-worker
       AGENT_MEMORY_OBJECT_SECRET_KEY: worker-local-development-only
+      AGENT_MEMORY_GRAPHRAG_ENABLED: ${AGENT_MEMORY_GRAPHRAG_ENABLED:-false}
+      AGENT_MEMORY_GRAPH_BUNDLE_SIGNING_KEY: ${AGENT_MEMORY_GRAPH_BUNDLE_SIGNING_KEY:-nWGxne/9WmC6hEr0kuwsxERJxWl7MmkZcDusAxyuf2DXWpgBgrEKt9VL/tPJZAc6DuFy89qmIyWvAhpo9wdRGg==}
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -222,6 +227,41 @@ services:
         condition: service_healthy
       object-init:
         condition: service_completed_successfully
+
+  graph-worker:
+    profiles: ["graphrag"]
+    image: ${AGENT_MEMORY_GRAPHRAG_IMAGE:-agent-memory-graph-worker@sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee}
+    environment:
+      AGENT_MEMORY_SAAS_ENV: development
+      AGENT_MEMORY_SAAS_SERVICE: graph-worker
+      AGENT_MEMORY_GRAPHRAG_ENABLED: "true"
+      AGENT_MEMORY_QUEUE_URL: nats://nats:4222
+      AGENT_MEMORY_OBJECT_ENDPOINT: http://minio:9000
+      AGENT_MEMORY_OBJECT_ACCESS_KEY: agent-memory-graph-worker
+      AGENT_MEMORY_OBJECT_SECRET_KEY: graph-worker-local-development-only
+      INDEX_COMPLETION_API_KEY: ${INDEX_COMPLETION_API_KEY:-local-development-only}
+      INDEX_EMBEDDING_API_KEY: ${INDEX_EMBEDDING_API_KEY:-local-development-only}
+      AGENT_MEMORY_GRAPH_COMPLETION_MODEL: ${AGENT_MEMORY_GRAPH_COMPLETION_MODEL:-graph-completion-v1}
+      AGENT_MEMORY_GRAPH_EMBEDDING_MODEL: ${AGENT_MEMORY_GRAPH_EMBEDDING_MODEL:-graph-embedding-v1}
+      AGENT_MEMORY_GRAPHRAG_BUILD_DIGEST: ${AGENT_MEMORY_GRAPHRAG_BUILD_DIGEST:-sha256:local-development-image}
+      AGENT_MEMORY_GRAPHRAG_ATTESTATION_SIGNATURE: ${AGENT_MEMORY_GRAPHRAG_ATTESTATION_SIGNATURE:-local-workload-attestation}
+      AGENT_MEMORY_GRAPH_BUNDLE_PUBLIC_KEY: ${AGENT_MEMORY_GRAPH_BUNDLE_PUBLIC_KEY:-11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo=}
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:size=256m,mode=1777
+    volumes:
+      - graph-job-data:/graph-job
+    depends_on:
+      minio:
+        condition: service_healthy
+      object-init:
+        condition: service_completed_successfully
+      nats:
+        condition: service_healthy
 
   object-policy-test:
     image: minio/mc:latest
@@ -258,3 +298,4 @@ volumes:
   postgres-data:
   object-data:
   queue-data:
+  graph-job-data:

@@ -16,6 +16,7 @@ import (
 	"github.com/taimufuraiyaa/agent-memory/internal/core"
 	"github.com/taimufuraiyaa/agent-memory/internal/embeddings"
 	"github.com/taimufuraiyaa/agent-memory/internal/engine"
+	graphretrieval "github.com/taimufuraiyaa/agent-memory/internal/retrieval"
 	"github.com/taimufuraiyaa/agent-memory/internal/storage/sqlite"
 )
 
@@ -449,6 +450,8 @@ func newRecallCommand() *cobra.Command {
 	var observationSessionID string
 	var useAdaptiveBudget bool
 	var budgetPercentage float64
+	var graphMode string
+	var graphRequired, graphAllowStale bool
 
 	cmd := &cobra.Command{
 		Use:   "recall",
@@ -502,6 +505,10 @@ Budget Configuration:
 			if err := validateOutputFormat(flags.format, true); err != nil {
 				return err
 			}
+			normalizedGraphMode := graphretrieval.GraphQueryMode(strings.ToLower(strings.TrimSpace(graphMode)))
+			if normalizedGraphMode != "" && normalizedGraphMode != graphretrieval.GraphQueryBasic && normalizedGraphMode != graphretrieval.GraphQueryAuto && normalizedGraphMode != graphretrieval.GraphQueryLocal && normalizedGraphMode != graphretrieval.GraphQueryGlobal {
+				return fmt.Errorf("invalid graph mode: %s", graphMode)
+			}
 
 			// Handle adaptive budget sizing
 			if useAdaptiveBudget {
@@ -553,6 +560,9 @@ Budget Configuration:
 					"include_observations":   includeObservations,
 					"observation_limit":      observationLimit,
 					"observation_session_id": strings.TrimSpace(observationSessionID),
+					"graph_mode":             normalizedGraphMode,
+					"graph_required":         graphRequired,
+					"graph_allow_stale":      graphAllowStale,
 				}, &out)
 				if err != nil {
 					return err
@@ -580,6 +590,9 @@ Budget Configuration:
 				IncludeObservations:  includeObservations,
 				ObservationLimit:     observationLimit,
 				ObservationSessionID: observationSessionID,
+				GraphMode:            normalizedGraphMode,
+				GraphRequired:        graphRequired,
+				GraphAllowStale:      graphAllowStale,
 			}
 			memoryEnabled := engine.MemoryEnabled()
 			var store *sqlite.Store
@@ -622,6 +635,9 @@ Budget Configuration:
 	cmd.Flags().BoolVar(&includeObservations, "include-observations", false, "Include recent observation summaries (if available)")
 	cmd.Flags().IntVar(&observationLimit, "observation-limit", 10, "Recent observation count to include (max 50)")
 	cmd.Flags().StringVar(&observationSessionID, "observation-session-id", "", "Session ID for observations (default: most recent)")
+	cmd.Flags().StringVar(&graphMode, "graph-mode", "", "Graph enrichment: basic|auto|local_graph|global")
+	cmd.Flags().BoolVar(&graphRequired, "graph-required", false, "Fail if the selected graph route is unavailable")
+	cmd.Flags().BoolVar(&graphAllowStale, "graph-allow-stale", false, "Allow a stale active graph revision with degraded status")
 	_ = cmd.MarkFlagRequired("task")
 	return cmd
 }

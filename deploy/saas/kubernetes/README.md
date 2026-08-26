@@ -38,6 +38,22 @@ secret values. Before a release, the platform must create these scoped secrets:
 | `agent-memory-worker-secrets` | Worker | PostgreSQL URL, object credentials/endpoints, queue URL, encryption keys, secret reference; production model endpoint/key |
 | `agent-memory-reconciler-secrets` | Reconciler | PostgreSQL URL, object credentials/endpoint, and secret reference |
 | `agent-memory-migration-secrets` | Migration | PostgreSQL URL only |
+| `agent-memory-graph-worker-secrets` | Isolated graph worker | Queue credentials, graph-projection read credentials, graph-artifact staging write credentials, approved indexing-model credentials/endpoints; **no PostgreSQL URL or canonical database credential** |
+
+GraphRAG is disabled in the normal `staging` and `production` overlays: the
+isolated graph worker has zero replicas. After its immutable image and scoped
+secret are installed and approved, render `staging-graphrag` or
+`production-graphrag`. Those overlays set one initial replica, a disruption
+budget, and a deliberately slow `1..4` HPA bound. The graph-worker network
+policy allows DNS, HTTPS model access, NATS, and object storage; it deliberately
+has no PostgreSQL egress. API, general worker, reconciler, and migration secrets
+must never be reused by the graph worker.
+
+The self-managed Compose topology follows the same boundary through the
+optional `graphrag` profile. Its graph worker receives queue/object/model
+settings only and no `AGENT_MEMORY_POSTGRES_URL`. Enable it with
+`docker compose --profile graphrag config` after supplying the certified
+`AGENT_MEMORY_GRAPHRAG_IMAGE` digest.
 
 Internal secret synchronization and workload-identity bindings must grant each
 service only its contract. Never commit `Secret`, `data`, or `stringData`

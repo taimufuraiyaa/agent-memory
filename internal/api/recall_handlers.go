@@ -6,8 +6,10 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/taimufuraiyaa/agent-memory/internal/core"
 	"github.com/taimufuraiyaa/agent-memory/internal/engine"
+	graphretrieval "github.com/taimufuraiyaa/agent-memory/internal/retrieval"
 )
 
 // memoriesRecentHandler implements GET /api/v1/memories/recent: returns the
@@ -93,6 +95,9 @@ func memoriesRecallHandler(svc *Service) http.HandlerFunc {
 			IncludeObservations bool   `json:"include_observations"`
 			ObservationLimit    int    `json:"observation_limit"`
 			ObservationSession  string `json:"observation_session_id"`
+			GraphMode           string `json:"graph_mode"`
+			GraphRequired       bool   `json:"graph_required"`
+			GraphAllowStale     bool   `json:"graph_allow_stale"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
@@ -149,6 +154,9 @@ func memoriesRecallHandler(svc *Service) http.HandlerFunc {
 			includeObservations: req.IncludeObservations,
 			observationSession:  req.ObservationSession,
 			observationLimit:    req.ObservationLimit,
+			graphMode:           graphretrieval.GraphQueryMode(strings.ToLower(strings.TrimSpace(req.GraphMode))),
+			graphRequired:       req.GraphRequired,
+			graphAllowStale:     req.GraphAllowStale,
 		})
 		if err != nil {
 			writeErr(w, http.StatusBadRequest, "runtime", err.Error())
@@ -191,6 +199,9 @@ func memoriesRecallHandler(svc *Service) http.HandlerFunc {
 			"search_probe":           result.decision.Probe,
 			"deep_recall_used":       result.decision.Strategy != engine.RecallStrategySearchSatisfied,
 			"reconstruction":         result.reconstruction,
+			"graph_route":            result.graphRoute,
+			"graph_context":          result.graphContext,
+			"graph_request_id":       uuid.NewString(),
 		}
 		if strings.EqualFold(strings.TrimSpace(req.Format), "raw") {
 			data["text"] = result.contextBlock
@@ -228,6 +239,9 @@ func memoriesRecallPreviewHandler(svc *Service) http.HandlerFunc {
 			IncludeObservations bool   `json:"include_observations"`
 			ObservationLimit    int    `json:"observation_limit"`
 			ObservationSession  string `json:"observation_session_id"`
+			GraphMode           string `json:"graph_mode"`
+			GraphRequired       bool   `json:"graph_required"`
+			GraphAllowStale     bool   `json:"graph_allow_stale"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
@@ -275,6 +289,9 @@ func memoriesRecallPreviewHandler(svc *Service) http.HandlerFunc {
 			includeObservations: req.IncludeObservations,
 			observationSession:  req.ObservationSession,
 			observationLimit:    req.ObservationLimit,
+			graphMode:           graphretrieval.GraphQueryMode(strings.ToLower(strings.TrimSpace(req.GraphMode))),
+			graphRequired:       req.GraphRequired,
+			graphAllowStale:     req.GraphAllowStale,
 		})
 		if err != nil {
 			writeErr(w, http.StatusBadRequest, "runtime", err.Error())
@@ -345,6 +362,9 @@ func memoriesRecallPreviewHandler(svc *Service) http.HandlerFunc {
 			"search_probe":           result.decision.Probe,
 			"deep_recall_used":       result.decision.Strategy != engine.RecallStrategySearchSatisfied,
 			"reconstruction":         result.reconstruction,
+			"graph_route":            result.graphRoute,
+			"graph_context":          result.graphContext,
+			"graph_request_id":       uuid.NewString(),
 		}
 		if req.IncludeMemories {
 			out["memories_included_full"] = fullMems

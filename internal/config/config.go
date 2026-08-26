@@ -33,6 +33,10 @@ type Config struct {
 	// Retrieval settings
 	Retrieval RetrievalConfig `yaml:"retrieval"`
 
+	// Optional GraphRAG indexing adapter. Disabled by default and never used by
+	// the canonical write or synchronous basic-retrieval path.
+	Graph GraphConfig `yaml:"graph"`
+
 	// Dashboard settings
 	Dashboard DashboardConfig `yaml:"dashboard"`
 
@@ -202,6 +206,7 @@ func DefaultConfig() *Config {
 			RetrievalTimeout:  10,
 			EnableExplanation: false,
 		},
+		Graph: DefaultGraphConfig(dataDir),
 		Dashboard: DashboardConfig{
 			Enabled:    true,
 			Dir:        filepath.Join(dataDir, "dashboard"),
@@ -363,8 +368,12 @@ func (c *Config) merge(other *Config, present map[string]bool) {
 	if present["enabled"] {
 		c.Enabled = other.Enabled
 	}
+	previousDataDir := c.DataDir
 	if other.DataDir != "" {
 		c.DataDir = other.DataDir
+		if !present["graph.job_root"] && c.Graph.JobRoot == DefaultGraphConfig(previousDataDir).JobRoot {
+			c.Graph.JobRoot = DefaultGraphConfig(c.DataDir).JobRoot
+		}
 	}
 	if other.RunLabel != "" {
 		c.RunLabel = other.RunLabel
@@ -377,6 +386,7 @@ func (c *Config) merge(other *Config, present map[string]bool) {
 	c.mergeStorage(&other.Storage, present)
 	c.mergeEmbeddings(&other.Embeddings, present)
 	c.mergeRetrieval(&other.Retrieval, present)
+	c.mergeGraph(&other.Graph, present)
 	c.mergeDashboard(&other.Dashboard, present)
 	c.mergeServer(&other.Server, present)
 	c.mergeObserve(&other.Observe, present)
@@ -465,6 +475,42 @@ func (c *Config) mergeRetrieval(other *RetrievalConfig, present map[string]bool)
 	}
 	if present["retrieval.enable_explanation"] {
 		c.Retrieval.EnableExplanation = other.EnableExplanation
+	}
+}
+
+func (c *Config) mergeGraph(other *GraphConfig, present map[string]bool) {
+	if present["graph.enabled"] {
+		c.Graph.Enabled = other.Enabled
+	}
+	if other.Executable != "" {
+		c.Graph.Executable = other.Executable
+	}
+	if other.JobRoot != "" {
+		c.Graph.JobRoot = other.JobRoot
+	}
+	if other.TimeoutSeconds > 0 {
+		c.Graph.TimeoutSeconds = other.TimeoutSeconds
+	}
+	if other.CancelGraceSeconds > 0 {
+		c.Graph.CancelGraceSeconds = other.CancelGraceSeconds
+	}
+	if other.MaxOutputBytes > 0 {
+		c.Graph.MaxOutputBytes = other.MaxOutputBytes
+	}
+	if other.MaxRequestBytes > 0 {
+		c.Graph.MaxRequestBytes = other.MaxRequestBytes
+	}
+	if other.MaxDiskBytes > 0 {
+		c.Graph.MaxDiskBytes = other.MaxDiskBytes
+	}
+	if other.MaxMemoryBytes > 0 {
+		c.Graph.MaxMemoryBytes = other.MaxMemoryBytes
+	}
+	if other.MaxCPUSeconds > 0 {
+		c.Graph.MaxCPUSeconds = other.MaxCPUSeconds
+	}
+	if len(other.CredentialEnv) > 0 {
+		c.Graph.CredentialEnv = append([]string(nil), other.CredentialEnv...)
 	}
 }
 
@@ -564,7 +610,11 @@ func (c *Config) applyEnvOverrides() {
 		c.Enabled = envBool(v)
 	}
 	if v := os.Getenv("AGENT_MEMORY_DATA_DIR"); v != "" {
+		previousDataDir := c.DataDir
 		c.DataDir = v
+		if c.Graph.JobRoot == DefaultGraphConfig(previousDataDir).JobRoot {
+			c.Graph.JobRoot = DefaultGraphConfig(c.DataDir).JobRoot
+		}
 	}
 	if v := os.Getenv("AGENT_MEMORY_RUN_LABEL"); v != "" {
 		c.RunLabel = v
@@ -613,6 +663,12 @@ func (c *Config) applyEnvOverrides() {
 	}
 	if v := os.Getenv("AGENT_MEMORY_SRC_DIR"); v != "" {
 		c.Upgrade.SourceDir = v
+	}
+	if v := os.Getenv("AGENT_MEMORY_GRAPH_ENABLED"); v != "" {
+		c.Graph.Enabled = envBool(v)
+	}
+	if v := os.Getenv("AGENT_MEMORY_GRAPH_ADAPTER"); v != "" {
+		c.Graph.Executable = v
 	}
 
 	// Adaptive tuning - handled by existing adaptive_tuning.go functions
@@ -676,6 +732,9 @@ func (c *Config) Validate() error {
 	}
 	if c.Embeddings.Dimensions < 1 {
 		errors = append(errors, "embeddings.dimensions must be positive")
+	}
+	if err := c.Graph.Validate(c.DataDir); err != nil {
+		errors = append(errors, err.Error())
 	}
 
 	// Validate retrieval weights sum to 1.0

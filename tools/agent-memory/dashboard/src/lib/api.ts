@@ -575,6 +575,9 @@ export type RecallPreviewResponse = {
   requested_top_k: number
   requested_budget: number
   retrieval_policy?: RetrievalPolicy
+  graph_route?: GraphRouteDecision
+  graph_context?: GraphRecallContext
+  graph_request_id?: string
 }
 
 export type BenchmarkClusterSummary = {
@@ -1054,11 +1057,46 @@ export function recallPreview(input: {
   token_budget: number
   explain: boolean
   include_memories: boolean
-}): Promise<RecallPreviewResponse> {
+  graph_mode?: 'basic' | 'auto' | 'local_graph' | 'global'
+  graph_required?: boolean
+  graph_allow_stale?: boolean
+}, signal?: AbortSignal): Promise<RecallPreviewResponse> {
   return api('/api/v1/memories/recall/preview', {
     method: 'POST',
     body: JSON.stringify(input),
+    signal,
   })
+}
+
+function graphQuery(scope: { workspaceId: string }, configurationId?: string): string {
+  const query = new URLSearchParams({ workspace: scope.workspaceId })
+  if (configurationId) query.set('configuration_id', configurationId)
+  return query.toString()
+}
+
+export function getGraphReadiness(scope: { workspaceId: string }, signal?: AbortSignal): Promise<GraphReadiness> {
+  return api(`/api/v1/graph-index/readiness?${graphQuery(scope)}`, { signal })
+}
+
+export function getGraphStatus(scope: { workspaceId: string }, signal?: AbortSignal): Promise<GraphStatus> {
+  return api(`/api/v1/graph-index/status?${graphQuery(scope)}`, { signal })
+}
+
+export function getGraphSnapshot(scope: { workspaceId: string }, signal?: AbortSignal): Promise<GraphSnapshot> {
+  return api(`/api/v1/graph-index/explorer?${graphQuery(scope)}`, { signal })
+}
+
+export async function operateGraph(scope: { workspaceId: string }, configurationId: string, action: GraphOperationAction, expectedRevision?: string, jobId?: string): Promise<GraphStatus> {
+  const result = await api<{ status: GraphStatus }>('/api/v1/graph-index/operations', { method: 'POST', body: JSON.stringify({ scope: { workspace_id: scope.workspaceId }, configuration_id: configurationId, action, expected_revision: expectedRevision || '', job_id: jobId || '', idempotency_key: crypto.randomUUID() }) })
+  return result.status
+}
+
+export async function reviewGraph(scope: { workspaceId: string }, input: GraphReviewInput): Promise<void> {
+  await api('/api/v1/graph-index/review', { method: 'POST', body: JSON.stringify({ scope: { workspace_id: scope.workspaceId }, action: input.action, target_kind: input.targetKind, target_id: input.targetId, from: input.from, to: input.to, expected_version: input.expectedVersion, reason: input.reason || '' }) })
+}
+
+export async function submitGraphFeedback(scope: { workspaceId: string }, requestId: string, targetKind: string, targetId: string, outcome: string, reason?: string): Promise<void> {
+  await api('/api/v1/graph-index/feedback', { method: 'POST', body: JSON.stringify({ scope: { workspace_id: scope.workspaceId }, request_id: requestId, target_kind: targetKind, target_id: targetId, outcome, reason: reason || '', created_at: new Date().toISOString() }) })
 }
 
 export type RetrievalRequestLog = {
@@ -1181,3 +1219,4 @@ export function listSkills(input: { workspace: string }): Promise<SkillInfo[]> {
     method: 'GET',
   }).then((res) => res.skills || [])
 }
+import type { GraphOperationAction, GraphReadiness, GraphReviewInput, GraphRouteDecision, GraphRecallContext, GraphSnapshot, GraphStatus } from './knowledgeGateway'

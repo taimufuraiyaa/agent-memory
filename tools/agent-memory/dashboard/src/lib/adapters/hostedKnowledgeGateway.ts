@@ -6,6 +6,9 @@ import {
   getHostedProjectLifecycle,
   getHostedBilling,
   getHostedPrivacy,
+  getHostedGraphReadiness,
+  getHostedGraphSnapshot,
+  getHostedGraphStatus,
   getHostedProjectMemory,
   getHostedProjectSolution,
   importHostedBundle,
@@ -17,12 +20,16 @@ import {
   listHostedProjectSkills,
   listHostedSources,
   queryHostedSources,
+  recallHostedGraph,
+  operateHostedGraph,
   retryHostedSource,
   reviewHostedProjectSolution,
+  reviewHostedGraph,
   searchHostedMemories,
   searchHostedProjectMemories,
   studyHostedProject,
   submitHostedRetrievalFeedback,
+  submitHostedGraphFeedback,
   uploadHostedSource,
   updateHostedClientProfile,
   type HostedConnection,
@@ -110,7 +117,7 @@ export function createHostedKnowledgeGateway(connection: HostedConnection, optio
   const isRegisteredProject = (workspaceId: string) => registeredProjects.has(workspaceId)
   const localOwner = Boolean(options.localOwner)
   const localSystemTools = Boolean(localOwner && options.localSystemTools)
-  const capabilities = new Set<KnowledgeCapability>(['workspace', 'ask', 'search', 'browse', 'source', 'study', 'activity', 'settings', ...(localSystemTools ? ['lifecycle', 'clients', 'skills'] as const : [])])
+  const capabilities = new Set<KnowledgeCapability>(['workspace', 'ask', 'search', 'browse', 'source', 'study', 'activity', 'settings', 'graph', ...(localSystemTools ? ['lifecycle', 'clients', 'skills'] as const : [])])
 
   return {
     runtime: 'hosted',
@@ -119,6 +126,7 @@ export function createHostedKnowledgeGateway(connection: HostedConnection, optio
       if (!capabilities.has(capability)) return false
       if (capability === 'clients') return localSystemTools
       if (capability === 'lifecycle' || capability === 'skills') return localSystemTools && isRegisteredProject(scope.workspaceId)
+      if (capability === 'graph') return !isRegisteredProject(scope.workspaceId)
       return true
     },
     async listWorkspaces() {
@@ -138,13 +146,34 @@ export function createHostedKnowledgeGateway(connection: HostedConnection, optio
       if (registeredProjects.has(connection.workspace)) return projectWorkspaces
       return [{ id: connection.workspace, name: 'Hosted workspace', kind: 'hosted', memoryCount: 0, sourceCount: 0, noteCount: 0, connectionState: 'connected', capabilities: ['workspace', 'ask', 'search', 'source', 'activity', 'settings'] }, ...projectWorkspaces]
     },
-    async ask(scope, question) {
+    async ask(scope, question, options = { mode: 'basic' }, signal) {
       if (isRegisteredProject(scope.workspaceId)) {
+        if (options.mode !== 'basic') throw new Error('Graph Ask is available for hosted workspaces; this registered project uses its Basic memory index.')
         const response = await searchHostedProjectMemories(connection, { workspace: scope.workspaceId, query: question, limit: 12 })
         const durableMemory = response.items.map((item) => hostedMemoryResult(item.memory, scope.workspaceId, item.score, item.explanation))
         return { answerable: durableMemory.length > 0, answer: durableMemory.length ? durableMemory.map((item) => item.content).join('\n\n') : undefined, sourceEvidence: [], durableMemory, weakContext: [], unavailableReason: durableMemory.length ? undefined : 'No grounded durable memory was found in this project.' } satisfies AskResponse
       }
       const scopedConnection = { ...connection, workspace: scope.workspaceId }
+      if (options.mode !== 'basic') {
+        const response = await recallHostedGraph(scopedConnection, question, options, signal)
+        const durableMemory = response.basic_memories.map((memory) => hostedMemoryResult(memory, scope.workspaceId))
+        const directIDs = new Set(durableMemory.map((memory) => memory.id))
+        const weakContext = (response.canonical_memories || [])
+          .filter((memory) => !directIDs.has(memory.id))
+          .map((memory) => hostedMemoryResult(memory, scope.workspaceId, undefined, 'Canonical memory connected through the active graph index.'))
+        const answerContext = [...durableMemory, ...weakContext]
+        return {
+          requestId: response.request_id,
+          answerable: answerContext.length > 0,
+          answer: answerContext.length ? answerContext.map((item) => item.content).join('\n\n') : undefined,
+          sourceEvidence: [],
+          durableMemory,
+          weakContext,
+          unavailableReason: answerContext.length ? undefined : 'No grounded durable memory or graph-connected canonical memory was found.',
+          graphRoute: response.graph_route,
+          graphContext: response.graph_context,
+        } satisfies AskResponse
+      }
       const sources = await listHostedSources(scopedConnection)
       const sourceIDs = scope.sourceId ? sources.filter((source) => source.id === scope.sourceId).map((source) => source.id) : sources.filter((source) => source.state === 'ready').map((source) => source.id)
       const [memoryResult, evidenceResult] = await Promise.allSettled([
@@ -291,6 +320,12 @@ export function createHostedKnowledgeGateway(connection: HostedConnection, optio
       const [privacy, billing] = await Promise.all([getHostedPrivacy(scoped), getHostedBilling(scoped)])
       return { privacy, billing }
     },
+    async getGraphReadiness(scope, signal) { return getHostedGraphReadiness({ ...connection, workspace: scope.workspaceId }, signal) },
+    async getGraphStatus(scope, signal) { return getHostedGraphStatus({ ...connection, workspace: scope.workspaceId }, signal) },
+    async getGraphSnapshot(scope, signal) { return getHostedGraphSnapshot({ ...connection, workspace: scope.workspaceId }, signal) },
+    async operateGraph(scope, configurationId, action, expectedRevision, jobId) { return operateHostedGraph({ ...connection, workspace: scope.workspaceId }, configurationId, action, expectedRevision, jobId) },
+    async reviewGraph(scope, input) { return reviewHostedGraph({ ...connection, workspace: scope.workspaceId }, input) },
+    async submitGraphFeedback(scope, requestId, targetKind, targetId, outcome, reason) { return submitHostedGraphFeedback({ ...connection, workspace: scope.workspaceId }, requestId, targetKind, targetId, outcome, reason) },
     async importMigration(scope, file, passphrase, idempotencyKey) {
       if (isRegisteredProject(scope.workspaceId)) throw new Error('Migration import is available only for hosted workspaces.')
       const result = await importHostedBundle({ ...connection, workspace: scope.workspaceId }, file, passphrase, idempotencyKey)

@@ -82,6 +82,21 @@ func TestQueryCacheNormalizedQueryHits(t *testing.T) {
 	}
 }
 
+func TestGraphCacheIdentityInvalidatesResultForRevisionReviewDeletionOrConfigurationChange(t *testing.T) {
+	cache := NewQueryCache(DefaultQueryCacheConfig())
+	ctx := context.Background()
+	base := RetrievalOptions{Workspace: "ws", Query: "related memories", TopK: 3, Mode: ModeRecall, GraphCacheIdentity: "graph-epoch-1"}
+	cache.SetResults(ctx, base, []RetrievalHit{{Memory: core.MemoryEntry{ID: "m1"}}})
+	if got := cache.GetResults(ctx, base); len(got) != 1 {
+		t.Fatalf("expected graph cache baseline hit: %#v", got)
+	}
+	changed := base
+	changed.GraphCacheIdentity = "graph-epoch-2"
+	if got := cache.GetResults(ctx, changed); got != nil {
+		t.Fatalf("stale graph epoch returned cached context: %#v", got)
+	}
+}
+
 // TestLifecycleOnWorkspaceChangeHookFiresAfterRun verifies that the
 // OnWorkspaceChange invalidation hook fires with the maintained workspace when
 // Run completes.

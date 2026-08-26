@@ -48,6 +48,25 @@ func TestWritePipelineRejectsSecrets(t *testing.T) {
 	}
 }
 
+func TestGraphWriteIndependenceWithoutConfigurationOrWorker(t *testing.T) {
+	store := mustOpenStore(t)
+	t.Cleanup(func() { _ = store.Close() })
+	pipeline := NewWritePipeline(store)
+
+	result, err := pipeline.Write(context.Background(), WriteInput{
+		ID: "graph-independent-memory", Workspace: "ws", Type: core.SemanticMemory,
+		Content: "basic retrieval remains available while graph indexing is disabled",
+		Source:  core.MemorySource{Type: core.SourceAgentObservation},
+	})
+	if err != nil || result.Rejected {
+		t.Fatalf("canonical write depends on graph services: result=%+v err=%v", result, err)
+	}
+	stored, err := store.GetMemory(context.Background(), result.ID)
+	if err != nil || stored == nil || stored.Content == "" {
+		t.Fatalf("immediate canonical retrieval failed: memory=%+v err=%v", stored, err)
+	}
+}
+
 func TestWritePipelineRejectsPIIAndSize(t *testing.T) {
 	store := mustOpenStore(t)
 	t.Cleanup(func() { _ = store.Close() })

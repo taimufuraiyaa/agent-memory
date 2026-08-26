@@ -1,0 +1,3 @@
+DROP INDEX IF EXISTS saas_graph_change_journal_pending;
+ALTER TABLE saas_graph_change_journal DROP CONSTRAINT IF EXISTS saas_graph_change_journal_configuration_fk;
+ALTER TABLE saas_graph_change_journal DROP COLUMN IF EXISTS configuration_id;

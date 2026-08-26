@@ -33,6 +33,182 @@ var schemaMigrations = []migrationStep{
 	{13, "how-retrieval-feedback", migrateHowRetrievalFeedback},
 	{14, "distilled-skill-metadata", migrateDistilledSkillMetadata},
 	{15, "solution-activity-review", migrateSolutionActivityReview},
+	{16, "graphrag-control-plane", migrateGraphControlPlane},
+	{17, "graphrag-normalized-index", migrateGraphNormalizedIndex},
+	{18, "graphrag-normalized-metadata", migrateGraphNormalizedMetadata},
+}
+
+func migrateGraphNormalizedMetadata(ctx context.Context, s *Store) error {
+	statements := []string{
+		`ALTER TABLE graph_edge_versions ADD COLUMN origin TEXT NOT NULL DEFAULT 'inferred'`,
+		`ALTER TABLE graph_edge_versions ADD COLUMN provenance_approved INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE graph_communities ADD COLUMN configuration_id TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE graph_communities ADD COLUMN membership_fingerprint TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE graph_communities ADD COLUMN evidence_fingerprint TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE graph_reports ADD COLUMN admission_state TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE graph_reports ADD COLUMN model_route TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE graph_reports ADD COLUMN model_fingerprint TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE graph_reports ADD COLUMN prompt_fingerprint TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE graph_reports ADD COLUMN membership_fingerprint TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE graph_reports ADD COLUMN evidence_fingerprint TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE graph_reports ADD COLUMN review_version INTEGER NOT NULL DEFAULT 0`,
+	}
+	for _, statement := range statements {
+		if _, err := s.db.ExecContext(ctx, statement); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func migrateGraphNormalizedIndex(ctx context.Context, s *Store) error {
+	statements := []string{
+		`CREATE TABLE IF NOT EXISTS graph_entities (
+			id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL DEFAULT '', workspace TEXT NOT NULL,
+			trust TEXT NOT NULL, record_version INTEGER NOT NULL DEFAULT 1,
+			first_revision_id TEXT NOT NULL, last_revision_id TEXT NOT NULL, superseded_by TEXT NOT NULL DEFAULT '',
+			created_at TEXT NOT NULL, updated_at TEXT NOT NULL, UNIQUE(workspace, id)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_graph_entities_query ON graph_entities(tenant_id, workspace, trust, updated_at DESC)`,
+		`CREATE TABLE IF NOT EXISTS graph_entity_versions (
+			entity_id TEXT NOT NULL, revision_id TEXT NOT NULL, external_id TEXT NOT NULL,
+			name TEXT NOT NULL, entity_type TEXT NOT NULL, description TEXT NOT NULL,
+			aliases_json TEXT NOT NULL DEFAULT '[]', occurrence_count INTEGER NOT NULL DEFAULT 0, degree INTEGER NOT NULL DEFAULT 0,
+			PRIMARY KEY(entity_id, revision_id), FOREIGN KEY(entity_id) REFERENCES graph_entities(id) ON DELETE CASCADE,
+			FOREIGN KEY(revision_id) REFERENCES graph_revisions(id) ON DELETE CASCADE
+		)`,
+		`CREATE TABLE IF NOT EXISTS graph_entity_evidence (
+			entity_id TEXT NOT NULL, revision_id TEXT NOT NULL, evidence_id TEXT NOT NULL,
+			tenant_id TEXT NOT NULL DEFAULT '', workspace TEXT NOT NULL, canonical_kind TEXT NOT NULL,
+			canonical_id TEXT NOT NULL, canonical_fingerprint TEXT NOT NULL, locator TEXT NOT NULL DEFAULT '',
+			occurrence_count INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(entity_id, revision_id, evidence_id),
+			FOREIGN KEY(entity_id, revision_id) REFERENCES graph_entity_versions(entity_id, revision_id) ON DELETE CASCADE
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_graph_entity_evidence_canonical ON graph_entity_evidence(tenant_id, workspace, canonical_kind, canonical_id)`,
+		`CREATE TABLE IF NOT EXISTS graph_edges (
+			id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL DEFAULT '', workspace TEXT NOT NULL,
+			source_entity_id TEXT NOT NULL, target_entity_id TEXT NOT NULL,
+			normalized_kind TEXT NOT NULL, external_kind TEXT NOT NULL DEFAULT '', trust TEXT NOT NULL,
+			record_version INTEGER NOT NULL DEFAULT 1, first_revision_id TEXT NOT NULL, last_revision_id TEXT NOT NULL,
+			created_at TEXT NOT NULL, updated_at TEXT NOT NULL, UNIQUE(workspace, id),
+			FOREIGN KEY(source_entity_id) REFERENCES graph_entities(id), FOREIGN KEY(target_entity_id) REFERENCES graph_entities(id)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_graph_edges_query ON graph_edges(tenant_id, workspace, trust, source_entity_id, target_entity_id)`,
+		`CREATE TABLE IF NOT EXISTS graph_edge_versions (
+			edge_id TEXT NOT NULL, revision_id TEXT NOT NULL, external_id TEXT NOT NULL,
+			description TEXT NOT NULL, weight REAL NOT NULL, PRIMARY KEY(edge_id, revision_id),
+			FOREIGN KEY(edge_id) REFERENCES graph_edges(id) ON DELETE CASCADE,
+			FOREIGN KEY(revision_id) REFERENCES graph_revisions(id) ON DELETE CASCADE
+		)`,
+		`CREATE TABLE IF NOT EXISTS graph_edge_evidence (
+			edge_id TEXT NOT NULL, revision_id TEXT NOT NULL, evidence_id TEXT NOT NULL,
+			tenant_id TEXT NOT NULL DEFAULT '', workspace TEXT NOT NULL, canonical_kind TEXT NOT NULL,
+			canonical_id TEXT NOT NULL, canonical_fingerprint TEXT NOT NULL, locator TEXT NOT NULL DEFAULT '',
+			occurrence_count INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(edge_id, revision_id, evidence_id),
+			FOREIGN KEY(edge_id, revision_id) REFERENCES graph_edge_versions(edge_id, revision_id) ON DELETE CASCADE
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_graph_edge_evidence_canonical ON graph_edge_evidence(tenant_id, workspace, canonical_kind, canonical_id)`,
+		`CREATE TABLE IF NOT EXISTS graph_communities (
+			id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL DEFAULT '', workspace TEXT NOT NULL,
+			revision_id TEXT NOT NULL, external_id TEXT NOT NULL, parent_id TEXT NOT NULL DEFAULT '', level INTEGER NOT NULL,
+			entity_count INTEGER NOT NULL DEFAULT 0, edge_count INTEGER NOT NULL DEFAULT 0,
+			source_count INTEGER NOT NULL DEFAULT 0, unresolved_count INTEGER NOT NULL DEFAULT 0,
+			UNIQUE(workspace, id), FOREIGN KEY(revision_id) REFERENCES graph_revisions(id) ON DELETE CASCADE
+		)`,
+		`CREATE TABLE IF NOT EXISTS graph_community_members (
+			community_id TEXT NOT NULL, revision_id TEXT NOT NULL, kind TEXT NOT NULL, target_id TEXT NOT NULL,
+			PRIMARY KEY(community_id, revision_id, kind, target_id),
+			FOREIGN KEY(community_id) REFERENCES graph_communities(id) ON DELETE CASCADE
+		)`,
+		`CREATE TABLE IF NOT EXISTS graph_reports (
+			id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL DEFAULT '', workspace TEXT NOT NULL,
+			community_id TEXT NOT NULL, revision_id TEXT NOT NULL, title TEXT NOT NULL, summary TEXT NOT NULL,
+			findings_json TEXT NOT NULL DEFAULT '[]', rank REAL NOT NULL DEFAULT 0, trust TEXT NOT NULL,
+			stale INTEGER NOT NULL DEFAULT 0, evidence_count INTEGER NOT NULL DEFAULT 0,
+			unresolved_count INTEGER NOT NULL DEFAULT 0, UNIQUE(workspace, id),
+			FOREIGN KEY(community_id) REFERENCES graph_communities(id) ON DELETE CASCADE,
+			FOREIGN KEY(revision_id) REFERENCES graph_revisions(id) ON DELETE CASCADE
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_graph_reports_query ON graph_reports(tenant_id, workspace, stale, trust, rank DESC)`,
+		`CREATE TABLE IF NOT EXISTS graph_reviews (
+			id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL DEFAULT '', workspace TEXT NOT NULL,
+			action TEXT NOT NULL DEFAULT '', target_kind TEXT NOT NULL, target_id TEXT NOT NULL, from_state TEXT NOT NULL, to_state TEXT NOT NULL,
+			expected_version INTEGER NOT NULL, reason TEXT NOT NULL DEFAULT '', reviewer_id TEXT NOT NULL, created_at TEXT NOT NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_graph_reviews_target ON graph_reviews(tenant_id, workspace, target_kind, target_id, created_at DESC)`,
+		`CREATE TABLE IF NOT EXISTS graph_feedback (
+			id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL DEFAULT '', workspace TEXT NOT NULL,
+			request_id TEXT NOT NULL, target_kind TEXT NOT NULL, target_id TEXT NOT NULL,
+			outcome TEXT NOT NULL, reason TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_graph_feedback_target ON graph_feedback(tenant_id, workspace, target_kind, target_id, created_at DESC)`,
+		`CREATE TABLE IF NOT EXISTS graph_deletion_tombstones (
+			tenant_id TEXT NOT NULL DEFAULT '', workspace TEXT NOT NULL, canonical_kind TEXT NOT NULL,
+			canonical_id TEXT NOT NULL, deleted_at TEXT NOT NULL,
+			PRIMARY KEY(tenant_id, workspace, canonical_kind, canonical_id)
+		)`,
+		`CREATE TABLE IF NOT EXISTS graph_repair_queue (
+			tenant_id TEXT NOT NULL DEFAULT '', workspace TEXT NOT NULL, canonical_kind TEXT NOT NULL,
+			canonical_id TEXT NOT NULL, affected_entities INTEGER NOT NULL DEFAULT 0,
+			affected_edges INTEGER NOT NULL DEFAULT 0, affected_reports INTEGER NOT NULL DEFAULT 0,
+			deadline_at TEXT NOT NULL, state TEXT NOT NULL DEFAULT 'queued',
+			PRIMARY KEY(tenant_id, workspace, canonical_kind, canonical_id)
+		)`,
+	}
+	for _, statement := range statements {
+		if _, err := s.db.ExecContext(ctx, statement); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func migrateGraphControlPlane(ctx context.Context, s *Store) error {
+	statements := []string{
+		`CREATE TABLE IF NOT EXISTS graph_configurations (
+			id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL DEFAULT '', workspace TEXT NOT NULL,
+			version INTEGER NOT NULL, enabled INTEGER NOT NULL DEFAULT 0,
+			adapter_name TEXT NOT NULL, adapter_version TEXT NOT NULL, index_method TEXT NOT NULL,
+			projection_version TEXT NOT NULL, artifact_schema_version TEXT NOT NULL,
+			prompt_fingerprint TEXT NOT NULL, model_route TEXT NOT NULL,
+			active_revision_id TEXT NOT NULL DEFAULT '', previous_revision_id TEXT NOT NULL DEFAULT '',
+			created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+			UNIQUE(workspace, version), UNIQUE(workspace, id)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_graph_configurations_scope ON graph_configurations(tenant_id, workspace, enabled, version DESC)`,
+		`CREATE TABLE IF NOT EXISTS graph_revisions (
+			id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL DEFAULT '', workspace TEXT NOT NULL,
+			configuration_id TEXT NOT NULL, base_revision_id TEXT NOT NULL DEFAULT '', state TEXT NOT NULL,
+			cutoff_sequence INTEGER NOT NULL DEFAULT 0, cutoff_event_time TEXT NOT NULL DEFAULT '', cutoff_digest TEXT NOT NULL DEFAULT '',
+			projection_hash TEXT NOT NULL DEFAULT '', artifact_hash TEXT NOT NULL DEFAULT '',
+			previous_revision_id TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+			UNIQUE(workspace, configuration_id, id),
+			FOREIGN KEY(configuration_id) REFERENCES graph_configurations(id) ON DELETE CASCADE
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_graph_revisions_scope_state ON graph_revisions(tenant_id, workspace, configuration_id, state, updated_at DESC)`,
+		`CREATE TABLE IF NOT EXISTS graph_jobs (
+			id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL DEFAULT '', workspace TEXT NOT NULL,
+			configuration_id TEXT NOT NULL, revision_id TEXT NOT NULL, idempotency_key TEXT NOT NULL,
+			state TEXT NOT NULL, attempt INTEGER NOT NULL DEFAULT 0, lease_owner TEXT NOT NULL DEFAULT '',
+			lease_expires_at TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+			UNIQUE(workspace, configuration_id, idempotency_key),
+			FOREIGN KEY(configuration_id) REFERENCES graph_configurations(id) ON DELETE CASCADE
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_graph_jobs_claim ON graph_jobs(tenant_id, workspace, state, lease_expires_at, created_at)`,
+		`CREATE TABLE IF NOT EXISTS graph_change_journal (
+			id TEXT PRIMARY KEY, workspace TEXT NOT NULL, subject_kind TEXT NOT NULL, subject_id TEXT NOT NULL,
+			subject_fingerprint TEXT NOT NULL, projection_version TEXT NOT NULL, configuration_version TEXT NOT NULL,
+			change_kind TEXT NOT NULL, occurred_at TEXT NOT NULL, processed_revision_id TEXT NOT NULL DEFAULT '',
+			UNIQUE(workspace, subject_kind, subject_id, subject_fingerprint, projection_version, configuration_version)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_graph_change_journal_pending ON graph_change_journal(workspace, processed_revision_id, occurred_at)`,
+	}
+	for _, statement := range statements {
+		if _, err := s.db.ExecContext(ctx, statement); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func migrateSolutionActivityReview(ctx context.Context, s *Store) error {

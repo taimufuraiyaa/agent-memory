@@ -67,6 +67,7 @@ export type HostedMemory = {
   type: string
   content: string
   source_kind?: string
+  workspace_id?: string
   updated_at?: string
   workspace?: string
   confidence?: number
@@ -74,6 +75,14 @@ export type HostedMemory = {
   score?: number
   match_reason?: string
   source?: { file_path?: string; note_path?: string; type?: string }
+}
+
+export type HostedGraphRecallResponse = {
+  request_id: string
+  graph_route: GraphRouteDecision
+  graph_context?: GraphRecallContext
+  basic_memories: HostedMemory[]
+  canonical_memories?: HostedMemory[]
 }
 
 export type HostedProjectMemoryResult = { memory: HostedMemory; score: number; explanation?: string }
@@ -421,3 +430,50 @@ export function importHostedBundle(connection: HostedConnection, file: File, pas
 export function getHostedImport(connection: HostedConnection, importID: string): Promise<HostedImportResult> {
   return hostedRequest(connection, `/v1/imports/${encodeURIComponent(importID)}`)
 }
+
+function hostedGraphQuery(connection: HostedConnection, configurationId?: string): string {
+  const query = new URLSearchParams({ workspace_id: connection.workspace })
+  if (configurationId) query.set('configuration_id', configurationId)
+  return query.toString()
+}
+
+export function getHostedGraphReadiness(connection: HostedConnection, signal?: AbortSignal): Promise<GraphReadiness> {
+  return hostedRequest(connection, `/v1/graph-index/readiness?${hostedGraphQuery(connection)}`, { signal })
+}
+
+export function getHostedGraphStatus(connection: HostedConnection, signal?: AbortSignal): Promise<GraphStatus> {
+  return hostedRequest(connection, `/v1/graph-index/status?${hostedGraphQuery(connection)}`, { signal })
+}
+
+export function getHostedGraphSnapshot(connection: HostedConnection, signal?: AbortSignal): Promise<GraphSnapshot> {
+  return hostedRequest(connection, `/v1/graph-index/explorer?${hostedGraphQuery(connection)}`, { signal })
+}
+
+export function recallHostedGraph(connection: HostedConnection, query: string, options: GraphAskOptions, signal?: AbortSignal): Promise<HostedGraphRecallResponse> {
+  return hostedRequest(connection, '/v1/graph-index/recall', {
+    method: 'POST',
+    signal,
+    body: JSON.stringify({
+      workspace_id: connection.workspace,
+      query,
+      mode: options.mode,
+      required: Boolean(options.required),
+      allow_stale: Boolean(options.allowStale),
+      limit: 50,
+    }),
+  })
+}
+
+export async function operateHostedGraph(connection: HostedConnection, configurationId: string, action: GraphOperationAction, expectedRevision?: string, jobId?: string): Promise<GraphStatus> {
+  const result = await hostedRequest<{ status: GraphStatus }>(connection, '/v1/graph-index/operations', { method: 'POST', body: JSON.stringify({ workspace_id: connection.workspace, configuration_id: configurationId, action, expected_revision: expectedRevision || '', job_id: jobId || '', idempotency_key: crypto.randomUUID() }) })
+  return result.status
+}
+
+export async function reviewHostedGraph(connection: HostedConnection, input: GraphReviewInput): Promise<void> {
+  await hostedRequest(connection, '/v1/graph-index/review', { method: 'POST', body: JSON.stringify({ scope: { workspace_id: connection.workspace }, action: input.action, target_kind: input.targetKind, target_id: input.targetId, from: input.from, to: input.to, expected_version: input.expectedVersion, reason: input.reason || '' }) })
+}
+
+export async function submitHostedGraphFeedback(connection: HostedConnection, requestId: string, targetKind: string, targetId: string, outcome: string, reason?: string): Promise<void> {
+  await hostedRequest(connection, '/v1/graph-index/feedback', { method: 'POST', body: JSON.stringify({ scope: { workspace_id: connection.workspace }, request_id: requestId, target_kind: targetKind, target_id: targetId, outcome, reason: reason || '', created_at: new Date().toISOString() }) })
+}
+import type { GraphAskOptions, GraphOperationAction, GraphReadiness, GraphRecallContext, GraphReviewInput, GraphRouteDecision, GraphSnapshot, GraphStatus } from './knowledgeGateway'

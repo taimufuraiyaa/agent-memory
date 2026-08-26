@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Alert, Badge, Button, Card, FileInput, Grid, Group, NavLink, Paper, PasswordInput, Stack, Tabs, Text, Title } from '@mantine/core'
-import { IconActivity, IconAdjustments, IconDatabase, IconDownload, IconGauge, IconKey, IconServer, IconSettings, IconShieldLock, IconStethoscope, IconUsers, IconWand } from '@tabler/icons-react'
+import { IconActivity, IconAdjustments, IconDatabase, IconDownload, IconGauge, IconKey, IconShare, IconServer, IconSettings, IconShieldLock, IconStethoscope, IconUsers, IconWand } from '@tabler/icons-react'
 import type { KnowledgeCapability, KnowledgeGateway } from '../../lib/knowledgeGateway'
 import { getStats, listBenchmarkRuns, type BenchmarkRun, type DashboardStats, type SchedulerRunHistory, type SchedulerSummary, type SkillInfo } from '../../lib/api'
 import { BenchmarkPanel } from '../BenchmarkPanel'
@@ -10,12 +10,14 @@ import { DiagnosticsPanel } from '../DiagnosticsPanel'
 import { LifecyclePanel } from '../LifecyclePanel'
 import { MigrationPanel } from '../MigrationPanel'
 import { SkillsPanel } from '../SkillsPanel'
+import { GraphSettings } from './GraphSettings'
 
 type SettingsSection = 'account' | 'data' | 'access' | 'system'
 type SystemTool = { id: string; label: string; description: string; runtimes: Array<KnowledgeGateway['runtime']>; capability?: KnowledgeCapability; icon: typeof IconSettings }
 
 export const systemTools: SystemTool[] = [
   { id: 'diagnostics', label: 'Diagnostics', description: 'Workspace health, storage, and retrieval signals.', runtimes: ['standalone', 'hosted'], icon: IconStethoscope },
+  { id: 'graph', label: 'Graph index', description: 'Derived-index readiness, processing, provenance, and review.', runtimes: ['standalone', 'hosted'], capability: 'graph', icon: IconShare },
   { id: 'lifecycle', label: 'Lifecycle', description: 'Decay, promotion, and scheduled maintenance history.', runtimes: ['standalone'], capability: 'lifecycle', icon: IconActivity },
   { id: 'benchmark', label: 'Benchmark', description: 'Retrieval quality and economic comparison runs.', runtimes: ['standalone'], icon: IconGauge },
   { id: 'clients', label: 'Clients', description: 'Agent client profiles and tool exposure.', runtimes: ['standalone'], capability: 'clients', icon: IconUsers },
@@ -64,6 +66,7 @@ function SystemToolPanel({ id, workspaceId, gateway }: { id: string; workspaceId
   }, [gateway, id, workspaceId])
 
   if (id === 'diagnostics') return <>{rawOpen ? <Paper withBorder p="md"><Button variant="default" onClick={() => setRawOpen(false)}>Close raw payload</Button><pre>{JSON.stringify(stats, null, 2)}</pre></Paper> : <DiagnosticsPanel workspaceLabel={workspaceId} stats={stats} statsErr={error} healthState={{ tone: error ? 'bad' : stats ? 'good' : 'warn', label: error ? 'Unavailable' : stats ? 'Healthy' : 'Loading', detail: error || 'Workspace diagnostics' }} onOpenRaw={() => setRawOpen(true)} />}</>
+  if (id === 'graph') return <GraphSettings gateway={gateway} workspaceId={workspaceId} />
   if (id === 'lifecycle') return <LifecyclePanel workspace={workspaceId} scheduler={scheduler} history={history} busy={busy} error={error} />
   if (id === 'benchmark') return <BenchmarkPanel workspace={workspaceId} runs={runs} busy={busy} error={error} />
   if (id === 'clients') return <ClientsPanel clientProfiles={gateway} />

@@ -2,6 +2,8 @@ package source
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/taimufuraiyaa/agent-memory/internal/ingestion"
+	"github.com/taimufuraiyaa/agent-memory/internal/saas/outbox"
 )
 
 func extractionJobKey(sourceID string, version int64) string {
@@ -73,13 +76,13 @@ func (r *PostgresRepository) PublishExtraction(ctx context.Context, claim Extrac
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	var publishedAt *time.Time
-	var sourceState string
+	var sourceState, workspaceID string
 	err = tx.QueryRow(ctx, `
-		SELECT v.published_at,s.state
+		SELECT v.published_at,s.state,s.workspace_id::text
 		FROM saas_source_versions v
 		JOIN saas_sources s ON s.tenant_id=v.tenant_id AND s.id=v.source_id
 		WHERE v.tenant_id=$1 AND v.source_id=$2 AND v.version=$3
-		FOR UPDATE OF v,s`, claim.TenantID, claim.SourceID, claim.Version).Scan(&publishedAt, &sourceState)
+		FOR UPDATE OF v,s`, claim.TenantID, claim.SourceID, claim.Version).Scan(&publishedAt, &sourceState, &workspaceID)
 	if err != nil {
 		return err
 	}
@@ -141,6 +144,18 @@ func (r *PostgresRepository) PublishExtraction(ctx context.Context, claim Extrac
 			VALUES($1,$2,$3,'1.0','source',$4,$5,$6,$6)`, claim.TenantID, uuid.NewString(), eventType, claim.SourceID, payload, at); err != nil {
 			return err
 		}
+	}
+	projectionDigest := sha256.New()
+	for _, passage := range extraction.Passages {
+		_, _ = projectionDigest.Write([]byte(passage.Fingerprint))
+		_, _ = projectionDigest.Write([]byte{0})
+	}
+	if err := outbox.AppendGraphChangeEventsTx(ctx, tx, outbox.GraphChangeInput{
+		TenantID: claim.TenantID, WorkspaceID: workspaceID, SubjectKind: "source", SubjectID: claim.SourceID,
+		SubjectFingerprint: "sha256:" + hex.EncodeToString(projectionDigest.Sum(nil)), ChangeKind: "publish",
+		OccurredAt: at,
+	}); err != nil {
+		return fmt.Errorf("append source graph change event: %w", err)
 	}
 	if err := sourceAuditWithType(ctx, tx, claim.TenantID, "system", "source-extractor", extractionJobKey(claim.SourceID, claim.Version), claim.SourceID, "source.publish_passages", claim.SourceID, at); err != nil {
 		return err

@@ -1,9 +1,11 @@
 APP := agent-memory
 BIN_DIR := bin
 
-.PHONY: help build test integration-test lint clean setup test-verbose test-coverage bench bench-mem bench-cpu fmt vet clean-all install-dev build-dashboard embed-dashboard build-with-dashboard hygiene-clean contracts-check saas-build saas-dev-up saas-dev-down saas-local-up saas-floci-up saas-floci-oidc-up saas-local-down saas-local-profile-test saas-local-alpha-gate saas-local-alpha-gate-test saas-smoke saas-upload-smoke saas-lifecycle-script-test saas-integration-test saas-object-policy-test saas-kubernetes-check saas-release-script-test saas-platform-inventory-check saas-platform-plan-check saas-platform-change-check saas-platform-exposure-check saas-platform-preflight saas-platform-rollback-verify saas-platform-probe saas-launch-state-collect saas-operational-safety-check saas-identity-safety-check saas-parity-evidence-check saas-retrieval-risk-check saas-retrieval-load-check saas-alert-evidence-check saas-game-day-evidence-check saas-alpha-evidence-check saas-blocker-evidence-check saas-security-closure-check saas-migration-cohort-check saas-migration-acceptance-check saas-launch-scope-check saas-privacy-review-check saas-external-integration-check saas-recovery-exit-check saas-program-approval-check saas-notice-readiness-check saas-private-beta-approval-check saas-billing-reconciliation-check saas-support-evidence-check saas-beta-slo-check saas-beta-operations-check saas-beta-integrity-check saas-launch-assets-check saas-public-beta-gate-check saas-approval-export-check saas-ga-scorecard-check saas-ga-drills-check saas-ga-approval-export-check saas-mvp-readiness-check saas-capacity-evidence-check saas-staging-journey-collect saas-staging-format-collect saas-object-custody-check saas-isolation-review-check saas-postgres-restore-check saas-retention-inventory-collect saas-backup-expiry-check saas-external-evidence-check
+.PHONY: help build test integration-test lint clean setup test-verbose test-coverage bench bench-mem bench-cpu fmt vet clean-all install-dev build-dashboard embed-dashboard build-with-dashboard hygiene-clean contracts-check graphrag-adapter-supply-chain graphrag-adapter-container-test saas-build saas-dev-up saas-dev-down saas-local-up saas-floci-up saas-floci-oidc-up saas-local-down saas-local-profile-test saas-local-alpha-gate saas-local-alpha-gate-test saas-smoke saas-upload-smoke saas-lifecycle-script-test saas-integration-test saas-object-policy-test saas-kubernetes-check saas-release-script-test saas-platform-inventory-check saas-platform-plan-check saas-platform-change-check saas-platform-exposure-check saas-platform-preflight saas-platform-rollback-verify saas-platform-probe saas-launch-state-collect saas-operational-safety-check saas-identity-safety-check saas-parity-evidence-check saas-retrieval-risk-check saas-retrieval-load-check saas-alert-evidence-check saas-game-day-evidence-check saas-alpha-evidence-check saas-blocker-evidence-check saas-security-closure-check saas-migration-cohort-check saas-migration-acceptance-check saas-launch-scope-check saas-privacy-review-check saas-external-integration-check saas-recovery-exit-check saas-program-approval-check saas-notice-readiness-check saas-private-beta-approval-check saas-billing-reconciliation-check saas-support-evidence-check saas-beta-slo-check saas-beta-operations-check saas-beta-integrity-check saas-launch-assets-check saas-public-beta-gate-check saas-approval-export-check saas-ga-scorecard-check saas-ga-drills-check saas-ga-approval-export-check saas-mvp-readiness-check saas-capacity-evidence-check saas-staging-journey-collect saas-staging-format-collect saas-object-custody-check saas-isolation-review-check saas-postgres-restore-check saas-retention-inventory-collect saas-backup-expiry-check saas-external-evidence-check
 
 .DEFAULT_GOAL := help
+
+.PHONY: observability-validate
 
 help: ## Show this help message
 	@echo 'Usage: make [target]'
@@ -65,6 +67,40 @@ integration-test: ## Run integration parity, privacy, benchmark, MCP, and dashbo
 contracts-check: ## Validate hosted API and event contracts
 	go test ./internal/contracts
 
+graphrag-adapter-supply-chain: ## Generate and verify GraphRAG adapter SBOM, licenses, vulnerabilities, and signature
+	$(MAKE) -C tools/graphrag-adapter supply-chain
+
+graphrag-adapter-container-test: ## Verify the frozen non-root GraphRAG adapter image
+	$(MAKE) -C tools/graphrag-adapter container-test
+
+observability-validate: ## Validate content-safe GraphRAG metrics, alert routes, and dashboard contracts
+	go test ./internal/observability -run 'GraphObservabilityConfiguration|GraphMetrics'
+
+.PHONY: graphrag-evaluate
+graphrag-evaluate: ## Run the deterministic GraphRAG quality, latency, grounding, isolation, and cost gate
+	go test ./internal/evaluation -run 'GraphRAG' -count=1
+	go run ./tools/evaluation/graphrag-report
+
+.PHONY: graphrag-chaos-test graphrag-security-test graphrag-recovery-test graphrag-capacity-test
+graphrag-chaos-test: ## Exercise GraphRAG provider, worker, queue, replay, and credential failure paths
+	$(MAKE) -C tools/graphrag-certification chaos
+
+graphrag-security-test: ## Exercise GraphRAG validation, isolation, privacy, and static-analysis controls
+	$(MAKE) -C tools/graphrag-certification security
+
+graphrag-recovery-test: ## Exercise GraphRAG deletion, canonical-only rebuild, and restore controls
+	$(MAKE) -C tools/graphrag-certification recovery
+
+graphrag-capacity-test: ## Exercise GraphRAG large-corpus latency and pre-model backpressure controls
+	$(MAKE) -C tools/graphrag-certification capacity
+
+.PHONY: graphrag-upgrade-certify graphrag-production-gate
+graphrag-upgrade-certify: ## Fail-closed GraphRAG dependency upgrade, canary, signature, and rollback certification
+	sh tools/graphrag-certification/upgrade.sh
+
+graphrag-production-gate: ## Verify internal controls plus signed GraphRAG production certification and approvals
+	sh tools/graphrag-certification/production-gate.sh
+
 saas-build: contracts-check ## Build the hosted edge, API, worker, reconciler, and migration images
 	docker compose -f deploy/saas/compose.yaml build edge api worker reconciler migrate
 
@@ -113,7 +149,7 @@ saas-upload-smoke: ## Exercise the complete local SaaS lifecycle across every re
 saas-lifecycle-script-test: ## Validate the full-lifecycle smoke contract without starting services
 	scripts/tests/saas-lifecycle-smoke_test.sh
 
-saas-kubernetes-check: ## Validate hosted Kubernetes isolation and immutable workload policy
+saas-kubernetes-check saas-kubernetes-validate: ## Validate hosted Kubernetes isolation and immutable workload policy
 	scripts/validate-saas-kubernetes.sh
 
 saas-release-script-test: ## Verify migration-before-rollout and automatic rollback behavior

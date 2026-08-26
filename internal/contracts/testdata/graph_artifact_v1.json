@@ -1,0 +1,28 @@
+{
+  "contract_version": "graph-adapter/v1",
+  "artifact_schema_version": "graph-artifact/v1",
+  "scope": {"tenant_id": "tenant-a", "workspace_id": "workspace-a"},
+  "configuration_id": "configuration-1",
+  "job_id": "job-1",
+  "revision_id": "revision-1",
+  "adapter_name": "agent-memory-graphrag",
+  "adapter_version": "1.0.0",
+  "graphrag_version": "3.1.2",
+  "python_version": "3.13.5",
+  "environment_fingerprint": "sha256:locked-environment",
+  "input_manifest_hash": "sha256:projection-manifest",
+  "configuration_fingerprint": "sha256:configuration",
+  "prompt_fingerprint": "sha256:prompts",
+  "index_method": "standard",
+  "mode": "full",
+  "outputs": [
+    {"name": "entities.jsonl", "kind": "entities", "required": true, "bytes": 128, "rows": 3, "schema_fingerprint": "sha256:entity-schema", "content_hash": "sha256:entities"},
+    {"name": "relationships.jsonl", "kind": "relationships", "required": true, "bytes": 128, "rows": 2, "schema_fingerprint": "sha256:relationship-schema", "content_hash": "sha256:relationships"}
+  ],
+  "models": ["index-text-primary"],
+  "usage": {"requests": 4, "input_tokens": 1200, "output_tokens": 300, "estimated_cost_micros": 4200, "cache_hits": 0, "retries": 0},
+  "duration_millis": 42000,
+  "status": "completed",
+  "completed_at": "2026-08-26T10:02:00Z",
+  "attestation": {"producer_identity": "agent-memory-graphrag-worker", "build_digest": "sha256:image", "signature": "sigstore:bundle"}
+}

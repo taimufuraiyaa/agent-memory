@@ -44,6 +44,9 @@ type Service struct {
 	DeploymentProfile      *deploymentprofile.Store
 	LocalLLMStore          *localllm.Store
 	LocalLLMChecker        *localllm.Checker
+	// GraphOperations is optional and primarily supports embedding/tests. When
+	// nil, handlers bind a controller to the resolved workspace store.
+	GraphOperations application.GraphOperationController
 
 	mu             sync.RWMutex
 	stores         map[string]*workspaceAssets
@@ -323,6 +326,12 @@ func NewMux(svc *Service) *http.ServeMux {
 
 	mux.HandleFunc("/api/v1/dashboard", workspaceDashboardHandler(svc))
 	mux.HandleFunc("/api/v1/graph", workspaceGraphHandler(svc))
+	mux.HandleFunc("/api/v1/graph-index/readiness", graphIndexReadinessHandler(svc))
+	mux.HandleFunc("/api/v1/graph-index/status", graphIndexStatusHandler(svc))
+	mux.HandleFunc("/api/v1/graph-index/operations", graphIndexOperationHandler(svc))
+	mux.HandleFunc("/api/v1/graph-index/explorer", graphExplorerHandler(svc))
+	mux.HandleFunc("/api/v1/graph-index/review", graphReviewHandler(svc))
+	mux.HandleFunc("/api/v1/graph-index/feedback", graphFeedbackHandler(svc))
 	mux.HandleFunc("/api/v1/stats", workspaceStatsHandler(svc))
 	mux.HandleFunc("/api/v1/advisor", advisorHandler(svc))
 	mux.HandleFunc("/api/v1/requests/feedback", requestsFeedbackHandler(svc))

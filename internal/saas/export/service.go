@@ -2,6 +2,7 @@
 package export
 
 import (
+	"bytes"
 	"context"
 	"crypto/aes"
 	"crypto/cipher"
@@ -46,6 +47,7 @@ type Bundle struct {
 	Policies            []map[string]any `json:"policies"`
 	SourceBytesIncluded bool             `json:"source_bytes_included"`
 	SourceObjects       []SourceObject   `json:"source_objects,omitempty"`
+	GraphMetadata       json.RawMessage  `json:"graph_metadata,omitempty"`
 	Manifest            BundleManifest   `json:"manifest"`
 }
 type SourceObject struct {
@@ -91,12 +93,54 @@ func (b *Bundle) SealManifest() error {
 	payload, err := json.Marshal(struct {
 		Memories, Notes, Sources, SourceVersions, Lineage, Attestations, Policies []map[string]any
 		SourceObjects                                                             []SourceObject
-	}{b.Memories, b.Notes, b.Sources, b.SourceVersions, b.Lineage, b.Attestations, b.Policies, b.SourceObjects})
+		GraphMetadata                                                             json.RawMessage
+	}{b.Memories, b.Notes, b.Sources, b.SourceVersions, b.Lineage, b.Attestations, b.Policies, b.SourceObjects, b.GraphMetadata})
 	if err != nil {
 		return err
 	}
 	sum := sha256.Sum256(payload)
-	b.Manifest = BundleManifest{Algorithm: "sha256", PayloadSHA256: hex.EncodeToString(sum[:]), Counts: map[string]int{"memories": len(b.Memories), "notes": len(b.Notes), "sources": len(b.Sources), "source_versions": len(b.SourceVersions), "lineage": len(b.Lineage), "attestations": len(b.Attestations), "policies": len(b.Policies), "source_objects": len(b.SourceObjects)}}
+	graphCount := 0
+	if len(b.GraphMetadata) > 0 {
+		graphCount = 1
+	}
+	b.Manifest = BundleManifest{Algorithm: "sha256", PayloadSHA256: hex.EncodeToString(sum[:]), Counts: map[string]int{"memories": len(b.Memories), "notes": len(b.Notes), "sources": len(b.Sources), "source_versions": len(b.SourceVersions), "lineage": len(b.Lineage), "attestations": len(b.Attestations), "policies": len(b.Policies), "source_objects": len(b.SourceObjects), "graph_metadata": graphCount}}
+	return nil
+}
+
+// AttachGraphMetadata adds explicitly authorized normalized graph metadata to a
+// canonical export. Native GraphRAG artifact locations are rejected because
+// they are internal, rebuildable cache custody rather than customer data.
+func (b *Bundle) AttachGraphMetadata(authorized bool, encoded []byte) error {
+	if !authorized {
+		return errors.New("graph metadata export is not authorized")
+	}
+	var envelope struct {
+		SchemaVersion   string            `json:"schema_version"`
+		NativeArtifacts []json.RawMessage `json:"native_artifacts"`
+	}
+	decoder := json.NewDecoder(bytes.NewReader(encoded))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&envelope); err != nil {
+		// The complete graph export has additional owned fields. Decode those as
+		// a map after strict top-level JSON validation and inspect the two policy
+		// fields without coupling hosted export to portable package types.
+		var raw map[string]json.RawMessage
+		if json.Unmarshal(encoded, &raw) != nil {
+			return errors.New("graph metadata export is invalid")
+		}
+		if err := json.Unmarshal(raw["schema_version"], &envelope.SchemaVersion); err != nil {
+			return errors.New("graph metadata schema is invalid")
+		}
+		if value, ok := raw["native_artifacts"]; ok && string(value) != "null" {
+			if err := json.Unmarshal(value, &envelope.NativeArtifacts); err != nil {
+				return errors.New("graph native artifact metadata is invalid")
+			}
+		}
+	}
+	if envelope.SchemaVersion != "agent-memory-graph-metadata/v1" || len(envelope.NativeArtifacts) != 0 {
+		return errors.New("graph export contains unsupported or native artifact metadata")
+	}
+	b.GraphMetadata = append(json.RawMessage(nil), encoded...)
 	return nil
 }
 func (b Bundle) VerifyManifest() error {
