@@ -1,12 +1,12 @@
 {
   "name": "Memory Consolidation Gate",
   "version": "2.1.0",
-  "description": "agent-memory operating contract: v4. Consolidate durable knowledge and solution progress after every agent turn.",
+  "description": "Hippocampus consolidation: write durable knowledge and compact the session after every agent turn. The agent always saves what it learned — it does not decide whether to write.",
   "when": {
     "type": "agentStop"
   },
   "then": {
     "type": "askAgent",
-    "prompt": "Review what happened in this session. Store durable What and Where facts with agent-memory write. Account for What, Where, and When; use literal N/A with a concise reason for an optional dimension with no applicable stored value. If a solution episode is active, append a final agent-memory work step, checkpoint if continuation is needed, and transition it to the truthful terminal status. If the result is verified and reusable, run agent-memory work promote. Always run agent-memory session-end --transcript \"<one paragraph summary>\" --format json. Do not store private chain-of-thought; store only concise rationale summaries."
+    "prompt": "Review what happened in this session and do the following:\n1. Identify anything worth keeping using this filter:\n   - Structural delta: new service, integration, or data flow discovered\n   - Hidden why: non-obvious design decision or trade-off\n   - Interface contract: API schema, data model, or protocol change\n   - Systemic insight: complex logic spanning multiple files\n   - ANY failure: always write failures, no filter applies\n2. For each qualifying item, write it with the correct type:\n   - Fact about the system -> agent-memory write --type semantic --content \"<fact>\"\n   - Convention or repeatable process -> agent-memory write --type procedural --content \"<steps>\"\n   - Attempt result (success or failure) -> agent-memory write --type outcome --content \"<what was tried> (result: success|failure|partial, approach: <how>, reason: <why>)\"\n3. Proactively package reusable scripts, grep queries, workflows, or complex setup/learnings into a custom agent skill under .agents/skills/ (using agent-memory distill --name <name> --description \"<description>\" or manual packaging) if they are valuable and highly likely to be reused. Do NOT wait for the user to ask.\n4. Run session-end compaction: agent-memory session-end --transcript \"<one paragraph summary of this session>\" --format json\nDo not skip step 4 even if nothing was written in step 2 or 3."
   }
 }

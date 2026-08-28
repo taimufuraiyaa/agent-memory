@@ -29,20 +29,8 @@
 ## agent-memory (MANDATORY)
 
 workspace: agent-memory
-contract: agent-memory operating contract: v4
-
-Memory dimensions:
-- **What**: facts, outcomes, and artifacts learned during work.
-- **Where**: source paths, commands, URLs, memory IDs, and other locators.
-- **When**: session/episode ordering, checkpoints, timestamps, and terminal status.
-- **How**: safe action, observation, decision, concise rationale-summary, result, and handoff steps in a bounded solution episode.
-- **Feedback**: honest retrieval usefulness and corrective outcomes.
-
-Do not store private chain-of-thought. Store only concise rationale summaries needed to understand or repeat the work.
 
 Always use `agent-memory` as the memory system:
-- Run a focused memory search for the key terms and entities you're about to research.
-- Run a recall for the current task only when the task continues previous work or search is weak. Directly escalate for `continue`, `resume`, or `what were we doing`.
 - Before doing any self-research: run memory `search` first. Run task `recall` only when the task is about continuing previous work, or when search returns no useful / weak / insufficient results.
 - After running search or recall: you MUST immediately submit a feedback score from 0 (useless) to 5 (extremely helpful) using command `agent-memory feedback --request-id <request_id> --score <0-5> --reason "<explanation>" --useful-count <useful_memories_count> --total-count <total_memories_retrieved>`. You MUST score honestly and objectively. If the score is below 4, you MUST provide a detailed explanation.
 - If a query receives a low score (0 to 3), proceed to investigate. After finding the correct information:
@@ -51,9 +39,6 @@ Always use `agent-memory` as the memory system:
     1. Write the new corrected memory first using `agent-memory write` and copy the new memory ID.
     2. Link the old incorrect memory to the new one by running `agent-memory feedback --memory-id <old_id> --outcome rejected --reconsolidation-action superseded --successor-memory-id <new_id> --reason "<explanation>"`.
 - After learning durable new knowledge: write it to memory immediately.
-- For non-trivial work: start a solution episode before substantial investigation or implementation. Append a step after each meaningful action, decision, or result; checkpoint during long work; transition the episode to a terminal status; then run session-end.
-- Before ending an episode, account for What, Where, and When. When an optional dimension has no applicable stored value, surface the literal `N/A` with a concise reason instead of silently omitting it.
-- For a future how-oriented question: run solution-path recall before repeating research. Promote only verified, reusable solution-path knowledge.
 - When writing a memory: Choose up to three explicit keywords: names, terms, or helpful locators a human would search later. Do not copy the full content into keywords.
 - You MUST proactively package reusable scripts, grep queries, workflows, or complex setup/learnings into a custom agent skill under `.agents/skills/` (using `agent-memory distill` or manual packaging) if they are valuable and highly likely to be reused. Do NOT wait for the user to ask; proactively distill skills once a workflow or learning pattern is successfully validated.
   - Do NOT use generic, numbered, or index-based filenames (like `part1.md`, `workflows_part1.md`).
@@ -71,9 +56,3 @@ Commands:
 - `agent-memory write --type procedural --content "<repeatable steps/checklist>"`
 - `agent-memory write --type outcome --content "<what you tried> (result: success|failure|partial, approach: <how>, reason: <why>)"`
 - `agent-memory session-end --transcript "<session summary or transcript>" --format json`
-- `agent-memory work start --goal "<goal>" --session "<session_id>" --principal "<principal_id>" --client "<client_id>"`
-- `agent-memory work step --episode "<episode_id>" --principal "<principal_id>" --kind <action|observation|decision|result> --status <running|completed|failed> --summary "<safe summary>"`
-- `agent-memory work checkpoint --episode "<episode_id>" --principal "<principal_id>" --goal "<goal>" --next-action "<next action>"`
-- `agent-memory work end --episode "<episode_id>" --principal "<principal_id>" --status <completed|partial|abandoned|cancelled>`
-- `agent-memory work recall --task "<how-oriented task>" --principal "<principal_id>"`
-- `agent-memory work promote --episode "<episode_id>" --summary "<summary_id>" --principal "<principal_id>" --memory-type procedural`
