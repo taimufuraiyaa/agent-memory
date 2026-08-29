@@ -204,9 +204,11 @@ type LocalProjectSystemService interface {
 }
 
 type LocalProjectSkillLifecycleView struct {
-	Skill      core.LogicalSkill     `json:"skill"`
-	Revisions  []core.SkillRevision  `json:"revisions"`
-	Activation *core.SkillActivation `json:"activation,omitempty"`
+	Skill           core.LogicalSkill          `json:"skill"`
+	Revisions       []core.SkillRevision       `json:"revisions"`
+	Evaluations     []core.SkillEvaluationRun  `json:"evaluations"`
+	PolicyDecisions []core.SkillPolicyDecision `json:"policy_decisions"`
+	Activation      *core.SkillActivation      `json:"activation,omitempty"`
 }
 type LocalProjectSkillLifecycleInput struct {
 	Workspace string          `json:"workspace"`

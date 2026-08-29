@@ -739,6 +739,35 @@ func (s *Store) GetSkillEvaluationRun(ctx context.Context, workspace, runID stri
 	return run, run.Validate()
 }
 
+func (s *Store) ListSkillEvaluationRuns(ctx context.Context, workspace, skillID string, limit int) ([]core.SkillEvaluationRun, error) {
+	limit = boundedSkillLifecycleLimit(limit)
+	rows, err := s.db.QueryContext(ctx, `SELECT id FROM skill_evaluation_runs WHERE workspace=? AND skill_id=? ORDER BY completed_at DESC,id DESC LIMIT ?`, strings.TrimSpace(workspace), strings.TrimSpace(skillID), limit)
+	if err != nil {
+		return nil, err
+	}
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	result := make([]core.SkillEvaluationRun, 0, len(ids))
+	for _, id := range ids {
+		run, loadErr := s.GetSkillEvaluationRun(ctx, workspace, id)
+		if loadErr != nil {
+			return nil, loadErr
+		}
+		result = append(result, run)
+	}
+	return result, nil
+}
+
 func (s *Store) CreateSkillPolicyDecision(ctx context.Context, decision core.SkillPolicyDecision) error {
 	if err := decision.Validate(); err != nil {
 		return err
@@ -760,6 +789,45 @@ func (s *Store) GetSkillPolicyDecision(ctx context.Context, workspace, decisionI
 	_ = json.Unmarshal([]byte(reasons), &decision.ReasonCodes)
 	decision.DecidedAt, _ = time.Parse(time.RFC3339Nano, decided)
 	return decision, decision.Validate()
+}
+
+func (s *Store) ListSkillPolicyDecisions(ctx context.Context, workspace, skillID string, limit int) ([]core.SkillPolicyDecision, error) {
+	limit = boundedSkillLifecycleLimit(limit)
+	rows, err := s.db.QueryContext(ctx, `SELECT id FROM skill_policy_decisions WHERE workspace=? AND skill_id=? ORDER BY decided_at DESC,id DESC LIMIT ?`, strings.TrimSpace(workspace), strings.TrimSpace(skillID), limit)
+	if err != nil {
+		return nil, err
+	}
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	result := make([]core.SkillPolicyDecision, 0, len(ids))
+	for _, id := range ids {
+		decision, loadErr := s.GetSkillPolicyDecision(ctx, workspace, id)
+		if loadErr != nil {
+			return nil, loadErr
+		}
+		result = append(result, decision)
+	}
+	return result, nil
+}
+
+func boundedSkillLifecycleLimit(limit int) int {
+	if limit <= 0 {
+		return 20
+	}
+	if limit > 200 {
+		return 200
+	}
+	return limit
 }
 
 func (s *Store) GetSkillApproval(ctx context.Context, workspace, approvalID string) (core.SkillApproval, error) {

@@ -134,6 +134,25 @@ func TestSkillActivationServiceAutomaticallyRollsBackThroughSameBoundary(t *test
 	}
 }
 
+func TestSkillActivationServiceManuallyRollsBackWithoutReusingPromotionDecision(t *testing.T) {
+	fixture := newSkillActivationFixture(t)
+	if _, err := fixture.service.Activate(context.Background(), fixture.promotionRequest("promote-2-manual", fixture.revisionTwo, 1)); err != nil {
+		t.Fatal(err)
+	}
+	rollback := application.SkillActivationRequest{
+		OperationID: "rollback-manual", IdempotencyKey: "rollback-manual", Workspace: "ws", Environment: "local",
+		SkillID: fixture.skill.ID, TargetRevisionID: fixture.revisionOne.ID, ExpectedGeneration: 2,
+		PolicyDecisionID: "manual-rollback", Actor: "operator", Rollback: true, ReasonCode: "operator_requested",
+	}
+	activation, err := fixture.service.Activate(context.Background(), rollback)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if activation.ActiveRevisionID != fixture.revisionOne.ID || activation.Generation != 3 {
+		t.Fatalf("manual rollback activation = %+v", activation)
+	}
+}
+
 func TestSkillActivationServiceRequiresEffectiveApprovalForMediumRisk(t *testing.T) {
 	fixture := newSkillActivationFixture(t)
 	revision, files := activationRevision(t, fixture.skill, "revision-medium", 3, core.SkillRevisionCanary, "medium revision", fixture.now.Add(3*time.Minute))

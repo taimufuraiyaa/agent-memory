@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Alert, Badge, Button, Card, FileInput, Grid, Group, NavLink, Paper, PasswordInput, Stack, Tabs, Text, Title } from '@mantine/core'
 import { IconActivity, IconAdjustments, IconDatabase, IconDownload, IconGauge, IconKey, IconShare, IconServer, IconSettings, IconShieldLock, IconStethoscope, IconUsers, IconWand } from '@tabler/icons-react'
 import type { KnowledgeCapability, KnowledgeGateway } from '../../lib/knowledgeGateway'
-import { getStats, listBenchmarkRuns, type BenchmarkRun, type DashboardStats, type SchedulerRunHistory, type SchedulerSummary, type SkillInfo } from '../../lib/api'
+import { getStats, listBenchmarkRuns, type BenchmarkRun, type DashboardStats, type SchedulerRunHistory, type SchedulerSummary, type SkillInfo, type SkillLifecycleDetail, type SkillLifecycleSummary } from '../../lib/api'
 import { BenchmarkPanel } from '../BenchmarkPanel'
 import { ClientsPanel } from '../ClientsPanel'
 import { DeploymentPanel } from '../DeploymentPanel'
@@ -48,6 +48,7 @@ function SystemToolPanel({ id, workspaceId, gateway }: { id: string; workspaceId
   const [history, setHistory] = useState<SchedulerRunHistory[]>([])
   const [runs, setRuns] = useState<BenchmarkRun[]>([])
   const [skills, setSkills] = useState<SkillInfo[]>([])
+  const [skillLifecycle, setSkillLifecycle] = useState<SkillLifecycleSummary[]>([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [rawOpen, setRawOpen] = useState(false)
@@ -58,7 +59,7 @@ function SystemToolPanel({ id, workspaceId, gateway }: { id: string; workspaceId
     setError('')
     const request = id === 'lifecycle' ? gateway.listLifecycle({ workspaceId }).then((result) => { setScheduler(result.scheduler); setHistory(result.history || []) })
       : id === 'benchmark' ? listBenchmarkRuns({ workspace: workspaceId, limit: 100 }).then((result) => setRuns(result.runs || []))
-        : id === 'skills' ? gateway.listSkills({ workspaceId }).then(setSkills)
+        : id === 'skills' ? Promise.all([gateway.listSkills({ workspaceId }), gateway.listSkillLifecycle({ workspaceId })]).then(([files, lifecycle]) => { setSkills(files); setSkillLifecycle(lifecycle) })
           : id === 'diagnostics' ? getStats(workspaceId).then(setStats)
             : Promise.resolve()
     request.catch((cause) => { if (current) setError(cause instanceof Error ? cause.message : String(cause)) }).finally(() => { if (current) setBusy(false) })
@@ -70,7 +71,25 @@ function SystemToolPanel({ id, workspaceId, gateway }: { id: string; workspaceId
   if (id === 'lifecycle') return <LifecyclePanel workspace={workspaceId} scheduler={scheduler} history={history} busy={busy} error={error} />
   if (id === 'benchmark') return <BenchmarkPanel workspace={workspaceId} runs={runs} busy={busy} error={error} />
   if (id === 'clients') return <ClientsPanel clientProfiles={gateway} />
-  if (id === 'skills') return <SkillsPanel theme="dark" workspace={workspaceId} skills={skills} busy={busy} error={error} />
+  const inspectSkill = useCallback((skillId: string) => gateway.inspectSkillLifecycle({ workspaceId }, skillId, 'local'), [gateway, workspaceId])
+  const approveSkill = useCallback(async (detail: SkillLifecycleDetail, revisionId: string) => {
+	const policyDecisionId = detail.policy_decisions?.find((decision) => decision.revision_id === revisionId && decision.decision === 'approval_required')?.id
+	if (!policyDecisionId) throw new Error('No approval-required policy decision is available for this revision.')
+    const reason = window.prompt('Approval reason:')?.trim()
+    if (!reason) throw new Error('Approval requires a reason.')
+    const actor = 'dashboard-operator'
+    await gateway.operateSkillLifecycle({ workspaceId }, actor, 'approve', { id: crypto.randomUUID(), revision_id: revisionId, policy_decision_id: policyDecisionId, approver_id: actor, approved: true, reason })
+  }, [gateway, workspaceId])
+  const rollbackSkill = useCallback(async (detail: SkillLifecycleDetail) => {
+    const activation = detail.activation
+    if (!activation?.last_known_good_revision_id) throw new Error('No last-known-good revision is available.')
+    const reason = window.prompt('Rollback reason code:')?.trim()
+    if (!reason) throw new Error('Rollback requires a reason code.')
+    const actor = 'dashboard-operator'
+    await gateway.operateSkillLifecycle({ workspaceId }, actor, 'rollback', { operation_id: crypto.randomUUID(), idempotency_key: crypto.randomUUID(), environment: activation.environment || 'local', skill_id: detail.skill.id, target_revision_id: activation.last_known_good_revision_id, expected_generation: activation.generation, policy_decision_id: 'manual-rollback', actor, rollback: true, automatic: false, reason_code: reason })
+  }, [gateway, workspaceId])
+
+  if (id === 'skills') return <SkillsPanel theme="dark" workspace={workspaceId} skills={skills} lifecycleSkills={skillLifecycle} busy={busy} error={error} inspect={inspectSkill} approve={approveSkill} rollback={rollbackSkill} />
   if (id === 'infrastructure') return <DeploymentPanel />
   if (id === 'migration') return <MigrationPanel workspace={workspaceId} />
   return null

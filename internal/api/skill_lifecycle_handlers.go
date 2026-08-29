@@ -89,7 +89,17 @@ func skillInspectHandler(svc *Service) http.HandlerFunc {
 			writeSolutionError(w, err)
 			return
 		}
-		result := map[string]any{"skill": skill, "revisions": revisions}
+		evaluations, err := assets.Store.ListSkillEvaluationRuns(r.Context(), ws, skill.ID, 200)
+		if err != nil {
+			writeSolutionError(w, err)
+			return
+		}
+		decisions, err := assets.Store.ListSkillPolicyDecisions(r.Context(), ws, skill.ID, 200)
+		if err != nil {
+			writeSolutionError(w, err)
+			return
+		}
+		result := map[string]any{"skill": skill, "revisions": revisions, "evaluations": evaluations, "policy_decisions": decisions}
 		environment := r.URL.Query().Get("environment")
 		if environment == "" {
 			environment = "local"
@@ -176,6 +186,7 @@ func skillLifecycleHandler(svc *Service) http.HandlerFunc {
 			err = json.Unmarshal(request.Payload, &input)
 			if err == nil {
 				input.Workspace = ws
+				input.ApproverID = request.Actor
 				if svc.SkillApprovalAuthorizer == nil {
 					err = errors.New("skill approval authorizer is required")
 				} else {
@@ -193,6 +204,7 @@ func skillLifecycleHandler(svc *Service) http.HandlerFunc {
 			err = json.Unmarshal(request.Payload, &input)
 			if err == nil {
 				input.Workspace = ws
+				input.Actor = request.Actor
 				if request.Operation == "rollback" {
 					input.Rollback = true
 					input.Automatic = false

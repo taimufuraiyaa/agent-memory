@@ -1214,6 +1214,23 @@ export type SkillInfo = {
   path: string
 }
 
+export type SkillLifecycleSummary = { id: string; workspace: string; name: string; description: string; risk_tier: 'low' | 'medium' | 'high'; owner_group: string; status: 'active' | 'archived'; generation: number }
+export type SkillLifecycleRevision = { id: string; workspace: string; skill_id: string; number: number; state: 'draft' | 'testing' | 'canary' | 'active' | 'previous' | 'disabled' | 'rejected'; bundle_digest: string; risk_tier: string; candidate_id?: string; parent_revision_ids?: string[]; source_memory_ids?: string[]; source_tool_lesson_ids?: string[]; source_episode_ids?: string[]; created_by: string; created_at: string }
+export type SkillLifecycleActivation = { id: string; environment: string; skill_id: string; active_revision_id: string; active_digest: string; last_known_good_revision_id?: string; canary_revision_id?: string; generation: number; policy_decision_id: string; materialization: string }
+export type SkillLifecycleEvaluation = { id: string; revision_id: string; verdict: 'pass' | 'fail' | 'inconclusive'; evaluator: string; evaluator_version: string; completed_at: string; case_results?: Array<{ case_id: string; passed: boolean; independently_verified: boolean; failure_class?: string }> }
+export type SkillLifecyclePolicyDecision = { id: string; revision_id: string; decision: 'promote' | 'canary' | 'approval_required' | 'pause' | 'reject'; reason_codes: string[]; evaluation_run_ids: string[]; decided_at: string }
+export type SkillLifecycleDetail = { skill: SkillLifecycleSummary; revisions: SkillLifecycleRevision[]; evaluations?: SkillLifecycleEvaluation[]; policy_decisions?: SkillLifecyclePolicyDecision[]; activation?: SkillLifecycleActivation }
+
+export function listSkillLifecycle(input: { workspace: string }): Promise<SkillLifecycleSummary[]> {
+  return api<{ skills: SkillLifecycleSummary[] }>(`/api/v1/skills/lifecycle/list?workspace=${encodeURIComponent(input.workspace)}`, { method: 'GET' }).then((res) => res.skills || [])
+}
+export function inspectSkillLifecycle(input: { workspace: string; skill_id: string; environment?: string }): Promise<SkillLifecycleDetail> {
+  return api(`/api/v1/skills/inspect?workspace=${encodeURIComponent(input.workspace)}&skill_id=${encodeURIComponent(input.skill_id)}&environment=${encodeURIComponent(input.environment || 'local')}`, { method: 'GET' })
+}
+export function operateSkillLifecycle(input: { workspace: string; actor: string; operation: string; payload: Record<string, unknown> }): Promise<{ operation: string; result: unknown }> {
+  return api('/api/v1/skills/lifecycle', { method: 'POST', body: JSON.stringify(input) })
+}
+
 export function listSkills(input: { workspace: string }): Promise<SkillInfo[]> {
   return api<{ skills: SkillInfo[] }>(`/api/v1/skills?workspace=${encodeURIComponent(input.workspace)}`, {
     method: 'GET',

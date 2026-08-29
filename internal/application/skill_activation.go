@@ -73,7 +73,10 @@ func (s *SkillActivationService) Activate(ctx context.Context, request SkillActi
 	if target.SkillID != skill.ID || target.Workspace != skill.Workspace {
 		return core.SkillActivation{}, errors.New("target revision does not belong to logical skill")
 	}
-	if !request.Rollback || !request.Automatic {
+	// Rollback authorization is enforced at the public boundary and the target is
+	// restricted to the recorded last-known-good revision below. A prior promotion
+	// decision cannot bind that older target revision.
+	if !request.Rollback {
 		decision, decisionErr := s.repository.GetSkillPolicyDecision(ctx, request.Workspace, request.PolicyDecisionID)
 		if decisionErr != nil {
 			return core.SkillActivation{}, decisionErr

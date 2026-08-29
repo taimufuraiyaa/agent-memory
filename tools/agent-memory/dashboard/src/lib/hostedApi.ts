@@ -217,6 +217,9 @@ export function getHostedProjectLifecycle(connection: HostedConnection, workspac
 export function listHostedProjectSkills(connection: HostedConnection, workspace: string): Promise<{ skills: import('./api').SkillInfo[] }> {
   return hostedRequest(connection, `/v1/local-projects/skills?workspace=${encodeURIComponent(workspace)}`)
 }
+export function listHostedSkillLifecycle(connection: HostedConnection, workspace: string): Promise<{ skills: import('./api').SkillLifecycleSummary[] }> { return hostedRequest(connection, `/v1/local-project-skills/lifecycle?workspace=${encodeURIComponent(workspace)}`) }
+export function inspectHostedSkillLifecycle(connection: HostedConnection, workspace: string, skillId: string, environment = 'local'): Promise<import('./api').SkillLifecycleDetail> { return hostedRequest(connection, `/v1/local-project-skills/lifecycle?workspace=${encodeURIComponent(workspace)}&skill_id=${encodeURIComponent(skillId)}&environment=${encodeURIComponent(environment)}`) }
+export function operateHostedSkillLifecycle(connection: HostedConnection, workspace: string, operation: string, payload: Record<string, unknown>): Promise<unknown> { return hostedRequest(connection, '/v1/local-project-skills/lifecycle', { method: 'POST', body: JSON.stringify({ workspace, operation, payload }) }) }
 
 export function listHostedClientProfiles(connection: HostedConnection): Promise<{ profiles: import('./api').ClientProfile[] }> {
   return hostedRequest(connection, '/v1/local-client-profiles')

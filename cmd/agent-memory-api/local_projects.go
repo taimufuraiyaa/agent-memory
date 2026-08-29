@@ -140,7 +140,15 @@ func (service *localProjectService) InspectSkillLifecycle(ctx context.Context, w
 	if err != nil {
 		return api.LocalProjectSkillLifecycleView{}, err
 	}
-	view := api.LocalProjectSkillLifecycleView{Skill: skill, Revisions: revisions}
+	evaluations, err := store.ListSkillEvaluationRuns(ctx, workspaceName, skill.ID, 200)
+	if err != nil {
+		return api.LocalProjectSkillLifecycleView{}, err
+	}
+	decisions, err := store.ListSkillPolicyDecisions(ctx, workspaceName, skill.ID, 200)
+	if err != nil {
+		return api.LocalProjectSkillLifecycleView{}, err
+	}
+	view := api.LocalProjectSkillLifecycleView{Skill: skill, Revisions: revisions, Evaluations: evaluations, PolicyDecisions: decisions}
 	if activation, activationErr := store.GetSkillActivation(ctx, workspaceName, environment, skill.ID); activationErr == nil {
 		view.Activation = &activation
 	}
@@ -195,6 +203,7 @@ func (service *localProjectService) OperateSkillLifecycle(ctx context.Context, i
 			return nil, err
 		}
 		request.Workspace = input.Workspace
+		request.ApproverID = input.Actor
 		return application.NewSkillApprovalService(store, localProjectSkillAuthorizer{}, time.Now).Approve(ctx, request)
 	case "canary":
 		var request application.SkillCanaryAllocationInput
@@ -208,6 +217,7 @@ func (service *localProjectService) OperateSkillLifecycle(ctx context.Context, i
 			return nil, err
 		}
 		request.Workspace = input.Workspace
+		request.Actor = input.Actor
 		if input.Operation == "rollback" {
 			request.Rollback = true
 		}

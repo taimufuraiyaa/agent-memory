@@ -17,6 +17,9 @@ import {
   listSessions,
   listSolutionEpisodes,
   listSkills,
+  listSkillLifecycle,
+  inspectSkillLifecycle,
+  operateSkillLifecycle,
   getLibraryLocalLLMStatus,
   getGraphReadiness,
   getGraphSnapshot,
@@ -314,6 +317,9 @@ export function createStandaloneKnowledgeGateway(): KnowledgeGateway {
     async listSkills(scope) {
       return listSkills({ workspace: scope.workspaceId })
     },
+    async listSkillLifecycle(scope) { return listSkillLifecycle({ workspace: scope.workspaceId }) },
+    async inspectSkillLifecycle(scope, skillId, environment) { return inspectSkillLifecycle({ workspace: scope.workspaceId, skill_id: skillId, environment }) },
+    async operateSkillLifecycle(scope, actor, operation, payload) { return operateSkillLifecycle({ workspace: scope.workspaceId, actor, operation, payload }) },
     async listClientProfiles() { return listClientProfiles() },
     async createClientProfile(input) { return createClientProfile(input) },
     async updateClientProfile(input) { return updateClientProfile(input) },

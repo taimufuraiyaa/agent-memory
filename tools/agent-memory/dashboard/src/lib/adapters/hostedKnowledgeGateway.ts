@@ -18,6 +18,9 @@ import {
   listHostedRetrievalFeedback,
   listHostedProjectSolutions,
   listHostedProjectSkills,
+  listHostedSkillLifecycle,
+  inspectHostedSkillLifecycle,
+  operateHostedSkillLifecycle,
   listHostedSources,
   queryHostedSources,
   recallHostedGraph,
@@ -298,6 +301,9 @@ export function createHostedKnowledgeGateway(connection: HostedConnection, optio
       if (!localSystemTools || !isRegisteredProject(scope.workspaceId)) throw new Error('Skills are available only for registered projects in a private installation.')
       return (await listHostedProjectSkills(connection, scope.workspaceId)).skills || []
     },
+    async listSkillLifecycle(scope) { if (!localSystemTools || !isRegisteredProject(scope.workspaceId)) throw new Error('Skill lifecycle is available only for registered projects.'); return (await listHostedSkillLifecycle(connection, scope.workspaceId)).skills || [] },
+    async inspectSkillLifecycle(scope, skillId, environment) { if (!localSystemTools || !isRegisteredProject(scope.workspaceId)) throw new Error('Skill lifecycle is available only for registered projects.'); return inspectHostedSkillLifecycle(connection, scope.workspaceId, skillId, environment) },
+    async operateSkillLifecycle(scope, _actor, operation, payload) { if (!localSystemTools || !isRegisteredProject(scope.workspaceId)) throw new Error('Skill lifecycle is available only for registered projects.'); return operateHostedSkillLifecycle(connection, scope.workspaceId, operation, payload) },
     async listClientProfiles() {
       if (!localSystemTools) throw new Error('Client profiles are available only in a private installation.')
       return listHostedClientProfiles(connection)

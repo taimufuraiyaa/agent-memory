@@ -207,7 +207,7 @@
   - Files: hosted contracts, local-project adapter, authorization tests.
   - Estimated scope: Medium.
 
-- [ ] **Task 24: Upgrade the Skills dashboard**
+- [x] **Task 24: Upgrade the Skills dashboard**
   - Acceptance: Users can see active versus latest, compare revisions, inspect provenance and evaluation, monitor canary, approve when authorized, and roll back with accessible responsive controls.
   - Verify: dashboard component tests for every lifecycle state, keyboard use, narrow layout, stale operation, authorization, and N/A evidence.
   - Dependencies: Tasks 21 and 23.
@@ -216,10 +216,10 @@
 
 ### Checkpoint F — Public Production Workflow
 
-- [ ] Standalone, expanded MCP, and registered-project hosted surfaces agree on lifecycle state.
-- [ ] Legacy agents still load the active root skill without revision awareness.
-- [ ] Users can distinguish latest, active, canary, disabled, and last-known-good.
-- [ ] All mutations are authorized, idempotent, and generation-safe.
+- [x] Standalone, expanded MCP, and registered-project hosted surfaces agree on lifecycle state.
+- [x] Legacy agents still load the active root skill without revision awareness.
+- [x] Users can distinguish latest, active, canary, disabled, and last-known-good.
+- [x] All mutations are authorized, idempotent, and generation-safe.
 
 ## Phase 7 — Operations, Migration, and Release
 

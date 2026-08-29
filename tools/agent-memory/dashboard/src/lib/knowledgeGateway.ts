@@ -249,6 +249,9 @@ export interface KnowledgeGateway {
   submitFeedback(scope: WorkspaceScope, requestId: string, score: number, reason: string): Promise<void>
   listLifecycle(scope: WorkspaceScope, signal?: AbortSignal): Promise<{ scheduler?: SchedulerSummary; history: SchedulerRunHistory[] }>
   listSkills(scope: WorkspaceScope, signal?: AbortSignal): Promise<SkillInfo[]>
+  listSkillLifecycle(scope: WorkspaceScope, signal?: AbortSignal): Promise<import('./api').SkillLifecycleSummary[]>
+  inspectSkillLifecycle(scope: WorkspaceScope, skillId: string, environment?: string): Promise<import('./api').SkillLifecycleDetail>
+  operateSkillLifecycle(scope: WorkspaceScope, actor: string, operation: string, payload: Record<string, unknown>): Promise<unknown>
   listClientProfiles(signal?: AbortSignal): Promise<{ profiles: ClientProfile[] }>
   createClientProfile(input: { id: string; display_name: string; client_kind: ClientKind; tool_profile: ClientToolProfile }): Promise<{ profile: ClientProfile }>
   updateClientProfile(input: { id: string; display_name: string; client_kind: ClientKind; tool_profile: ClientToolProfile; expected_revision: number }): Promise<{ profile: ClientProfile }>

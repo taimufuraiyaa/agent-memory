@@ -168,6 +168,29 @@ body.light .workspaceApp {
   overflow-y: auto;
 }
 .settingsView .skillsDetail { min-width: 0; overflow-y: auto; }
+.skillDirectoryItem {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+.skillDirectoryItem span { max-width: 100%; color: var(--text-muted); overflow-wrap: anywhere; }
+.skillDirectoryItem:hover,
+.skillDirectoryItem[data-selected] { border-color: var(--workspace-accent-border); background: var(--workspace-accent-soft); }
+.skillDirectoryItem:focus-visible { outline: 3px solid var(--workspace-accent-border); outline-offset: 2px; }
+.skillStateGrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.skillStateGrid > * { min-width: 0; overflow-wrap: anywhere; }
+.skillRevisionTable { max-width: 100%; overflow: hidden; }
+.skillRevisionTable tr[data-active] { outline: 1px solid var(--workspace-accent-border); outline-offset: -1px; }
 .recordPagination { width: 100%; min-width: 0; padding-block: 8px; flex-wrap: wrap; }
 
 @media (max-width: 760px) {
@@ -180,6 +203,9 @@ body.light .workspaceApp {
     border-bottom: 1px dashed var(--border);
   }
   .settingsView .skillsDetail { overflow: visible; }
+  .skillStateGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .skillLifecycleActions { align-items: stretch; flex-direction: column; }
+  .skillLifecycleActions button { width: 100%; }
 }
 
 @media (max-width: 1100px) {
