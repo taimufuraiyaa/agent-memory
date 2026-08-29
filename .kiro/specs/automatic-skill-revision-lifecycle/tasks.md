@@ -170,7 +170,7 @@
   - Files: revision builder, diff validator, provenance adapter, focused tests.
   - Estimated scope: Medium.
 
-- [ ] **Task 20: Convert `distill` into draft-revision creation**
+- [x] **Task 20: Convert `distill` into draft-revision creation**
   - Acceptance: Existing focused seeds create candidates and draft revisions; `--force` no longer overwrites active content and compatibility output clearly reports the draft.
   - Verify: existing distill regression plus active-preservation, revision increment, provenance, and replay tests.
   - Dependencies: Task 19.
@@ -179,10 +179,10 @@
 
 ### Checkpoint E — Agent-Proposed Improvement
 
-- [ ] Repeated validated work can produce a reviewable draft revision automatically.
-- [ ] An agent can explicitly propose a draft but cannot activate it.
-- [ ] Existing active skills remain unchanged until the promotion controller succeeds.
-- [ ] Revision content and provenance remain deterministic and bounded.
+- [x] Repeated validated work can produce a reviewable draft revision automatically.
+- [x] An agent can explicitly propose a draft but cannot activate it.
+- [x] Existing active skills remain unchanged until the promotion controller succeeds.
+- [x] Revision content and provenance remain deterministic and bounded.
 
 ## Phase 6 — Product and Runtime Contracts
 

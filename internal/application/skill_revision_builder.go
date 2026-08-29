@@ -17,7 +17,11 @@ import (
 	"github.com/taimufuraiyaa/agent-memory/internal/engine"
 )
 
-const maxSkillRevisionDiffEntries = 256
+const (
+	maxSkillRevisionDiffEntries = 256
+	maxSkillDraftTotalBytes     = 32 * 1024 * 1024
+	maxSkillDraftTextBytes      = 256 * 1024
+)
 
 type SkillRevisionBuildInput struct {
 	Workspace, CandidateID, SkillName, Description, OwnerGroup, CreatedBy string
@@ -192,7 +196,7 @@ func (b *SkillRevisionBuilder) Build(ctx context.Context, input SkillRevisionBui
 	revision := core.SkillRevision{ID: "revision-" + shortSkillHash(candidate.ID+"\x00"+digest), Workspace: input.Workspace, SkillID: skill.ID,
 		Number: number, State: core.SkillRevisionDraft, BundleDigest: digest, ManifestVersion: 1, Files: manifest, ParentRevisionIDs: parents,
 		CandidateID: candidate.ID, Compatibility: input.Compatibility, RiskTier: candidate.RiskTier, ProtectedSections: protected,
-		SourceToolLessonIDs: append([]string(nil), candidate.SourceToolLessonIDs...), SourceEpisodeIDs: append([]string(nil), candidate.SourceEpisodeIDs...), CreatedBy: input.CreatedBy, CreatedAt: now}
+		SourceMemoryIDs: append([]string(nil), candidate.SourceMemoryIDs...), SourceToolLessonIDs: append([]string(nil), candidate.SourceToolLessonIDs...), SourceEpisodeIDs: append([]string(nil), candidate.SourceEpisodeIDs...), CreatedBy: input.CreatedBy, CreatedAt: now}
 	if err := revision.Validate(); err != nil {
 		return SkillRevisionBuildResult{}, err
 	}
@@ -226,14 +230,27 @@ func (b *SkillRevisionBuilder) admitSkillFiles(ctx context.Context, workspaceID 
 			continue
 		}
 		raw := files[name]
-		if len(raw) > core.MaxSolutionStateItemBytes {
+		if name == "SKILL.md" && len(raw) > 12_000 {
+			return nil, errors.New("SKILL.md exceeds 12000 bytes")
+		}
+		if len(raw) > maxSkillDraftTextBytes {
 			return nil, fmt.Errorf("text asset %q exceeds admission bound", name)
 		}
-		decision := b.admission.Evaluate(ctx, engine.SolutionAdmissionInput{Workspace: workspaceID, Origin: engine.SolutionOriginAgent, Field: engine.SolutionFieldWorkingStateItem, Content: string(raw)})
-		results = append(results, SkillRevisionAdmission{Path: name, Disposition: decision.Disposition, Reason: decision.Reason})
-		if decision.Disposition != engine.SolutionAdmissionAllow {
-			return nil, fmt.Errorf("text asset %q admission %s: %s", name, decision.Disposition, decision.Reason)
+		for offset := 0; offset < len(raw); {
+			end := offset + core.MaxSolutionStateItemBytes
+			if end > len(raw) {
+				end = len(raw)
+			}
+			decision := b.admission.Evaluate(ctx, engine.SolutionAdmissionInput{Workspace: workspaceID, Origin: engine.SolutionOriginAgent, Field: engine.SolutionFieldWorkingStateItem, Content: string(raw[offset:end])})
+			if decision.Disposition != engine.SolutionAdmissionAllow {
+				return nil, fmt.Errorf("text asset %q admission %s: %s", name, decision.Disposition, decision.Reason)
+			}
+			if end == len(raw) {
+				break
+			}
+			offset = end - 128
 		}
+		results = append(results, SkillRevisionAdmission{Path: name, Disposition: engine.SolutionAdmissionAllow, Reason: engine.SolutionAdmissionAccepted})
 	}
 	return results, nil
 }
@@ -310,7 +327,12 @@ func buildSkillManifest(files map[string][]byte) ([]core.SkillBundleFile, string
 		return nil, "", errors.New("skill bundle file count exceeds bound")
 	}
 	manifest := make([]core.SkillBundleFile, 0, len(files))
+	totalBytes := 0
 	for name, raw := range files {
+		totalBytes += len(raw)
+		if totalBytes > maxSkillDraftTotalBytes {
+			return nil, "", errors.New("skill draft total size exceeds bound")
+		}
 		if path.Clean(name) != name || strings.HasPrefix(name, "../") || int64(len(raw)) > core.MaxSkillBundleFileBytes {
 			return nil, "", fmt.Errorf("unsafe or oversized skill asset %q", name)
 		}

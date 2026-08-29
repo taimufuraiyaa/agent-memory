@@ -301,6 +301,7 @@ type SkillCandidate struct {
 	RiskTier            SkillRiskTier       `json:"risk_tier"`
 	Confidence          float64             `json:"confidence"`
 	State               SkillCandidateState `json:"state"`
+	SourceMemoryIDs     []string            `json:"source_memory_ids,omitempty"`
 	SourceEpisodeIDs    []string            `json:"source_episode_ids,omitempty"`
 	SourceToolLessonIDs []string            `json:"source_tool_lesson_ids,omitempty"`
 	SourceExecutionIDs  []string            `json:"source_execution_ids,omitempty"`
@@ -352,10 +353,10 @@ func (c SkillCandidate) Validate() error {
 			return errors.New("merge candidate requires at least two target_skill_ids")
 		}
 	}
-	if len(c.SourceEpisodeIDs)+len(c.SourceToolLessonIDs)+len(c.SourceExecutionIDs) == 0 {
+	if len(c.SourceMemoryIDs)+len(c.SourceEpisodeIDs)+len(c.SourceToolLessonIDs)+len(c.SourceExecutionIDs) == 0 {
 		return errors.New("skill candidate requires source evidence")
 	}
-	for field, values := range map[string][]string{"source_episode_ids": c.SourceEpisodeIDs, "source_tool_lesson_ids": c.SourceToolLessonIDs, "source_execution_ids": c.SourceExecutionIDs} {
+	for field, values := range map[string][]string{"source_memory_ids": c.SourceMemoryIDs, "source_episode_ids": c.SourceEpisodeIDs, "source_tool_lesson_ids": c.SourceToolLessonIDs, "source_execution_ids": c.SourceExecutionIDs} {
 		if err := validateSkillIDList(field, values); err != nil {
 			return err
 		}

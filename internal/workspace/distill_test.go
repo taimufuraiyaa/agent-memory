@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -15,6 +16,7 @@ import (
 func TestManagerDistill(t *testing.T) {
 	base := t.TempDir()
 	cwd := t.TempDir()
+	cleanupImmutableDistillTest(t, cwd)
 
 	mgr, err := NewManager(base)
 	if err != nil {
@@ -83,6 +85,12 @@ func TestManagerDistill(t *testing.T) {
 	if res == nil {
 		t.Fatalf("expected DistillResult, got nil")
 	}
+	if res.RevisionState != core.SkillRevisionDraft || !res.ActivePreserved || res.CandidateID == "" || res.RevisionID == "" {
+		t.Fatalf("distill did not return draft lifecycle identity: %+v", res)
+	}
+	if fileExists(filepath.Join(cwd, ".agents", "skills", "memory-distiller", "SKILL.md")) {
+		t.Fatal("distill unexpectedly materialized a draft as active")
+	}
 
 	// Verify file was written
 	if _, err := os.Stat(res.SkillPath); err != nil {
@@ -115,6 +123,7 @@ func TestManagerDistill(t *testing.T) {
 
 func TestManagerDistillFiltersSkillSeedAndWritesContentFreeProvenance(t *testing.T) {
 	base, cwd := t.TempDir(), t.TempDir()
+	cleanupImmutableDistillTest(t, cwd)
 	mgr, err := NewManager(base)
 	if err != nil {
 		t.Fatal(err)
@@ -185,4 +194,75 @@ func TestManagerDistillFiltersSkillSeedAndWritesContentFreeProvenance(t *testing
 	if len(skills) != 1 || skills[0].Name != "focused-runner" || len(skills[0].ToolLessonIDs) != 1 || skills[0].ToolLessonIDs[0] != lesson.ID || len(skills[0].EpisodeIDs) != 1 || skills[0].EpisodeIDs[0] != episode.ID {
 		t.Fatalf("distilled skill metadata lost provenance: %+v", skills)
 	}
+}
+
+func TestManagerDistillForcePreservesActiveAndReplaysDraftRevision(t *testing.T) {
+	base, cwd := t.TempDir(), t.TempDir()
+	cleanupImmutableDistillTest(t, cwd)
+	activePath := filepath.Join(cwd, ".agents", "skills", "existing-skill", "SKILL.md")
+	if err := os.MkdirAll(filepath.Dir(activePath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	active := []byte("---\nname: existing-skill\ndescription: Existing active behavior.\n---\n\n# Existing skill\n\nKeep this active.\n")
+	if err := os.WriteFile(activePath, active, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mgr, err := NewManager(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	initialized, err := mgr.Init(context.Background(), InitOptions{CWD: cwd, ProjectName: "revision-proj", NoRule: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	store, err := sqlite.Open(context.Background(), initialized.DBPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.UpsertMemory(context.Background(), &core.MemoryEntry{ID: "revision-memory", Workspace: "revision-proj", Type: core.ProceduralMemory, Content: "Run the new verified check.", CreatedAt: time.Now()}); err != nil {
+		t.Fatal(err)
+	}
+	_ = store.Close()
+
+	first, err := mgr.Distill(context.Background(), cwd, DistillOptions{Workspace: "revision-proj", SkillName: "existing-skill", Description: "Draft improvement", Force: true, SourceMemoryIDs: []string{"revision-memory"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.RevisionNumber != 2 || first.RevisionState != core.SkillRevisionDraft || !first.ActivePreserved || !strings.Contains(first.CompatibilityMessage, "--force is compatibility-only") {
+		t.Fatalf("unexpected revision result: %+v", first)
+	}
+	unchanged, err := os.ReadFile(activePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(unchanged) != string(active) {
+		t.Fatalf("active skill was overwritten:\n%s", unchanged)
+	}
+	draft, err := os.ReadFile(first.SkillPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(draft), "Run the new verified check") {
+		t.Fatalf("draft omitted focused evidence: %s", draft)
+	}
+
+	replayed, err := mgr.Distill(context.Background(), cwd, DistillOptions{Workspace: "revision-proj", SkillName: "existing-skill", Description: "Draft improvement", Force: true, SourceMemoryIDs: []string{"revision-memory"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if replayed.CandidateID != first.CandidateID || replayed.RevisionID != first.RevisionID || replayed.RevisionDigest != first.RevisionDigest {
+		t.Fatalf("distill replay changed identity: first=%+v replay=%+v", first, replayed)
+	}
+}
+
+func cleanupImmutableDistillTest(t *testing.T, root string) {
+	t.Helper()
+	t.Cleanup(func() {
+		_ = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+			if err == nil {
+				_ = os.Chmod(path, 0o700)
+			}
+			return nil
+		})
+	})
 }

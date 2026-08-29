@@ -2,13 +2,18 @@ package workspace
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 	"unicode/utf8"
 
+	"github.com/taimufuraiyaa/agent-memory/internal/application"
 	"github.com/taimufuraiyaa/agent-memory/internal/core"
 	"github.com/taimufuraiyaa/agent-memory/internal/storage/sqlite"
 )
@@ -25,10 +30,17 @@ type DistillOptions struct {
 
 // DistillResult represents the metadata of the distilled skill.
 type DistillResult struct {
-	Workspace      string `json:"workspace"`
-	SkillName      string `json:"skill_name"`
-	SkillPath      string `json:"skill_path"`
-	ProvenancePath string `json:"provenance_path"`
+	Workspace            string                  `json:"workspace"`
+	SkillName            string                  `json:"skill_name"`
+	SkillPath            string                  `json:"skill_path"`
+	ProvenancePath       string                  `json:"provenance_path"`
+	CandidateID          string                  `json:"candidate_id"`
+	RevisionID           string                  `json:"revision_id"`
+	RevisionNumber       int64                   `json:"revision_number"`
+	RevisionDigest       string                  `json:"revision_digest"`
+	RevisionState        core.SkillRevisionState `json:"revision_state"`
+	ActivePreserved      bool                    `json:"active_preserved"`
+	CompatibilityMessage string                  `json:"compatibility_message"`
 }
 
 type DistillProvenance struct {
@@ -127,6 +139,15 @@ func (m *Manager) Distill(ctx context.Context, cwd string, opt DistillOptions) (
 			outcomes = append(outcomes, mem)
 		}
 	}
+	if len(selectedMemoryIDs) == 0 {
+		for _, memory := range memories {
+			selectedMemoryIDs = append(selectedMemoryIDs, memory.ID)
+		}
+		selectedMemoryIDs = uniqueDistillIDs(selectedMemoryIDs)
+	}
+	if len(selectedMemoryIDs) == 0 && len(toolLessonIDs) == 0 {
+		return nil, fmt.Errorf("distill requires focused reusable evidence")
+	}
 
 	var sb strings.Builder
 	sb.WriteString("---\n")
@@ -164,42 +185,124 @@ func (m *Manager) Distill(ctx context.Context, cwd string, opt DistillOptions) (
 		sb.WriteString("\n")
 	}
 
-	projectRoot := FindProjectRoot(cwd)
-	skillDir := filepath.Join(projectRoot, ".agents", "skills", opt.SkillName)
-	skillFile := filepath.Join(skillDir, "SKILL.md")
-	provenanceFile := filepath.Join(skillDir, ".agent-memory-provenance.json")
-
-	if !opt.Force && fileExists(skillFile) {
-		return nil, fmt.Errorf("%w: skill file already exists at %s (use --force to overwrite)", core.ErrAlreadyExists, skillFile)
-	}
-
-	if err := os.MkdirAll(skillDir, 0o755); err != nil {
-		return nil, fmt.Errorf("failed to create skill directory: %w", err)
-	}
-
 	skillContent := boundDistilledSkill(sb.String(), 11999)
-	if err := os.WriteFile(skillFile, []byte(skillContent), 0o644); err != nil {
-		return nil, fmt.Errorf("failed to write skill file: %w", err)
-	}
 	provenance := DistillProvenance{Workspace: name, MemoryIDs: selectedMemoryIDs, ToolLessonIDs: toolLessonIDs, EpisodeIDs: uniqueDistillIDs(episodeIDs)}
 	provenanceJSON, err := json.MarshalIndent(provenance, "", "  ")
 	if err != nil {
 		return nil, err
 	}
-	if err := os.WriteFile(provenanceFile, append(provenanceJSON, '\n'), 0o644); err != nil {
-		return nil, fmt.Errorf("failed to write skill provenance: %w", err)
+
+	projectRoot := FindProjectRoot(cwd)
+	if _, err := ImportExistingSkills(ctx, store, name, projectRoot, time.Now); err != nil {
+		return nil, fmt.Errorf("import active skills before distill: %w", err)
 	}
-	if err := store.PutDistilledSkillMetadata(ctx, core.DistilledSkillMetadata{Workspace: name, Name: opt.SkillName, Path: skillFile,
-		MemoryIDs: selectedMemoryIDs, ToolLessonIDs: toolLessonIDs, EpisodeIDs: provenance.EpisodeIDs}); err != nil {
+	logicalSkills, err := store.ListLogicalSkills(ctx, name, 200)
+	if err != nil {
+		return nil, err
+	}
+	var existing *core.LogicalSkill
+	for index := range logicalSkills {
+		if logicalSkills[index].Name == opt.SkillName {
+			existing = &logicalSkills[index]
+			break
+		}
+	}
+	kind, targets, risk := core.SkillCandidateCreate, []string(nil), core.SkillRiskMedium
+	proposedFiles := map[string][]byte{"SKILL.md": []byte(skillContent), ".agent-memory-provenance.json": append(provenanceJSON, '\n')}
+	if existing != nil {
+		kind, targets, risk = core.SkillCandidateRevise, []string{existing.ID}, existing.RiskTier
+		revisions, listErr := store.ListSkillRevisions(ctx, name, existing.ID, 1)
+		if listErr != nil || len(revisions) == 0 {
+			return nil, errors.New("active skill revision is unavailable")
+		}
+		bundles, bundleErr := NewRevisionBundleStore(projectRoot)
+		if bundleErr != nil {
+			return nil, bundleErr
+		}
+		base, readErr := bundles.ReadRevision(ctx, revisions[0])
+		if readErr != nil {
+			base, readErr = readActiveDistillBundle(projectRoot, opt.SkillName, revisions[0])
+			if readErr != nil {
+				return nil, readErr
+			}
+			if _, _, readErr = bundles.PublishRevision(ctx, revisions[0], base); readErr != nil {
+				return nil, readErr
+			}
+		}
+		proposedFiles = cloneDistillFiles(base)
+		proposedFiles["SKILL.md"] = []byte(boundDistilledSkill(string(base["SKILL.md"])+"\n\n## Proposed distilled learnings\n\n"+skillContent, 11999))
+		proposedFiles[".agent-memory-provenance.json"] = append(provenanceJSON, '\n')
+	}
+	identityParts := append([]string{name, opt.SkillName, string(kind), string(skillContent)}, selectedMemoryIDs...)
+	identityParts = append(identityParts, toolLessonIDs...)
+	sum := sha256.Sum256([]byte(strings.Join(identityParts, "\x00")))
+	digest := "sha256:" + hex.EncodeToString(sum[:])
+	now := time.Now().UTC()
+	candidate := core.SkillCandidate{ID: "candidate-distill-" + hex.EncodeToString(sum[:12]), Workspace: name, Kind: kind, TargetSkillIDs: targets,
+		Summary: "Focused distillation for " + opt.SkillName, ExpectedBenefit: "Package validated reusable workspace knowledge into a reviewable skill draft.",
+		RiskTier: risk, Confidence: .9, State: core.SkillCandidateProposed, SourceMemoryIDs: selectedMemoryIDs, SourceToolLessonIDs: toolLessonIDs,
+		SourceEpisodeIDs: provenance.EpisodeIDs, DeduplicationHash: digest, CreatedBy: "distill", CreatedAt: now, UpdatedAt: now}
+	storedCandidate, _, err := store.PutSkillCandidate(ctx, candidate)
+	if err != nil {
+		return nil, err
+	}
+	bundleStore, err := NewRevisionBundleStore(projectRoot)
+	if err != nil {
+		return nil, err
+	}
+	built, err := application.NewSkillRevisionBuilder(store, bundleStore).Build(ctx, application.SkillRevisionBuildInput{Workspace: name, CandidateID: storedCandidate.ID,
+		SkillName: opt.SkillName, Description: desc, OwnerGroup: "local-owner", CreatedBy: "distill", ProposedFiles: proposedFiles})
+	if err != nil {
+		return nil, err
+	}
+	objectRoot := filepath.Join(projectRoot, ".agent-memory", "skill-revisions", "objects", "sha256", strings.TrimPrefix(built.Revision.BundleDigest, "sha256:"), "bundle")
+	skillFile, provenanceFile := filepath.Join(objectRoot, "SKILL.md"), filepath.Join(objectRoot, ".agent-memory-provenance.json")
+	if err := store.PutDistilledSkillMetadata(ctx, core.DistilledSkillMetadata{Workspace: name, Name: opt.SkillName, Path: skillFile, MemoryIDs: selectedMemoryIDs, ToolLessonIDs: toolLessonIDs, EpisodeIDs: provenance.EpisodeIDs}); err != nil {
 		return nil, fmt.Errorf("failed to record skill provenance: %w", err)
 	}
+	message := "Created immutable draft; active skill remains unchanged until evaluation, approval, canary, and promotion succeed."
+	if opt.Force {
+		message = "--force is compatibility-only; created or replayed an immutable draft and preserved the active skill."
+	}
+	return &DistillResult{Workspace: name, SkillName: opt.SkillName, SkillPath: skillFile, ProvenancePath: provenanceFile, CandidateID: storedCandidate.ID,
+		RevisionID: built.Revision.ID, RevisionNumber: built.Revision.Number, RevisionDigest: built.Revision.BundleDigest, RevisionState: built.Revision.State, ActivePreserved: true, CompatibilityMessage: message}, nil
+}
 
-	return &DistillResult{
-		Workspace:      name,
-		SkillName:      opt.SkillName,
-		SkillPath:      skillFile,
-		ProvenancePath: provenanceFile,
-	}, nil
+func cloneDistillFiles(input map[string][]byte) map[string][]byte {
+	result := make(map[string][]byte, len(input))
+	for name, raw := range input {
+		result[name] = append([]byte(nil), raw...)
+	}
+	return result
+}
+
+func readActiveDistillBundle(projectRoot, skillName string, revision core.SkillRevision) (map[string][]byte, error) {
+	root, err := filepath.EvalSymlinks(projectRoot)
+	if err != nil {
+		return nil, err
+	}
+	skillRoot, err := filepath.EvalSymlinks(filepath.Join(root, ".agents", "skills", skillName))
+	if err != nil || !skillPathWithin(root, skillRoot) {
+		return nil, errors.New("active skill bundle is unavailable")
+	}
+	contents := make(map[string][]byte, len(revision.Files))
+	for _, declared := range revision.Files {
+		candidate := filepath.Join(skillRoot, filepath.FromSlash(declared.Path))
+		resolved, resolveErr := filepath.EvalSymlinks(candidate)
+		if resolveErr != nil || !skillPathWithin(skillRoot, resolved) {
+			return nil, fmt.Errorf("active skill asset %q escapes its bundle", declared.Path)
+		}
+		info, statErr := os.Lstat(candidate)
+		if statErr != nil || !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 {
+			return nil, fmt.Errorf("active skill asset %q is not a regular file", declared.Path)
+		}
+		raw, readErr := os.ReadFile(candidate)
+		if readErr != nil {
+			return nil, readErr
+		}
+		contents[declared.Path] = raw
+	}
+	return contents, nil
 }
 
 func uniqueDistillIDs(values []string) []string {

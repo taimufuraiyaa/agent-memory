@@ -41,7 +41,7 @@ func (s *Store) PutSkillCandidate(ctx context.Context, candidate core.SkillCandi
 		candidate.ID, candidate.Workspace, candidate.Kind, candidate.Summary, candidate.ExpectedBenefit, string(risks), candidate.RiskTier, candidate.Confidence, candidate.State, string(targets), candidate.DeduplicationHash, candidate.CreatedBy, formatSkillTime(candidate.CreatedAt), formatSkillTime(candidate.UpdatedAt)); err != nil {
 		return core.SkillCandidate{}, false, err
 	}
-	for kind, ids := range map[string][]string{"episode": candidate.SourceEpisodeIDs, "tool_lesson": candidate.SourceToolLessonIDs, "execution": candidate.SourceExecutionIDs} {
+	for kind, ids := range map[string][]string{"memory": candidate.SourceMemoryIDs, "episode": candidate.SourceEpisodeIDs, "tool_lesson": candidate.SourceToolLessonIDs, "execution": candidate.SourceExecutionIDs} {
 		for _, id := range ids {
 			if _, err = tx.ExecContext(ctx, `INSERT INTO skill_candidate_sources(candidate_id,source_kind,source_id) VALUES(?,?,?)`, candidate.ID, kind, id); err != nil {
 				return core.SkillCandidate{}, false, err
@@ -93,6 +93,8 @@ func getSkillCandidateWith(ctx context.Context, queryer skillCandidateQueryer, i
 			return core.SkillCandidate{}, err
 		}
 		switch kind {
+		case "memory":
+			candidate.SourceMemoryIDs = append(candidate.SourceMemoryIDs, sourceID)
 		case "episode":
 			candidate.SourceEpisodeIDs = append(candidate.SourceEpisodeIDs, sourceID)
 		case "tool_lesson":
