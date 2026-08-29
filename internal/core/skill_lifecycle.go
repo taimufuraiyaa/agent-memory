@@ -683,6 +683,81 @@ type SkillActivation struct {
 	UpdatedAt               time.Time                 `json:"updated_at"`
 }
 
+type SkillActivationOperationState string
+
+const (
+	SkillActivationOperationReserved      SkillActivationOperationState = "reserved"
+	SkillActivationOperationMaterializing SkillActivationOperationState = "materializing"
+	SkillActivationOperationCompleted     SkillActivationOperationState = "completed"
+	SkillActivationOperationFailed        SkillActivationOperationState = "failed"
+)
+
+func (s SkillActivationOperationState) Valid() bool {
+	switch s {
+	case SkillActivationOperationReserved, SkillActivationOperationMaterializing, SkillActivationOperationCompleted, SkillActivationOperationFailed:
+		return true
+	default:
+		return false
+	}
+}
+
+func CanTransitionSkillActivationOperation(from, to SkillActivationOperationState) bool {
+	if !from.Valid() || !to.Valid() || from == to {
+		return false
+	}
+	allowed := map[SkillActivationOperationState]map[SkillActivationOperationState]bool{
+		SkillActivationOperationReserved:      {SkillActivationOperationMaterializing: true, SkillActivationOperationFailed: true},
+		SkillActivationOperationMaterializing: {SkillActivationOperationCompleted: true, SkillActivationOperationFailed: true},
+		SkillActivationOperationFailed:        {SkillActivationOperationMaterializing: true},
+	}
+	return allowed[from][to]
+}
+
+type SkillActivationOperation struct {
+	ID                 string                        `json:"id"`
+	Workspace          string                        `json:"workspace"`
+	Environment        string                        `json:"environment"`
+	SkillID            string                        `json:"skill_id"`
+	FromRevisionID     string                        `json:"from_revision_id,omitempty"`
+	ToRevisionID       string                        `json:"to_revision_id"`
+	ExpectedGeneration int64                         `json:"expected_generation"`
+	State              SkillActivationOperationState `json:"state"`
+	Error              string                        `json:"error,omitempty"`
+	IdempotencyKey     string                        `json:"idempotency_key"`
+	CreatedAt          time.Time                     `json:"created_at"`
+	UpdatedAt          time.Time                     `json:"updated_at"`
+}
+
+func (o SkillActivationOperation) Validate() error {
+	for field, value := range map[string]string{
+		"id": o.ID, "workspace": o.Workspace, "environment": o.Environment, "skill_id": o.SkillID,
+		"to_revision_id": o.ToRevisionID, "idempotency_key": o.IdempotencyKey,
+	} {
+		if err := requireSkillText(field, value, 256); err != nil {
+			return err
+		}
+	}
+	if len(o.FromRevisionID) > 256 {
+		return errors.New("skill activation operation from_revision_id exceeds bound")
+	}
+	if o.ExpectedGeneration < 0 || !o.State.Valid() {
+		return errors.New("skill activation operation generation or state is invalid")
+	}
+	if len(o.Error) > MaxSkillReasonBytes {
+		return errors.New("skill activation operation error exceeds bound")
+	}
+	if o.State == SkillActivationOperationFailed && strings.TrimSpace(o.Error) == "" {
+		return errors.New("failed skill activation operation requires error")
+	}
+	if o.State != SkillActivationOperationFailed && o.Error != "" {
+		return errors.New("non-failed skill activation operation cannot contain error")
+	}
+	if o.CreatedAt.IsZero() || o.UpdatedAt.IsZero() || o.UpdatedAt.Before(o.CreatedAt) {
+		return errors.New("skill activation operation timestamps are invalid")
+	}
+	return nil
+}
+
 func (a SkillActivation) Validate() error {
 	for field, value := range map[string]string{"id": a.ID, "workspace": a.Workspace, "environment": a.Environment, "skill_id": a.SkillID, "active_revision_id": a.ActiveRevisionID, "policy_decision_id": a.PolicyDecisionID, "activated_by": a.ActivatedBy} {
 		if err := requireSkillText(field, value, 256); err != nil {

@@ -38,7 +38,7 @@
   - Files: workspace bundle store, custody helper, focused tests.
   - Estimated scope: Medium.
 
-- [ ] **Task 5: Implement active bundle materialization**
+- [x] **Task 5: Implement active bundle materialization**
   - Acceptance: A verified revision bundle atomically materializes at the legacy root path with all declared assets; failure leaves the prior active bundle intact.
   - Verify: atomic rename, read-only filesystem, missing asset, digest mismatch, and recovery tests.
   - Dependencies: Task 4.

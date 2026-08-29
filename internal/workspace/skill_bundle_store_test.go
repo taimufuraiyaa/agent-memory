@@ -237,16 +237,18 @@ func bundleDigestForTest(files []core.SkillBundleFile) string {
 func allowBundleCleanup(t *testing.T, projectRoot string) {
 	t.Helper()
 	t.Cleanup(func() {
-		_ = filepath.Walk(filepath.Join(projectRoot, ".agent-memory"), func(path string, info os.FileInfo, err error) error {
-			if err != nil {
+		for _, relative := range []string{".agent-memory", ".agents"} {
+			_ = filepath.Walk(filepath.Join(projectRoot, relative), func(path string, info os.FileInfo, err error) error {
+				if err != nil {
+					return nil
+				}
+				if info.IsDir() {
+					_ = os.Chmod(path, 0o700)
+				} else {
+					_ = os.Chmod(path, 0o600)
+				}
 				return nil
-			}
-			if info.IsDir() {
-				_ = os.Chmod(path, 0o700)
-			} else {
-				_ = os.Chmod(path, 0o600)
-			}
-			return nil
-		})
+			})
+		}
 	})
 }

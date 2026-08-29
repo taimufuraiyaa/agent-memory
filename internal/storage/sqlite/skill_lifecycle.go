@@ -173,6 +173,80 @@ func (s *Store) GetSkillActivation(ctx context.Context, workspace, environment, 
 	return item, nil
 }
 
+func (s *Store) CreateSkillActivationOperation(ctx context.Context, operation core.SkillActivationOperation) (bool, error) {
+	if err := operation.Validate(); err != nil {
+		return false, err
+	}
+	_, err := s.db.ExecContext(ctx, `INSERT INTO skill_activation_operations(id,workspace,environment,skill_id,from_revision_id,to_revision_id,expected_generation,state,error,idempotency_key,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
+		operation.ID, operation.Workspace, operation.Environment, operation.SkillID, operation.FromRevisionID, operation.ToRevisionID,
+		operation.ExpectedGeneration, operation.State, operation.Error, operation.IdempotencyKey, formatSkillTime(operation.CreatedAt), formatSkillTime(operation.UpdatedAt))
+	if err == nil {
+		return false, nil
+	}
+	existing, getErr := s.GetSkillActivationOperationByKey(ctx, operation.Workspace, operation.Environment, operation.SkillID, operation.IdempotencyKey)
+	if getErr != nil {
+		return false, err
+	}
+	if existing.ID != operation.ID || existing.FromRevisionID != operation.FromRevisionID || existing.ToRevisionID != operation.ToRevisionID || existing.ExpectedGeneration != operation.ExpectedGeneration {
+		return false, errors.New("skill activation idempotency key is already bound to another operation")
+	}
+	return true, nil
+}
+
+func (s *Store) GetSkillActivationOperation(ctx context.Context, workspace, operationID string) (core.SkillActivationOperation, error) {
+	return scanSkillActivationOperation(s.db.QueryRowContext(ctx, `SELECT id,workspace,environment,skill_id,from_revision_id,to_revision_id,expected_generation,state,error,idempotency_key,created_at,updated_at FROM skill_activation_operations WHERE workspace = ? AND id = ?`, strings.TrimSpace(workspace), strings.TrimSpace(operationID)))
+}
+
+func (s *Store) GetSkillActivationOperationByKey(ctx context.Context, workspace, environment, skillID, idempotencyKey string) (core.SkillActivationOperation, error) {
+	return scanSkillActivationOperation(s.db.QueryRowContext(ctx, `SELECT id,workspace,environment,skill_id,from_revision_id,to_revision_id,expected_generation,state,error,idempotency_key,created_at,updated_at FROM skill_activation_operations WHERE workspace = ? AND environment = ? AND skill_id = ? AND idempotency_key = ?`, strings.TrimSpace(workspace), strings.TrimSpace(environment), strings.TrimSpace(skillID), strings.TrimSpace(idempotencyKey)))
+}
+
+func (s *Store) TransitionSkillActivationOperation(ctx context.Context, workspace, operationID string, from, to core.SkillActivationOperationState, failure string, updatedAt time.Time) (core.SkillActivationOperation, error) {
+	if !core.CanTransitionSkillActivationOperation(from, to) {
+		return core.SkillActivationOperation{}, errors.New("invalid skill activation operation transition")
+	}
+	failure = strings.TrimSpace(failure)
+	if to == core.SkillActivationOperationFailed && failure == "" {
+		return core.SkillActivationOperation{}, errors.New("failed skill activation operation requires error")
+	}
+	if to != core.SkillActivationOperationFailed && failure != "" {
+		return core.SkillActivationOperation{}, errors.New("non-failed skill activation operation cannot contain error")
+	}
+	if updatedAt.IsZero() {
+		return core.SkillActivationOperation{}, errors.New("skill activation operation updated_at is required")
+	}
+	result, err := s.db.ExecContext(ctx, `UPDATE skill_activation_operations SET state = ?, error = ?, updated_at = ? WHERE workspace = ? AND id = ? AND state = ?`, to, failure, formatSkillTime(updatedAt), strings.TrimSpace(workspace), strings.TrimSpace(operationID), from)
+	if err != nil {
+		return core.SkillActivationOperation{}, err
+	}
+	changed, err := result.RowsAffected()
+	if err != nil {
+		return core.SkillActivationOperation{}, err
+	}
+	if changed != 1 {
+		return core.SkillActivationOperation{}, errors.New("skill activation operation transition is stale")
+	}
+	return s.GetSkillActivationOperation(ctx, workspace, operationID)
+}
+
+type skillActivationOperationScanner interface {
+	Scan(...any) error
+}
+
+func scanSkillActivationOperation(row skillActivationOperationScanner) (core.SkillActivationOperation, error) {
+	var operation core.SkillActivationOperation
+	var created, updated string
+	if err := row.Scan(&operation.ID, &operation.Workspace, &operation.Environment, &operation.SkillID, &operation.FromRevisionID, &operation.ToRevisionID, &operation.ExpectedGeneration, &operation.State, &operation.Error, &operation.IdempotencyKey, &created, &updated); err != nil {
+		return core.SkillActivationOperation{}, err
+	}
+	operation.CreatedAt, _ = time.Parse(time.RFC3339Nano, created)
+	operation.UpdatedAt, _ = time.Parse(time.RFC3339Nano, updated)
+	if err := operation.Validate(); err != nil {
+		return core.SkillActivationOperation{}, err
+	}
+	return operation, nil
+}
+
 type skillQueryer interface {
 	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
 }
