@@ -119,7 +119,7 @@
   - Files: acknowledgement service, token adapter, repository, focused tests.
   - Estimated scope: Medium.
 
-- [ ] **Task 14: Add skill execution outcome telemetry**
+- [x] **Task 14: Add skill execution outcome telemetry**
   - Acceptance: Acknowledged executions store safe outcome, verification, time, token/tool counts, and feedback while unacknowledged resolutions remain excluded from effectiveness metrics.
   - Verify: complete, partial, failed, duplicate, redacted, missing metric, and retention tests.
   - Dependencies: Task 13.

@@ -40,6 +40,7 @@ var schemaMigrations = []migrationStep{
 	{20, "skill-activation-operation-lease", migrateSkillActivationOperationLease},
 	{21, "skill-approval-audit-events", migrateSkillApprovalAuditEvents},
 	{22, "skill-resolution-acknowledgement", migrateSkillResolutionAcknowledgement},
+	{23, "skill-execution-feedback-class", migrateSkillExecutionFeedbackClass},
 }
 
 func migrateSkillActivationOperationLease(ctx context.Context, s *Store) error {
@@ -69,6 +70,11 @@ func migrateSkillResolutionAcknowledgement(ctx context.Context, s *Store) error 
 		}
 	}
 	return nil
+}
+
+func migrateSkillExecutionFeedbackClass(ctx context.Context, s *Store) error {
+	_, err := s.db.ExecContext(ctx, `ALTER TABLE skill_executions ADD COLUMN feedback_class TEXT NOT NULL DEFAULT ''`)
+	return err
 }
 
 func migrateAutomaticSkillRevisionLifecycle(ctx context.Context, s *Store) error {

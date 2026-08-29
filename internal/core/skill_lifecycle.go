@@ -910,6 +910,19 @@ type SkillExecution struct {
 	InputTokens           int64                 `json:"input_tokens,omitempty"`
 	OutputTokens          int64                 `json:"output_tokens,omitempty"`
 	ToolCalls             int64                 `json:"tool_calls,omitempty"`
+	FeedbackClass         string                `json:"feedback_class,omitempty"`
+}
+
+type SkillExecutionAggregate struct {
+	Workspace         string  `json:"workspace"`
+	Environment       string  `json:"environment"`
+	SkillID           string  `json:"skill_id"`
+	RevisionID        string  `json:"revision_id"`
+	VerifiedSamples   int64   `json:"verified_samples"`
+	VerifiedSuccesses int64   `json:"verified_successes"`
+	Failures          int64   `json:"failures"`
+	HarmfulFeedback   int64   `json:"harmful_feedback"`
+	AverageDurationMS float64 `json:"average_duration_ms"`
 }
 
 func (e SkillExecution) Validate() error {
@@ -935,6 +948,9 @@ func (e SkillExecution) Validate() error {
 	}
 	if len(e.FailureClass) > 256 {
 		return errors.New("skill execution failure_class exceeds bound")
+	}
+	if len(e.FeedbackClass) > 64 {
+		return errors.New("skill execution feedback_class exceeds bound")
 	}
 	return nil
 }

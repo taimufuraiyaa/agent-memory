@@ -469,6 +469,52 @@ func (s *Store) AcknowledgeSkillResolution(ctx context.Context, acknowledgement 
 	return stored, nil
 }
 
+func (s *Store) CreateSkillExecution(ctx context.Context, execution core.SkillExecution) error {
+	if err := execution.Validate(); err != nil {
+		return err
+	}
+	_, err := s.db.ExecContext(ctx, `INSERT INTO skill_executions(id,workspace,environment,episode_id,skill_id,revision_id,revision_digest,resolution_id,acknowledged,acknowledged_at,outcome,independently_verified,failure_class,started_at,completed_at,duration_ms,input_tokens,output_tokens,tool_calls,feedback_class) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, execution.ID, execution.Workspace, execution.Environment, execution.EpisodeID, execution.SkillID, execution.RevisionID, execution.RevisionDigest, execution.ResolutionID, execution.Acknowledged, formatSkillTime(execution.AcknowledgedAt), execution.Outcome, execution.IndependentlyVerified, execution.FailureClass, formatSkillTime(execution.StartedAt), formatSkillTime(execution.CompletedAt), execution.DurationMS, execution.InputTokens, execution.OutputTokens, execution.ToolCalls, execution.FeedbackClass)
+	return err
+}
+
+func (s *Store) GetSkillExecution(ctx context.Context, workspace, executionID string) (core.SkillExecution, error) {
+	var execution core.SkillExecution
+	var acknowledgedAt, started, completed string
+	err := s.db.QueryRowContext(ctx, `SELECT id,workspace,environment,episode_id,skill_id,revision_id,revision_digest,resolution_id,acknowledged,acknowledged_at,outcome,independently_verified,failure_class,started_at,completed_at,duration_ms,input_tokens,output_tokens,tool_calls,feedback_class FROM skill_executions WHERE workspace=? AND id=?`, strings.TrimSpace(workspace), strings.TrimSpace(executionID)).Scan(&execution.ID, &execution.Workspace, &execution.Environment, &execution.EpisodeID, &execution.SkillID, &execution.RevisionID, &execution.RevisionDigest, &execution.ResolutionID, &execution.Acknowledged, &acknowledgedAt, &execution.Outcome, &execution.IndependentlyVerified, &execution.FailureClass, &started, &completed, &execution.DurationMS, &execution.InputTokens, &execution.OutputTokens, &execution.ToolCalls, &execution.FeedbackClass)
+	if err != nil {
+		return core.SkillExecution{}, err
+	}
+	execution.AcknowledgedAt, _ = time.Parse(time.RFC3339Nano, acknowledgedAt)
+	execution.StartedAt, _ = time.Parse(time.RFC3339Nano, started)
+	execution.CompletedAt, _ = time.Parse(time.RFC3339Nano, completed)
+	return execution, execution.Validate()
+}
+
+func (s *Store) PruneSkillExecutions(ctx context.Context, workspace string, before time.Time) (int64, error) {
+	result, err := s.db.ExecContext(ctx, `DELETE FROM skill_executions WHERE workspace=? AND completed_at<?`, strings.TrimSpace(workspace), formatSkillTime(before))
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+func (s *Store) ListVerifiedSkillExecutionAggregates(ctx context.Context, workspace, environment, skillID string, since time.Time) ([]core.SkillExecutionAggregate, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT workspace,environment,skill_id,revision_id,COUNT(*),SUM(CASE WHEN outcome='success' THEN 1 ELSE 0 END),SUM(CASE WHEN outcome='failure' THEN 1 ELSE 0 END),SUM(CASE WHEN feedback_class='harmful' THEN 1 ELSE 0 END),AVG(duration_ms) FROM skill_executions WHERE workspace=? AND environment=? AND skill_id=? AND acknowledged=1 AND independently_verified=1 AND completed_at>=? GROUP BY workspace,environment,skill_id,revision_id ORDER BY revision_id`, strings.TrimSpace(workspace), strings.TrimSpace(environment), strings.TrimSpace(skillID), formatSkillTime(since))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := make([]core.SkillExecutionAggregate, 0)
+	for rows.Next() {
+		var item core.SkillExecutionAggregate
+		if err := rows.Scan(&item.Workspace, &item.Environment, &item.SkillID, &item.RevisionID, &item.VerifiedSamples, &item.VerifiedSuccesses, &item.Failures, &item.HarmfulFeedback, &item.AverageDurationMS); err != nil {
+			return nil, err
+		}
+		result = append(result, item)
+	}
+	return result, rows.Err()
+}
+
 func (s *Store) CreateSkillEvaluationSuite(ctx context.Context, suite core.SkillEvaluationSuite) error {
 	if err := suite.Validate(); err != nil {
 		return err
