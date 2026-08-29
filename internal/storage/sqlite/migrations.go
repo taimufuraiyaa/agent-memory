@@ -37,6 +37,12 @@ var schemaMigrations = []migrationStep{
 	{17, "graphrag-normalized-index", migrateGraphNormalizedIndex},
 	{18, "graphrag-normalized-metadata", migrateGraphNormalizedMetadata},
 	{19, "automatic-skill-revision-lifecycle", migrateAutomaticSkillRevisionLifecycle},
+	{20, "skill-activation-operation-lease", migrateSkillActivationOperationLease},
+}
+
+func migrateSkillActivationOperationLease(ctx context.Context, s *Store) error {
+	_, err := s.db.ExecContext(ctx, `CREATE UNIQUE INDEX IF NOT EXISTS idx_skill_activation_operation_lease ON skill_activation_operations(workspace, environment, skill_id) WHERE state IN ('reserved', 'materializing')`)
+	return err
 }
 
 func migrateAutomaticSkillRevisionLifecycle(ctx context.Context, s *Store) error {

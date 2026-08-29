@@ -728,6 +728,20 @@ type SkillActivationOperation struct {
 	UpdatedAt          time.Time                     `json:"updated_at"`
 }
 
+type SkillMaterializationRequest struct {
+	OperationID string        `json:"operation_id"`
+	Skill       LogicalSkill  `json:"skill"`
+	Revision    SkillRevision `json:"revision"`
+}
+
+type SkillMaterializationResult struct {
+	OperationID string `json:"operation_id"`
+	SkillID     string `json:"skill_id"`
+	RevisionID  string `json:"revision_id"`
+	Digest      string `json:"digest"`
+	Recovered   bool   `json:"recovered"`
+}
+
 func (o SkillActivationOperation) Validate() error {
 	for field, value := range map[string]string{
 		"id": o.ID, "workspace": o.Workspace, "environment": o.Environment, "skill_id": o.SkillID,

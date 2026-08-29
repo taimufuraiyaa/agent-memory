@@ -16,19 +16,9 @@ import (
 
 const legacySkillsRoot = ".agents/skills"
 
-type SkillMaterializationRequest struct {
-	OperationID string             `json:"operation_id"`
-	Skill       core.LogicalSkill  `json:"skill"`
-	Revision    core.SkillRevision `json:"revision"`
-}
+type SkillMaterializationRequest = core.SkillMaterializationRequest
 
-type SkillMaterializationResult struct {
-	OperationID string `json:"operation_id"`
-	SkillID     string `json:"skill_id"`
-	RevisionID  string `json:"revision_id"`
-	Digest      string `json:"digest"`
-	Recovered   bool   `json:"recovered"`
-}
+type SkillMaterializationResult = core.SkillMaterializationResult
 
 type SkillMaterializer struct {
 	projectRoot     string

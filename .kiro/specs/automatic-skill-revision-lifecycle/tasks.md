@@ -45,7 +45,7 @@
   - Files: materializer, operation ledger adapter, focused tests.
   - Estimated scope: Medium.
 
-- [ ] **Task 6: Deliver activation and rollback service**
+- [x] **Task 6: Deliver activation and rollback service**
   - Acceptance: Optimistic activation selects one active revision, preserves last-known-good, records immutable decisions, and rolls back idempotently through the same materialization boundary.
   - Verify: transition matrix, concurrent promotion, replay, stale generation, crash recovery, and automatic hard-failure rollback tests.
   - Dependencies: Tasks 2 and 5.
