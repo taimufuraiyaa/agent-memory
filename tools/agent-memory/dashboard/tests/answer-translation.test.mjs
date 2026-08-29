@@ -29,6 +29,7 @@ test('Ask answer has a compact local translation menu, settings, and original to
   assert.match(view, /translationControllerRef\.current\?\.abort\(\)/)
   assert.match(view, /setTranslatedAnswer\(null\)/)
   assert.match(view, /aria-label="Target translation language"/)
+  assert.match(view, /label="Timeout \(seconds\)" min=\{1\} max=\{30\}/)
   assert.match(styles, /\.askTranslationControl/)
   assert.match(styles, /@media \(max-width: 480px\)/)
 })

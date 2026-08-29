@@ -217,7 +217,7 @@ function TranslationSettingsModal({ gateway, opened, onClose }: { gateway: Knowl
     <TextInput label="OpenAI-compatible local endpoint" value={baseURL} onChange={(event) => setBaseURL(event.currentTarget.value)} placeholder="http://127.0.0.1:11434/v1" />
     <TextInput label="Text model" value={textModel} onChange={(event) => setTextModel(event.currentTarget.value)} placeholder="qwen3:4b" />
     <TextInput label="API key (optional)" description={keyConfigured ? 'A key is stored. Leave blank to keep it.' : 'Stored write-only when provided.'} type="password" value={apiKey} onChange={(event) => setAPIKey(event.currentTarget.value)} />
-    <NumberInput label="Timeout (seconds)" min={1} max={120} value={timeoutSeconds} onChange={setTimeoutSeconds} />
+    <NumberInput label="Timeout (seconds)" min={1} max={30} value={timeoutSeconds} onChange={setTimeoutSeconds} />
     {status ? <Alert color={status.startsWith('Ready') ? 'green' : 'yellow'} title="Local model status" aria-live="polite">{status}</Alert> : null}
     {error ? <Alert color="red" title="Settings failed" role="alert">{error}</Alert> : null}
     <Group justify="flex-end"><Button variant="default" disabled={busy || !baseURL.trim() || !textModel.trim()} onClick={() => void apply('test')}>Test connection</Button><Button loading={busy} disabled={!baseURL.trim() || !textModel.trim()} onClick={() => void apply('save')}>Save settings</Button></Group>

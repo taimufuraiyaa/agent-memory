@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func TestTranslatorUsesReadyConfiguredTextModel(t *testing.T) {
@@ -75,6 +76,26 @@ func TestTranslatorFailsClosedWhenLocalModelIsUnavailable(t *testing.T) {
 	}
 }
 
+func TestTranslatorDoesNotCallCompletionWhenConfiguredModelIsMissing(t *testing.T) {
+	var completionCalls atomic.Int32
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/models" {
+			_, _ = w.Write([]byte(`{"data":[{"id":"another-model"}]}`))
+			return
+		}
+		completionCalls.Add(1)
+	}))
+	defer provider.Close()
+	store := NewStore(t.TempDir())
+	if _, err := store.Save(Config{Enabled: true, BaseURL: provider.URL + "/v1", TextModel: "translator", TimeoutSeconds: 2}); err != nil {
+		t.Fatal(err)
+	}
+	_, err := NewTranslator(store, nil).Translate(context.Background(), TranslationInput{Text: "Hello", TargetLanguage: "vi"})
+	if !IsTranslationUnavailable(err) || completionCalls.Load() != 0 {
+		t.Fatalf("expected model-missing failure before completion, err=%v completion_calls=%d", err, completionCalls.Load())
+	}
+}
+
 func TestTranslatorRejectsUnsupportedAndOversizedInputBeforeProviderCall(t *testing.T) {
 	translator := NewTranslator(NewStore(t.TempDir()), nil)
 	for name, input := range map[string]TranslationInput{
@@ -109,6 +130,83 @@ func TestTranslatorRejectsEmptyAndOversizedProviderOutput(t *testing.T) {
 				t.Fatal(err)
 			}
 			if _, err := NewTranslator(store, nil).Translate(context.Background(), TranslationInput{Text: "Hello", TargetLanguage: "vi"}); !IsTranslationInvalidOutput(err) {
+				t.Fatalf("expected invalid output, got %v", err)
+			}
+		})
+	}
+}
+
+func TestTranslatorRejectsRedirectedModelDiscovery(t *testing.T) {
+	var redirectedRequests atomic.Int32
+	redirectTarget := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		redirectedRequests.Add(1)
+	}))
+	defer redirectTarget.Close()
+	provider := httptest.NewServer(http.RedirectHandler(redirectTarget.URL, http.StatusTemporaryRedirect))
+	defer provider.Close()
+
+	store := NewStore(t.TempDir())
+	if _, err := store.Save(Config{Enabled: true, BaseURL: provider.URL, TextModel: "translator", TimeoutSeconds: 2}); err != nil {
+		t.Fatal(err)
+	}
+	_, err := NewTranslator(store, nil).Translate(context.Background(), TranslationInput{Text: "Hello", TargetLanguage: "vi"})
+	if !IsTranslationUnavailable(err) || redirectedRequests.Load() != 0 {
+		t.Fatalf("expected redirect denial before reaching target, err=%v redirected=%d", err, redirectedRequests.Load())
+	}
+}
+
+func TestTranslatorBoundsCompletionTimeout(t *testing.T) {
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/models" {
+			_, _ = w.Write([]byte(`{"data":[{"id":"translator"}]}`))
+			return
+		}
+		time.Sleep(1500 * time.Millisecond)
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"late"}}]}`))
+	}))
+	defer provider.Close()
+	store := NewStore(t.TempDir())
+	if _, err := store.Save(Config{Enabled: true, BaseURL: provider.URL + "/v1", TextModel: "translator", TimeoutSeconds: 1}); err != nil {
+		t.Fatal(err)
+	}
+	started := time.Now()
+	_, err := NewTranslator(store, nil).Translate(context.Background(), TranslationInput{Text: "Hello", TargetLanguage: "vi"})
+	if !IsTranslationProviderFailure(err) || time.Since(started) > 2*time.Second {
+		t.Fatalf("expected bounded provider timeout, err=%v elapsed=%s", err, time.Since(started))
+	}
+}
+
+func TestTranslatorSanitizesProviderFailures(t *testing.T) {
+	for name, completion := range map[string]http.HandlerFunc{
+		"non-2xx": func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusBadGateway)
+			_, _ = w.Write([]byte("provider-secret-diagnostic"))
+		},
+		"malformed JSON": func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte(`{"choices":[`))
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path == "/v1/models" {
+					_, _ = w.Write([]byte(`{"data":[{"id":"translator"}]}`))
+					return
+				}
+				completion(w, r)
+			}))
+			defer provider.Close()
+			store := NewStore(t.TempDir())
+			if _, err := store.Save(Config{Enabled: true, BaseURL: provider.URL + "/v1", TextModel: "translator", TimeoutSeconds: 2}); err != nil {
+				t.Fatal(err)
+			}
+			_, err := NewTranslator(store, nil).Translate(context.Background(), TranslationInput{Text: "Hello", TargetLanguage: "vi"})
+			if err == nil || strings.Contains(err.Error(), "provider-secret-diagnostic") {
+				t.Fatalf("expected sanitized failure, got %v", err)
+			}
+			if name == "non-2xx" && !IsTranslationProviderFailure(err) {
+				t.Fatalf("expected provider failure, got %v", err)
+			}
+			if name == "malformed JSON" && !IsTranslationInvalidOutput(err) {
 				t.Fatalf("expected invalid output, got %v", err)
 			}
 		})

@@ -65,6 +65,33 @@ func TestLibraryLocalLLMTranslateValidatesWorkspaceAndLanguage(t *testing.T) {
 	}
 }
 
+func TestLibraryLocalLLMTranslateSanitizesProviderFailure(t *testing.T) {
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/models" {
+			_, _ = w.Write([]byte(`{"data":[{"id":"translator"}]}`))
+			return
+		}
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = w.Write([]byte("provider-private-diagnostic"))
+	}))
+	defer provider.Close()
+	service := &Service{BaseDir: t.TempDir()}
+	localLLMRequest(t, NewMux(service), http.MethodPut, "/api/v1/library/local-llm", map[string]any{
+		"enabled": true, "base_url": provider.URL + "/v1", "text_model": "translator", "api_key": "local-private-key", "timeout_seconds": 2,
+	})
+	body, _ := json.Marshal(map[string]any{"workspace": "agent-memory", "text": "Hello", "target_language": "vi"})
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/library/local-llm/translate", bytes.NewReader(body))
+	request.Header.Set("content-type", "application/json")
+	response := httptest.NewRecorder()
+	NewMux(service).ServeHTTP(response, request)
+	if response.Code != http.StatusBadGateway || !bytes.Contains(response.Body.Bytes(), []byte(`"translation_failed"`)) {
+		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
+	}
+	if bytes.Contains(response.Body.Bytes(), []byte("provider-private-diagnostic")) || bytes.Contains(response.Body.Bytes(), []byte("local-private-key")) {
+		t.Fatalf("translation error exposed provider details or credentials: %s", response.Body.String())
+	}
+}
+
 func TestLibraryLocalLLMStatusDefaultsToParserOnly(t *testing.T) {
 	response := httptest.NewRecorder()
 	NewMux(&Service{BaseDir: t.TempDir()}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/library/local-llm", nil))
