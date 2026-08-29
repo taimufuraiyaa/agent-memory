@@ -193,7 +193,7 @@
   - Files: CLI skill commands, local API handlers, request mappings, focused tests.
   - Estimated scope: Medium.
 
-- [ ] **Task 22: Expose expanded MCP revision workflow**
+- [x] **Task 22: Expose expanded MCP revision workflow**
   - Acceptance: Expanded profiles support logical skill resolution, acknowledgement, execution completion, proposal, and authorized review while legacy profiles remain unchanged.
   - Verify: `npm --prefix tools/agent-memory/mcp-server test` with legacy snapshot parity and expanded end-to-end fixtures.
   - Dependencies: Task 21.

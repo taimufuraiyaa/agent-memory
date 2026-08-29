@@ -164,6 +164,30 @@ const allTools = [
   tool("solution_tool_lesson_promote", "Promote a verified tool lesson into durable procedural memory", {
     workspace: { type: "string" }, principal_id: { type: "string" }, lesson_id: { type: "string" }, idempotency_key: { type: "string" },
   }, ["principal_id", "lesson_id"]),
+  tool("skill_list", "List logical skills and lifecycle state", { workspace: { type: "string" }, limit: { type: "integer", minimum: 1, maximum: 200 } }),
+  tool("skill_inspect", "Inspect revisions and activation state for one logical skill", { workspace: { type: "string" }, skill_id: { type: "string" }, environment: { type: "string" } }, ["skill_id"]),
+  tool("skill_propose", "Build an immutable draft from an authorized candidate", {
+    workspace: { type: "string" }, actor: { type: "string" }, candidate_id: { type: "string" }, skill_name: { type: "string" },
+    description: { type: "string" }, owner_group: { type: "string" }, files: { type: "object" }, removal_reasons: { type: "object" },
+    compatibility: { type: "object" }, protected_sections: { type: "array", items: { type: "string" } },
+  }, ["actor", "candidate_id", "files"]),
+  tool("skill_resolve", "Resolve an exact authorized logical skill revision", {
+    workspace: { type: "string" }, actor: { type: "string" }, environment: { type: "string" }, principal_id: { type: "string" }, task_id: { type: "string" },
+    skill_id: { type: "string" }, explicit_revision_id: { type: "string" }, environment_revision_id: { type: "string" }, platform: { type: "string" },
+    architecture: { type: "string" }, runtime_version: { type: "string" }, capabilities: { type: "array", items: { type: "string" } }, policy_version: { type: "integer", minimum: 1 },
+    canary_basis_points: { type: "integer", minimum: 0, maximum: 10000 }, canary_approved: { type: "boolean" }, acknowledgement_supported: { type: "boolean" },
+  }, ["actor", "principal_id", "task_id", "skill_id", "platform", "architecture", "runtime_version"]),
+  tool("skill_acknowledge", "Acknowledge the exact loaded revision and digest", {
+    workspace: { type: "string" }, actor: { type: "string" }, resolution_id: { type: "string" }, principal_id: { type: "string" }, task_id: { type: "string" }, revision_id: { type: "string" }, digest: { type: "string" }, token: { type: "string" },
+  }, ["actor", "resolution_id", "principal_id", "task_id", "revision_id", "digest", "token"]),
+  tool("skill_complete", "Complete acknowledged skill execution with bounded telemetry", {
+    workspace: { type: "string" }, actor: { type: "string" }, id: { type: "string" }, resolution_id: { type: "string" }, episode_id: { type: "string" },
+    outcome: { type: "string", enum: ["success", "failure", "partial", "cancelled"] }, independently_verified: { type: "boolean" }, failure_class: { type: "string" }, feedback_class: { type: "string" },
+    started_at: { type: "string" }, completed_at: { type: "string" }, input_tokens: { type: "integer", minimum: 0 }, output_tokens: { type: "integer", minimum: 0 }, tool_calls: { type: "integer", minimum: 0 },
+  }, ["actor", "id", "resolution_id", "episode_id", "outcome", "started_at", "completed_at"]),
+  tool("skill_review", "Run an authorized evaluation, approval, canary, promotion, disable, pin, or rollback operation", {
+    workspace: { type: "string" }, actor: { type: "string" }, operation: { type: "string", enum: ["evaluate", "approve", "canary", "promote", "disable", "pin", "rollback"] }, payload: { type: "object" },
+  }, ["actor", "operation", "payload"]),
 ];
 const defaultToolNames = new Set([
   "memory_write",
@@ -373,6 +397,33 @@ async function callTool(name, args) {
     case "solution_tool_lesson_promote":
       requireLocalSolutionTool();
       return requestService("/api/v1/solutions/tool-lessons/promote", { body: { ...args, idempotency_key: args.idempotency_key || randomUUID() } });
+    case "skill_list": {
+      requireLocalSolutionTool(); const query = new URLSearchParams(); if (args.workspace) query.set("workspace", args.workspace); if (args.limit) query.set("limit", String(args.limit));
+      return requestService(`/api/v1/skills/lifecycle/list${query.size ? `?${query}` : ""}`, { method: "GET" });
+    }
+    case "skill_inspect": {
+      requireLocalSolutionTool(); const query = new URLSearchParams({ skill_id: args.skill_id, environment: args.environment || "local" }); if (args.workspace) query.set("workspace", args.workspace);
+      return requestService(`/api/v1/skills/inspect?${query}`, { method: "GET" });
+    }
+    case "skill_propose": {
+      requireLocalSolutionTool(); const { workspace, actor, ...payload } = args;
+      return requestService("/api/v1/skills/lifecycle", { body: { operation: "propose", workspace, actor, payload } });
+    }
+    case "skill_resolve": {
+      requireLocalSolutionTool(); const { workspace, actor, ...payload } = args;
+      return requestService("/api/v1/skills/lifecycle", { body: { operation: "resolve", workspace, actor, payload: { ...payload, environment: payload.environment || "local", policy_version: payload.policy_version || 1, acknowledgement_supported: payload.acknowledgement_supported ?? true } } });
+    }
+    case "skill_acknowledge": {
+      requireLocalSolutionTool(); const { workspace, actor, ...payload } = args;
+      return requestService("/api/v1/skills/lifecycle", { body: { operation: "acknowledge", workspace, actor, payload } });
+    }
+    case "skill_complete": {
+      requireLocalSolutionTool(); const { workspace, actor, ...payload } = args;
+      return requestService("/api/v1/skills/lifecycle", { body: { operation: "complete", workspace, actor, payload } });
+    }
+    case "skill_review":
+      requireLocalSolutionTool();
+      return requestService("/api/v1/skills/lifecycle", { body: { operation: args.operation, workspace: args.workspace, actor: args.actor, payload: args.payload } });
     default:
       throw new Error(`tool execution is not available for ${name}`);
   }
