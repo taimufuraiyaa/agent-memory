@@ -183,6 +183,10 @@ func NewHandler(deps Dependencies) (http.Handler, error) {
 			protected.Handle("GET /v1/local-projects/lifecycle", localProjectBoundary("memory:read", listLocalProjectLifecycle(system)))
 			protected.Handle("GET /v1/local-projects/skills", localProjectBoundary("memory:read", listLocalProjectSkills(system)))
 		}
+		if skills, ok := deps.LocalProjects.(LocalProjectSkillLifecycleService); ok {
+			protected.Handle("GET /v1/local-project-skills/lifecycle", localProjectOwnerBoundary(deps.LocalOwner, "memory:read", localProjectSkillLifecycle(skills)))
+			protected.Handle("POST /v1/local-project-skills/lifecycle", localProjectOwnerBoundary(deps.LocalOwner, "memory:write", localProjectSkillLifecycle(skills)))
+		}
 		if clients, ok := deps.LocalProjects.(LocalClientProfileService); ok {
 			protected.Handle("GET /v1/local-client-profiles", localProjectBoundary("memory:read", localClientProfiles(clients)))
 			protected.Handle("POST /v1/local-client-profiles", localProjectBoundary("memory:write", localClientProfiles(clients)))

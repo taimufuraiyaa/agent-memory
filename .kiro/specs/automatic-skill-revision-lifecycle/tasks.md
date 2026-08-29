@@ -200,7 +200,7 @@
   - Files: MCP tools, schemas, client mappings, focused tests.
   - Estimated scope: Medium.
 
-- [ ] **Task 23: Add registered-project hosted parity**
+- [x] **Task 23: Add registered-project hosted parity**
   - Acceptance: Hosted adapters provide equivalent lifecycle semantics using tenant/workspace identities and never accept arbitrary local paths or cross-project revision IDs.
   - Verify: two-tenant, two-workspace, unknown project, path injection, approval, canary, rollback, and timing tests.
   - Dependencies: Task 21.

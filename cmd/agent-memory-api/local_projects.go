@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -114,6 +115,190 @@ func (service *localProjectService) Skills(_ context.Context, workspaceName stri
 		skills = append(skills, api.LocalProjectSkill{Name: entry.Name(), DisplayName: displayName, Description: description, Content: body, Path: filepath.ToSlash(filepath.Join(".agents", "skills", entry.Name(), "SKILL.md"))})
 	}
 	return skills, nil
+}
+
+func (service *localProjectService) ListSkillLifecycle(ctx context.Context, workspaceName string) ([]core.LogicalSkill, error) {
+	store, err := service.openProjectStore(ctx, workspaceName)
+	if err != nil {
+		return nil, err
+	}
+	defer store.Close()
+	return store.ListLogicalSkills(ctx, workspaceName, 200)
+}
+
+func (service *localProjectService) InspectSkillLifecycle(ctx context.Context, workspaceName, skillID, environment string) (api.LocalProjectSkillLifecycleView, error) {
+	store, err := service.openProjectStore(ctx, workspaceName)
+	if err != nil {
+		return api.LocalProjectSkillLifecycleView{}, err
+	}
+	defer store.Close()
+	skill, err := store.GetLogicalSkill(ctx, workspaceName, skillID)
+	if err != nil {
+		return api.LocalProjectSkillLifecycleView{}, err
+	}
+	revisions, err := store.ListSkillRevisions(ctx, workspaceName, skill.ID, 200)
+	if err != nil {
+		return api.LocalProjectSkillLifecycleView{}, err
+	}
+	view := api.LocalProjectSkillLifecycleView{Skill: skill, Revisions: revisions}
+	if activation, activationErr := store.GetSkillActivation(ctx, workspaceName, environment, skill.ID); activationErr == nil {
+		view.Activation = &activation
+	}
+	return view, nil
+}
+
+func (service *localProjectService) OperateSkillLifecycle(ctx context.Context, input api.LocalProjectSkillLifecycleInput) (any, error) {
+	if strings.TrimSpace(input.TenantID) == "" || strings.TrimSpace(input.AccountID) == "" || strings.TrimSpace(input.Actor) == "" {
+		return nil, errors.New("authenticated tenant, account, and actor are required")
+	}
+	project, err := service.manager.Project(input.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(project.WorkspaceRoot) == "" {
+		return nil, errors.New("registered project root is required")
+	}
+	store, err := sqlite.Open(ctx, project.DBPath)
+	if err != nil {
+		return nil, err
+	}
+	defer store.Close()
+	switch input.Operation {
+	case "propose":
+		var request struct {
+			CandidateID       string                  `json:"candidate_id"`
+			SkillName         string                  `json:"skill_name"`
+			Description       string                  `json:"description"`
+			OwnerGroup        string                  `json:"owner_group"`
+			Files             map[string]string       `json:"files"`
+			RemovalReasons    map[string]string       `json:"removal_reasons"`
+			Compatibility     core.SkillCompatibility `json:"compatibility"`
+			ProtectedSections []string                `json:"protected_sections"`
+		}
+		if err := json.Unmarshal(input.Payload, &request); err != nil {
+			return nil, err
+		}
+		files := map[string][]byte{}
+		for name, content := range request.Files {
+			files[name] = []byte(content)
+		}
+		bundles, err := workspace.NewRevisionBundleStore(project.WorkspaceRoot)
+		if err != nil {
+			return nil, err
+		}
+		return application.NewSkillRevisionBuilder(store, bundles).Build(ctx, application.SkillRevisionBuildInput{Workspace: input.Workspace, CandidateID: request.CandidateID, SkillName: request.SkillName, Description: request.Description, OwnerGroup: request.OwnerGroup, CreatedBy: input.Actor, ProposedFiles: files, RemovalReasons: request.RemovalReasons, Compatibility: request.Compatibility, ProtectedSections: request.ProtectedSections})
+	case "evaluate":
+		return nil, application.ErrSkillEvaluatorUnavailable
+	case "approve":
+		var request application.SkillApprovalInput
+		if err := json.Unmarshal(input.Payload, &request); err != nil {
+			return nil, err
+		}
+		request.Workspace = input.Workspace
+		return application.NewSkillApprovalService(store, localProjectSkillAuthorizer{}, time.Now).Approve(ctx, request)
+	case "canary":
+		var request application.SkillCanaryAllocationInput
+		if err := json.Unmarshal(input.Payload, &request); err != nil {
+			return nil, err
+		}
+		return application.SkillCanaryAllocator{}.Allocate(request), nil
+	case "promote", "rollback":
+		var request application.SkillActivationRequest
+		if err := json.Unmarshal(input.Payload, &request); err != nil {
+			return nil, err
+		}
+		request.Workspace = input.Workspace
+		if input.Operation == "rollback" {
+			request.Rollback = true
+		}
+		bundles, err := workspace.NewRevisionBundleStore(project.WorkspaceRoot)
+		if err != nil {
+			return nil, err
+		}
+		materializer, err := workspace.NewSkillMaterializer(project.WorkspaceRoot, bundles)
+		if err != nil {
+			return nil, err
+		}
+		return application.NewSkillActivationService(store, materializer, time.Now).Activate(ctx, request)
+	case "resolve", "pin":
+		var request application.SkillResolutionRequest
+		if err := json.Unmarshal(input.Payload, &request); err != nil {
+			return nil, err
+		}
+		request.Workspace = input.Workspace
+		bundles, err := workspace.NewRevisionBundleStore(project.WorkspaceRoot)
+		if err != nil {
+			return nil, err
+		}
+		materializer, err := workspace.NewSkillMaterializer(project.WorkspaceRoot, bundles)
+		if err != nil {
+			return nil, err
+		}
+		verifier, err := workspace.NewSkillArtifactVerifier(bundles, materializer)
+		if err != nil {
+			return nil, err
+		}
+		return application.NewSkillResolver(store, localProjectSkillAuthorizer{}, verifier, time.Now).Resolve(ctx, request)
+	case "acknowledge":
+		var request application.SkillAcknowledgementInput
+		if err := json.Unmarshal(input.Payload, &request); err != nil {
+			return nil, err
+		}
+		request.Workspace = input.Workspace
+		return application.NewSkillAcknowledgementService(store, time.Now).Acknowledge(ctx, request)
+	case "complete":
+		var request application.SkillExecutionInput
+		if err := json.Unmarshal(input.Payload, &request); err != nil {
+			return nil, err
+		}
+		request.Workspace = input.Workspace
+		return application.NewSkillExecutionService(store).Complete(ctx, request)
+	case "disable":
+		var request struct {
+			RevisionID    string                  `json:"revision_id"`
+			ExpectedState core.SkillRevisionState `json:"expected_state"`
+		}
+		if err := json.Unmarshal(input.Payload, &request); err != nil {
+			return nil, err
+		}
+		revision, err := store.GetSkillRevision(ctx, input.Workspace, request.RevisionID)
+		if err != nil {
+			return nil, err
+		}
+		if revision.State == core.SkillRevisionDisabled {
+			return revision, nil
+		}
+		return store.TransitionSkillRevisionState(ctx, input.Workspace, request.RevisionID, request.ExpectedState, core.SkillRevisionDisabled)
+	default:
+		return nil, errors.New("unsupported skill lifecycle operation")
+	}
+}
+
+type localProjectSkillAuthorizer struct{}
+
+func (localProjectSkillAuthorizer) AuthorizeSkillApproval(_ context.Context, actor, workspaceName, revisionID string) error {
+	if actor == "" || workspaceName == "" || revisionID == "" {
+		return errors.New("approval scope is required")
+	}
+	return nil
+}
+func (localProjectSkillAuthorizer) AuthorizeSkillApprovalRevocation(_ context.Context, actor, workspaceName, approvalID string) error {
+	if actor == "" || workspaceName == "" || approvalID == "" {
+		return errors.New("approval scope is required")
+	}
+	return nil
+}
+func (localProjectSkillAuthorizer) AuthorizeSkillResolution(_ context.Context, actor, workspaceName, environment, skillID string) error {
+	if actor == "" || workspaceName == "" || environment == "" || skillID == "" {
+		return errors.New("resolution scope is required")
+	}
+	return nil
+}
+func (localProjectSkillAuthorizer) AuthorizeSkillPin(_ context.Context, actor, workspaceName, skillID, revisionID string) error {
+	if actor == "" || workspaceName == "" || skillID == "" || revisionID == "" {
+		return errors.New("pin scope is required")
+	}
+	return nil
 }
 
 func pathWithinRoot(root, candidate string) bool {

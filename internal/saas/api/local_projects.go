@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
@@ -202,6 +203,25 @@ type LocalProjectSystemService interface {
 	Skills(context.Context, string) ([]LocalProjectSkill, error)
 }
 
+type LocalProjectSkillLifecycleView struct {
+	Skill      core.LogicalSkill     `json:"skill"`
+	Revisions  []core.SkillRevision  `json:"revisions"`
+	Activation *core.SkillActivation `json:"activation,omitempty"`
+}
+type LocalProjectSkillLifecycleInput struct {
+	Workspace string          `json:"workspace"`
+	TenantID  string          `json:"-"`
+	AccountID string          `json:"-"`
+	Actor     string          `json:"-"`
+	Operation string          `json:"operation"`
+	Payload   json.RawMessage `json:"payload"`
+}
+type LocalProjectSkillLifecycleService interface {
+	ListSkillLifecycle(context.Context, string) ([]core.LogicalSkill, error)
+	InspectSkillLifecycle(context.Context, string, string, string) (LocalProjectSkillLifecycleView, error)
+	OperateSkillLifecycle(context.Context, LocalProjectSkillLifecycleInput) (any, error)
+}
+
 type LocalClientProfileService interface {
 	ListClientProfiles(context.Context) ([]clientprofile.Profile, error)
 	CreateClientProfile(context.Context, clientprofile.Input) (clientprofile.Profile, error)
@@ -241,6 +261,115 @@ func localProjectBoundary(capability string, next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(response, request)
 	})
+}
+
+func localProjectOwnerBoundary(owner LocalOwnerService, capability string, next http.Handler) http.Handler {
+	bound := http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		caller, _ := auth.FromContext(request.Context())
+		status, err := owner.Status(request.Context())
+		if err != nil || status.State != "authenticated" || caller.TenantID != status.Account.TenantID || caller.AccountID != status.Account.AccountID {
+			writeError(response, http.StatusForbidden, requestID(request), "local_owner_scope_required", "The session does not own this local project registry.")
+			return
+		}
+		next.ServeHTTP(response, request)
+	})
+	return localProjectBoundary(capability, bound)
+}
+
+func localProjectSkillLifecycle(service LocalProjectSkillLifecycleService) http.HandlerFunc {
+	return func(response http.ResponseWriter, request *http.Request) {
+		caller, ok := auth.FromContext(request.Context())
+		if !ok {
+			writeError(response, http.StatusForbidden, requestID(request), "browser_owner_required", "A browser owner session is required.")
+			return
+		}
+		switch request.Method {
+		case http.MethodGet:
+			workspaceName := strings.TrimSpace(request.URL.Query().Get("workspace"))
+			if _, valid := validLocalProjectWorkspace(workspaceName); !valid {
+				writeError(response, 400, requestID(request), "invalid_workspace", "A registered workspace name is required.")
+				return
+			}
+			skillID := strings.TrimSpace(request.URL.Query().Get("skill_id"))
+			if skillID == "" {
+				items, err := service.ListSkillLifecycle(request.Context(), workspaceName)
+				if err != nil {
+					writeError(response, 400, requestID(request), "skill_lifecycle_unavailable", err.Error())
+					return
+				}
+				writeSuccess(response, 200, requestID(request), map[string]any{"skills": items})
+				return
+			}
+			environment := strings.TrimSpace(request.URL.Query().Get("environment"))
+			if environment == "" {
+				environment = "local"
+			}
+			view, err := service.InspectSkillLifecycle(request.Context(), workspaceName, skillID, environment)
+			if err != nil {
+				writeError(response, 400, requestID(request), "skill_lifecycle_unavailable", err.Error())
+				return
+			}
+			writeSuccess(response, 200, requestID(request), view)
+		case http.MethodPost:
+			var input LocalProjectSkillLifecycleInput
+			if decodeJSON(request, &input) != nil {
+				writeError(response, 400, requestID(request), "invalid_request", "request body is invalid")
+				return
+			}
+			input.Workspace = strings.TrimSpace(input.Workspace)
+			input.Operation = strings.TrimSpace(input.Operation)
+			if _, valid := validLocalProjectWorkspace(input.Workspace); !valid || !validLocalSkillOperation(input.Operation) || unsafeLocalSkillPayload(input.Payload) {
+				writeError(response, 400, requestID(request), "invalid_skill_lifecycle", "workspace, operation, or payload is invalid")
+				return
+			}
+			input.Actor, input.AccountID, input.TenantID = caller.SubjectID, caller.AccountID, caller.TenantID
+			result, err := service.OperateSkillLifecycle(request.Context(), input)
+			if err != nil {
+				writeError(response, 400, requestID(request), "skill_lifecycle_failed", err.Error())
+				return
+			}
+			writeSuccess(response, 200, requestID(request), map[string]any{"operation": input.Operation, "result": result})
+		default:
+			writeError(response, 405, requestID(request), "method_not_allowed", "method not allowed")
+		}
+	}
+}
+
+func validLocalSkillOperation(value string) bool {
+	switch value {
+	case "propose", "evaluate", "approve", "canary", "promote", "resolve", "acknowledge", "complete", "disable", "pin", "rollback":
+		return true
+	}
+	return false
+}
+func unsafeLocalSkillPayload(raw json.RawMessage) bool {
+	var value any
+	if len(raw) == 0 || json.Unmarshal(raw, &value) != nil {
+		return true
+	}
+	var inspect func(any) bool
+	inspect = func(current any) bool {
+		switch typed := current.(type) {
+		case map[string]any:
+			for key, item := range typed {
+				normalized := strings.ToLower(strings.TrimSpace(key))
+				if normalized == "path" || normalized == "project_root" || normalized == "db_path" || normalized == "workspace" || normalized == "tenant_id" || normalized == "account_id" {
+					return true
+				}
+				if inspect(item) {
+					return true
+				}
+			}
+		case []any:
+			for _, item := range typed {
+				if inspect(item) {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	return inspect(value)
 }
 
 func validLocalProjectWorkspace(raw string) (string, bool) {
