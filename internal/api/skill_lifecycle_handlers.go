@@ -12,6 +12,7 @@ import (
 
 	"github.com/taimufuraiyaa/agent-memory/internal/application"
 	"github.com/taimufuraiyaa/agent-memory/internal/core"
+	"github.com/taimufuraiyaa/agent-memory/internal/observability"
 	"github.com/taimufuraiyaa/agent-memory/internal/workspace"
 )
 
@@ -126,6 +127,11 @@ func skillLifecycleHandler(svc *Service) http.HandlerFunc {
 		}
 		request.Operation = strings.TrimSpace(request.Operation)
 		request.Actor = strings.TrimSpace(request.Actor)
+		started := time.Now()
+		outcome := "failure"
+		defer func() {
+			observability.DefaultSkillLifecycleMetrics().Observe(observability.SkillLifecycleObservation{Event: request.Operation, Outcome: outcome, Duration: time.Since(started)})
+		}()
 		assets, err := svc.resolve(r.Context(), request.Workspace)
 		if err != nil {
 			writeSolutionError(w, err)
@@ -221,7 +227,7 @@ func skillLifecycleHandler(svc *Service) http.HandlerFunc {
 						if materialErr != nil {
 							err = materialErr
 						} else {
-							result, err = application.NewSkillActivationService(assets.Store, materializer, time.Now).Activate(r.Context(), input)
+							result, err = application.NewSkillActivationService(assets.Store, materializer, time.Now).WithMaterializationObserver(observability.DefaultSkillLifecycleMetrics()).Activate(r.Context(), input)
 						}
 					}
 				}
@@ -287,6 +293,7 @@ func skillLifecycleHandler(svc *Service) http.HandlerFunc {
 			writeSolutionError(w, err)
 			return
 		}
+		outcome = "success"
 		writeOK(w, 200, map[string]any{"operation": request.Operation, "result": result})
 	}
 }

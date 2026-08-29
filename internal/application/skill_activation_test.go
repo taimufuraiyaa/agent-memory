@@ -41,6 +41,27 @@ func TestSkillActivationServicePromotesAndReplaysIdempotently(t *testing.T) {
 	}
 }
 
+func TestSkillActivationServiceObservesMaterializationWithoutIdentifiers(t *testing.T) {
+	fixture := newSkillActivationFixture(t)
+	observer := &materializationObserver{}
+	fixture.service.WithMaterializationObserver(observer)
+	if _, err := fixture.service.Activate(context.Background(), fixture.promotionRequest("observed", fixture.revisionTwo, 1)); err != nil {
+		t.Fatal(err)
+	}
+	if observer.outcome != "success" || observer.duration < 0 {
+		t.Fatalf("materialization observation = %+v", observer)
+	}
+}
+
+type materializationObserver struct {
+	outcome  string
+	duration time.Duration
+}
+
+func (o *materializationObserver) ObserveSkillMaterialization(outcome string, duration time.Duration) {
+	o.outcome, o.duration = outcome, duration
+}
+
 func TestSkillActivationServiceRejectsStaleGeneration(t *testing.T) {
 	fixture := newSkillActivationFixture(t)
 	request := fixture.promotionRequest("stale", fixture.revisionTwo, 0)

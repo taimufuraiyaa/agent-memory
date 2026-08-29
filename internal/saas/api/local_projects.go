@@ -13,6 +13,7 @@ import (
 	"github.com/taimufuraiyaa/agent-memory/internal/clientprofile"
 	"github.com/taimufuraiyaa/agent-memory/internal/core"
 	"github.com/taimufuraiyaa/agent-memory/internal/engine"
+	"github.com/taimufuraiyaa/agent-memory/internal/observability"
 	"github.com/taimufuraiyaa/agent-memory/internal/saas/auth"
 	"github.com/taimufuraiyaa/agent-memory/internal/workspace"
 )
@@ -320,6 +321,11 @@ func localProjectSkillLifecycle(service LocalProjectSkillLifecycleService) http.
 			}
 			input.Workspace = strings.TrimSpace(input.Workspace)
 			input.Operation = strings.TrimSpace(input.Operation)
+			started := time.Now()
+			outcome := "failure"
+			defer func() {
+				observability.DefaultSkillLifecycleMetrics().Observe(observability.SkillLifecycleObservation{Event: input.Operation, Outcome: outcome, Duration: time.Since(started)})
+			}()
 			if _, valid := validLocalProjectWorkspace(input.Workspace); !valid || !validLocalSkillOperation(input.Operation) || unsafeLocalSkillPayload(input.Payload) {
 				writeError(response, 400, requestID(request), "invalid_skill_lifecycle", "workspace, operation, or payload is invalid")
 				return
@@ -330,6 +336,7 @@ func localProjectSkillLifecycle(service LocalProjectSkillLifecycleService) http.
 				writeError(response, 400, requestID(request), "skill_lifecycle_failed", err.Error())
 				return
 			}
+			outcome = "success"
 			writeSuccess(response, 200, requestID(request), map[string]any{"operation": input.Operation, "result": result})
 		default:
 			writeError(response, 405, requestID(request), "method_not_allowed", "method not allowed")

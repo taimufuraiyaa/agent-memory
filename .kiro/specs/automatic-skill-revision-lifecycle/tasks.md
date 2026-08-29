@@ -223,7 +223,7 @@
 
 ## Phase 7 — Operations, Migration, and Release
 
-- [ ] **Task 25: Add bounded operational metrics and alerts**
+- [x] **Task 25: Add bounded operational metrics and alerts**
   - Acceptance: Metrics cover candidates, evaluations, approvals, canaries, acknowledgements, promotions, materialization failures, disables, and rollbacks without unbounded skill labels or content.
   - Verify: metric registration, bounded-cardinality, alert fixture, and content-leak tests.
   - Dependencies: Checkpoint F.

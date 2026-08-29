@@ -1,0 +1,30 @@
+groups:
+  - name: agent-memory-skill-lifecycle
+    rules:
+      - alert: AgentMemorySkillMaterializationFailures
+        expr: increase(agent_memory_skill_lifecycle_events_total{event="materialization",outcome="failure"}[15m]) > 0
+        for: 5m
+        labels:
+          severity: page
+          owner: agent-memory-operations
+        annotations:
+          summary: Skill materialization is failing
+          runbook: docs/runbooks/skill-revision-lifecycle.md#materialization-failure
+      - alert: AgentMemorySkillRollbackSpike
+        expr: increase(agent_memory_skill_lifecycle_events_total{event="rollback",outcome="success"}[30m]) > 3
+        for: 5m
+        labels:
+          severity: ticket
+          owner: agent-memory-operations
+        annotations:
+          summary: Skill rollbacks exceed the normal safety envelope
+          runbook: docs/runbooks/skill-revision-lifecycle.md#rollback-spike
+      - alert: AgentMemorySkillEvaluationFailures
+        expr: increase(agent_memory_skill_lifecycle_events_total{event="evaluate",outcome="failure"}[30m]) > 5
+        for: 10m
+        labels:
+          severity: ticket
+          owner: agent-memory-operations
+        annotations:
+          summary: Skill evaluation failures are elevated
+          runbook: docs/runbooks/skill-revision-lifecycle.md#evaluation-failure

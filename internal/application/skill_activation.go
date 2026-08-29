@@ -42,10 +42,20 @@ type skillMaterializer interface {
 	Materialize(context.Context, core.SkillMaterializationRequest) (core.SkillMaterializationResult, error)
 }
 
+type SkillMaterializationObserver interface {
+	ObserveSkillMaterialization(string, time.Duration)
+}
+
 type SkillActivationService struct {
 	repository   skillActivationRepository
 	materializer skillMaterializer
 	now          func() time.Time
+	observer     SkillMaterializationObserver
+}
+
+func (s *SkillActivationService) WithMaterializationObserver(observer SkillMaterializationObserver) *SkillActivationService {
+	s.observer = observer
+	return s
 }
 
 func NewSkillActivationService(repository skillActivationRepository, materializer skillMaterializer, now func() time.Time) *SkillActivationService {
@@ -124,9 +134,16 @@ func (s *SkillActivationService) Activate(ctx context.Context, request SkillActi
 	if err != nil {
 		return core.SkillActivation{}, err
 	}
+	materializationStarted := time.Now()
 	if _, err := s.materializer.Materialize(ctx, core.SkillMaterializationRequest{OperationID: operation.ID, Skill: skill, Revision: target}); err != nil {
+		if s.observer != nil {
+			s.observer.ObserveSkillMaterialization("failure", time.Since(materializationStarted))
+		}
 		_, transitionErr := s.repository.TransitionSkillActivationOperation(ctx, request.Workspace, operation.ID, core.SkillActivationOperationMaterializing, core.SkillActivationOperationFailed, boundedActivationError(err), s.now().UTC())
 		return core.SkillActivation{}, errors.Join(err, transitionErr)
+	}
+	if s.observer != nil {
+		s.observer.ObserveSkillMaterialization("success", time.Since(materializationStarted))
 	}
 	activation, err := s.repository.CompleteSkillActivation(ctx, operation.ID, request.PolicyDecisionID, request.Actor, request.Rollback, request.Automatic, request.ReasonCode, s.now().UTC())
 	if err == nil {

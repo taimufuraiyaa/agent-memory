@@ -15,6 +15,7 @@ import (
 	"github.com/taimufuraiyaa/agent-memory/internal/core"
 	"github.com/taimufuraiyaa/agent-memory/internal/embeddings"
 	"github.com/taimufuraiyaa/agent-memory/internal/engine"
+	"github.com/taimufuraiyaa/agent-memory/internal/observability"
 	api "github.com/taimufuraiyaa/agent-memory/internal/saas/api"
 	"github.com/taimufuraiyaa/agent-memory/internal/storage/sqlite"
 	"github.com/taimufuraiyaa/agent-memory/internal/workspace"
@@ -229,7 +230,7 @@ func (service *localProjectService) OperateSkillLifecycle(ctx context.Context, i
 		if err != nil {
 			return nil, err
 		}
-		return application.NewSkillActivationService(store, materializer, time.Now).Activate(ctx, request)
+		return application.NewSkillActivationService(store, materializer, time.Now).WithMaterializationObserver(observability.DefaultSkillLifecycleMetrics()).Activate(ctx, request)
 	case "resolve", "pin":
 		var request application.SkillResolutionRequest
 		if err := json.Unmarshal(input.Payload, &request); err != nil {
