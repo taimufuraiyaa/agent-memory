@@ -37,6 +37,15 @@ type RevisionBundleStore struct {
 	beforeCommit  func() error
 }
 
+func (s *RevisionBundleStore) PublishRevision(ctx context.Context, revision core.SkillRevision, contents map[string][]byte) (string, bool, error) {
+	published, err := s.Publish(ctx, revision, contents)
+	return published.Digest, published.Duplicate, err
+}
+
+func (s *RevisionBundleStore) ReadRevision(ctx context.Context, revision core.SkillRevision) (map[string][]byte, error) {
+	return s.Read(ctx, revision)
+}
+
 type storedSkillBundleManifest struct {
 	ManifestVersion int64                  `json:"manifest_version"`
 	BundleDigest    string                 `json:"bundle_digest"`

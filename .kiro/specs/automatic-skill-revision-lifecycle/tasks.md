@@ -163,7 +163,7 @@
   - Files: detector, candidate repository, scheduler integration, focused tests.
   - Estimated scope: Medium.
 
-- [ ] **Task 19: Add safe revision builder**
+- [x] **Task 19: Add safe revision builder**
   - Acceptance: A candidate produces a draft immutable bundle with protected-section preservation, bounded explained diff, admission results, asset manifest, and source provenance.
   - Verify: new skill, revision, merge, split, protected content, unsafe deletion, oversize, injection, and deterministic digest tests.
   - Dependencies: Tasks 4 and 18.

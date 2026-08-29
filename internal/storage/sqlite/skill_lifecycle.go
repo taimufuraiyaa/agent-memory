@@ -134,6 +134,25 @@ func (s *Store) GetLogicalSkill(ctx context.Context, workspace, skillID string) 
 	return item, err
 }
 
+func (s *Store) CreateLogicalSkill(ctx context.Context, skill core.LogicalSkill) error {
+	if err := skill.Validate(); err != nil {
+		return err
+	}
+	triggers, _ := json.Marshal(skill.TriggerConditions)
+	capabilities, _ := json.Marshal(skill.Capabilities)
+	_, err := s.db.ExecContext(ctx, `INSERT INTO skills(id,workspace,name,description,trigger_conditions_json,capabilities_json,risk_tier,owner_group,status,generation,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
+		skill.ID, skill.Workspace, skill.Name, skill.Description, string(triggers), string(capabilities), skill.RiskTier, skill.OwnerGroup, skill.Status, skill.Generation, formatSkillTime(skill.CreatedAt), formatSkillTime(skill.UpdatedAt))
+	return err
+}
+
+func (s *Store) GetSkillRevisionForCandidate(ctx context.Context, workspace, candidateID string) (core.SkillRevision, error) {
+	var revisionID string
+	if err := s.db.QueryRowContext(ctx, `SELECT id FROM skill_revisions WHERE workspace = ? AND candidate_id = ? ORDER BY revision_number DESC LIMIT 1`, strings.TrimSpace(workspace), strings.TrimSpace(candidateID)).Scan(&revisionID); err != nil {
+		return core.SkillRevision{}, err
+	}
+	return s.GetSkillRevision(ctx, workspace, revisionID)
+}
+
 func (s *Store) CreateSkillRevision(ctx context.Context, revision core.SkillRevision) error {
 	if err := revision.Validate(); err != nil {
 		return err
