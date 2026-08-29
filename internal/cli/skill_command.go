@@ -14,7 +14,7 @@ func newSkillCommand() *cobra.Command {
 	command := &cobra.Command{Use: "skill", Short: "Inspect and operate the revision lifecycle"}
 	addCommonPersistentFlags(command, &flags)
 	command.AddCommand(newSkillListCommand(&flags), newSkillInspectCommand(&flags))
-	for _, operation := range []string{"propose", "evaluate", "approve", "canary", "promote", "resolve", "acknowledge", "complete", "disable", "pin", "rollback"} {
+	for _, operation := range []string{"propose", "evaluate", "approve", "canary", "promote", "resolve", "acknowledge", "complete", "disable", "pin", "rollback", "migration-verify"} {
 		command.AddCommand(newSkillLifecycleOperationCommand(&flags, operation))
 	}
 	return command

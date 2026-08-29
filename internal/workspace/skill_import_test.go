@@ -15,6 +15,7 @@ import (
 func TestImportExistingSkillsCreatesActiveRevisionOneWithProvenance(t *testing.T) {
 	ctx := context.Background()
 	root := t.TempDir()
+	allowBundleCleanup(t, root)
 	skillDir := filepath.Join(root, ".agents", "skills", "safe-release")
 	if err := os.MkdirAll(filepath.Join(skillDir, "scripts"), 0o755); err != nil {
 		t.Fatal(err)

@@ -346,7 +346,7 @@ func localProjectSkillLifecycle(service LocalProjectSkillLifecycleService) http.
 
 func validLocalSkillOperation(value string) bool {
 	switch value {
-	case "propose", "evaluate", "approve", "canary", "promote", "resolve", "acknowledge", "complete", "disable", "pin", "rollback":
+	case "propose", "evaluate", "approve", "canary", "promote", "resolve", "acknowledge", "complete", "disable", "pin", "rollback", "migration-verify":
 		return true
 	}
 	return false

@@ -237,7 +237,7 @@
   - Files: export adapter, deletion service, retention cleanup, focused tests.
   - Estimated scope: Medium.
 
-- [ ] **Task 27: Add migration and shadow-resolution release gate**
+- [x] **Task 27: Add migration and shadow-resolution release gate**
   - Acceptance: Representative existing projects import revision 1, shadow resolution matches legacy skill selection, and digest/materialization discrepancies block rollout.
   - Verify: fresh and upgraded database matrix, representative skill assets, shadow parity report, and rollback drill.
   - Dependencies: Tasks 3, 7, and 25.

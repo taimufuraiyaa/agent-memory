@@ -22,6 +22,7 @@ var skillEvents = map[string]struct{}{
 	"propose": {}, "evaluate": {}, "approve": {}, "canary": {}, "acknowledge": {},
 	"promote": {}, "materialization": {}, "complete": {}, "disable": {}, "rollback": {},
 	"resolve": {}, "pin": {}, "unknown": {},
+	"migration-verify": {},
 }
 var skillOutcomes = map[string]struct{}{"success": {}, "failure": {}, "rejected": {}, "skipped": {}, "unknown": {}}
 

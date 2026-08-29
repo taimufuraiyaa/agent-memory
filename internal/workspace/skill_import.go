@@ -67,6 +67,10 @@ func ImportExistingSkills(ctx context.Context, store existingSkillImportStore, w
 	if err != nil {
 		return result, err
 	}
+	bundleStore, err := NewRevisionBundleStore(root)
+	if err != nil {
+		return result, err
+	}
 	for _, entry := range entries {
 		if !entry.IsDir() || entry.Type()&os.ModeSymlink != 0 {
 			continue
@@ -107,6 +111,11 @@ func ImportExistingSkills(ctx context.Context, store existingSkillImportStore, w
 			result.Issues = append(result.Issues, ExistingSkillImportIssue{Skill: name, Reason: importErr.Error()})
 			continue
 		}
+		if _, publishErr := bundleStore.Publish(ctx, revision, bundle.Contents); publishErr != nil {
+			result.Skipped++
+			result.Issues = append(result.Issues, ExistingSkillImportIssue{Skill: name, Reason: "publish immutable revision 1: " + publishErr.Error()})
+			continue
+		}
 		if deduplicated {
 			result.Skipped++
 		} else {
@@ -117,8 +126,9 @@ func ImportExistingSkills(ctx context.Context, store existingSkillImportStore, w
 }
 
 type inspectedSkillBundle struct {
-	Digest string
-	Files  []core.SkillBundleFile
+	Digest   string
+	Files    []core.SkillBundleFile
+	Contents map[string][]byte
 }
 
 func inspectExistingSkillBundle(root, skillDir string) (inspectedSkillBundle, string, error) {
@@ -127,6 +137,7 @@ func inspectExistingSkillBundle(root, skillDir string) (inspectedSkillBundle, st
 		return inspectedSkillBundle{}, "", errors.New("skill directory escapes registered root")
 	}
 	files := make([]core.SkillBundleFile, 0)
+	contents := map[string][]byte{}
 	var description string
 	err = filepath.WalkDir(resolvedDir, func(filePath string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
@@ -169,6 +180,7 @@ func inspectExistingSkillBundle(root, skillDir string) (inspectedSkillBundle, st
 		}
 		digest := sha256.Sum256(content)
 		files = append(files, core.SkillBundleFile{Path: relative, Digest: "sha256:" + hex.EncodeToString(digest[:]), SizeBytes: info.Size()})
+		contents[relative] = append([]byte(nil), content...)
 		return nil
 	})
 	if err != nil {
@@ -190,7 +202,7 @@ func inspectExistingSkillBundle(root, skillDir string) (inspectedSkillBundle, st
 	if strings.TrimSpace(description) == "" {
 		description = "Imported workspace skill."
 	}
-	return inspectedSkillBundle{Digest: skillBundleDigest(files), Files: files}, description, nil
+	return inspectedSkillBundle{Digest: skillBundleDigest(files), Files: files, Contents: contents}, description, nil
 }
 
 func parseExistingSkillDescription(raw string) string {

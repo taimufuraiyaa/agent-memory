@@ -280,6 +280,14 @@ func (service *localProjectService) OperateSkillLifecycle(ctx context.Context, i
 			return revision, nil
 		}
 		return store.TransitionSkillRevisionState(ctx, input.Workspace, request.RevisionID, request.ExpectedState, core.SkillRevisionDisabled)
+	case "migration-verify":
+		var request struct {
+			Shadow []workspace.SkillShadowSelection `json:"shadow"`
+		}
+		if err := json.Unmarshal(input.Payload, &request); err != nil {
+			return nil, err
+		}
+		return workspace.RunSkillMigrationReleaseGate(ctx, store, input.Workspace, project.WorkspaceRoot, request.Shadow, time.Now)
 	default:
 		return nil, errors.New("unsupported skill lifecycle operation")
 	}

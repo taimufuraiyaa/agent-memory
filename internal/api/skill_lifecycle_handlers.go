@@ -286,6 +286,19 @@ func skillLifecycleHandler(svc *Service) http.HandlerFunc {
 					result, err = assets.Store.TransitionSkillRevisionState(r.Context(), ws, input.RevisionID, input.ExpectedState, core.SkillRevisionDisabled)
 				}
 			}
+		case "migration-verify":
+			var input struct {
+				Shadow []workspace.SkillShadowSelection `json:"shadow"`
+			}
+			err = json.Unmarshal(request.Payload, &input)
+			if err == nil {
+				root, rootErr := skillProjectRoot(svc, ws)
+				if rootErr != nil {
+					err = rootErr
+				} else {
+					result, err = workspace.RunSkillMigrationReleaseGate(r.Context(), assets.Store, ws, root, input.Shadow, time.Now)
+				}
+			}
 		default:
 			err = errors.New("unsupported skill lifecycle operation")
 		}
