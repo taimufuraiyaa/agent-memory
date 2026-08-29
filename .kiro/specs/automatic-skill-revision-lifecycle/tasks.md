@@ -186,7 +186,7 @@
 
 ## Phase 6 — Product and Runtime Contracts
 
-- [ ] **Task 21: Expose standalone lifecycle APIs and CLI**
+- [x] **Task 21: Expose standalone lifecycle APIs and CLI**
   - Acceptance: Public operations cover list, inspect, propose, evaluate, approve, canary, promote, resolve, acknowledge, complete, disable, pin, and rollback with stable JSON and idempotency.
   - Verify: CLI and API contract tests for successful, stale, unauthorized, partial, and replayed operations.
   - Dependencies: Checkpoint E.

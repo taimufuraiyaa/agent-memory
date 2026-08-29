@@ -29,8 +29,9 @@ import (
 )
 
 type Service struct {
-	Workspace string
-	BaseDir   string
+	Workspace   string
+	BaseDir     string
+	ProjectRoot string
 	// DBPath binds a fixed standalone workspace to an exact database file.
 	// It is ignored for daemon and alternate-workspace resolution.
 	DBPath                 string
@@ -46,7 +47,11 @@ type Service struct {
 	LocalLLMChecker        *localllm.Checker
 	// GraphOperations is optional and primarily supports embedding/tests. When
 	// nil, handlers bind a controller to the resolved workspace store.
-	GraphOperations application.GraphOperationController
+	GraphOperations           application.GraphOperationController
+	SkillEvaluationRunner     application.RestrictedSkillEvaluationRunner
+	SkillApprovalAuthorizer   application.SkillApprovalAuthorizer
+	SkillResolutionAuthorizer application.SkillResolutionAuthorizer
+	SkillMutationAuthorizer   SkillMutationAuthorizer
 
 	mu             sync.RWMutex
 	stores         map[string]*workspaceAssets
@@ -303,6 +308,9 @@ func NewMux(svc *Service) *http.ServeMux {
 	mux.HandleFunc("/api/v1/solutions/handoff", solutionHandoffHandler(svc))
 	mux.HandleFunc("/api/v1/solutions/activity", solutionActivityHandler(svc))
 	mux.HandleFunc("/api/v1/solutions/review", solutionReviewHandler(svc))
+	mux.HandleFunc("/api/v1/skills/lifecycle/list", skillListHandler(svc))
+	mux.HandleFunc("/api/v1/skills/inspect", skillInspectHandler(svc))
+	mux.HandleFunc("/api/v1/skills/lifecycle", skillLifecycleHandler(svc))
 	mux.HandleFunc("/api/v1/projects/init", projectsInitHandler(svc))
 	mux.HandleFunc("/api/v1/projects/rename", projectsRenameHandler(svc))
 	mux.HandleFunc("/api/v1/projects/list", projectsListHandler(svc))

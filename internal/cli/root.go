@@ -97,6 +97,7 @@ func NewRootCommand() *cobra.Command {
 	cmd.AddCommand(newFeedbackCommand())
 	cmd.AddCommand(newSessionEndCommand())
 	cmd.AddCommand(newWorkCommand())
+	cmd.AddCommand(newSkillCommand())
 	cmd.AddCommand(newConsolidateCommand())
 	cmd.AddCommand(newStudyCommand())
 	cmd.AddCommand(newReconstructCommand())
