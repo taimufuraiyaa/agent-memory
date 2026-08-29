@@ -11,19 +11,20 @@ import (
 )
 
 type SkillPolicyInput struct {
-	DecisionID                string  `json:"decision_id"`
-	Workspace                 string  `json:"workspace"`
-	SkillID                   string  `json:"skill_id"`
-	RevisionID                string  `json:"revision_id"`
-	PolicyID                  string  `json:"policy_id"`
-	PolicyVersion             int64   `json:"policy_version"`
-	CandidateRunID            string  `json:"candidate_run_id"`
-	BaselineRunID             string  `json:"baseline_run_id"`
-	CanarySamples             int     `json:"canary_samples"`
-	CanaryVerifiedSuccessRate float64 `json:"canary_verified_success_rate"`
-	CanaryFailureRate         float64 `json:"canary_failure_rate"`
-	HarmfulFeedbackCount      int     `json:"harmful_feedback_count"`
-	EfficiencyImprovement     float64 `json:"efficiency_improvement"`
+	DecisionID                        string  `json:"decision_id"`
+	Workspace                         string  `json:"workspace"`
+	SkillID                           string  `json:"skill_id"`
+	RevisionID                        string  `json:"revision_id"`
+	PolicyID                          string  `json:"policy_id"`
+	PolicyVersion                     int64   `json:"policy_version"`
+	CandidateRunID                    string  `json:"candidate_run_id"`
+	BaselineRunID                     string  `json:"baseline_run_id"`
+	CanarySamples                     int     `json:"canary_samples"`
+	CanaryVerifiedSuccessRate         float64 `json:"canary_verified_success_rate"`
+	CanaryFailureRate                 float64 `json:"canary_failure_rate"`
+	BaselineCanaryVerifiedSuccessRate float64 `json:"baseline_canary_verified_success_rate"`
+	HarmfulFeedbackCount              int     `json:"harmful_feedback_count"`
+	EfficiencyImprovement             float64 `json:"efficiency_improvement"`
 }
 
 type skillPolicyRepositoryContract interface {
@@ -113,6 +114,9 @@ func evaluatePromotionPolicy(input SkillPolicyInput, policy core.SkillPromotionP
 	if input.CanaryVerifiedSuccessRate < policy.MinimumVerifiedSuccessRate || input.CanaryFailureRate > policy.MaximumFailureRate {
 		return core.SkillDecisionPause, []string{"canary_quality_gate_failed"}
 	}
+	if input.CanaryVerifiedSuccessRate < input.BaselineCanaryVerifiedSuccessRate {
+		return core.SkillDecisionPause, []string{"canary_baseline_regression"}
+	}
 	return core.SkillDecisionPromote, []string{"all_policy_gates_passed"}
 }
 
@@ -145,7 +149,7 @@ func validateSkillPolicyInput(input SkillPolicyInput) error {
 			return fmt.Errorf("skill policy %s is required and bounded", field)
 		}
 	}
-	if input.PolicyVersion < 1 || input.CanarySamples < 0 || input.HarmfulFeedbackCount < 0 || input.CanaryVerifiedSuccessRate < 0 || input.CanaryVerifiedSuccessRate > 1 || input.CanaryFailureRate < 0 || input.CanaryFailureRate > 1 {
+	if input.PolicyVersion < 1 || input.CanarySamples < 0 || input.HarmfulFeedbackCount < 0 || input.CanaryVerifiedSuccessRate < 0 || input.CanaryVerifiedSuccessRate > 1 || input.BaselineCanaryVerifiedSuccessRate < 0 || input.BaselineCanaryVerifiedSuccessRate > 1 || input.CanaryFailureRate < 0 || input.CanaryFailureRate > 1 {
 		return errors.New("skill policy version or evidence metrics are invalid")
 	}
 	return nil

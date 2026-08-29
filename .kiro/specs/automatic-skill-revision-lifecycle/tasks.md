@@ -126,7 +126,7 @@
   - Files: execution service, repository, aggregation query, focused tests.
   - Estimated scope: Medium.
 
-- [ ] **Task 15: Add canary analysis and automatic promotion**
+- [x] **Task 15: Add canary analysis and automatic promotion**
   - Acceptance: Versioned policy evaluates bounded acknowledged samples, automatically activates eligible low-risk revisions, pauses ambiguous results, and refuses high-risk automation.
   - Verify: successful promotion, insufficient sample, baseline regression, evaluator gap, high-risk denial, and idempotent replay tests.
   - Dependencies: Tasks 10, 12, and 14.
