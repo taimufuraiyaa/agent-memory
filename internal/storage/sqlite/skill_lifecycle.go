@@ -189,6 +189,20 @@ func (s *Store) GetSkillRevision(ctx context.Context, workspace, revisionID stri
 	return item, err
 }
 
+func (s *Store) TransitionSkillRevisionState(ctx context.Context, workspace, revisionID string, from, to core.SkillRevisionState) (core.SkillRevision, error) {
+	if !core.CanTransitionSkillRevision(from, to) {
+		return core.SkillRevision{}, errors.New("invalid skill revision transition")
+	}
+	result, err := s.db.ExecContext(ctx, `UPDATE skill_revisions SET state = ? WHERE workspace = ? AND id = ? AND state = ?`, to, strings.TrimSpace(workspace), strings.TrimSpace(revisionID), from)
+	if err != nil {
+		return core.SkillRevision{}, err
+	}
+	if changed, _ := result.RowsAffected(); changed != 1 {
+		return core.SkillRevision{}, errors.New("skill revision transition is stale")
+	}
+	return s.GetSkillRevision(ctx, workspace, revisionID)
+}
+
 func (s *Store) ListSkillRevisions(ctx context.Context, workspace, skillID string, limit int) ([]core.SkillRevision, error) {
 	if limit <= 0 {
 		limit = 20
@@ -400,6 +414,17 @@ func (s *Store) ListSkillRollbackEvents(ctx context.Context, workspace, environm
 		events = append(events, event)
 	}
 	return events, rows.Err()
+}
+
+func (s *Store) CreateSkillResolution(ctx context.Context, resolution core.SkillResolution) error {
+	if err := resolution.Validate(); err != nil {
+		return err
+	}
+	_, err := s.db.ExecContext(ctx, `INSERT INTO skill_resolutions(id,workspace,environment,principal_id,task_id,skill_id,revision_id,revision_number,digest,reason,policy_version,fallback_revision_id,fallback_digest,acknowledgement_token_hash,expires_at,resolved_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		resolution.ID, resolution.Workspace, resolution.Environment, resolution.PrincipalID, resolution.TaskID, resolution.SkillID,
+		resolution.RevisionID, resolution.RevisionNumber, resolution.Digest, resolution.Reason, resolution.PolicyVersion,
+		resolution.FallbackRevisionID, resolution.FallbackDigest, resolution.AcknowledgementTokenHash, formatSkillTime(resolution.ExpiresAt), formatSkillTime(resolution.ResolvedAt))
+	return err
 }
 
 type skillActivationOperationScanner interface {

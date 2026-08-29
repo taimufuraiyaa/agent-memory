@@ -172,6 +172,26 @@ func (m *SkillMaterializer) Materialize(ctx context.Context, request SkillMateri
 	return result, nil
 }
 
+func (m *SkillMaterializer) VerifyActive(ctx context.Context, skill core.LogicalSkill, revision core.SkillRevision) error {
+	if m == nil {
+		return errors.New("skill materializer is required")
+	}
+	if skill.ID != revision.SkillID || skill.Workspace != revision.Workspace || !safeMaterializationComponent(skill.Name) {
+		return errors.New("skill and revision scope do not match")
+	}
+	root, rootInfo, directoryHandle, err := openContainedDirectory(m.skillsRoot, "legacy skills root")
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	defer directoryHandle.Close()
+	if err := requireUnchangedDirectory(m.skillsRoot, rootInfo, "legacy skills root"); err != nil {
+		return err
+	}
+	_, err = readActiveSkillBundle(ctx, root, skill.Name, revision)
+	return err
+}
+
 func validateMaterializationRequest(request SkillMaterializationRequest) error {
 	if !safeMaterializationComponent(request.OperationID) {
 		return errors.New("materialization operation_id is unsafe")

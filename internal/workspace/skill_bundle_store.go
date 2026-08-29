@@ -187,6 +187,11 @@ func (s *RevisionBundleStore) Read(ctx context.Context, revision core.SkillRevis
 	return readSkillBundleFromRoot(ctx, root, strings.TrimPrefix(revision.BundleDigest, "sha256:"), revision)
 }
 
+func (s *RevisionBundleStore) VerifyImmutable(ctx context.Context, revision core.SkillRevision) error {
+	_, err := s.Read(ctx, revision)
+	return err
+}
+
 func (s *RevisionBundleStore) openObjectRoot() (*os.Root, os.FileInfo, *os.File, error) {
 	validated, err := os.Lstat(s.objectRoot)
 	if err != nil || !validated.IsDir() || validated.Mode()&os.ModeSymlink != 0 {

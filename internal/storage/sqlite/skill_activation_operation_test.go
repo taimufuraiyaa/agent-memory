@@ -45,6 +45,31 @@ func TestSkillActivationOperationLedgerIsIdempotentAndTransitionChecked(t *testi
 	}
 }
 
+func TestSkillRevisionStateTransitionIsOptimistic(t *testing.T) {
+	ctx := context.Background()
+	store, err := Open(ctx, filepath.Join(t.TempDir(), "revision-transition.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	now := time.Date(2026, 8, 29, 15, 30, 0, 0, time.UTC)
+	insertSkillOperationFixture(t, store, now)
+	if _, err := store.db.Exec(`UPDATE skill_revisions SET state='draft' WHERE id='revision-2'`); err != nil {
+		t.Fatal(err)
+	}
+	for _, transition := range []struct {
+		from core.SkillRevisionState
+		to   core.SkillRevisionState
+	}{{core.SkillRevisionDraft, core.SkillRevisionTesting}, {core.SkillRevisionTesting, core.SkillRevisionCanary}} {
+		if _, err := store.TransitionSkillRevisionState(ctx, "ws", "revision-2", transition.from, transition.to); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := store.TransitionSkillRevisionState(ctx, "ws", "revision-2", core.SkillRevisionTesting, core.SkillRevisionActive); err == nil {
+		t.Fatal("stale or illegal revision transition was accepted")
+	}
+}
+
 func insertSkillOperationFixture(t *testing.T, store *Store, now time.Time) {
 	t.Helper()
 	digestOne := "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"

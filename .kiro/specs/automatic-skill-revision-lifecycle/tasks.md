@@ -52,7 +52,7 @@
   - Files: application service, SQLite repository, audit mapping, focused tests.
   - Estimated scope: Medium.
 
-- [ ] **Task 7: Deliver deterministic revision resolution**
+- [x] **Task 7: Deliver deterministic revision resolution**
   - Acceptance: Resolution applies authorization, pins, compatibility, canary eligibility, active state, and fallback in fixed order and returns one digest-verified revision plus reason.
   - Verify: table-driven precedence, no-compatible-revision, disabled, stale materialization, and workspace-isolation tests.
   - Dependencies: Task 6.
@@ -61,10 +61,10 @@
 
 ### Checkpoint B — Safe Manual Revisions
 
-- [ ] A draft can be published as an immutable revision and manually activated.
-- [ ] Legacy clients load only the materialized active root bundle.
-- [ ] Concurrent activation and partial filesystem failures cannot expose two active revisions.
-- [ ] Rollback restores the prior verified artifact and registry state.
+- [x] A draft can be published as an immutable revision and manually activated.
+- [x] Legacy clients load only the materialized active root bundle.
+- [x] Concurrent activation and partial filesystem failures cannot expose two active revisions.
+- [x] Rollback restores the prior verified artifact and registry state.
 
 ## Phase 3 — Evaluation and Policy Gates
 
