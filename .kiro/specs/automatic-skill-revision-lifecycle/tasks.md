@@ -9,7 +9,7 @@
   - Files: `internal/core/skill_lifecycle.go`, focused core tests.
   - Estimated scope: Medium.
 
-- [ ] **Task 2: Add additive SQLite revision registry schema**
+- [x] **Task 2: Add additive SQLite revision registry schema**
   - Acceptance: Normalized tables and constraints preserve revision lineage, one activation per scope, idempotency, and foreign-key integrity without changing existing databases.
   - Verify: migration round-trip, uniqueness, rollback, and concurrent-open tests in `internal/storage/sqlite`.
   - Dependencies: Task 1.

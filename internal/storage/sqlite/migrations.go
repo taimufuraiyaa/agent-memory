@@ -36,6 +36,159 @@ var schemaMigrations = []migrationStep{
 	{16, "graphrag-control-plane", migrateGraphControlPlane},
 	{17, "graphrag-normalized-index", migrateGraphNormalizedIndex},
 	{18, "graphrag-normalized-metadata", migrateGraphNormalizedMetadata},
+	{19, "automatic-skill-revision-lifecycle", migrateAutomaticSkillRevisionLifecycle},
+}
+
+func migrateAutomaticSkillRevisionLifecycle(ctx context.Context, s *Store) error {
+	statements := []string{
+		`CREATE TABLE IF NOT EXISTS skills (
+			id TEXT PRIMARY KEY, workspace TEXT NOT NULL, name TEXT NOT NULL, description TEXT NOT NULL,
+			trigger_conditions_json TEXT NOT NULL DEFAULT '[]', capabilities_json TEXT NOT NULL DEFAULT '[]',
+			risk_tier TEXT NOT NULL, owner_group TEXT NOT NULL, status TEXT NOT NULL, generation INTEGER NOT NULL,
+			created_at TEXT NOT NULL, updated_at TEXT NOT NULL, UNIQUE(workspace, name)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_skills_workspace_status ON skills(workspace, status, updated_at DESC)`,
+		`CREATE TABLE IF NOT EXISTS skill_aliases (
+			workspace TEXT NOT NULL, skill_id TEXT NOT NULL, alias TEXT NOT NULL,
+			PRIMARY KEY(workspace, alias), FOREIGN KEY(skill_id) REFERENCES skills(id) ON DELETE CASCADE
+		)`,
+		`CREATE TABLE IF NOT EXISTS skill_candidates (
+			id TEXT PRIMARY KEY, workspace TEXT NOT NULL, kind TEXT NOT NULL, summary TEXT NOT NULL,
+			expected_benefit TEXT NOT NULL, risks_json TEXT NOT NULL DEFAULT '[]', risk_tier TEXT NOT NULL,
+			confidence REAL NOT NULL, state TEXT NOT NULL, target_skill_ids_json TEXT NOT NULL DEFAULT '[]',
+			deduplication_hash TEXT NOT NULL, created_by TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+			UNIQUE(workspace, deduplication_hash)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_skill_candidates_workspace_state ON skill_candidates(workspace, state, updated_at DESC)`,
+		`CREATE TABLE IF NOT EXISTS skill_candidate_sources (
+			candidate_id TEXT NOT NULL, source_kind TEXT NOT NULL, source_id TEXT NOT NULL,
+			PRIMARY KEY(candidate_id, source_kind, source_id),
+			FOREIGN KEY(candidate_id) REFERENCES skill_candidates(id) ON DELETE CASCADE
+		)`,
+		`CREATE TABLE IF NOT EXISTS skill_revisions (
+			id TEXT PRIMARY KEY, workspace TEXT NOT NULL, skill_id TEXT NOT NULL, revision_number INTEGER NOT NULL,
+			state TEXT NOT NULL, bundle_digest TEXT NOT NULL, manifest_version INTEGER NOT NULL,
+			compatibility_json TEXT NOT NULL DEFAULT '{}', risk_tier TEXT NOT NULL, candidate_id TEXT NOT NULL DEFAULT '',
+			protected_sections_json TEXT NOT NULL DEFAULT '[]', provenance_json TEXT NOT NULL DEFAULT '{}',
+			created_by TEXT NOT NULL, created_at TEXT NOT NULL,
+			UNIQUE(workspace, skill_id, revision_number), UNIQUE(workspace, skill_id, bundle_digest),
+			FOREIGN KEY(skill_id) REFERENCES skills(id) ON DELETE CASCADE
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_skill_revisions_state ON skill_revisions(workspace, skill_id, state, revision_number DESC)`,
+		`CREATE TABLE IF NOT EXISTS skill_revision_parents (
+			revision_id TEXT NOT NULL, parent_revision_id TEXT NOT NULL,
+			PRIMARY KEY(revision_id, parent_revision_id),
+			FOREIGN KEY(revision_id) REFERENCES skill_revisions(id) ON DELETE CASCADE,
+			FOREIGN KEY(parent_revision_id) REFERENCES skill_revisions(id)
+		)`,
+		`CREATE TABLE IF NOT EXISTS skill_revision_files (
+			revision_id TEXT NOT NULL, path TEXT NOT NULL, digest TEXT NOT NULL, size_bytes INTEGER NOT NULL,
+			PRIMARY KEY(revision_id, path), FOREIGN KEY(revision_id) REFERENCES skill_revisions(id) ON DELETE CASCADE
+		)`,
+		`CREATE TABLE IF NOT EXISTS skill_evaluation_suites (
+			id TEXT PRIMARY KEY, workspace TEXT NOT NULL, skill_id TEXT NOT NULL, version INTEGER NOT NULL,
+			digest TEXT NOT NULL, created_by TEXT NOT NULL, created_at TEXT NOT NULL,
+			UNIQUE(workspace, skill_id, version), UNIQUE(workspace, skill_id, digest),
+			FOREIGN KEY(skill_id) REFERENCES skills(id) ON DELETE CASCADE
+		)`,
+		`CREATE TABLE IF NOT EXISTS skill_evaluation_cases (
+			suite_id TEXT NOT NULL, case_id TEXT NOT NULL, kind TEXT NOT NULL, summary TEXT NOT NULL,
+			reference TEXT NOT NULL, required INTEGER NOT NULL,
+			PRIMARY KEY(suite_id, case_id), FOREIGN KEY(suite_id) REFERENCES skill_evaluation_suites(id) ON DELETE CASCADE
+		)`,
+		`CREATE TABLE IF NOT EXISTS skill_evaluation_runs (
+			id TEXT PRIMARY KEY, workspace TEXT NOT NULL, skill_id TEXT NOT NULL, revision_id TEXT NOT NULL,
+			revision_digest TEXT NOT NULL, baseline_revision_id TEXT NOT NULL DEFAULT '', baseline_digest TEXT NOT NULL DEFAULT '',
+			suite_id TEXT NOT NULL, suite_version INTEGER NOT NULL, suite_digest TEXT NOT NULL,
+			evaluator TEXT NOT NULL, evaluator_version TEXT NOT NULL, environment_fingerprint TEXT NOT NULL,
+			verdict TEXT NOT NULL, started_at TEXT NOT NULL, completed_at TEXT NOT NULL,
+			FOREIGN KEY(skill_id) REFERENCES skills(id) ON DELETE CASCADE,
+			FOREIGN KEY(revision_id) REFERENCES skill_revisions(id),
+			FOREIGN KEY(suite_id) REFERENCES skill_evaluation_suites(id)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_skill_evaluation_runs_revision ON skill_evaluation_runs(workspace, revision_id, completed_at DESC)`,
+		`CREATE TABLE IF NOT EXISTS skill_evaluation_case_results (
+			run_id TEXT NOT NULL, case_id TEXT NOT NULL, passed INTEGER NOT NULL, independently_verified INTEGER NOT NULL,
+			failure_class TEXT NOT NULL DEFAULT '', duration_ms INTEGER NOT NULL DEFAULT 0,
+			PRIMARY KEY(run_id, case_id), FOREIGN KEY(run_id) REFERENCES skill_evaluation_runs(id) ON DELETE CASCADE
+		)`,
+		`CREATE TABLE IF NOT EXISTS skill_promotion_policies (
+			id TEXT PRIMARY KEY, workspace TEXT NOT NULL, version INTEGER NOT NULL, risk_tier TEXT NOT NULL,
+			minimum_canary_samples INTEGER NOT NULL, minimum_verified_success_rate REAL NOT NULL,
+			maximum_failure_rate REAL NOT NULL, allow_automatic_activation INTEGER NOT NULL,
+			created_by TEXT NOT NULL, created_at TEXT NOT NULL, UNIQUE(workspace, risk_tier, version)
+		)`,
+		`CREATE TABLE IF NOT EXISTS skill_policy_decisions (
+			id TEXT PRIMARY KEY, workspace TEXT NOT NULL, skill_id TEXT NOT NULL, revision_id TEXT NOT NULL,
+			policy_id TEXT NOT NULL, policy_version INTEGER NOT NULL, evaluation_run_ids_json TEXT NOT NULL,
+			risk_tier TEXT NOT NULL, decision TEXT NOT NULL, reason_codes_json TEXT NOT NULL, decided_at TEXT NOT NULL,
+			FOREIGN KEY(skill_id) REFERENCES skills(id) ON DELETE CASCADE,
+			FOREIGN KEY(revision_id) REFERENCES skill_revisions(id),
+			FOREIGN KEY(policy_id) REFERENCES skill_promotion_policies(id)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_skill_policy_decisions_revision ON skill_policy_decisions(workspace, revision_id, decided_at DESC)`,
+		`CREATE TABLE IF NOT EXISTS skill_approvals (
+			id TEXT PRIMARY KEY, workspace TEXT NOT NULL, revision_id TEXT NOT NULL, policy_decision_id TEXT NOT NULL,
+			approver_id TEXT NOT NULL, approved INTEGER NOT NULL, reason TEXT NOT NULL, created_at TEXT NOT NULL,
+			revoked_at TEXT NOT NULL DEFAULT '', UNIQUE(policy_decision_id, approver_id),
+			FOREIGN KEY(revision_id) REFERENCES skill_revisions(id),
+			FOREIGN KEY(policy_decision_id) REFERENCES skill_policy_decisions(id) ON DELETE CASCADE
+		)`,
+		`CREATE TABLE IF NOT EXISTS skill_activations (
+			id TEXT PRIMARY KEY, workspace TEXT NOT NULL, environment TEXT NOT NULL, skill_id TEXT NOT NULL,
+			active_revision_id TEXT NOT NULL, active_digest TEXT NOT NULL,
+			last_known_good_revision_id TEXT NOT NULL DEFAULT '', last_known_good_digest TEXT NOT NULL DEFAULT '',
+			canary_revision_id TEXT NOT NULL DEFAULT '', canary_digest TEXT NOT NULL DEFAULT '',
+			generation INTEGER NOT NULL, policy_decision_id TEXT NOT NULL, materialization TEXT NOT NULL,
+			activated_by TEXT NOT NULL, activated_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+			UNIQUE(workspace, environment, skill_id), FOREIGN KEY(skill_id) REFERENCES skills(id) ON DELETE CASCADE,
+			FOREIGN KEY(active_revision_id) REFERENCES skill_revisions(id)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_skill_activations_scope ON skill_activations(workspace, environment, updated_at DESC)`,
+		`CREATE TABLE IF NOT EXISTS skill_activation_operations (
+			id TEXT PRIMARY KEY, workspace TEXT NOT NULL, environment TEXT NOT NULL, skill_id TEXT NOT NULL,
+			from_revision_id TEXT NOT NULL DEFAULT '', to_revision_id TEXT NOT NULL, expected_generation INTEGER NOT NULL,
+			state TEXT NOT NULL, error TEXT NOT NULL DEFAULT '', idempotency_key TEXT NOT NULL,
+			created_at TEXT NOT NULL, updated_at TEXT NOT NULL, UNIQUE(workspace, environment, skill_id, idempotency_key),
+			FOREIGN KEY(skill_id) REFERENCES skills(id) ON DELETE CASCADE,
+			FOREIGN KEY(to_revision_id) REFERENCES skill_revisions(id)
+		)`,
+		`CREATE TABLE IF NOT EXISTS skill_resolutions (
+			id TEXT PRIMARY KEY, workspace TEXT NOT NULL, environment TEXT NOT NULL, principal_id TEXT NOT NULL,
+			task_id TEXT NOT NULL, skill_id TEXT NOT NULL, revision_id TEXT NOT NULL, revision_number INTEGER NOT NULL,
+			digest TEXT NOT NULL, reason TEXT NOT NULL, policy_version INTEGER NOT NULL,
+			fallback_revision_id TEXT NOT NULL DEFAULT '', fallback_digest TEXT NOT NULL DEFAULT '',
+			acknowledgement_token_hash TEXT NOT NULL, expires_at TEXT NOT NULL, resolved_at TEXT NOT NULL,
+			FOREIGN KEY(skill_id) REFERENCES skills(id) ON DELETE CASCADE,
+			FOREIGN KEY(revision_id) REFERENCES skill_revisions(id)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_skill_resolutions_scope ON skill_resolutions(workspace, environment, skill_id, resolved_at DESC)`,
+		`CREATE TABLE IF NOT EXISTS skill_executions (
+			id TEXT PRIMARY KEY, workspace TEXT NOT NULL, environment TEXT NOT NULL, episode_id TEXT NOT NULL,
+			skill_id TEXT NOT NULL, revision_id TEXT NOT NULL, revision_digest TEXT NOT NULL, resolution_id TEXT NOT NULL,
+			acknowledged INTEGER NOT NULL, acknowledged_at TEXT NOT NULL, outcome TEXT NOT NULL,
+			independently_verified INTEGER NOT NULL, failure_class TEXT NOT NULL DEFAULT '',
+			started_at TEXT NOT NULL, completed_at TEXT NOT NULL, duration_ms INTEGER NOT NULL DEFAULT 0,
+			input_tokens INTEGER NOT NULL DEFAULT 0, output_tokens INTEGER NOT NULL DEFAULT 0, tool_calls INTEGER NOT NULL DEFAULT 0,
+			FOREIGN KEY(skill_id) REFERENCES skills(id) ON DELETE CASCADE,
+			FOREIGN KEY(revision_id) REFERENCES skill_revisions(id),
+			FOREIGN KEY(resolution_id) REFERENCES skill_resolutions(id)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_skill_executions_comparison ON skill_executions(workspace, environment, skill_id, revision_id, completed_at DESC)`,
+		`CREATE TABLE IF NOT EXISTS skill_rollback_events (
+			id TEXT PRIMARY KEY, workspace TEXT NOT NULL, environment TEXT NOT NULL, skill_id TEXT NOT NULL,
+			from_revision_id TEXT NOT NULL, to_revision_id TEXT NOT NULL, reason_code TEXT NOT NULL,
+			automatic INTEGER NOT NULL, operation_id TEXT NOT NULL, created_at TEXT NOT NULL,
+			UNIQUE(workspace, operation_id), FOREIGN KEY(skill_id) REFERENCES skills(id) ON DELETE CASCADE,
+			FOREIGN KEY(from_revision_id) REFERENCES skill_revisions(id), FOREIGN KEY(to_revision_id) REFERENCES skill_revisions(id)
+		)`,
+	}
+	for _, statement := range statements {
+		if _, err := s.db.ExecContext(ctx, statement); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func migrateGraphNormalizedMetadata(ctx context.Context, s *Store) error {
