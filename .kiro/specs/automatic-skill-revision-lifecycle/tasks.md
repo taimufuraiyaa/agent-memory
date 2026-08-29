@@ -244,7 +244,7 @@
   - Files: migration verifier, release fixture, operator documentation, focused tests.
   - Estimated scope: Medium.
 
-- [ ] **Task 28: Add natural closed-loop acceptance regression**
+- [x] **Task 28: Add natural closed-loop acceptance regression**
   - Acceptance: A fresh workspace captures repeated work, proposes a revision, evaluates it against baseline, canaries it, automatically promotes low risk, acknowledges exact use, then triggers and recovers from a rollback scenario.
   - Verify: permanent standalone acceptance test plus full Go, vet, MCP, dashboard, typecheck, build, and embedded-dashboard gates.
   - Dependencies: Tasks 22-27.
@@ -253,11 +253,11 @@
 
 ### Final Checkpoint — Automatic Skill Learning Release Gate
 
-- [ ] All requirements have direct automated or accountable manual evidence.
-- [ ] No test path can activate an unverified or unauthorized revision.
-- [ ] Automatic promotion is disabled by default until shadow, canary, rollback, and false-promotion evidence is approved.
-- [ ] Full repository, hosted, MCP, dashboard, security, migration, and embedded-asset suites pass.
-- [ ] Operator runbooks cover evaluator outage, stuck canary, digest mismatch, disablement, rollback, and feature shutdown.
+- [x] All requirements have direct automated or accountable manual evidence.
+- [x] No test path can activate an unverified or unauthorized revision.
+- [x] Automatic promotion is disabled by default until shadow, canary, rollback, and false-promotion evidence is approved.
+- [x] Full repository, hosted, MCP, dashboard, security, migration, and embedded-asset suites pass.
+- [x] Operator runbooks cover evaluator outage, stuck canary, digest mismatch, disablement, rollback, and feature shutdown.
 - [ ] Product review approves risk classes, thresholds, canary allocation, approval policy, and retention before enabling automation.
 
 ## Dependency Summary

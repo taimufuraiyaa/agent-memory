@@ -32,8 +32,10 @@ type SkillRevisionBuildInput struct {
 }
 
 type SkillRevisionDiff struct {
-	Added, Changed, Removed []string          `json:"added,omitempty"`
-	RemovalReasons          map[string]string `json:"removal_reasons,omitempty"`
+	Added          []string          `json:"added,omitempty"`
+	Changed        []string          `json:"changed,omitempty"`
+	Removed        []string          `json:"removed,omitempty"`
+	RemovalReasons map[string]string `json:"removal_reasons,omitempty"`
 }
 
 type SkillRevisionAdmission struct {

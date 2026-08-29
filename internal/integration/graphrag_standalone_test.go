@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"os"
@@ -164,9 +165,12 @@ func assertPackagedGraphRAGAdapterReady(t *testing.T) {
 	if info, err := os.Stat(executable); err != nil || !info.Mode().IsRegular() {
 		t.Skip("packaged GraphRAG adapter is not installed; set AGENT_MEMORY_GRAPHRAG_ADAPTER in the production journey")
 	}
-	output, err := exec.Command(executable, "readiness").CombinedOutput()
+	command := exec.Command(executable, "readiness")
+	var stderr bytes.Buffer
+	command.Stderr = &stderr
+	output, err := command.Output()
 	if err != nil {
-		t.Fatalf("packaged adapter readiness: %v: %s", err, output)
+		t.Fatalf("packaged adapter readiness: %v: stdout=%s stderr=%s", err, output, stderr.String())
 	}
 	var response struct {
 		State           string `json:"state"`

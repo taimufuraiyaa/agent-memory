@@ -200,10 +200,23 @@ func skillLifecycleHandler(svc *Service) http.HandlerFunc {
 				}
 			}
 		case "canary":
-			var input application.SkillCanaryAllocationInput
-			err = json.Unmarshal(request.Payload, &input)
-			if err == nil {
-				result = application.SkillCanaryAllocator{}.Allocate(input)
+			var discriminator struct {
+				CandidateRevisionID string `json:"candidate_revision_id"`
+			}
+			err = json.Unmarshal(request.Payload, &discriminator)
+			if err == nil && discriminator.CandidateRevisionID != "" {
+				var input application.SkillCanaryStartInput
+				err = json.Unmarshal(request.Payload, &input)
+				if err == nil {
+					input.Workspace, input.Actor = ws, request.Actor
+					result, err = application.NewSkillCanaryStartService(assets.Store, time.Now).Start(r.Context(), input)
+				}
+			} else if err == nil {
+				var input application.SkillCanaryAllocationInput
+				err = json.Unmarshal(request.Payload, &input)
+				if err == nil {
+					result = application.SkillCanaryAllocator{}.Allocate(input)
+				}
 			}
 		case "promote", "rollback":
 			var input application.SkillActivationRequest

@@ -207,6 +207,20 @@ func (service *localProjectService) OperateSkillLifecycle(ctx context.Context, i
 		request.ApproverID = input.Actor
 		return application.NewSkillApprovalService(store, localProjectSkillAuthorizer{}, time.Now).Approve(ctx, request)
 	case "canary":
+		var discriminator struct {
+			CandidateRevisionID string `json:"candidate_revision_id"`
+		}
+		if err := json.Unmarshal(input.Payload, &discriminator); err != nil {
+			return nil, err
+		}
+		if discriminator.CandidateRevisionID != "" {
+			var request application.SkillCanaryStartInput
+			if err := json.Unmarshal(input.Payload, &request); err != nil {
+				return nil, err
+			}
+			request.Workspace, request.Actor = input.Workspace, input.Actor
+			return application.NewSkillCanaryStartService(store, time.Now).Start(ctx, request)
+		}
 		var request application.SkillCanaryAllocationInput
 		if err := json.Unmarshal(input.Payload, &request); err != nil {
 			return nil, err

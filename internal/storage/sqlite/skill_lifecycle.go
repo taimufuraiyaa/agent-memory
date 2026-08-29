@@ -277,6 +277,32 @@ func (s *Store) GetSkillActivation(ctx context.Context, workspace, environment, 
 	return item, nil
 }
 
+func (s *Store) StartSkillCanary(ctx context.Context, workspace, environment, skillID, revisionID, decisionID, actor string, expectedGeneration int64, at time.Time) (core.SkillActivation, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return core.SkillActivation{}, err
+	}
+	defer tx.Rollback()
+	revisionResult, err := tx.ExecContext(ctx, `UPDATE skill_revisions SET state=? WHERE workspace=? AND skill_id=? AND id=? AND state=?`, core.SkillRevisionCanary, workspace, skillID, revisionID, core.SkillRevisionTesting)
+	if err != nil {
+		return core.SkillActivation{}, err
+	}
+	if changed, _ := revisionResult.RowsAffected(); changed != 1 {
+		return core.SkillActivation{}, errors.New("skill canary revision transition is stale")
+	}
+	activationResult, err := tx.ExecContext(ctx, `UPDATE skill_activations SET canary_revision_id=?,canary_digest=(SELECT bundle_digest FROM skill_revisions WHERE workspace=? AND id=?),generation=generation+1,policy_decision_id=?,activated_by=?,updated_at=? WHERE workspace=? AND environment=? AND skill_id=? AND generation=? AND canary_revision_id=''`, revisionID, workspace, revisionID, decisionID, actor, formatSkillTime(at), workspace, environment, skillID, expectedGeneration)
+	if err != nil {
+		return core.SkillActivation{}, err
+	}
+	if changed, _ := activationResult.RowsAffected(); changed != 1 {
+		return core.SkillActivation{}, errors.New("skill canary activation generation is stale or occupied")
+	}
+	if err := tx.Commit(); err != nil {
+		return core.SkillActivation{}, err
+	}
+	return s.GetSkillActivation(ctx, workspace, environment, skillID)
+}
+
 func (s *Store) CreateSkillActivationOperation(ctx context.Context, operation core.SkillActivationOperation) (bool, error) {
 	if err := operation.Validate(); err != nil {
 		return false, err
