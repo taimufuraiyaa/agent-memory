@@ -16,7 +16,7 @@
   - Files: migrations, schema fixtures, focused migration tests.
   - Estimated scope: Medium.
 
-- [ ] **Task 3: Import existing skills as revision 1**
+- [x] **Task 3: Import existing skills as revision 1**
   - Acceptance: Valid contained root skills and existing distilled provenance import idempotently as active revision 1; invalid or escaping artifacts are reported and unchanged.
   - Verify: fresh, upgraded, duplicate, symlink, oversize, and missing-provenance fixtures.
   - Dependencies: Task 2.
