@@ -526,6 +526,62 @@ func (s *Store) CreateSkillEvaluationRun(ctx context.Context, run core.SkillEval
 	return tx.Commit()
 }
 
+func (s *Store) CreateSkillPromotionPolicy(ctx context.Context, policy core.SkillPromotionPolicy) error {
+	if err := policy.Validate(); err != nil {
+		return err
+	}
+	_, err := s.db.ExecContext(ctx, `INSERT INTO skill_promotion_policies(id,workspace,version,risk_tier,minimum_canary_samples,minimum_verified_success_rate,maximum_failure_rate,allow_automatic_activation,created_by,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)`, policy.ID, policy.Workspace, policy.Version, policy.RiskTier, policy.MinimumCanarySamples, policy.MinimumVerifiedSuccessRate, policy.MaximumFailureRate, policy.AllowAutomaticActivation, policy.CreatedBy, formatSkillTime(policy.CreatedAt))
+	return err
+}
+
+func (s *Store) GetSkillPromotionPolicy(ctx context.Context, workspace, policyID string, version int64) (core.SkillPromotionPolicy, error) {
+	var policy core.SkillPromotionPolicy
+	var created string
+	err := s.db.QueryRowContext(ctx, `SELECT id,workspace,version,risk_tier,minimum_canary_samples,minimum_verified_success_rate,maximum_failure_rate,allow_automatic_activation,created_by,created_at FROM skill_promotion_policies WHERE workspace=? AND id=? AND version=?`, strings.TrimSpace(workspace), strings.TrimSpace(policyID), version).Scan(&policy.ID, &policy.Workspace, &policy.Version, &policy.RiskTier, &policy.MinimumCanarySamples, &policy.MinimumVerifiedSuccessRate, &policy.MaximumFailureRate, &policy.AllowAutomaticActivation, &policy.CreatedBy, &created)
+	if err != nil {
+		return core.SkillPromotionPolicy{}, err
+	}
+	policy.CreatedAt, _ = time.Parse(time.RFC3339Nano, created)
+	return policy, policy.Validate()
+}
+
+func (s *Store) GetSkillEvaluationRun(ctx context.Context, workspace, runID string) (core.SkillEvaluationRun, error) {
+	var run core.SkillEvaluationRun
+	var started, completed string
+	err := s.db.QueryRowContext(ctx, `SELECT id,workspace,skill_id,revision_id,revision_digest,baseline_revision_id,baseline_digest,suite_id,suite_version,suite_digest,evaluator,evaluator_version,environment_fingerprint,verdict,started_at,completed_at FROM skill_evaluation_runs WHERE workspace=? AND id=?`, strings.TrimSpace(workspace), strings.TrimSpace(runID)).Scan(&run.ID, &run.Workspace, &run.SkillID, &run.RevisionID, &run.RevisionDigest, &run.BaselineRevisionID, &run.BaselineDigest, &run.SuiteID, &run.SuiteVersion, &run.SuiteDigest, &run.Evaluator, &run.EvaluatorVersion, &run.EnvironmentFingerprint, &run.Verdict, &started, &completed)
+	if err != nil {
+		return core.SkillEvaluationRun{}, err
+	}
+	run.StartedAt, _ = time.Parse(time.RFC3339Nano, started)
+	run.CompletedAt, _ = time.Parse(time.RFC3339Nano, completed)
+	rows, err := s.db.QueryContext(ctx, `SELECT case_id,passed,independently_verified,failure_class,duration_ms FROM skill_evaluation_case_results WHERE run_id=? ORDER BY case_id`, run.ID)
+	if err != nil {
+		return core.SkillEvaluationRun{}, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var result core.SkillEvaluationCaseResult
+		if err := rows.Scan(&result.CaseID, &result.Passed, &result.IndependentlyVerified, &result.FailureClass, &result.DurationMS); err != nil {
+			return core.SkillEvaluationRun{}, err
+		}
+		run.CaseResults = append(run.CaseResults, result)
+	}
+	if err := rows.Err(); err != nil {
+		return core.SkillEvaluationRun{}, err
+	}
+	return run, run.Validate()
+}
+
+func (s *Store) CreateSkillPolicyDecision(ctx context.Context, decision core.SkillPolicyDecision) error {
+	if err := decision.Validate(); err != nil {
+		return err
+	}
+	runs, _ := json.Marshal(decision.EvaluationRunIDs)
+	reasons, _ := json.Marshal(decision.ReasonCodes)
+	_, err := s.db.ExecContext(ctx, `INSERT INTO skill_policy_decisions(id,workspace,skill_id,revision_id,policy_id,policy_version,evaluation_run_ids_json,risk_tier,decision,reason_codes_json,decided_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)`, decision.ID, decision.Workspace, decision.SkillID, decision.RevisionID, decision.PolicyID, decision.PolicyVersion, string(runs), decision.RiskTier, decision.Decision, string(reasons), formatSkillTime(decision.DecidedAt))
+	return err
+}
+
 type skillActivationOperationScanner interface {
 	Scan(...any) error
 }

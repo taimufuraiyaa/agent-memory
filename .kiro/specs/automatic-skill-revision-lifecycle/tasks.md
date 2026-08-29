@@ -82,7 +82,7 @@
   - Files: evaluation orchestrator, runner interface, result adapter, focused tests.
   - Estimated scope: Medium.
 
-- [ ] **Task 10: Add immutable promotion-policy decisions**
+- [x] **Task 10: Add immutable promotion-policy decisions**
   - Acceptance: Versioned policies derive risk, enforce absolute safety gates, compare baseline quality, and return promote, canary, approval-required, pause, or reject with reason codes.
   - Verify: low-, medium-, high-risk, stale evidence, non-inferiority, and historical-policy tests.
   - Dependencies: Task 9.
