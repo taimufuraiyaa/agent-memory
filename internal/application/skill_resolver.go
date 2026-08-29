@@ -165,12 +165,12 @@ func (r *SkillResolver) selectRevision(ctx context.Context, request SkillResolut
 		return revision, pin.reason, decision, nil
 	}
 
-	if activation.CanaryRevisionID != "" && request.AcknowledgementSupported && request.CanaryBasisPoints > 0 && canaryAllocated(request) {
+	if activation.CanaryRevisionID != "" {
 		canary, err := r.repository.GetSkillRevision(ctx, request.Workspace, activation.CanaryRevisionID)
 		if err == nil {
 			decision := evaluateSkillCompatibility(canary.Compatibility, request)
-			eligibleRisk := canary.RiskTier == core.SkillRiskLow || (canary.RiskTier == core.SkillRiskMedium && request.CanaryApproved)
-			if canary.SkillID == skill.ID && canary.State == core.SkillRevisionCanary && canary.BundleDigest == activation.CanaryDigest && eligibleRisk && decision.Compatible {
+			allocation := (SkillCanaryAllocator{}).Allocate(SkillCanaryAllocationInput{Workspace: request.Workspace, Environment: request.Environment, TaskID: request.TaskID, SkillID: request.SkillID, PolicyVersion: request.PolicyVersion, BasisPoints: request.CanaryBasisPoints, RiskTier: canary.RiskTier, Approved: request.CanaryApproved, Compatible: decision.Compatible, AcknowledgementSupported: request.AcknowledgementSupported})
+			if canary.SkillID == skill.ID && canary.State == core.SkillRevisionCanary && canary.BundleDigest == activation.CanaryDigest && allocation.Allocated {
 				return canary, core.SkillResolutionCanary, decision, nil
 			}
 		}
@@ -212,12 +212,6 @@ func validateResolutionRequest(request SkillResolutionRequest) error {
 
 func selectablePinnedRevision(state core.SkillRevisionState) bool {
 	return state == core.SkillRevisionActive || state == core.SkillRevisionPrevious || state == core.SkillRevisionCanary
-}
-
-func canaryAllocated(request SkillResolutionRequest) bool {
-	hash := sha256.Sum256([]byte(strings.Join([]string{request.Workspace, request.Environment, request.TaskID, request.SkillID, strconv.FormatInt(request.PolicyVersion, 10)}, "\x00")))
-	bucket := int(hash[0])<<8 | int(hash[1])
-	return bucket%10_000 < request.CanaryBasisPoints
 }
 
 func evaluateSkillCompatibility(compatibility core.SkillCompatibility, request SkillResolutionRequest) SkillCompatibilityDecision {

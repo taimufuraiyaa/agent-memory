@@ -105,7 +105,7 @@
 
 ## Phase 4 — Canary and Effectiveness Loop
 
-- [ ] **Task 12: Add deterministic canary allocation**
+- [x] **Task 12: Add deterministic canary allocation**
   - Acceptance: Eligible tasks receive a stable bounded allocation; retries stay on the same revision and incompatible or pinned tasks never enter canary.
   - Verify: allocation stability, percentage bounds, retry, pin, risk, and compatibility tests.
   - Dependencies: Checkpoint C.
