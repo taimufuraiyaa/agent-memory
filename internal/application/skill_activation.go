@@ -34,6 +34,8 @@ type skillActivationRepository interface {
 	GetSkillActivationOperationByKey(context.Context, string, string, string, string) (core.SkillActivationOperation, error)
 	TransitionSkillActivationOperation(context.Context, string, string, core.SkillActivationOperationState, core.SkillActivationOperationState, string, time.Time) (core.SkillActivationOperation, error)
 	CompleteSkillActivation(context.Context, string, string, string, bool, bool, string, time.Time) (core.SkillActivation, error)
+	GetSkillPolicyDecision(context.Context, string, string) (core.SkillPolicyDecision, error)
+	HasEffectiveSkillApproval(context.Context, string, string, string) (bool, error)
 }
 
 type skillMaterializer interface {
@@ -70,6 +72,31 @@ func (s *SkillActivationService) Activate(ctx context.Context, request SkillActi
 	}
 	if target.SkillID != skill.ID || target.Workspace != skill.Workspace {
 		return core.SkillActivation{}, errors.New("target revision does not belong to logical skill")
+	}
+	if !request.Rollback || !request.Automatic {
+		decision, decisionErr := s.repository.GetSkillPolicyDecision(ctx, request.Workspace, request.PolicyDecisionID)
+		if decisionErr != nil {
+			return core.SkillActivation{}, decisionErr
+		}
+		if decision.RevisionID != target.ID || decision.SkillID != skill.ID || decision.RiskTier != target.RiskTier {
+			return core.SkillActivation{}, errors.New("activation policy decision does not bind target revision")
+		}
+		switch decision.Decision {
+		case core.SkillDecisionPromote:
+			if target.RiskTier != core.SkillRiskLow {
+				return core.SkillActivation{}, errors.New("medium or high-risk revision cannot activate without approval")
+			}
+		case core.SkillDecisionApprovalRequired:
+			approved, approvalErr := s.repository.HasEffectiveSkillApproval(ctx, request.Workspace, target.ID, decision.ID)
+			if approvalErr != nil {
+				return core.SkillActivation{}, approvalErr
+			}
+			if !approved {
+				return core.SkillActivation{}, errors.New("effective accountable approval is required")
+			}
+		default:
+			return core.SkillActivation{}, errors.New("policy decision is not activation-eligible")
+		}
 	}
 	operation, err := s.loadOrReserveActivation(ctx, request)
 	if err != nil {

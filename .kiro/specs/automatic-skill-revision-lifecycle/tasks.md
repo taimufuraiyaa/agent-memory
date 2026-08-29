@@ -89,7 +89,7 @@
   - Files: policy engine, policy configuration, focused tests.
   - Estimated scope: Medium.
 
-- [ ] **Task 11: Add accountable approval workflow**
+- [x] **Task 11: Add accountable approval workflow**
   - Acceptance: Medium/high-risk decisions require authorized, separation-of-duty approval; replay and revocation are audited and cannot alter historical decisions.
   - Verify: authorization, proposer-as-approver denial, stale revision, duplicate approval, revocation, and tenant-isolation tests.
   - Dependencies: Task 10.
@@ -98,10 +98,10 @@
 
 ### Checkpoint C — Promotion Cannot Bypass Safety
 
-- [ ] Low-risk revisions can become canary-eligible only after complete evaluation.
-- [ ] Medium/high-risk revisions cannot activate without required approval.
-- [ ] Faster but less correct or less safe revisions fail closed.
-- [ ] Evaluator and policy evidence is reproducible from stored digests and versions.
+- [x] Low-risk revisions can become canary-eligible only after complete evaluation.
+- [x] Medium/high-risk revisions cannot activate without required approval.
+- [x] Faster but less correct or less safe revisions fail closed.
+- [x] Evaluator and policy evidence is reproducible from stored digests and versions.
 
 ## Phase 4 — Canary and Effectiveness Loop
 

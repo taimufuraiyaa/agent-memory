@@ -582,6 +582,83 @@ func (s *Store) CreateSkillPolicyDecision(ctx context.Context, decision core.Ski
 	return err
 }
 
+func (s *Store) GetSkillPolicyDecision(ctx context.Context, workspace, decisionID string) (core.SkillPolicyDecision, error) {
+	var decision core.SkillPolicyDecision
+	var runs, reasons, decided string
+	err := s.db.QueryRowContext(ctx, `SELECT id,workspace,skill_id,revision_id,policy_id,policy_version,evaluation_run_ids_json,risk_tier,decision,reason_codes_json,decided_at FROM skill_policy_decisions WHERE workspace=? AND id=?`, strings.TrimSpace(workspace), strings.TrimSpace(decisionID)).Scan(&decision.ID, &decision.Workspace, &decision.SkillID, &decision.RevisionID, &decision.PolicyID, &decision.PolicyVersion, &runs, &decision.RiskTier, &decision.Decision, &reasons, &decided)
+	if err != nil {
+		return core.SkillPolicyDecision{}, err
+	}
+	_ = json.Unmarshal([]byte(runs), &decision.EvaluationRunIDs)
+	_ = json.Unmarshal([]byte(reasons), &decision.ReasonCodes)
+	decision.DecidedAt, _ = time.Parse(time.RFC3339Nano, decided)
+	return decision, decision.Validate()
+}
+
+func (s *Store) GetSkillApproval(ctx context.Context, workspace, approvalID string) (core.SkillApproval, error) {
+	var approval core.SkillApproval
+	var created, revoked string
+	err := s.db.QueryRowContext(ctx, `SELECT id,workspace,revision_id,policy_decision_id,approver_id,approved,reason,created_at,revoked_at FROM skill_approvals WHERE workspace=? AND id=?`, strings.TrimSpace(workspace), strings.TrimSpace(approvalID)).Scan(&approval.ID, &approval.Workspace, &approval.RevisionID, &approval.PolicyDecisionID, &approval.ApproverID, &approval.Approved, &approval.Reason, &created, &revoked)
+	if err != nil {
+		return core.SkillApproval{}, err
+	}
+	approval.CreatedAt, _ = time.Parse(time.RFC3339Nano, created)
+	if revoked != "" {
+		approval.RevokedAt, _ = time.Parse(time.RFC3339Nano, revoked)
+	}
+	return approval, approval.Validate()
+}
+
+func (s *Store) CreateSkillApproval(ctx context.Context, approval core.SkillApproval) error {
+	if err := approval.Validate(); err != nil {
+		return err
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `INSERT INTO skill_approvals(id,workspace,revision_id,policy_decision_id,approver_id,approved,reason,created_at,revoked_at) VALUES(?,?,?,?,?,?,?,?,?)`, approval.ID, approval.Workspace, approval.RevisionID, approval.PolicyDecisionID, approval.ApproverID, approval.Approved, approval.Reason, formatSkillTime(approval.CreatedAt), ""); err != nil {
+		return err
+	}
+	action := "rejected"
+	if approval.Approved {
+		action = "approved"
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO skill_approval_events(workspace,approval_id,action,actor_id,reason,created_at) VALUES(?,?,?,?,?,?)`, approval.Workspace, approval.ID, action, approval.ApproverID, approval.Reason, formatSkillTime(approval.CreatedAt)); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (s *Store) RevokeSkillApproval(ctx context.Context, workspace, approvalID, actorID, reason string, at time.Time) (core.SkillApproval, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return core.SkillApproval{}, err
+	}
+	defer tx.Rollback()
+	result, err := tx.ExecContext(ctx, `UPDATE skill_approvals SET revoked_at=? WHERE workspace=? AND id=? AND revoked_at=''`, formatSkillTime(at), strings.TrimSpace(workspace), strings.TrimSpace(approvalID))
+	if err != nil {
+		return core.SkillApproval{}, err
+	}
+	changed, _ := result.RowsAffected()
+	if changed == 1 {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO skill_approval_events(workspace,approval_id,action,actor_id,reason,created_at) VALUES(?,?,?,?,?,?)`, workspace, approvalID, "revoked", actorID, reason, formatSkillTime(at)); err != nil {
+			return core.SkillApproval{}, err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return core.SkillApproval{}, err
+	}
+	return s.GetSkillApproval(ctx, workspace, approvalID)
+}
+
+func (s *Store) HasEffectiveSkillApproval(ctx context.Context, workspace, revisionID, decisionID string) (bool, error) {
+	var count int
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM skill_approvals WHERE workspace=? AND revision_id=? AND policy_decision_id=? AND approved=1 AND revoked_at=''`, strings.TrimSpace(workspace), strings.TrimSpace(revisionID), strings.TrimSpace(decisionID)).Scan(&count)
+	return count > 0, err
+}
+
 type skillActivationOperationScanner interface {
 	Scan(...any) error
 }

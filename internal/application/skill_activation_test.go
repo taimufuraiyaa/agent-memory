@@ -134,6 +134,42 @@ func TestSkillActivationServiceAutomaticallyRollsBackThroughSameBoundary(t *test
 	}
 }
 
+func TestSkillActivationServiceRequiresEffectiveApprovalForMediumRisk(t *testing.T) {
+	fixture := newSkillActivationFixture(t)
+	revision, files := activationRevision(t, fixture.skill, "revision-medium", 3, core.SkillRevisionCanary, "medium revision", fixture.now.Add(3*time.Minute))
+	revision.RiskTier = core.SkillRiskMedium
+	if err := fixture.store.CreateSkillRevision(context.Background(), revision); err != nil {
+		t.Fatal(err)
+	}
+	policy := core.SkillPromotionPolicy{ID: "policy-medium", Workspace: "ws", Version: 1, RiskTier: core.SkillRiskMedium, MinimumCanarySamples: 1, MinimumVerifiedSuccessRate: .9, MaximumFailureRate: .1, CreatedBy: "operator", CreatedAt: fixture.now}
+	if err := fixture.store.CreateSkillPromotionPolicy(context.Background(), policy); err != nil {
+		t.Fatal(err)
+	}
+	decision := core.SkillPolicyDecision{ID: "decision-medium", Workspace: "ws", SkillID: fixture.skill.ID, RevisionID: revision.ID, PolicyID: policy.ID, PolicyVersion: 1, EvaluationRunIDs: []string{"verified-run"}, RiskTier: core.SkillRiskMedium, Decision: core.SkillDecisionApprovalRequired, ReasonCodes: []string{"accountable_approval_required"}, DecidedAt: fixture.now}
+	if err := fixture.store.CreateSkillPolicyDecision(context.Background(), decision); err != nil {
+		t.Fatal(err)
+	}
+	bundles, err := workspace.NewRevisionBundleStore(fixture.projectRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := bundles.Publish(context.Background(), revision, files); err != nil {
+		t.Fatal(err)
+	}
+	request := application.SkillActivationRequest{OperationID: "medium-activate", IdempotencyKey: "medium-activate", Workspace: "ws", Environment: "local", SkillID: fixture.skill.ID, TargetRevisionID: revision.ID, ExpectedGeneration: 1, PolicyDecisionID: decision.ID, Actor: "operator"}
+	if _, err := fixture.service.Activate(context.Background(), request); err == nil {
+		t.Fatal("medium-risk revision activated without approval")
+	}
+	approval := core.SkillApproval{ID: "approval-medium", Workspace: "ws", RevisionID: revision.ID, PolicyDecisionID: decision.ID, ApproverID: "independent-reviewer", Approved: true, Reason: "verified", CreatedAt: fixture.now}
+	if err := fixture.store.CreateSkillApproval(context.Background(), approval); err != nil {
+		t.Fatal(err)
+	}
+	activation, err := fixture.service.Activate(context.Background(), request)
+	if err != nil || activation.ActiveRevisionID != revision.ID {
+		t.Fatalf("approved medium activation = %+v, %v", activation, err)
+	}
+}
+
 type skillActivationFixture struct {
 	projectRoot string
 	store       *sqlite.Store
@@ -176,6 +212,11 @@ func newSkillActivationFixture(t *testing.T) *skillActivationFixture {
 	if err := store.CreateSkillRevision(ctx, revisionTwo); err != nil {
 		t.Fatal(err)
 	}
+	policy := core.SkillPromotionPolicy{ID: "policy-low", Workspace: "ws", Version: 1, RiskTier: core.SkillRiskLow, MinimumCanarySamples: 1, MinimumVerifiedSuccessRate: .9, MaximumFailureRate: .1, AllowAutomaticActivation: true, CreatedBy: "operator", CreatedAt: now}
+	if err := store.CreateSkillPromotionPolicy(ctx, policy); err != nil {
+		t.Fatal(err)
+	}
+	createActivationDecision(t, store, revisionTwo, now)
 	bundles, err := workspace.NewRevisionBundleStore(projectRoot)
 	if err != nil {
 		t.Fatal(err)
@@ -198,7 +239,7 @@ func newSkillActivationFixture(t *testing.T) *skillActivationFixture {
 }
 
 func (f *skillActivationFixture) promotionRequest(id string, revision core.SkillRevision, generation int64) application.SkillActivationRequest {
-	return application.SkillActivationRequest{OperationID: id, IdempotencyKey: id, Workspace: "ws", Environment: "local", SkillID: f.skill.ID, TargetRevisionID: revision.ID, ExpectedGeneration: generation, PolicyDecisionID: "decision-1", Actor: "operator"}
+	return application.SkillActivationRequest{OperationID: id, IdempotencyKey: id, Workspace: "ws", Environment: "local", SkillID: f.skill.ID, TargetRevisionID: revision.ID, ExpectedGeneration: generation, PolicyDecisionID: "decision-" + revision.ID, Actor: "operator"}
 }
 
 func (f *skillActivationFixture) addRevision(t *testing.T, id string, number int64, content string) core.SkillRevision {
@@ -207,6 +248,7 @@ func (f *skillActivationFixture) addRevision(t *testing.T, id string, number int
 	if err := f.store.CreateSkillRevision(context.Background(), revision); err != nil {
 		t.Fatal(err)
 	}
+	createActivationDecision(t, f.store, revision, f.now)
 	bundles, err := workspace.NewRevisionBundleStore(f.projectRoot)
 	if err != nil {
 		t.Fatal(err)
@@ -215,6 +257,14 @@ func (f *skillActivationFixture) addRevision(t *testing.T, id string, number int
 		t.Fatal(err)
 	}
 	return revision
+}
+
+func createActivationDecision(t *testing.T, store *sqlite.Store, revision core.SkillRevision, now time.Time) {
+	t.Helper()
+	decision := core.SkillPolicyDecision{ID: "decision-" + revision.ID, Workspace: revision.Workspace, SkillID: revision.SkillID, RevisionID: revision.ID, PolicyID: "policy-low", PolicyVersion: 1, EvaluationRunIDs: []string{"verified-run"}, RiskTier: revision.RiskTier, Decision: core.SkillDecisionPromote, ReasonCodes: []string{"all_policy_gates_passed"}, DecidedAt: now}
+	if err := store.CreateSkillPolicyDecision(context.Background(), decision); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func activationRevision(t *testing.T, skill core.LogicalSkill, id string, number int64, state core.SkillRevisionState, content string, now time.Time) (core.SkillRevision, map[string][]byte) {

@@ -38,10 +38,20 @@ var schemaMigrations = []migrationStep{
 	{18, "graphrag-normalized-metadata", migrateGraphNormalizedMetadata},
 	{19, "automatic-skill-revision-lifecycle", migrateAutomaticSkillRevisionLifecycle},
 	{20, "skill-activation-operation-lease", migrateSkillActivationOperationLease},
+	{21, "skill-approval-audit-events", migrateSkillApprovalAuditEvents},
 }
 
 func migrateSkillActivationOperationLease(ctx context.Context, s *Store) error {
 	_, err := s.db.ExecContext(ctx, `CREATE UNIQUE INDEX IF NOT EXISTS idx_skill_activation_operation_lease ON skill_activation_operations(workspace, environment, skill_id) WHERE state IN ('reserved', 'materializing')`)
+	return err
+}
+
+func migrateSkillApprovalAuditEvents(ctx context.Context, s *Store) error {
+	_, err := s.db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS skill_approval_events (
+		id INTEGER PRIMARY KEY AUTOINCREMENT, workspace TEXT NOT NULL, approval_id TEXT NOT NULL,
+		action TEXT NOT NULL, actor_id TEXT NOT NULL, reason TEXT NOT NULL, created_at TEXT NOT NULL,
+		FOREIGN KEY(approval_id) REFERENCES skill_approvals(id) ON DELETE CASCADE
+	)`)
 	return err
 }
 
