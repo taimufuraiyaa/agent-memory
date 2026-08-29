@@ -729,6 +729,13 @@ func (s *SolutionService) DeriveToolLesson(ctx context.Context, input SolutionTo
 	}
 	lesson.Fallback = admittedFallback
 	stored, _, err := s.store.PutSolutionToolLesson(ctx, lesson)
+	if err == nil && stored.Validation == core.SolutionValidationVerified {
+		// Candidate detection is advisory and must never make validated lesson
+		// capture or normal retrieval unavailable.
+		_, _ = NewSkillRecurrenceScheduler(s.store, SkillRecurrencePolicy{}).Run(ctx, SkillRecurrenceInput{
+			Workspace: stored.Workspace, PrincipalID: input.PrincipalID, CreatedBy: "skill-recurrence-scheduler",
+		})
+	}
 	return stored, err
 }
 

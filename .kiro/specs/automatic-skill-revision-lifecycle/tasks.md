@@ -156,7 +156,7 @@
   - Files: CLI adapter, HTTP handler, MCP mapping, contract tests.
   - Estimated scope: Medium.
 
-- [ ] **Task 18: Add bounded recurrence detection**
+- [x] **Task 18: Add bounded recurrence detection**
   - Acceptance: The lifecycle scheduler clusters only validated authorized evidence, compares existing skills, and emits deduplicated create/revise/merge/split candidates without activation.
   - Verify: repeated success, repetition-only rejection, suppressed evidence, duplicate, low confidence, fairness, and bounded-scan tests.
   - Dependencies: Tasks 14 and 17.
