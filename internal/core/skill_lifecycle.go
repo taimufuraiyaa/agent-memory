@@ -968,6 +968,67 @@ type SkillRollbackEvent struct {
 	CreatedAt      time.Time `json:"created_at"`
 }
 
+type SkillSafetySignalKind string
+
+const (
+	SkillSafetyViolation SkillSafetySignalKind = "safety_violation"
+	SkillHarmfulFeedback SkillSafetySignalKind = "harmful_feedback"
+	SkillDigestMismatch  SkillSafetySignalKind = "digest_mismatch"
+	SkillSoftRegression  SkillSafetySignalKind = "soft_regression"
+)
+
+func (k SkillSafetySignalKind) Hard() bool {
+	return k == SkillSafetyViolation || k == SkillHarmfulFeedback || k == SkillDigestMismatch
+}
+
+func (k SkillSafetySignalKind) Valid() bool { return k.Hard() || k == SkillSoftRegression }
+
+type SkillSafetySignalState string
+
+const (
+	SkillSafetyCooldown        SkillSafetySignalState = "cooldown"
+	SkillSafetyRollbackPending SkillSafetySignalState = "rollback_pending"
+	SkillSafetyRollbackFailed  SkillSafetySignalState = "rollback_failed"
+	SkillSafetyResolved        SkillSafetySignalState = "resolved"
+)
+
+type SkillSafetySignal struct {
+	ID            string                 `json:"id"`
+	Workspace     string                 `json:"workspace"`
+	Environment   string                 `json:"environment"`
+	SkillID       string                 `json:"skill_id"`
+	RevisionID    string                 `json:"revision_id"`
+	Kind          SkillSafetySignalKind  `json:"kind"`
+	State         SkillSafetySignalState `json:"state"`
+	Verified      bool                   `json:"verified"`
+	Occurrences   int64                  `json:"occurrences"`
+	CooldownUntil time.Time              `json:"cooldown_until,omitempty"`
+	LastError     string                 `json:"last_error,omitempty"`
+	CreatedAt     time.Time              `json:"created_at"`
+	UpdatedAt     time.Time              `json:"updated_at"`
+}
+
+func (s SkillSafetySignal) Validate() error {
+	for field, value := range map[string]string{"id": s.ID, "workspace": s.Workspace, "environment": s.Environment, "skill_id": s.SkillID, "revision_id": s.RevisionID} {
+		if err := requireSkillText(field, value, 256); err != nil {
+			return err
+		}
+	}
+	if !s.Kind.Valid() || s.Occurrences < 1 || !s.Verified || s.CreatedAt.IsZero() || s.UpdatedAt.Before(s.CreatedAt) {
+		return errors.New("skill safety signal classification, verification, occurrences, or timestamps are invalid")
+	}
+	if s.State != SkillSafetyCooldown && s.State != SkillSafetyRollbackPending && s.State != SkillSafetyRollbackFailed && s.State != SkillSafetyResolved {
+		return errors.New("skill safety signal state is invalid")
+	}
+	if s.State == SkillSafetyCooldown && !s.CooldownUntil.After(s.UpdatedAt) {
+		return errors.New("soft safety signal requires future cooldown")
+	}
+	if len(s.LastError) > MaxSkillReasonBytes {
+		return errors.New("skill safety signal last_error exceeds bound")
+	}
+	return nil
+}
+
 func (e SkillRollbackEvent) Validate() error {
 	for field, value := range map[string]string{"id": e.ID, "workspace": e.Workspace, "environment": e.Environment, "skill_id": e.SkillID, "from_revision_id": e.FromRevisionID, "to_revision_id": e.ToRevisionID, "reason_code": e.ReasonCode, "operation_id": e.OperationID} {
 		if err := requireSkillText(field, value, 256); err != nil {

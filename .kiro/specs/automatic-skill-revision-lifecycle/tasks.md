@@ -133,7 +133,7 @@
   - Files: canary analyzer, activation integration, scheduler adapter, focused tests.
   - Estimated scope: Medium.
 
-- [ ] **Task 16: Add automatic failure disablement and rollback**
+- [x] **Task 16: Add automatic failure disablement and rollback**
   - Acceptance: Hard safety or digest failures immediately stop allocation, disable the revision, and restore last-known-good; soft failures enter cooldown without oscillation.
   - Verify: hard failure, harmful feedback, digest mismatch, cooldown, repeated signal, rollback failure, and recovery tests.
   - Dependencies: Tasks 6, 14, and 15.
@@ -142,10 +142,10 @@
 
 ### Checkpoint D — Closed Measurable Loop
 
-- [ ] Every canary sample proves which revision was actually loaded.
-- [ ] Automatic activation is limited to eligible low-risk revisions.
-- [ ] Hard failures restore last-known-good without operator intervention.
-- [ ] Baseline comparisons exclude unresolved, unacknowledged, and unverified executions.
+- [x] Every canary sample proves which revision was actually loaded.
+- [x] Automatic activation is limited to eligible low-risk revisions.
+- [x] Hard failures restore last-known-good without operator intervention.
+- [x] Baseline comparisons exclude unresolved, unacknowledged, and unverified executions.
 
 ## Phase 5 — Candidate Generation and Revision Authoring
 

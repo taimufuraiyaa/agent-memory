@@ -515,6 +515,66 @@ func (s *Store) ListVerifiedSkillExecutionAggregates(ctx context.Context, worksp
 	return result, rows.Err()
 }
 
+func (s *Store) CreateSkillSafetySignal(ctx context.Context, signal core.SkillSafetySignal) error {
+	if err := signal.Validate(); err != nil {
+		return err
+	}
+	_, err := s.db.ExecContext(ctx, `INSERT INTO skill_safety_signals(id,workspace,environment,skill_id,revision_id,kind,state,verified,occurrences,cooldown_until,last_error,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`, signal.ID, signal.Workspace, signal.Environment, signal.SkillID, signal.RevisionID, signal.Kind, signal.State, signal.Verified, signal.Occurrences, formatOptionalSkillTime(signal.CooldownUntil), signal.LastError, formatSkillTime(signal.CreatedAt), formatSkillTime(signal.UpdatedAt))
+	return err
+}
+
+func (s *Store) GetSkillSafetySignal(ctx context.Context, workspace, signalID string) (core.SkillSafetySignal, error) {
+	var signal core.SkillSafetySignal
+	var cooldown, created, updated string
+	err := s.db.QueryRowContext(ctx, `SELECT id,workspace,environment,skill_id,revision_id,kind,state,verified,occurrences,cooldown_until,last_error,created_at,updated_at FROM skill_safety_signals WHERE workspace=? AND id=?`, strings.TrimSpace(workspace), strings.TrimSpace(signalID)).Scan(&signal.ID, &signal.Workspace, &signal.Environment, &signal.SkillID, &signal.RevisionID, &signal.Kind, &signal.State, &signal.Verified, &signal.Occurrences, &cooldown, &signal.LastError, &created, &updated)
+	if err != nil {
+		return core.SkillSafetySignal{}, err
+	}
+	if cooldown != "" {
+		signal.CooldownUntil, _ = time.Parse(time.RFC3339Nano, cooldown)
+	}
+	signal.CreatedAt, _ = time.Parse(time.RFC3339Nano, created)
+	signal.UpdatedAt, _ = time.Parse(time.RFC3339Nano, updated)
+	return signal, signal.Validate()
+}
+
+func (s *Store) UpdateSkillSafetySignal(ctx context.Context, signal core.SkillSafetySignal) error {
+	if err := signal.Validate(); err != nil {
+		return err
+	}
+	result, err := s.db.ExecContext(ctx, `UPDATE skill_safety_signals SET state=?,occurrences=?,cooldown_until=?,last_error=?,updated_at=? WHERE workspace=? AND id=?`, signal.State, signal.Occurrences, formatOptionalSkillTime(signal.CooldownUntil), signal.LastError, formatSkillTime(signal.UpdatedAt), signal.Workspace, signal.ID)
+	if err != nil {
+		return err
+	}
+	if changed, _ := result.RowsAffected(); changed != 1 {
+		return errors.New("skill safety signal update is stale")
+	}
+	return nil
+}
+
+func (s *Store) DisableSkillRevisionForSafety(ctx context.Context, workspace, environment, skillID, revisionID string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	result, err := tx.ExecContext(ctx, `UPDATE skill_revisions SET state=? WHERE workspace=? AND skill_id=? AND id=? AND state NOT IN (?,?)`, core.SkillRevisionDisabled, strings.TrimSpace(workspace), strings.TrimSpace(skillID), strings.TrimSpace(revisionID), core.SkillRevisionDisabled, core.SkillRevisionRejected)
+	if err != nil {
+		return err
+	}
+	changed, _ := result.RowsAffected()
+	if changed == 0 {
+		var state core.SkillRevisionState
+		if err := tx.QueryRowContext(ctx, `SELECT state FROM skill_revisions WHERE workspace=? AND skill_id=? AND id=?`, workspace, skillID, revisionID).Scan(&state); err != nil || state != core.SkillRevisionDisabled {
+			return errors.New("skill revision could not be disabled for safety")
+		}
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE skill_activations SET canary_revision_id='',canary_digest='',updated_at=? WHERE workspace=? AND environment=? AND skill_id=? AND canary_revision_id=?`, formatSkillTime(time.Now().UTC()), workspace, environment, skillID, revisionID); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 func (s *Store) CreateSkillEvaluationSuite(ctx context.Context, suite core.SkillEvaluationSuite) error {
 	if err := suite.Validate(); err != nil {
 		return err
@@ -821,3 +881,10 @@ func listSkillRevisionFiles(ctx context.Context, queryer skillQueryer, revisionI
 }
 
 func formatSkillTime(value time.Time) string { return value.UTC().Format(time.RFC3339Nano) }
+
+func formatOptionalSkillTime(value time.Time) string {
+	if value.IsZero() {
+		return ""
+	}
+	return formatSkillTime(value)
+}

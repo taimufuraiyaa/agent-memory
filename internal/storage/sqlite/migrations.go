@@ -41,6 +41,7 @@ var schemaMigrations = []migrationStep{
 	{21, "skill-approval-audit-events", migrateSkillApprovalAuditEvents},
 	{22, "skill-resolution-acknowledgement", migrateSkillResolutionAcknowledgement},
 	{23, "skill-execution-feedback-class", migrateSkillExecutionFeedbackClass},
+	{24, "skill-safety-signals", migrateSkillSafetySignals},
 }
 
 func migrateSkillActivationOperationLease(ctx context.Context, s *Store) error {
@@ -74,6 +75,18 @@ func migrateSkillResolutionAcknowledgement(ctx context.Context, s *Store) error 
 
 func migrateSkillExecutionFeedbackClass(ctx context.Context, s *Store) error {
 	_, err := s.db.ExecContext(ctx, `ALTER TABLE skill_executions ADD COLUMN feedback_class TEXT NOT NULL DEFAULT ''`)
+	return err
+}
+
+func migrateSkillSafetySignals(ctx context.Context, s *Store) error {
+	_, err := s.db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS skill_safety_signals (
+		id TEXT PRIMARY KEY, workspace TEXT NOT NULL, environment TEXT NOT NULL, skill_id TEXT NOT NULL,
+		revision_id TEXT NOT NULL, kind TEXT NOT NULL, state TEXT NOT NULL, verified INTEGER NOT NULL,
+		occurrences INTEGER NOT NULL, cooldown_until TEXT NOT NULL DEFAULT '', last_error TEXT NOT NULL DEFAULT '',
+		created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+		FOREIGN KEY(skill_id) REFERENCES skills(id) ON DELETE CASCADE,
+		FOREIGN KEY(revision_id) REFERENCES skill_revisions(id)
+	)`)
 	return err
 }
 
