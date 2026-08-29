@@ -25,13 +25,13 @@
 
 ### Checkpoint A — Read-Only Compatibility
 
-- [ ] Existing workspaces migrate without changing root skill contents.
-- [ ] Revision inventory reproduces current logical skills and provenance.
-- [ ] Core and SQLite suites pass with migration downgrade/upgrade fixtures.
+- [x] Existing workspaces migrate without changing root skill contents.
+- [x] Revision inventory reproduces current logical skills and provenance.
+- [x] Core and SQLite suites pass with migration downgrade/upgrade fixtures.
 
 ## Phase 2 — Immutable Bundles and Safe Activation
 
-- [ ] **Task 4: Implement contained immutable bundle storage**
+- [x] **Task 4: Implement contained immutable bundle storage**
   - Acceptance: Revision bundles are regular-file-only, bounded, content-addressed, descriptor-rooted, and immutable after publication.
   - Verify: replacement-parent, symlink, digest, size, duplicate, and crash-interruption tests.
   - Dependencies: Checkpoint A.

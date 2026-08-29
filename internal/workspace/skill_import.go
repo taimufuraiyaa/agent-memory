@@ -9,8 +9,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -176,22 +174,15 @@ func inspectExistingSkillBundle(root, skillDir string) (inspectedSkillBundle, st
 	if err != nil {
 		return inspectedSkillBundle{}, "", err
 	}
-	sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
+	sortSkillBundleFiles(files)
 	if len(files) == 0 || files[0].Path == "" {
 		return inspectedSkillBundle{}, "", errors.New("skill bundle is empty")
 	}
 	hasSkill := false
-	hash := sha256.New()
 	for _, file := range files {
 		if file.Path == "SKILL.md" {
 			hasSkill = true
 		}
-		hash.Write([]byte(file.Path))
-		hash.Write([]byte{0})
-		hash.Write([]byte(file.Digest))
-		hash.Write([]byte{0})
-		hash.Write([]byte(strconv.FormatInt(file.SizeBytes, 10)))
-		hash.Write([]byte{0})
 	}
 	if !hasSkill {
 		return inspectedSkillBundle{}, "", errors.New("skill bundle is missing SKILL.md")
@@ -199,7 +190,7 @@ func inspectExistingSkillBundle(root, skillDir string) (inspectedSkillBundle, st
 	if strings.TrimSpace(description) == "" {
 		description = "Imported workspace skill."
 	}
-	return inspectedSkillBundle{Digest: "sha256:" + hex.EncodeToString(hash.Sum(nil)), Files: files}, description, nil
+	return inspectedSkillBundle{Digest: skillBundleDigest(files), Files: files}, description, nil
 }
 
 func parseExistingSkillDescription(raw string) string {
