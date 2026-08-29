@@ -41,7 +41,7 @@ func TestWorkStepEndAndHandoffCommandsAreRegistered(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"start", "step", "checkpoint", "show", "end", "handoff", "recall", "promote"} {
+	for _, name := range []string{"start", "step", "checkpoint", "show", "end", "handoff", "recall", "promote", "tool-event", "derive-tool-lesson", "promote-tool-lesson"} {
 		if child, _, findErr := work.Find([]string{name}); findErr != nil || child.Name() != name {
 			t.Fatalf("missing work %s command", name)
 		}

@@ -150,6 +150,20 @@ const allTools = [
     workspace: { type: "string" }, principal_id: { type: "string" }, episode_id: { type: "string" }, summary_id: { type: "string" },
     idempotency_key: { type: "string" }, targets: { type: "array", minItems: 1, maxItems: 8, items: { type: "object" } },
   }, ["principal_id", "episode_id", "summary_id", "targets"]),
+  tool("solution_tool_event", "Record a safe tool event for validated lesson derivation", {
+    workspace: { type: "string" }, principal_id: { type: "string" }, episode_id: { type: "string" }, step_id: { type: "string" },
+    kind: { type: "string", enum: ["discovery", "selection", "invocation", "result"] }, tool_name: { type: "string" },
+    tool_version: { type: "string" }, operation: { type: "string" }, capability: { type: "string" }, input_summary: { type: "string" },
+    result_class: { type: "string", enum: ["success", "failure", "partial", "cancelled", "unknown"] }, task_verified: { type: "boolean" },
+    duration_ms: { type: "integer", minimum: 0 }, evidence: { type: "array", items: { type: "object" } }, idempotency_key: { type: "string" },
+  }, ["principal_id", "episode_id", "step_id", "tool_name", "operation", "capability"]),
+  tool("solution_tool_lesson_derive", "Derive a bounded validated lesson from authorized tool events", {
+    workspace: { type: "string" }, principal_id: { type: "string" }, event_ids: { type: "array", minItems: 1, maxItems: 100, items: { type: "string" } },
+    fallback: { type: "string" }, reviewed: { type: "boolean" },
+  }, ["principal_id", "event_ids"]),
+  tool("solution_tool_lesson_promote", "Promote a verified tool lesson into durable procedural memory", {
+    workspace: { type: "string" }, principal_id: { type: "string" }, lesson_id: { type: "string" }, idempotency_key: { type: "string" },
+  }, ["principal_id", "lesson_id"]),
 ];
 const defaultToolNames = new Set([
   "memory_write",
@@ -347,6 +361,18 @@ async function callTool(name, args) {
     case "solution_promote":
       requireLocalSolutionTool();
       return requestService("/api/v1/solutions/promote", { body: { ...args, idempotency_key: args.idempotency_key || randomUUID() } });
+    case "solution_tool_event":
+      requireLocalSolutionTool();
+      return requestService("/api/v1/solutions/tool-events", { body: {
+        ...args, kind: args.kind || "result", result_class: args.result_class || "unknown",
+        task_verified: args.task_verified || false, idempotency_key: args.idempotency_key || randomUUID(),
+      } });
+    case "solution_tool_lesson_derive":
+      requireLocalSolutionTool();
+      return requestService("/api/v1/solutions/tool-lessons/derive", { body: args });
+    case "solution_tool_lesson_promote":
+      requireLocalSolutionTool();
+      return requestService("/api/v1/solutions/tool-lessons/promote", { body: { ...args, idempotency_key: args.idempotency_key || randomUUID() } });
     default:
       throw new Error(`tool execution is not available for ${name}`);
   }

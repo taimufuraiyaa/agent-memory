@@ -87,6 +87,9 @@ test("lists operational tools only in the expanded profile", async (t) => {
     "solution_handoff",
     "solution_recall",
     "solution_promote",
+	"solution_tool_event",
+	"solution_tool_lesson_derive",
+	"solution_tool_lesson_promote",
   ]);
 });
 
@@ -129,6 +132,39 @@ test("proxies default solution continuation tools", async (t) => {
     { method: "POST", url: "/api/v1/solutions/recall", body: { workspace: "ws", task: "How did we continue safely?", token_budget: 800, max_candidates: 50 } },
     { method: "POST", url: "/api/v1/solutions/promote", body: { workspace: "ws", principal_id: "p1", episode_id: "ep-1", summary_id: "sum-1", targets: [{ memory_type: "procedural" }], idempotency_key: "promote-1" } },
   ]);
+});
+
+test("proxies tool lesson capture only in the expanded profile", async (t) => {
+  const requests = [];
+  const server = http.createServer((request, response) => {
+    let body = "";
+    request.on("data", (chunk) => { body += chunk; });
+    request.on("end", () => {
+      requests.push({ url: request.url, body: JSON.parse(body) });
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({ ok: true, data: {} }));
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => server.close());
+  const child = startServer({ AGENT_MEMORY_MCP_PROFILE: "expanded", AGENT_MEMORY_URL: `http://127.0.0.1:${server.address().port}` });
+  t.after(() => child.kill());
+
+  for (const [id, name, args] of [
+    [51, "solution_tool_event", { principal_id: "p1", episode_id: "ep1", step_id: "st1", tool_name: "safe-tool", operation: "verify", capability: "verify artifact" }],
+    [52, "solution_tool_lesson_derive", { principal_id: "p1", event_ids: ["ev1", "ev2"] }],
+    [53, "solution_tool_lesson_promote", { principal_id: "p1", lesson_id: "lesson1", idempotency_key: "promote1" }],
+  ]) {
+    child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id, method: "tools/call", params: { name, arguments: args } })}\n`);
+    await readMessage(child);
+  }
+
+  assert.deepEqual(requests.map((request) => request.url), [
+    "/api/v1/solutions/tool-events", "/api/v1/solutions/tool-lessons/derive", "/api/v1/solutions/tool-lessons/promote",
+  ]);
+  assert.equal(requests[0].body.kind, "result");
+  assert.equal(requests[0].body.result_class, "unknown");
+  assert.equal(requests[2].body.idempotency_key, "promote1");
 });
 
 test("rejects calls to tools hidden from the default profile", async (t) => {
@@ -176,7 +212,7 @@ test("resolves distinct persisted profiles by client id before listing tools", a
 
   const [codexResponse, claudeResponse] = await Promise.all([readMessage(codex), readMessage(claude)]);
 	assert.equal(codexResponse.result.tools.length, 13);
-  assert.equal(claudeResponse.result.tools.length, 15);
+	assert.equal(claudeResponse.result.tools.length, 18);
   assert.ok(claudeResponse.result.tools.some((tool) => tool.name === "memory_sessions"));
   assert.ok(claudeResponse.result.tools.some((tool) => tool.name === "solution_checkpoint"));
 });

@@ -25,7 +25,12 @@ func (s *Store) InsertSolutionToolEvent(ctx context.Context, input SolutionToolE
 		return core.SolutionToolInvocationRecord{}, false, err
 	}
 	record := input.Record
-	requestHash, err := hashSolutionRequest(record)
+	// Generated identity and server time are response metadata, not request
+	// semantics. Excluding them keeps an otherwise identical retry replayable.
+	hashRecord := record
+	hashRecord.ID = ""
+	hashRecord.OccurredAt = time.Time{}
+	requestHash, err := hashSolutionRequest(hashRecord)
 	if err != nil {
 		return core.SolutionToolInvocationRecord{}, false, err
 	}

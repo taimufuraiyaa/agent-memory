@@ -116,6 +116,117 @@ type solutionPromoteRequest struct {
 	Targets        []solutionPromotionTargetRequest `json:"targets"`
 }
 
+type solutionToolEventRequest struct {
+	Workspace      string                       `json:"workspace"`
+	PrincipalID    string                       `json:"principal_id"`
+	EpisodeID      string                       `json:"episode_id"`
+	StepID         string                       `json:"step_id"`
+	Kind           core.SolutionToolEventKind   `json:"kind"`
+	ToolName       string                       `json:"tool_name"`
+	ToolVersion    string                       `json:"tool_version"`
+	Operation      string                       `json:"operation"`
+	Capability     string                       `json:"capability"`
+	InputSummary   string                       `json:"input_summary"`
+	ResultClass    core.SolutionToolResultClass `json:"result_class"`
+	TaskVerified   bool                         `json:"task_verified"`
+	DurationMS     int64                        `json:"duration_ms"`
+	Evidence       []core.SolutionReference     `json:"evidence"`
+	IdempotencyKey string                       `json:"idempotency_key"`
+}
+
+type solutionToolLessonRequest struct {
+	Workspace   string   `json:"workspace"`
+	PrincipalID string   `json:"principal_id"`
+	Fallback    string   `json:"fallback"`
+	EventIDs    []string `json:"event_ids"`
+	Reviewed    bool     `json:"reviewed"`
+}
+
+type solutionToolLessonPromoteRequest struct {
+	Workspace      string `json:"workspace"`
+	PrincipalID    string `json:"principal_id"`
+	LessonID       string `json:"lesson_id"`
+	IdempotencyKey string `json:"idempotency_key"`
+}
+
+func solutionToolEventHandler(svc *Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeErr(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+			return
+		}
+		var req solutionToolEventRequest
+		if !decodeSolutionRequest(w, r, &req) {
+			return
+		}
+		ws, service, ok := resolveSolutionService(w, r, svc, req.Workspace)
+		if !ok {
+			return
+		}
+		event, err := service.RecordToolEvent(r.Context(), application.SolutionToolEventInput{
+			Workspace: ws, PrincipalID: req.PrincipalID, EpisodeID: req.EpisodeID, StepID: req.StepID,
+			Kind: req.Kind, ToolName: req.ToolName, ToolVersion: req.ToolVersion, Operation: req.Operation,
+			Capability: req.Capability, InputSummary: req.InputSummary, ResultClass: req.ResultClass,
+			TaskVerified: req.TaskVerified, DurationMS: req.DurationMS, Evidence: req.Evidence, IdempotencyKey: req.IdempotencyKey,
+		})
+		if err != nil {
+			writeSolutionError(w, err)
+			return
+		}
+		writeOK(w, http.StatusOK, map[string]any{"event": event})
+	}
+}
+
+func solutionToolLessonDeriveHandler(svc *Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeErr(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+			return
+		}
+		var req solutionToolLessonRequest
+		if !decodeSolutionRequest(w, r, &req) {
+			return
+		}
+		ws, service, ok := resolveSolutionService(w, r, svc, req.Workspace)
+		if !ok {
+			return
+		}
+		lesson, err := service.DeriveToolLesson(r.Context(), application.SolutionToolLessonInput{
+			Workspace: ws, PrincipalID: req.PrincipalID, EventIDs: req.EventIDs, Fallback: req.Fallback, Reviewed: req.Reviewed,
+		})
+		if err != nil {
+			writeSolutionError(w, err)
+			return
+		}
+		writeOK(w, http.StatusOK, map[string]any{"lesson": lesson})
+	}
+}
+
+func solutionToolLessonPromoteHandler(svc *Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeErr(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+			return
+		}
+		var req solutionToolLessonPromoteRequest
+		if !decodeSolutionRequest(w, r, &req) {
+			return
+		}
+		ws, service, ok := resolveSolutionService(w, r, svc, req.Workspace)
+		if !ok {
+			return
+		}
+		promotion, err := service.PromoteToolLesson(r.Context(), application.ToolLessonPromotionInput{
+			Workspace: ws, PrincipalID: req.PrincipalID, LessonID: req.LessonID, IdempotencyKey: req.IdempotencyKey,
+		})
+		if err != nil {
+			writeSolutionError(w, err)
+			return
+		}
+		writeOK(w, http.StatusOK, map[string]any{"promotion": promotion})
+	}
+}
+
 func solutionStartHandler(svc *Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {

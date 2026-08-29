@@ -63,6 +63,49 @@ func TestSolutionContinuationHTTPContract(t *testing.T) {
 	}
 }
 
+func TestSolutionToolLessonHTTPContract(t *testing.T) {
+	svc := &Service{Workspace: "ws", BaseDir: t.TempDir()}
+	server := httptest.NewServer(NewMux(svc))
+	t.Cleanup(func() { server.Close(); _ = svc.Close() })
+
+	started := postJSON(t, server.URL+"/api/v1/solutions/start", map[string]any{
+		"workspace": "ws", "session_id": "tool-session", "principal_id": "agent-1", "client_id": "codex",
+		"goal_summary": "Validate reusable tool behavior.", "capture_policy": "structured", "retention_class": "standard", "idempotency_key": "tool-start",
+	})
+	episodeID := started["episode"].(map[string]any)["id"].(string)
+	step := postJSON(t, server.URL+"/api/v1/solutions/steps", map[string]any{
+		"workspace": "ws", "principal_id": "agent-1", "episode_id": episodeID, "kind": "result", "status": "completed",
+		"summary": "The tool completed the task.", "source": "agent", "confidence": .9, "sensitivity": "internal", "idempotency_key": "tool-step",
+	})
+	stepID := step["step"].(map[string]any)["id"].(string)
+
+	eventIDs := make([]string, 0, 2)
+	for _, key := range []string{"tool-event-1", "tool-event-2"} {
+		event := postJSON(t, server.URL+"/api/v1/solutions/tool-events", map[string]any{
+			"workspace": "ws", "principal_id": "agent-1", "episode_id": episodeID, "step_id": stepID,
+			"kind": "result", "tool_name": "safe-tool", "tool_version": "1.2.3", "operation": "verify",
+			"capability": "Verify the requested artifact.", "result_class": "success", "task_verified": true,
+			"duration_ms": 12, "idempotency_key": key,
+		})
+		eventIDs = append(eventIDs, event["event"].(map[string]any)["id"].(string))
+	}
+	replayed := postJSON(t, server.URL+"/api/v1/solutions/tool-events", map[string]any{
+		"workspace": "ws", "principal_id": "agent-1", "episode_id": episodeID, "step_id": stepID,
+		"kind": "result", "tool_name": "safe-tool", "tool_version": "1.2.3", "operation": "verify",
+		"capability": "Verify the requested artifact.", "result_class": "success", "task_verified": true,
+		"duration_ms": 12, "idempotency_key": "tool-event-1",
+	})
+	if replayed["event"].(map[string]any)["id"] != eventIDs[0] {
+		t.Fatalf("tool event retry was not idempotent: %#v", replayed)
+	}
+	lesson := postJSON(t, server.URL+"/api/v1/solutions/tool-lessons/derive", map[string]any{
+		"workspace": "ws", "principal_id": "agent-1", "event_ids": eventIDs,
+	})["lesson"].(map[string]any)
+	if lesson["validation"] != "verified" || lesson["success_count"] != float64(2) {
+		t.Fatalf("unexpected derived lesson: %#v", lesson)
+	}
+}
+
 func TestSolutionStateRejectsPriorPrincipalAfterHandoff(t *testing.T) {
 	svc := &Service{Workspace: "ws", BaseDir: t.TempDir()}
 	server := httptest.NewServer(NewMux(svc))

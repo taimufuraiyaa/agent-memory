@@ -149,7 +149,7 @@
 
 ## Phase 5 — Candidate Generation and Revision Authoring
 
-- [ ] **Task 17: Wire public tool-event and lesson capture**
+- [x] **Task 17: Wire public tool-event and lesson capture**
   - Acceptance: CLI, HTTP, and expanded MCP can record safe tool events, derive validated lessons, and promote them through existing application services without direct storage access.
   - Verify: contract, idempotency, task verification, admission, authorization, and provenance tests.
   - Dependencies: Checkpoint D.

@@ -25,8 +25,125 @@ func newWorkCommand() *cobra.Command {
 		newWorkStartCommand(&flags), newWorkStepCommand(&flags), newWorkCheckpointCommand(&flags),
 		newWorkShowCommand(&flags), newWorkEndCommand(&flags), newWorkHandoffCommand(&flags),
 		newWorkRecallCommand(&flags), newWorkPromoteCommand(&flags),
+		newWorkToolEventCommand(&flags), newWorkDeriveToolLessonCommand(&flags), newWorkPromoteToolLessonCommand(&flags),
 	)
 	return command
+}
+
+func newWorkToolEventCommand(flags *commonFlags) *cobra.Command {
+	var principal, episode, step, kind, toolName, toolVersion, operation, capability, inputSummary, resultClass, key string
+	var taskVerified bool
+	var durationMS int64
+	cmd := &cobra.Command{Use: "tool-event", Short: "Record a safe tool event", RunE: func(cmd *cobra.Command, _ []string) error {
+		cfg, err := resolveRuntime(*flags)
+		if err != nil {
+			return err
+		}
+		key = idempotencyKeyOrNew(key)
+		body := map[string]any{"workspace": cfg.workspace, "principal_id": principal, "episode_id": episode, "step_id": step,
+			"kind": kind, "tool_name": toolName, "tool_version": toolVersion, "operation": operation, "capability": capability,
+			"input_summary": inputSummary, "result_class": resultClass, "task_verified": taskVerified, "duration_ms": durationMS, "idempotency_key": key}
+		var output any
+		if cfg.apiURL != "" {
+			err = postAPI(cmd.Context(), cfg.apiURL, "/api/v1/solutions/tool-events", body, &output)
+		} else {
+			err = withSolutionService(cmd.Context(), cfg, func(service *application.SolutionService) error {
+				event, callErr := service.RecordToolEvent(cmd.Context(), application.SolutionToolEventInput{Workspace: cfg.workspace, PrincipalID: principal,
+					EpisodeID: episode, StepID: step, Kind: core.SolutionToolEventKind(kind), ToolName: toolName, ToolVersion: toolVersion,
+					Operation: operation, Capability: capability, InputSummary: inputSummary, ResultClass: core.SolutionToolResultClass(resultClass),
+					TaskVerified: taskVerified, DurationMS: durationMS, IdempotencyKey: key})
+				output = map[string]any{"event": event}
+				return callErr
+			})
+		}
+		if err != nil {
+			return err
+		}
+		return writeSuccessEnvelope(cmd.OutOrStdout(), "work.tool-event", output)
+	}}
+	cmd.Flags().StringVar(&principal, "principal", "", "Principal identifier")
+	cmd.Flags().StringVar(&episode, "episode", "", "Episode identifier")
+	cmd.Flags().StringVar(&step, "step", "", "Source step identifier")
+	cmd.Flags().StringVar(&kind, "kind", string(core.SolutionToolResult), "Tool event kind")
+	cmd.Flags().StringVar(&toolName, "tool", "", "Tool name")
+	cmd.Flags().StringVar(&toolVersion, "tool-version", "", "Tool version")
+	cmd.Flags().StringVar(&operation, "operation", "", "Tool operation")
+	cmd.Flags().StringVar(&capability, "capability", "", "Safe capability summary")
+	cmd.Flags().StringVar(&inputSummary, "input-summary", "", "Safe input or result summary")
+	cmd.Flags().StringVar(&resultClass, "result", string(core.SolutionToolResultUnknown), "Tool result classification")
+	cmd.Flags().BoolVar(&taskVerified, "task-verified", false, "Mark a successful result as task verified")
+	cmd.Flags().Int64Var(&durationMS, "duration-ms", 0, "Tool duration in milliseconds")
+	cmd.Flags().StringVar(&key, "idempotency-key", "", "Stable retry key")
+	for _, flag := range []string{"principal", "episode", "step", "tool", "operation", "capability"} {
+		_ = cmd.MarkFlagRequired(flag)
+	}
+	return cmd
+}
+
+func newWorkDeriveToolLessonCommand(flags *commonFlags) *cobra.Command {
+	var principal, fallback string
+	var eventIDs []string
+	var reviewed bool
+	cmd := &cobra.Command{Use: "derive-tool-lesson", Short: "Derive a validated lesson from tool events", RunE: func(cmd *cobra.Command, _ []string) error {
+		cfg, err := resolveRuntime(*flags)
+		if err != nil {
+			return err
+		}
+		body := map[string]any{"workspace": cfg.workspace, "principal_id": principal, "event_ids": eventIDs, "fallback": fallback, "reviewed": reviewed}
+		var output any
+		if cfg.apiURL != "" {
+			err = postAPI(cmd.Context(), cfg.apiURL, "/api/v1/solutions/tool-lessons/derive", body, &output)
+		} else {
+			err = withSolutionService(cmd.Context(), cfg, func(service *application.SolutionService) error {
+				lesson, callErr := service.DeriveToolLesson(cmd.Context(), application.SolutionToolLessonInput{Workspace: cfg.workspace, PrincipalID: principal, EventIDs: eventIDs, Fallback: fallback, Reviewed: reviewed})
+				output = map[string]any{"lesson": lesson}
+				return callErr
+			})
+		}
+		if err != nil {
+			return err
+		}
+		return writeSuccessEnvelope(cmd.OutOrStdout(), "work.derive-tool-lesson", output)
+	}}
+	cmd.Flags().StringVar(&principal, "principal", "", "Principal identifier")
+	cmd.Flags().StringSliceVar(&eventIDs, "event", nil, "Source tool event identifier (repeatable)")
+	cmd.Flags().StringVar(&fallback, "fallback", "", "Safe fallback guidance")
+	cmd.Flags().BoolVar(&reviewed, "reviewed", false, "Record an explicit review")
+	_ = cmd.MarkFlagRequired("principal")
+	_ = cmd.MarkFlagRequired("event")
+	return cmd
+}
+
+func newWorkPromoteToolLessonCommand(flags *commonFlags) *cobra.Command {
+	var principal, lesson, key string
+	cmd := &cobra.Command{Use: "promote-tool-lesson", Short: "Promote a verified tool lesson into durable memory", RunE: func(cmd *cobra.Command, _ []string) error {
+		cfg, err := resolveRuntime(*flags)
+		if err != nil {
+			return err
+		}
+		key = idempotencyKeyOrNew(key)
+		body := map[string]any{"workspace": cfg.workspace, "principal_id": principal, "lesson_id": lesson, "idempotency_key": key}
+		var output any
+		if cfg.apiURL != "" {
+			err = postAPI(cmd.Context(), cfg.apiURL, "/api/v1/solutions/tool-lessons/promote", body, &output)
+		} else {
+			err = withSolutionWriterService(cmd.Context(), cfg, func(service *application.SolutionService) error {
+				promotion, callErr := service.PromoteToolLesson(cmd.Context(), application.ToolLessonPromotionInput{Workspace: cfg.workspace, PrincipalID: principal, LessonID: lesson, IdempotencyKey: key})
+				output = map[string]any{"promotion": promotion}
+				return callErr
+			})
+		}
+		if err != nil {
+			return err
+		}
+		return writeSuccessEnvelope(cmd.OutOrStdout(), "work.promote-tool-lesson", output)
+	}}
+	cmd.Flags().StringVar(&principal, "principal", "", "Principal identifier")
+	cmd.Flags().StringVar(&lesson, "lesson", "", "Verified tool lesson identifier")
+	cmd.Flags().StringVar(&key, "idempotency-key", "", "Stable retry key")
+	_ = cmd.MarkFlagRequired("principal")
+	_ = cmd.MarkFlagRequired("lesson")
+	return cmd
 }
 
 func newWorkRecallCommand(flags *commonFlags) *cobra.Command {
