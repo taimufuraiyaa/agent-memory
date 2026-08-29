@@ -427,6 +427,59 @@ func (s *Store) CreateSkillResolution(ctx context.Context, resolution core.Skill
 	return err
 }
 
+func (s *Store) CreateSkillEvaluationSuite(ctx context.Context, suite core.SkillEvaluationSuite) error {
+	if err := suite.Validate(); err != nil {
+		return err
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var nextVersion int64
+	if err := tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(version),0)+1 FROM skill_evaluation_suites WHERE workspace=? AND skill_id=?`, suite.Workspace, suite.SkillID).Scan(&nextVersion); err != nil {
+		return err
+	}
+	if suite.Version != nextVersion {
+		return errors.New("evaluation suite version is stale")
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO skill_evaluation_suites(id,workspace,skill_id,version,digest,created_by,created_at) VALUES(?,?,?,?,?,?,?)`, suite.ID, suite.Workspace, suite.SkillID, suite.Version, suite.Digest, suite.CreatedBy, formatSkillTime(suite.CreatedAt)); err != nil {
+		return err
+	}
+	for _, item := range suite.Cases {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO skill_evaluation_cases(suite_id,case_id,kind,summary,reference,required) VALUES(?,?,?,?,?,?)`, suite.ID, item.ID, item.Kind, item.Summary, item.Reference, item.Required); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+func (s *Store) GetLatestSkillEvaluationSuite(ctx context.Context, workspace, skillID string) (core.SkillEvaluationSuite, error) {
+	var suite core.SkillEvaluationSuite
+	var created string
+	err := s.db.QueryRowContext(ctx, `SELECT id,skill_id,workspace,version,digest,created_by,created_at FROM skill_evaluation_suites WHERE workspace=? AND skill_id=? ORDER BY version DESC LIMIT 1`, strings.TrimSpace(workspace), strings.TrimSpace(skillID)).Scan(&suite.ID, &suite.SkillID, &suite.Workspace, &suite.Version, &suite.Digest, &suite.CreatedBy, &created)
+	if err != nil {
+		return core.SkillEvaluationSuite{}, err
+	}
+	suite.CreatedAt, _ = time.Parse(time.RFC3339Nano, created)
+	rows, err := s.db.QueryContext(ctx, `SELECT case_id,kind,summary,reference,required FROM skill_evaluation_cases WHERE suite_id=? ORDER BY case_id`, suite.ID)
+	if err != nil {
+		return core.SkillEvaluationSuite{}, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var item core.SkillEvaluationCase
+		if err := rows.Scan(&item.ID, &item.Kind, &item.Summary, &item.Reference, &item.Required); err != nil {
+			return core.SkillEvaluationSuite{}, err
+		}
+		suite.Cases = append(suite.Cases, item)
+	}
+	if err := rows.Err(); err != nil {
+		return core.SkillEvaluationSuite{}, err
+	}
+	return suite, suite.Validate()
+}
+
 type skillActivationOperationScanner interface {
 	Scan(...any) error
 }

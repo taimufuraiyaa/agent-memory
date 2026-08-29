@@ -68,7 +68,7 @@
 
 ## Phase 3 — Evaluation and Policy Gates
 
-- [ ] **Task 8: Add versioned evaluation-suite management**
+- [x] **Task 8: Add versioned evaluation-suite management**
   - Acceptance: Authorized clients create immutable suite versions with positive, negative-trigger, regression, safety, compatibility, and artifact cases by bounded reference.
   - Verify: validation, supersession, missing-reference, cross-workspace, and deterministic digest tests.
   - Dependencies: Checkpoint B.

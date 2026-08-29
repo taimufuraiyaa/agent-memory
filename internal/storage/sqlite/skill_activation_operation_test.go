@@ -70,6 +70,31 @@ func TestSkillRevisionStateTransitionIsOptimistic(t *testing.T) {
 	}
 }
 
+func TestSkillEvaluationSuiteVersionsAreImmutable(t *testing.T) {
+	ctx := context.Background()
+	store, err := Open(ctx, filepath.Join(t.TempDir(), "evaluation-suite.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	now := time.Date(2026, 8, 29, 15, 45, 0, 0, time.UTC)
+	insertSkillOperationFixture(t, store, now)
+	suite := core.SkillEvaluationSuite{ID: "suite-1", SkillID: "skill-1", Workspace: "ws", Version: 1, Digest: "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", Cases: []core.SkillEvaluationCase{{ID: "case-1", Kind: core.SkillCaseSafety, Summary: "Safety case.", Reference: "fixture:safety", Required: true}}, CreatedBy: "reviewer", CreatedAt: now}
+	if err := store.CreateSkillEvaluationSuite(ctx, suite); err != nil {
+		t.Fatal(err)
+	}
+	stale := suite
+	stale.ID = "suite-2"
+	stale.Digest = "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+	if err := store.CreateSkillEvaluationSuite(ctx, stale); err == nil {
+		t.Fatal("stale suite version was accepted")
+	}
+	latest, err := store.GetLatestSkillEvaluationSuite(ctx, "ws", "skill-1")
+	if err != nil || latest.ID != suite.ID || latest.Cases[0].Reference != "fixture:safety" {
+		t.Fatalf("latest suite = %+v, err %v", latest, err)
+	}
+}
+
 func insertSkillOperationFixture(t *testing.T, store *Store, now time.Time) {
 	t.Helper()
 	digestOne := "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
