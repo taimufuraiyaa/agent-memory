@@ -230,7 +230,7 @@
   - Files: observability metrics, instrumentation adapters, focused tests.
   - Estimated scope: Medium.
 
-- [ ] **Task 26: Add lifecycle export, deletion, and retention parity**
+- [x] **Task 26: Add lifecycle export, deletion, and retention parity**
   - Acceptance: Export and deletion include revision lineage and telemetry according to retention, legal hold, and tombstone rules without resurrecting deleted evidence.
   - Verify: export round-trip, selective delete, held data, expired telemetry, deleted evidence, and tenant-isolation tests.
   - Dependencies: Tasks 2 and 14.

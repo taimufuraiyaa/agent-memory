@@ -201,6 +201,27 @@ type SkillRevision struct {
 	CreatedAt           time.Time          `json:"created_at"`
 }
 
+type SkillLegalHold struct {
+	ID         string    `json:"id"`
+	Workspace  string    `json:"workspace"`
+	TargetKind string    `json:"target_kind"`
+	TargetID   string    `json:"target_id"`
+	Reason     string    `json:"reason"`
+	State      string    `json:"state"`
+	CreatedAt  time.Time `json:"created_at"`
+	ReleasedAt time.Time `json:"released_at,omitempty"`
+}
+
+type SkillEvidenceDeletionResult struct {
+	Workspace           string `json:"workspace"`
+	EvidenceKind        string `json:"evidence_kind"`
+	EvidenceID          string `json:"evidence_id"`
+	CandidateReferences int64  `json:"candidate_references"`
+	RevisionReferences  int64  `json:"revision_references"`
+	ExecutionsDeleted   int64  `json:"executions_deleted"`
+	Replayed            bool   `json:"replayed"`
+}
+
 func (r SkillRevision) Validate() error {
 	for field, value := range map[string]string{"id": r.ID, "workspace": r.Workspace, "skill_id": r.SkillID, "created_by": r.CreatedBy} {
 		if err := requireSkillText(field, value, 256); err != nil {

@@ -32,23 +32,24 @@ type Claimed struct {
 	AccountID string
 }
 type Bundle struct {
-	Format              string           `json:"format"`
-	Version             string           `json:"version"`
-	MinReaderVersion    string           `json:"min_reader_version"`
-	ExportedAt          time.Time        `json:"exported_at"`
-	TenantID            string           `json:"tenant_id"`
-	WorkspaceID         string           `json:"workspace_id,omitempty"`
-	Memories            []map[string]any `json:"memories"`
-	Notes               []map[string]any `json:"notes"`
-	Sources             []map[string]any `json:"sources"`
-	SourceVersions      []map[string]any `json:"source_versions"`
-	Lineage             []map[string]any `json:"lineage"`
-	Attestations        []map[string]any `json:"attestations"`
-	Policies            []map[string]any `json:"policies"`
-	SourceBytesIncluded bool             `json:"source_bytes_included"`
-	SourceObjects       []SourceObject   `json:"source_objects,omitempty"`
-	GraphMetadata       json.RawMessage  `json:"graph_metadata,omitempty"`
-	Manifest            BundleManifest   `json:"manifest"`
+	Format              string                      `json:"format"`
+	Version             string                      `json:"version"`
+	MinReaderVersion    string                      `json:"min_reader_version"`
+	ExportedAt          time.Time                   `json:"exported_at"`
+	TenantID            string                      `json:"tenant_id"`
+	WorkspaceID         string                      `json:"workspace_id,omitempty"`
+	Memories            []map[string]any            `json:"memories"`
+	Notes               []map[string]any            `json:"notes"`
+	Sources             []map[string]any            `json:"sources"`
+	SourceVersions      []map[string]any            `json:"source_versions"`
+	Lineage             []map[string]any            `json:"lineage"`
+	Attestations        []map[string]any            `json:"attestations"`
+	Policies            []map[string]any            `json:"policies"`
+	SourceBytesIncluded bool                        `json:"source_bytes_included"`
+	SourceObjects       []SourceObject              `json:"source_objects,omitempty"`
+	GraphMetadata       json.RawMessage             `json:"graph_metadata,omitempty"`
+	SkillLifecycle      map[string][]map[string]any `json:"skill_lifecycle"`
+	Manifest            BundleManifest              `json:"manifest"`
 }
 type SourceObject struct {
 	SourceID       string `json:"source_id"`
@@ -89,12 +90,16 @@ func (b *Bundle) SealManifest() error {
 	if b.SourceObjects == nil {
 		b.SourceObjects = []SourceObject{}
 	}
+	if b.SkillLifecycle == nil {
+		b.SkillLifecycle = map[string][]map[string]any{}
+	}
 	b.Manifest = BundleManifest{}
 	payload, err := json.Marshal(struct {
 		Memories, Notes, Sources, SourceVersions, Lineage, Attestations, Policies []map[string]any
 		SourceObjects                                                             []SourceObject
 		GraphMetadata                                                             json.RawMessage
-	}{b.Memories, b.Notes, b.Sources, b.SourceVersions, b.Lineage, b.Attestations, b.Policies, b.SourceObjects, b.GraphMetadata})
+		SkillLifecycle                                                            map[string][]map[string]any
+	}{b.Memories, b.Notes, b.Sources, b.SourceVersions, b.Lineage, b.Attestations, b.Policies, b.SourceObjects, b.GraphMetadata, b.SkillLifecycle})
 	if err != nil {
 		return err
 	}
@@ -103,7 +108,11 @@ func (b *Bundle) SealManifest() error {
 	if len(b.GraphMetadata) > 0 {
 		graphCount = 1
 	}
-	b.Manifest = BundleManifest{Algorithm: "sha256", PayloadSHA256: hex.EncodeToString(sum[:]), Counts: map[string]int{"memories": len(b.Memories), "notes": len(b.Notes), "sources": len(b.Sources), "source_versions": len(b.SourceVersions), "lineage": len(b.Lineage), "attestations": len(b.Attestations), "policies": len(b.Policies), "source_objects": len(b.SourceObjects), "graph_metadata": graphCount}}
+	skillRecords := 0
+	for _, records := range b.SkillLifecycle {
+		skillRecords += len(records)
+	}
+	b.Manifest = BundleManifest{Algorithm: "sha256", PayloadSHA256: hex.EncodeToString(sum[:]), Counts: map[string]int{"memories": len(b.Memories), "notes": len(b.Notes), "sources": len(b.Sources), "source_versions": len(b.SourceVersions), "lineage": len(b.Lineage), "attestations": len(b.Attestations), "policies": len(b.Policies), "source_objects": len(b.SourceObjects), "graph_metadata": graphCount, "skill_lifecycle_records": skillRecords}}
 	return nil
 }
 

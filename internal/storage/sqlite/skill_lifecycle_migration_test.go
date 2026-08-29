@@ -21,6 +21,7 @@ func TestSkillLifecycleMigrationCreatesNormalizedRegistry(t *testing.T) {
 		"skill_evaluation_suites", "skill_evaluation_cases", "skill_evaluation_runs", "skill_evaluation_case_results",
 		"skill_promotion_policies", "skill_policy_decisions", "skill_approvals",
 		"skill_activations", "skill_activation_operations", "skill_resolutions", "skill_executions", "skill_rollback_events",
+		"skill_legal_holds", "skill_evidence_tombstones",
 	} {
 		var name string
 		if err := store.db.QueryRowContext(ctx, `SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?`, table).Scan(&name); err != nil {

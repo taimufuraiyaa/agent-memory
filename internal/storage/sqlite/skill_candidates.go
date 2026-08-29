@@ -20,6 +20,17 @@ func (s *Store) PutSkillCandidate(ctx context.Context, candidate core.SkillCandi
 		return core.SkillCandidate{}, false, err
 	}
 	defer tx.Rollback()
+	for kind, ids := range map[string][]string{"memory": candidate.SourceMemoryIDs, "episode": candidate.SourceEpisodeIDs, "tool_lesson": candidate.SourceToolLessonIDs, "execution": candidate.SourceExecutionIDs} {
+		for _, id := range ids {
+			var tombstoned int
+			if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM skill_evidence_tombstones WHERE workspace=? AND evidence_kind=? AND evidence_id=?)`, candidate.Workspace, kind, id).Scan(&tombstoned); err != nil {
+				return core.SkillCandidate{}, false, err
+			}
+			if tombstoned != 0 {
+				return core.SkillCandidate{}, false, errors.New("skill candidate references deleted evidence")
+			}
+		}
+	}
 	var existingID string
 	err = tx.QueryRowContext(ctx, `SELECT id FROM skill_candidates WHERE workspace = ? AND deduplication_hash = ?`, candidate.Workspace, candidate.DeduplicationHash).Scan(&existingID)
 	if err == nil {

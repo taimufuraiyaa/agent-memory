@@ -60,6 +60,10 @@ type SkillRevisionBuilderRepository interface {
 	CreateSkillRevision(context.Context, core.SkillRevision) error
 }
 
+type skillEvidenceTombstoneChecker interface {
+	IsSkillEvidenceTombstoned(context.Context, string, string, string) (bool, error)
+}
+
 type SkillRevisionBundleStore interface {
 	PublishRevision(context.Context, core.SkillRevision, map[string][]byte) (string, bool, error)
 	ReadRevision(context.Context, core.SkillRevision) (map[string][]byte, error)
@@ -95,6 +99,19 @@ func (b *SkillRevisionBuilder) Build(ctx context.Context, input SkillRevisionBui
 	}
 	if candidate.State != core.SkillCandidateProposed && candidate.State != core.SkillCandidateAccepted {
 		return SkillRevisionBuildResult{}, errors.New("candidate is not buildable")
+	}
+	if checker, ok := b.repository.(skillEvidenceTombstoneChecker); ok {
+		for kind, ids := range map[string][]string{"memory": candidate.SourceMemoryIDs, "episode": candidate.SourceEpisodeIDs, "tool_lesson": candidate.SourceToolLessonIDs, "execution": candidate.SourceExecutionIDs} {
+			for _, id := range ids {
+				deleted, checkErr := checker.IsSkillEvidenceTombstoned(ctx, input.Workspace, kind, id)
+				if checkErr != nil {
+					return SkillRevisionBuildResult{}, checkErr
+				}
+				if deleted {
+					return SkillRevisionBuildResult{}, errors.New("revision candidate references deleted evidence")
+				}
+			}
+		}
 	}
 	if existing, existingErr := b.repository.GetSkillRevisionForCandidate(ctx, input.Workspace, candidate.ID); existingErr == nil {
 		skill, err := b.repository.GetLogicalSkill(ctx, input.Workspace, existing.SkillID)

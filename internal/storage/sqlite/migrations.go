@@ -42,6 +42,26 @@ var schemaMigrations = []migrationStep{
 	{22, "skill-resolution-acknowledgement", migrateSkillResolutionAcknowledgement},
 	{23, "skill-execution-feedback-class", migrateSkillExecutionFeedbackClass},
 	{24, "skill-safety-signals", migrateSkillSafetySignals},
+	{25, "skill-lifecycle-custody", migrateSkillLifecycleCustody},
+}
+
+func migrateSkillLifecycleCustody(ctx context.Context, s *Store) error {
+	for _, statement := range []string{
+		`CREATE TABLE IF NOT EXISTS skill_legal_holds (
+			id TEXT PRIMARY KEY, workspace TEXT NOT NULL, target_kind TEXT NOT NULL, target_id TEXT NOT NULL,
+			reason TEXT NOT NULL, state TEXT NOT NULL, created_at TEXT NOT NULL, released_at TEXT NOT NULL DEFAULT '',
+			UNIQUE(workspace,target_kind,target_id,state)
+		)`,
+		`CREATE TABLE IF NOT EXISTS skill_evidence_tombstones (
+			workspace TEXT NOT NULL, evidence_kind TEXT NOT NULL, evidence_id TEXT NOT NULL, deleted_at TEXT NOT NULL,
+			PRIMARY KEY(workspace,evidence_kind,evidence_id)
+		)`,
+	} {
+		if _, err := s.db.ExecContext(ctx, statement); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func migrateSkillActivationOperationLease(ctx context.Context, s *Store) error {
