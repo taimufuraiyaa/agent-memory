@@ -480,6 +480,52 @@ func (s *Store) GetLatestSkillEvaluationSuite(ctx context.Context, workspace, sk
 	return suite, suite.Validate()
 }
 
+func (s *Store) GetSkillEvaluationSuite(ctx context.Context, workspace, suiteID string, version int64) (core.SkillEvaluationSuite, error) {
+	var suite core.SkillEvaluationSuite
+	var created string
+	err := s.db.QueryRowContext(ctx, `SELECT id,skill_id,workspace,version,digest,created_by,created_at FROM skill_evaluation_suites WHERE workspace=? AND id=? AND version=?`, strings.TrimSpace(workspace), strings.TrimSpace(suiteID), version).Scan(&suite.ID, &suite.SkillID, &suite.Workspace, &suite.Version, &suite.Digest, &suite.CreatedBy, &created)
+	if err != nil {
+		return core.SkillEvaluationSuite{}, err
+	}
+	suite.CreatedAt, _ = time.Parse(time.RFC3339Nano, created)
+	rows, err := s.db.QueryContext(ctx, `SELECT case_id,kind,summary,reference,required FROM skill_evaluation_cases WHERE suite_id=? ORDER BY case_id`, suite.ID)
+	if err != nil {
+		return core.SkillEvaluationSuite{}, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var item core.SkillEvaluationCase
+		if err := rows.Scan(&item.ID, &item.Kind, &item.Summary, &item.Reference, &item.Required); err != nil {
+			return core.SkillEvaluationSuite{}, err
+		}
+		suite.Cases = append(suite.Cases, item)
+	}
+	if err := rows.Err(); err != nil {
+		return core.SkillEvaluationSuite{}, err
+	}
+	return suite, suite.Validate()
+}
+
+func (s *Store) CreateSkillEvaluationRun(ctx context.Context, run core.SkillEvaluationRun) error {
+	if err := run.Validate(); err != nil {
+		return err
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `INSERT INTO skill_evaluation_runs(id,workspace,skill_id,revision_id,revision_digest,baseline_revision_id,baseline_digest,suite_id,suite_version,suite_digest,evaluator,evaluator_version,environment_fingerprint,verdict,started_at,completed_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, run.ID, run.Workspace, run.SkillID, run.RevisionID, run.RevisionDigest, run.BaselineRevisionID, run.BaselineDigest, run.SuiteID, run.SuiteVersion, run.SuiteDigest, run.Evaluator, run.EvaluatorVersion, run.EnvironmentFingerprint, run.Verdict, formatSkillTime(run.StartedAt), formatSkillTime(run.CompletedAt)); err != nil {
+		return err
+	}
+	for _, result := range run.CaseResults {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO skill_evaluation_case_results(run_id,case_id,passed,independently_verified,failure_class,duration_ms) VALUES(?,?,?,?,?,?)`, run.ID, result.CaseID, result.Passed, result.IndependentlyVerified, result.FailureClass, result.DurationMS); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
 type skillActivationOperationScanner interface {
 	Scan(...any) error
 }

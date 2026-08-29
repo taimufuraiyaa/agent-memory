@@ -75,7 +75,7 @@
   - Files: core suite contracts, storage adapter, application service, focused tests.
   - Estimated scope: Medium.
 
-- [ ] **Task 9: Add restricted evaluation execution**
+- [x] **Task 9: Add restricted evaluation execution**
   - Acceptance: Candidate and active baseline run against the same suite and environment fingerprint with explicit independent verification and bounded resource use.
   - Verify: success, timeout, evaluator outage, sandbox denial, stale suite, and partial-result tests.
   - Dependencies: Task 8.
