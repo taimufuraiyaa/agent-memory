@@ -112,7 +112,7 @@
   - Files: canary allocator, resolver integration, focused tests.
   - Estimated scope: Small.
 
-- [ ] **Task 13: Add resolution acknowledgement**
+- [x] **Task 13: Add resolution acknowledgement**
   - Acceptance: A short-lived scope-bound token records whether the runtime loaded the exact offered revision digest; replay and mismatch fail closed.
   - Verify: acknowledge, expiry, replay, wrong digest, wrong episode, and cross-workspace tests.
   - Dependencies: Tasks 7 and 12.

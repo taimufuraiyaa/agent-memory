@@ -427,6 +427,48 @@ func (s *Store) CreateSkillResolution(ctx context.Context, resolution core.Skill
 	return err
 }
 
+func (s *Store) GetSkillResolution(ctx context.Context, workspace, resolutionID string) (core.SkillResolution, error) {
+	var resolution core.SkillResolution
+	var expires, resolved string
+	err := s.db.QueryRowContext(ctx, `SELECT id,workspace,environment,principal_id,task_id,skill_id,revision_id,revision_number,digest,reason,policy_version,fallback_revision_id,fallback_digest,acknowledgement_token_hash,expires_at,resolved_at FROM skill_resolutions WHERE workspace=? AND id=?`, strings.TrimSpace(workspace), strings.TrimSpace(resolutionID)).Scan(&resolution.ID, &resolution.Workspace, &resolution.Environment, &resolution.PrincipalID, &resolution.TaskID, &resolution.SkillID, &resolution.RevisionID, &resolution.RevisionNumber, &resolution.Digest, &resolution.Reason, &resolution.PolicyVersion, &resolution.FallbackRevisionID, &resolution.FallbackDigest, &resolution.AcknowledgementTokenHash, &expires, &resolved)
+	if err != nil {
+		return core.SkillResolution{}, err
+	}
+	resolution.ExpiresAt, _ = time.Parse(time.RFC3339Nano, expires)
+	resolution.ResolvedAt, _ = time.Parse(time.RFC3339Nano, resolved)
+	return resolution, resolution.Validate()
+}
+
+func (s *Store) GetSkillResolutionAcknowledgement(ctx context.Context, workspace, resolutionID string) (core.SkillResolutionAcknowledgement, error) {
+	var acknowledgement core.SkillResolutionAcknowledgement
+	var acknowledged string
+	err := s.db.QueryRowContext(ctx, `SELECT workspace,id,acknowledged_principal_id,acknowledged_task_id,acknowledged_revision_id,acknowledged_revision_digest,acknowledged_at FROM skill_resolutions WHERE workspace=? AND id=? AND acknowledged_at<>''`, strings.TrimSpace(workspace), strings.TrimSpace(resolutionID)).Scan(&acknowledgement.Workspace, &acknowledgement.ResolutionID, &acknowledgement.PrincipalID, &acknowledgement.TaskID, &acknowledgement.RevisionID, &acknowledgement.RevisionDigest, &acknowledged)
+	if err != nil {
+		return core.SkillResolutionAcknowledgement{}, err
+	}
+	acknowledgement.AcknowledgedAt, _ = time.Parse(time.RFC3339Nano, acknowledged)
+	return acknowledgement, acknowledgement.Validate()
+}
+
+func (s *Store) AcknowledgeSkillResolution(ctx context.Context, acknowledgement core.SkillResolutionAcknowledgement) (core.SkillResolutionAcknowledgement, error) {
+	if err := acknowledgement.Validate(); err != nil {
+		return core.SkillResolutionAcknowledgement{}, err
+	}
+	result, err := s.db.ExecContext(ctx, `UPDATE skill_resolutions SET acknowledged_principal_id=?,acknowledged_task_id=?,acknowledged_revision_id=?,acknowledged_revision_digest=?,acknowledged_at=? WHERE workspace=? AND id=? AND acknowledged_at=''`, acknowledgement.PrincipalID, acknowledgement.TaskID, acknowledgement.RevisionID, acknowledgement.RevisionDigest, formatSkillTime(acknowledgement.AcknowledgedAt), acknowledgement.Workspace, acknowledgement.ResolutionID)
+	if err != nil {
+		return core.SkillResolutionAcknowledgement{}, err
+	}
+	changed, _ := result.RowsAffected()
+	stored, err := s.GetSkillResolutionAcknowledgement(ctx, acknowledgement.Workspace, acknowledgement.ResolutionID)
+	if err != nil {
+		return core.SkillResolutionAcknowledgement{}, err
+	}
+	if changed == 0 && (stored.PrincipalID != acknowledgement.PrincipalID || stored.TaskID != acknowledgement.TaskID || stored.RevisionID != acknowledgement.RevisionID || stored.RevisionDigest != acknowledgement.RevisionDigest) {
+		return core.SkillResolutionAcknowledgement{}, errors.New("skill acknowledgement replay does not match original")
+	}
+	return stored, nil
+}
+
 func (s *Store) CreateSkillEvaluationSuite(ctx context.Context, suite core.SkillEvaluationSuite) error {
 	if err := suite.Validate(); err != nil {
 		return err

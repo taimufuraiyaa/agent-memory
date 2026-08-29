@@ -834,6 +834,28 @@ type SkillResolution struct {
 	ResolvedAt               time.Time             `json:"resolved_at"`
 }
 
+type SkillResolutionAcknowledgement struct {
+	Workspace      string    `json:"workspace"`
+	ResolutionID   string    `json:"resolution_id"`
+	PrincipalID    string    `json:"principal_id"`
+	TaskID         string    `json:"task_id"`
+	RevisionID     string    `json:"revision_id"`
+	RevisionDigest string    `json:"revision_digest"`
+	AcknowledgedAt time.Time `json:"acknowledged_at"`
+}
+
+func (a SkillResolutionAcknowledgement) Validate() error {
+	for field, value := range map[string]string{"workspace": a.Workspace, "resolution_id": a.ResolutionID, "principal_id": a.PrincipalID, "task_id": a.TaskID, "revision_id": a.RevisionID} {
+		if err := requireSkillText(field, value, 256); err != nil {
+			return err
+		}
+	}
+	if !validSkillDigest(a.RevisionDigest) || a.AcknowledgedAt.IsZero() {
+		return errors.New("skill acknowledgement digest and acknowledged_at are required")
+	}
+	return nil
+}
+
 func (r SkillResolution) Validate() error {
 	for field, value := range map[string]string{"id": r.ID, "workspace": r.Workspace, "environment": r.Environment, "principal_id": r.PrincipalID, "task_id": r.TaskID, "skill_id": r.SkillID, "revision_id": r.RevisionID} {
 		if err := requireSkillText(field, value, 256); err != nil {

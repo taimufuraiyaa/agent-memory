@@ -39,6 +39,7 @@ var schemaMigrations = []migrationStep{
 	{19, "automatic-skill-revision-lifecycle", migrateAutomaticSkillRevisionLifecycle},
 	{20, "skill-activation-operation-lease", migrateSkillActivationOperationLease},
 	{21, "skill-approval-audit-events", migrateSkillApprovalAuditEvents},
+	{22, "skill-resolution-acknowledgement", migrateSkillResolutionAcknowledgement},
 }
 
 func migrateSkillActivationOperationLease(ctx context.Context, s *Store) error {
@@ -53,6 +54,21 @@ func migrateSkillApprovalAuditEvents(ctx context.Context, s *Store) error {
 		FOREIGN KEY(approval_id) REFERENCES skill_approvals(id) ON DELETE CASCADE
 	)`)
 	return err
+}
+
+func migrateSkillResolutionAcknowledgement(ctx context.Context, s *Store) error {
+	for _, statement := range []string{
+		`ALTER TABLE skill_resolutions ADD COLUMN acknowledged_principal_id TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE skill_resolutions ADD COLUMN acknowledged_task_id TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE skill_resolutions ADD COLUMN acknowledged_revision_id TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE skill_resolutions ADD COLUMN acknowledged_revision_digest TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE skill_resolutions ADD COLUMN acknowledged_at TEXT NOT NULL DEFAULT ''`,
+	} {
+		if _, err := s.db.ExecContext(ctx, statement); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func migrateAutomaticSkillRevisionLifecycle(ctx context.Context, s *Store) error {
