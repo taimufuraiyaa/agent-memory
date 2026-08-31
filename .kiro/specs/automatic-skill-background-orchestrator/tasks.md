@@ -82,7 +82,7 @@
   - Files: dependency coordinator, repository queries, focused tests.
   - Estimated scope: Medium.
 
-- [ ] **Task 10: Implement bounded reconciliation engine**
+- [x] **Task 10: Implement bounded reconciliation engine**
   - Acceptance: Cursor-based sweeps repair expired leases, missing jobs, newly satisfied blocks, safety/rollback gaps, materialization drift, and terminal leftovers without inventing approval or success.
   - Verify: one fixture per sweep domain, cursor restart, concurrent reconcilers, time budget, partial failure, duplicate repair, restored database, and shutdown tests.
   - Dependencies: Tasks 6-9.
@@ -91,10 +91,10 @@
 
 ### Checkpoint B — Restartable Orchestration Kernel
 
-- [ ] Worker crash before and after each side effect converges on one outcome.
-- [ ] Lease expiry, retry, dependency, and reconciliation semantics match across repositories.
-- [ ] Normal memory retrieval and skill resolution never wait for orchestration.
-- [ ] Unsupported or invalid jobs fail closed without blocking unrelated work.
+- [x] Worker crash before and after each side effect converges on one outcome.
+- [x] Lease expiry, retry, dependency, and reconciliation semantics match across repositories.
+- [x] Normal memory retrieval and skill resolution never wait for orchestration.
+- [x] Unsupported or invalid jobs fail closed without blocking unrelated work.
 
 ## Phase 3 — Lifecycle Stage Adapters
 

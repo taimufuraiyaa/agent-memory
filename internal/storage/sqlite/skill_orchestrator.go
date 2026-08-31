@@ -795,6 +795,76 @@ func (s *Store) GetSkillWorkflow(ctx context.Context, scope core.SkillOrchestrat
 	return workflow, err
 }
 
+func (s *Store) LoadSkillReconciliationCursor(ctx context.Context, scope core.SkillOrchestratorScope, domain core.SkillReconciliationDomain, configurationVersion int64, now time.Time) (core.SkillReconciliationCursor, error) {
+	if err := scope.Validate(); err != nil {
+		return core.SkillReconciliationCursor{}, err
+	}
+	if !domain.Valid() || configurationVersion < 1 || now.IsZero() {
+		return core.SkillReconciliationCursor{}, errors.New("invalid skill reconciliation cursor load")
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return core.SkillReconciliationCursor{}, err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `INSERT INTO skill_orchestrator_reconciliation_cursors(tenant_id,workspace_id,environment,domain,cursor,configuration_version,updated_at) VALUES(?,?,?,?,?,?,?) ON CONFLICT(tenant_id,workspace_id,environment,domain) DO NOTHING`, scope.TenantID, scope.WorkspaceID, scope.Environment, domain, "", configurationVersion, formatSkillOrchestratorTime(now)); err != nil {
+		return core.SkillReconciliationCursor{}, err
+	}
+	cursor, err := scanSQLiteSkillReconciliationCursor(tx.QueryRowContext(ctx, `SELECT tenant_id,workspace_id,environment,domain,cursor,configuration_version,last_completed_at,scanned,repaired,skipped,blocked,failed,updated_at FROM skill_orchestrator_reconciliation_cursors WHERE tenant_id=? AND workspace_id=? AND environment=? AND domain=?`, scope.TenantID, scope.WorkspaceID, scope.Environment, domain))
+	if err != nil {
+		return core.SkillReconciliationCursor{}, err
+	}
+	if cursor.ConfigurationVersion != configurationVersion {
+		if _, err := tx.ExecContext(ctx, `UPDATE skill_orchestrator_reconciliation_cursors SET cursor='',configuration_version=?,last_completed_at='',scanned=0,repaired=0,skipped=0,blocked=0,failed=0,updated_at=? WHERE tenant_id=? AND workspace_id=? AND environment=? AND domain=?`, configurationVersion, formatSkillOrchestratorTime(now), scope.TenantID, scope.WorkspaceID, scope.Environment, domain); err != nil {
+			return core.SkillReconciliationCursor{}, err
+		}
+		cursor = core.SkillReconciliationCursor{Scope: scope, Domain: domain, ConfigurationVersion: configurationVersion, UpdatedAt: now}
+	}
+	if err := tx.Commit(); err != nil {
+		return core.SkillReconciliationCursor{}, err
+	}
+	return cursor, nil
+}
+
+func (s *Store) SaveSkillReconciliationCursor(ctx context.Context, input contracts.SkillReconciliationCursorUpdate) error {
+	if err := input.Cursor.Validate(); err != nil {
+		return err
+	}
+	if input.ExpectedUpdatedAt.IsZero() || !input.Cursor.UpdatedAt.After(input.ExpectedUpdatedAt) {
+		return errors.New("invalid skill reconciliation cursor compare-and-swap")
+	}
+	result, err := s.db.ExecContext(ctx, `UPDATE skill_orchestrator_reconciliation_cursors SET cursor=?,configuration_version=?,last_completed_at=?,scanned=?,repaired=?,skipped=?,blocked=?,failed=?,updated_at=? WHERE tenant_id=? AND workspace_id=? AND environment=? AND domain=? AND updated_at=?`,
+		input.Cursor.Cursor, input.Cursor.ConfigurationVersion, formatOptionalSkillOrchestratorTime(input.Cursor.LastCompletedAt), input.Cursor.Counters.Scanned,
+		input.Cursor.Counters.Repaired, input.Cursor.Counters.Skipped, input.Cursor.Counters.Blocked, input.Cursor.Counters.Failed,
+		formatSkillOrchestratorTime(input.Cursor.UpdatedAt), input.Cursor.Scope.TenantID, input.Cursor.Scope.WorkspaceID, input.Cursor.Scope.Environment,
+		input.Cursor.Domain, formatSkillOrchestratorTime(input.ExpectedUpdatedAt))
+	if err != nil {
+		return err
+	}
+	if changed, _ := result.RowsAffected(); changed != 1 {
+		return ErrSkillOrchestratorConflict
+	}
+	return nil
+}
+
+func scanSQLiteSkillReconciliationCursor(scanner skillOrchestratorScanner) (core.SkillReconciliationCursor, error) {
+	var cursor core.SkillReconciliationCursor
+	var completedAt, updatedAt string
+	err := scanner.Scan(&cursor.Scope.TenantID, &cursor.Scope.WorkspaceID, &cursor.Scope.Environment, &cursor.Domain, &cursor.Cursor,
+		&cursor.ConfigurationVersion, &completedAt, &cursor.Counters.Scanned, &cursor.Counters.Repaired, &cursor.Counters.Skipped,
+		&cursor.Counters.Blocked, &cursor.Counters.Failed, &updatedAt)
+	if err != nil {
+		return core.SkillReconciliationCursor{}, err
+	}
+	if cursor.LastCompletedAt, err = parseOptionalSkillOrchestratorTime(completedAt); err != nil {
+		return core.SkillReconciliationCursor{}, err
+	}
+	if cursor.UpdatedAt, err = parseSkillOrchestratorTime(updatedAt); err != nil {
+		return core.SkillReconciliationCursor{}, err
+	}
+	return cursor, cursor.Validate()
+}
+
 func (s *Store) ListSkillJobs(ctx context.Context, scope core.SkillOrchestratorScope, workflowID, afterID string, limit int) ([]core.SkillJob, string, error) {
 	if err := scope.Validate(); err != nil {
 		return nil, "", err

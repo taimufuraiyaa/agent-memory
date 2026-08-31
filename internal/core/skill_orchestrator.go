@@ -14,6 +14,7 @@ const (
 	MaxSkillOrchestratorReferenceBytes   = 256
 	MaxSkillOrchestratorFailureCodeBytes = 128
 	MaxSkillOrchestratorStagePolicies    = 16
+	MaxSkillReconciliationCursorBytes    = 512
 )
 
 var (
@@ -654,6 +655,73 @@ type SkillOrchestratorConfiguration struct {
 	SignatureReference       string                         `json:"signature_reference,omitempty"`
 	CreatedBy                string                         `json:"created_by"`
 	CreatedAt                time.Time                      `json:"created_at"`
+}
+
+type SkillReconciliationDomain string
+
+const (
+	SkillReconcileLeaseRecovery        SkillReconciliationDomain = "lease_recovery"
+	SkillReconcileDependencyReadiness  SkillReconciliationDomain = "dependency_readiness"
+	SkillReconcileLifecycleJobParity   SkillReconciliationDomain = "lifecycle_job_parity"
+	SkillReconcileBlockedRechecks      SkillReconciliationDomain = "blocked_rechecks"
+	SkillReconcileSafetyRollbackParity SkillReconciliationDomain = "safety_rollback_parity"
+	SkillReconcileMaterializationDrift SkillReconciliationDomain = "materialization_drift"
+	SkillReconcileTerminalCleanup      SkillReconciliationDomain = "terminal_cleanup"
+)
+
+func (d SkillReconciliationDomain) Valid() bool {
+	switch d {
+	case SkillReconcileLeaseRecovery, SkillReconcileDependencyReadiness, SkillReconcileLifecycleJobParity,
+		SkillReconcileBlockedRechecks, SkillReconcileSafetyRollbackParity, SkillReconcileMaterializationDrift,
+		SkillReconcileTerminalCleanup:
+		return true
+	default:
+		return false
+	}
+}
+
+type SkillReconciliationCounters struct {
+	Scanned  int64 `json:"scanned"`
+	Repaired int64 `json:"repaired"`
+	Skipped  int64 `json:"skipped"`
+	Blocked  int64 `json:"blocked"`
+	Failed   int64 `json:"failed"`
+}
+
+func (c SkillReconciliationCounters) Validate() error {
+	if c.Scanned < 0 || c.Repaired < 0 || c.Skipped < 0 || c.Blocked < 0 || c.Failed < 0 {
+		return errors.New("skill reconciliation counters cannot be negative")
+	}
+	if c.Repaired+c.Skipped+c.Blocked+c.Failed > c.Scanned {
+		return errors.New("skill reconciliation outcomes exceed scanned count")
+	}
+	return nil
+}
+
+type SkillReconciliationCursor struct {
+	Scope                SkillOrchestratorScope      `json:"scope"`
+	Domain               SkillReconciliationDomain   `json:"domain"`
+	Cursor               string                      `json:"cursor,omitempty"`
+	ConfigurationVersion int64                       `json:"configuration_version"`
+	LastCompletedAt      time.Time                   `json:"last_completed_at,omitempty"`
+	Counters             SkillReconciliationCounters `json:"counters"`
+	UpdatedAt            time.Time                   `json:"updated_at"`
+}
+
+func (c SkillReconciliationCursor) Validate() error {
+	if err := c.Scope.Validate(); err != nil {
+		return err
+	}
+	if !c.Domain.Valid() || c.ConfigurationVersion < 1 || c.UpdatedAt.IsZero() {
+		return errors.New("skill reconciliation domain, configuration version, and updated_at are required")
+	}
+	if len(c.Cursor) > MaxSkillReconciliationCursorBytes || strings.TrimSpace(c.Cursor) != c.Cursor || strings.ContainsAny(c.Cursor, "\r\n\t") {
+		return errors.New("skill reconciliation cursor is invalid")
+	}
+	if !c.LastCompletedAt.IsZero() && c.LastCompletedAt.After(c.UpdatedAt) {
+		return errors.New("skill reconciliation completion follows updated_at")
+	}
+	return c.Counters.Validate()
 }
 
 func (c SkillOrchestratorConfiguration) Validate() error {

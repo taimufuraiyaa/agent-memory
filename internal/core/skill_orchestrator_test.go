@@ -228,6 +228,25 @@ func TestSkillOrchestratorReferenceRejectsPathsAndContent(t *testing.T) {
 	}
 }
 
+func TestSkillReconciliationCursorRejectsContentAndImpossibleCounters(t *testing.T) {
+	now := time.Now().UTC()
+	cursor := SkillReconciliationCursor{Scope: SkillOrchestratorScope{WorkspaceID: "ws", Environment: "production"},
+		Domain: SkillReconcileLeaseRecovery, ConfigurationVersion: 1, UpdatedAt: now,
+		Counters: SkillReconciliationCounters{Scanned: 2, Repaired: 1, Skipped: 1}}
+	if err := cursor.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	cursor.Cursor = "raw content\nsecret"
+	if err := cursor.Validate(); err == nil {
+		t.Fatal("expected content-bearing cursor rejection")
+	}
+	cursor.Cursor = "page-1"
+	cursor.Counters.Repaired = 3
+	if err := cursor.Validate(); err == nil {
+		t.Fatal("expected impossible counter rejection")
+	}
+}
+
 func validSkillWorkflow(now time.Time) SkillWorkflow {
 	return SkillWorkflow{
 		ID: "workflow-1", Scope: SkillOrchestratorScope{WorkspaceID: "agent-memory", Environment: "production"},

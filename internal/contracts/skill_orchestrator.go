@@ -76,10 +76,17 @@ type SkillDependencyResolution struct {
 	Changed  bool
 }
 
+type SkillReconciliationCursorUpdate struct {
+	Cursor            core.SkillReconciliationCursor
+	ExpectedUpdatedAt time.Time
+}
+
 type SkillOrchestratorRepository interface {
 	RouteSkillSignal(context.Context, core.SkillWorkflow, core.SkillJob, []core.SkillJobDependency) (SkillSignalRouteResult, error)
 	ScheduleSkillSuccessor(context.Context, SkillSuccessorSchedule) (core.SkillJob, bool, error)
 	ResolveSkillJobDependencies(context.Context, core.SkillOrchestratorScope, string, int64, time.Time) (SkillDependencyResolution, error)
+	LoadSkillReconciliationCursor(context.Context, core.SkillOrchestratorScope, core.SkillReconciliationDomain, int64, time.Time) (core.SkillReconciliationCursor, error)
+	SaveSkillReconciliationCursor(context.Context, SkillReconciliationCursorUpdate) error
 	CreateSkillWorkflow(context.Context, core.SkillWorkflow) (core.SkillWorkflow, bool, error)
 	EnqueueSkillJob(context.Context, core.SkillJob, []core.SkillJobDependency) (core.SkillJob, bool, error)
 	ClaimSkillJobs(context.Context, core.SkillOrchestratorScope, string, int, time.Duration, time.Duration, time.Time) ([]core.SkillJob, error)
