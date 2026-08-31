@@ -46,6 +46,38 @@ var schemaMigrations = []migrationStep{
 	{26, "skill-background-orchestrator", migrateSkillBackgroundOrchestrator},
 	{27, "authenticated-skill-safety-signals", migrateAuthenticatedSkillSafetySignals},
 	{28, "scoped-skill-orchestrator-custody", migrateScopedSkillOrchestratorCustody},
+	{29, "skill-orchestrator-evaluation-budget", migrateSkillOrchestratorEvaluationBudget},
+}
+
+func migrateSkillOrchestratorEvaluationBudget(ctx context.Context, s *Store) error {
+	for _, statement := range []string{
+		`CREATE TABLE IF NOT EXISTS skill_orchestrator_budget_accounts (
+			tenant_id TEXT NOT NULL DEFAULT '', workspace_id TEXT NOT NULL, environment TEXT NOT NULL,
+			policy_version INTEGER NOT NULL, period_start TEXT NOT NULL, limit_units INTEGER NOT NULL,
+			reserved_units INTEGER NOT NULL DEFAULT 0, committed_units INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL,
+			PRIMARY KEY(tenant_id,workspace_id,environment,policy_version,period_start),
+			CHECK(policy_version >= 1), CHECK(limit_units > 0), CHECK(reserved_units >= 0), CHECK(committed_units >= 0),
+			CHECK(reserved_units + committed_units <= limit_units)
+		)`,
+		`CREATE TABLE IF NOT EXISTS skill_orchestrator_budget_reservations (
+			tenant_id TEXT NOT NULL DEFAULT '', workspace_id TEXT NOT NULL, environment TEXT NOT NULL,
+			job_id TEXT NOT NULL, policy_version INTEGER NOT NULL, period_start TEXT NOT NULL,
+			reserved_units INTEGER NOT NULL, committed_units INTEGER NOT NULL DEFAULT 0,
+			state TEXT NOT NULL, expires_at TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+			PRIMARY KEY(tenant_id,workspace_id,environment,job_id),
+			CHECK(policy_version >= 1), CHECK(reserved_units > 0), CHECK(committed_units >= 0 AND committed_units <= reserved_units),
+			CHECK(state IN ('reserved','committed','released')),
+			FOREIGN KEY(tenant_id,workspace_id,environment,policy_version,period_start)
+				REFERENCES skill_orchestrator_budget_accounts(tenant_id,workspace_id,environment,policy_version,period_start)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_skill_orchestrator_budget_expiry
+			ON skill_orchestrator_budget_reservations(tenant_id,workspace_id,environment,state,expires_at)`,
+	} {
+		if _, err := s.db.ExecContext(ctx, statement); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func migrateScopedSkillOrchestratorCustody(ctx context.Context, s *Store) error {

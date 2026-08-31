@@ -198,6 +198,44 @@ func TestPostgresSkillOrchestratorDeadLetterAndNoisyTenantIsolation(t *testing.T
 	}
 }
 
+func TestPostgresSkillEvaluationBudgetSerializesHorizontalReservations(t *testing.T) {
+	pool := openSkillOrchestratorPostgres(t)
+	scope := createSkillOrchestratorHostedScope(t, pool)
+	repository := NewSkillOrchestratorRepository(pool)
+	now := time.Now().UTC().Truncate(time.Hour)
+	start := make(chan struct{})
+	results := make(chan error, 2)
+	jobs := []string{uuid.NewString(), uuid.NewString()}
+	for _, jobID := range jobs {
+		jobID := jobID
+		go func() {
+			<-start
+			_, err := repository.ReserveSkillEvaluationBudget(context.Background(), core.SkillEvaluationBudgetReservationRequest{Scope: scope, JobID: jobID, PolicyVersion: 1, PeriodStart: now, LimitUnits: 10, Units: 6, ExpiresAt: now.Add(time.Hour), Now: now})
+			results <- err
+		}()
+	}
+	close(start)
+	succeeded, exhausted := 0, 0
+	for range jobs {
+		err := <-results
+		switch {
+		case err == nil:
+			succeeded++
+		case errors.Is(err, core.ErrSkillEvaluationBudgetExhausted):
+			exhausted++
+		default:
+			t.Fatal(err)
+		}
+	}
+	if succeeded != 1 || exhausted != 1 {
+		t.Fatalf("succeeded=%d exhausted=%d", succeeded, exhausted)
+	}
+	other := createSkillOrchestratorHostedScope(t, pool)
+	if _, err := repository.ReserveSkillEvaluationBudget(context.Background(), core.SkillEvaluationBudgetReservationRequest{Scope: other, JobID: uuid.NewString(), PolicyVersion: 1, PeriodStart: now, LimitUnits: 10, Units: 10, ExpiresAt: now.Add(time.Hour), Now: now}); err != nil {
+		t.Fatalf("other tenant budget was affected: %v", err)
+	}
+}
+
 func openSkillOrchestratorPostgres(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 	connectionURL := strings.TrimSpace(os.Getenv("AGENT_MEMORY_TEST_POSTGRES_URL"))

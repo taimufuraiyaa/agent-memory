@@ -353,6 +353,44 @@ func TestSkillOrchestratorCustodyMigrationIsScopedAndReversible(t *testing.T) {
 	}
 }
 
+func TestSkillOrchestratorBudgetMigrationIsAtomicScopedAndLeastPrivilege(t *testing.T) {
+	t.Parallel()
+	migrations := mustMigrations(t)
+	var budget *Migration
+	for index := range migrations {
+		if migrations[index].Version == "0037_skill_orchestrator_budget" {
+			budget = &migrations[index]
+			break
+		}
+	}
+	if budget == nil {
+		t.Fatal("skill orchestrator budget migration is missing")
+	}
+	for _, table := range []string{"saas_skill_orchestrator_budget_accounts", "saas_skill_orchestrator_budget_reservations"} {
+		if !strings.Contains(budget.Up, "CREATE TABLE "+table) || !strings.Contains(budget.Up, "ALTER TABLE "+table+" FORCE ROW LEVEL SECURITY") {
+			t.Errorf("budget migration missing scoped table %s", table)
+		}
+		if !strings.Contains(budget.Down, "DROP TABLE IF EXISTS "+table) {
+			t.Errorf("budget rollback missing table %s", table)
+		}
+	}
+	for _, required := range []string{
+		"reserved_units + committed_units <= limit_units",
+		"PRIMARY KEY (tenant_id,workspace_id,environment,job_id)",
+		"REFERENCES saas_skill_orchestrator_budget_accounts",
+		"current_setting('app.tenant_id',true)::uuid",
+		"current_setting('app.workspace_id',true)::uuid",
+		"GRANT SELECT,INSERT,UPDATE ON saas_skill_orchestrator_budget_accounts TO agent_memory_skill_worker",
+	} {
+		if !strings.Contains(budget.Up, required) {
+			t.Errorf("budget migration missing %q", required)
+		}
+	}
+	if strings.Contains(budget.Up, "GRANT DELETE") || strings.Contains(budget.Up, "GRANT ALL") {
+		t.Fatal("budget migration grants excess worker privilege")
+	}
+}
+
 func TestApplyRollbackAndTenantRLS(t *testing.T) {
 	connectionURL := strings.TrimSpace(os.Getenv("AGENT_MEMORY_TEST_POSTGRES_URL"))
 	if connectionURL == "" {

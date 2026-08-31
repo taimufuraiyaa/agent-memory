@@ -8,6 +8,8 @@ import (
 	"time"
 )
 
+var ErrSkillEvaluationBudgetExhausted = errors.New("skill evaluation budget exhausted")
+
 const (
 	SkillOrchestratorContractVersion     = "skill-orchestrator/v1"
 	MaxSkillOrchestratorReferences       = 32
@@ -687,6 +689,28 @@ type SkillOrchestratorAlertTargets struct {
 	LeaseFailureCount    int           `json:"lease_failure_count"`
 	CanaryStaleAfter     time.Duration `json:"canary_stale_after"`
 	RollbackFailureAfter time.Duration `json:"rollback_failure_after"`
+}
+
+type SkillEvaluationBudgetReservationRecord struct {
+	Scope          SkillOrchestratorScope `json:"scope"`
+	JobID          string                 `json:"job_id"`
+	PolicyVersion  int64                  `json:"policy_version"`
+	PeriodStart    time.Time              `json:"period_start"`
+	ReservedUnits  int64                  `json:"reserved_units"`
+	CommittedUnits int64                  `json:"committed_units"`
+	State          string                 `json:"state"`
+	ExpiresAt      time.Time              `json:"expires_at"`
+}
+
+type SkillEvaluationBudgetReservationRequest struct {
+	Scope         SkillOrchestratorScope
+	JobID         string
+	PolicyVersion int64
+	PeriodStart   time.Time
+	LimitUnits    int64
+	Units         int64
+	ExpiresAt     time.Time
+	Now           time.Time
 }
 
 func (t SkillOrchestratorAlertTargets) Validate() error {

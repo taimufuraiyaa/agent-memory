@@ -237,7 +237,7 @@
   - Files: portable/hosted export adapters, custody service, cleanup sweeps, focused tests.
   - Estimated scope: Medium.
 
-- [ ] **Task 27: Add capacity, fairness, budget, and cost controls**
+- [x] **Task 27: Add capacity, fairness, budget, and cost controls**
   - Acceptance: Global/tenant/workspace/stage bounds, reserved rollback capacity, cursor budgets, and evaluation cost reservations prevent noisy-neighbor and budget overrun while preserving retrieval availability.
   - Verify: large workspace, many small workspaces, burst queue, slow evaluator, noisy tenant, rollback starvation, budget exhaustion, SQLite latency, and hosted horizontal-load tests.
   - Dependencies: Tasks 13, 17-20, and 25.
@@ -246,10 +246,10 @@
 
 ### Checkpoint F — Governed Production Runtime
 
-- [ ] Automatic activation cannot claim without signed enablement evidence.
-- [ ] Operational telemetry is bounded and content-free.
-- [ ] Data rights and retention cover every orchestration record.
-- [ ] Capacity evidence proves fairness, rollback priority, and retrieval isolation.
+- [x] Automatic activation cannot claim without signed enablement evidence.
+- [x] Operational telemetry is bounded and content-free.
+- [x] Data rights and retention cover every orchestration record.
+- [x] Capacity evidence proves fairness, rollback priority, and retrieval isolation.
 
 ## Phase 7 — Migration and Release Evidence
 

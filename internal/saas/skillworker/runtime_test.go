@@ -50,11 +50,16 @@ func TestRuntimeChecksReadinessReservesRollbackAndRotatesTenantFairly(t *testing
 	worker.mu.Lock()
 	first := append([]laneCall(nil), worker.calls...)
 	worker.mu.Unlock()
-	if first[0].lane != RollbackLane || first[0].limit != configuration.RollbackReserved || first[1].lane != OrdinaryLane || first[1].limit != configuration.ClaimBatch-configuration.RollbackReserved {
-		t.Fatalf("lane reservation = %+v", first[:2])
+	lanes, scopes := map[Lane]int{}, map[core.SkillOrchestratorScope]int{}
+	for _, call := range first {
+		lanes[call.lane]++
+		scopes[call.scope]++
+		if call.limit != 1 {
+			t.Fatalf("capacity pool over-claimed: %+v", call)
+		}
 	}
-	if first[0].scope == first[4].scope {
-		t.Fatalf("tenant round-robin did not rotate: %+v", first)
+	if lanes[RollbackLane] == 0 || lanes[OrdinaryLane] == 0 || len(scopes) != len(configuration.Assignments) {
+		t.Fatalf("lane or assignment fairness missing: lanes=%v scopes=%v", lanes, scopes)
 	}
 	drainCtx, drainCancel := context.WithTimeout(context.Background(), time.Second)
 	if err := runtime.Drain(drainCtx); err != nil {
@@ -112,6 +117,31 @@ func TestRuntimeReadinessFailureNeverClaims(t *testing.T) {
 	}
 }
 
+func TestRuntimeSlowTenantDoesNotBlockOtherAssignments(t *testing.T) {
+	configuration := skillWorkerTestConfig()
+	worker := &slowTenantLaneWorker{slowEntered: make(chan struct{}), peerEntered: make(chan struct{}), release: make(chan struct{})}
+	runtime, err := NewRuntime(configuration, &skillWorkerReadiness{}, worker)
+	if err != nil {
+		t.Fatal(err)
+	}
+	finished := make(chan error, 1)
+	go func() { finished <- runtime.runCycle(context.Background()) }()
+	select {
+	case <-worker.slowEntered:
+	case <-time.After(time.Second):
+		t.Fatal("slow tenant was not scheduled")
+	}
+	select {
+	case <-worker.peerEntered:
+	case <-time.After(time.Second):
+		t.Fatal("peer tenant was serialized behind slow work")
+	}
+	close(worker.release)
+	if err := <-finished; err != nil {
+		t.Fatal(err)
+	}
+}
+
 type skillWorkerReadiness struct {
 	calls int
 	err   error
@@ -131,6 +161,27 @@ type laneCall struct {
 type recordingLaneWorker struct {
 	mu    sync.Mutex
 	calls []laneCall
+}
+
+type slowTenantLaneWorker struct {
+	slowOnce    sync.Once
+	peerOnce    sync.Once
+	slowEntered chan struct{}
+	peerEntered chan struct{}
+	release     chan struct{}
+}
+
+func (w *slowTenantLaneWorker) RunSkillWorkerLane(_ context.Context, scope core.SkillOrchestratorScope, lane Lane, _ int) error {
+	if lane != OrdinaryLane {
+		return nil
+	}
+	if scope.TenantID == "tenant-a" {
+		w.slowOnce.Do(func() { close(w.slowEntered) })
+		<-w.release
+		return nil
+	}
+	w.peerOnce.Do(func() { close(w.peerEntered) })
+	return nil
 }
 
 func (w *recordingLaneWorker) RunSkillWorkerLane(_ context.Context, scope core.SkillOrchestratorScope, lane Lane, limit int) error {
@@ -175,7 +226,7 @@ func skillWorkerTestConfig() RuntimeConfig {
 		WorkerIdentity: "worker-a", TelemetryAddress: ":9090", Assignments: []core.SkillOrchestratorScope{
 			{TenantID: "tenant-a", WorkspaceID: "workspace-a", Environment: "production"},
 			{TenantID: "tenant-b", WorkspaceID: "workspace-b", Environment: "production"}},
-		ClaimBatch: 8, Concurrency: 4, RollbackReserved: 2, LeaseDuration: time.Second,
+		ClaimBatch: 8, Concurrency: 4, RollbackReserved: 2, TenantConcurrency: 2, WorkspaceConcurrency: 1, LeaseDuration: time.Second,
 		StageTimeout: 500 * time.Millisecond, PollInterval: 10 * time.Millisecond, DrainTimeout: time.Second}
 }
 

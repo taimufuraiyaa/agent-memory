@@ -15,19 +15,21 @@ import (
 const DatabaseRole = "agent_memory_skill_worker"
 
 type RuntimeConfig struct {
-	Enabled          bool
-	DatabaseURL      string
-	DatabaseRole     string
-	WorkerIdentity   string
-	TelemetryAddress string
-	Assignments      []core.SkillOrchestratorScope
-	ClaimBatch       int
-	Concurrency      int
-	RollbackReserved int
-	LeaseDuration    time.Duration
-	StageTimeout     time.Duration
-	PollInterval     time.Duration
-	DrainTimeout     time.Duration
+	Enabled              bool
+	DatabaseURL          string
+	DatabaseRole         string
+	WorkerIdentity       string
+	TelemetryAddress     string
+	Assignments          []core.SkillOrchestratorScope
+	ClaimBatch           int
+	Concurrency          int
+	RollbackReserved     int
+	TenantConcurrency    int
+	WorkspaceConcurrency int
+	LeaseDuration        time.Duration
+	StageTimeout         time.Duration
+	PollInterval         time.Duration
+	DrainTimeout         time.Duration
 }
 
 func LoadRuntimeConfig() (RuntimeConfig, error) {
@@ -38,13 +40,13 @@ func LoadRuntimeConfig() (RuntimeConfig, error) {
 	configuration := RuntimeConfig{Enabled: enabled, DatabaseURL: strings.TrimSpace(os.Getenv("AGENT_MEMORY_DATABASE_URL")),
 		DatabaseRole: envSkillWorker("AGENT_MEMORY_SKILL_WORKER_DATABASE_ROLE", DatabaseRole), WorkerIdentity: envSkillWorker("AGENT_MEMORY_SKILL_WORKER_ID", "skill-worker"),
 		TelemetryAddress: envSkillWorker("AGENT_MEMORY_TELEMETRY_LISTEN_ADDR", ":9090"), ClaimBatch: 16, Concurrency: 8,
-		RollbackReserved: 2, LeaseDuration: 2 * time.Minute, StageTimeout: time.Minute, PollInterval: time.Second, DrainTimeout: 30 * time.Second}
+		RollbackReserved: 2, TenantConcurrency: 4, WorkspaceConcurrency: 2, LeaseDuration: 2 * time.Minute, StageTimeout: time.Minute, PollInterval: time.Second, DrainTimeout: 30 * time.Second}
 	if raw := strings.TrimSpace(os.Getenv("AGENT_MEMORY_SKILL_WORKER_ASSIGNMENTS")); raw != "" {
 		if err := json.Unmarshal([]byte(raw), &configuration.Assignments); err != nil {
 			return RuntimeConfig{}, errors.New("AGENT_MEMORY_SKILL_WORKER_ASSIGNMENTS must be valid JSON")
 		}
 	}
-	for name, target := range map[string]*int{"AGENT_MEMORY_SKILL_WORKER_CLAIM_BATCH": &configuration.ClaimBatch, "AGENT_MEMORY_SKILL_WORKER_CONCURRENCY": &configuration.Concurrency, "AGENT_MEMORY_SKILL_WORKER_ROLLBACK_RESERVED": &configuration.RollbackReserved} {
+	for name, target := range map[string]*int{"AGENT_MEMORY_SKILL_WORKER_CLAIM_BATCH": &configuration.ClaimBatch, "AGENT_MEMORY_SKILL_WORKER_CONCURRENCY": &configuration.Concurrency, "AGENT_MEMORY_SKILL_WORKER_ROLLBACK_RESERVED": &configuration.RollbackReserved, "AGENT_MEMORY_SKILL_WORKER_TENANT_CONCURRENCY": &configuration.TenantConcurrency, "AGENT_MEMORY_SKILL_WORKER_WORKSPACE_CONCURRENCY": &configuration.WorkspaceConcurrency} {
 		if raw := strings.TrimSpace(os.Getenv(name)); raw != "" {
 			value, parseErr := strconv.Atoi(raw)
 			if parseErr != nil {
@@ -90,6 +92,9 @@ func (c RuntimeConfig) Validate() error {
 	}
 	if c.ClaimBatch < 2 || c.ClaimBatch > 100 || c.Concurrency < 1 || c.Concurrency > c.ClaimBatch || c.RollbackReserved < 1 || c.RollbackReserved >= c.ClaimBatch || c.RollbackReserved > c.Concurrency {
 		return errors.New("hosted skill worker claim, concurrency, or rollback reservation is invalid")
+	}
+	if c.TenantConcurrency < 1 || c.TenantConcurrency > c.Concurrency || c.WorkspaceConcurrency < 1 || c.WorkspaceConcurrency > c.TenantConcurrency {
+		return errors.New("hosted skill worker tenant or workspace concurrency is invalid")
 	}
 	if c.LeaseDuration < time.Second || c.LeaseDuration > time.Hour || c.StageTimeout <= 0 || c.StageTimeout > c.LeaseDuration || c.PollInterval < 10*time.Millisecond || c.PollInterval > time.Minute || c.DrainTimeout <= 0 || c.DrainTimeout > time.Hour {
 		return errors.New("hosted skill worker timing is invalid")

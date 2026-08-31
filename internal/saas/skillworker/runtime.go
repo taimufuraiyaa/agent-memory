@@ -100,21 +100,72 @@ func (r *Runtime) Run(parent context.Context) error {
 func (r *Runtime) runCycle(ctx context.Context) error {
 	assignments := r.configuration.Assignments
 	start := r.next % len(assignments)
-	for offset := 0; offset < len(assignments); offset++ {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		scope := assignments[(start+offset)%len(assignments)]
-		if err := r.worker.RunSkillWorkerLane(ctx, scope, RollbackLane, r.configuration.RollbackReserved); err != nil {
-			return err
-		}
-		ordinary := r.configuration.ClaimBatch - r.configuration.RollbackReserved
-		if err := r.worker.RunSkillWorkerLane(ctx, scope, OrdinaryLane, ordinary); err != nil {
+	ordered := make([]core.SkillOrchestratorScope, len(assignments))
+	for offset := range assignments {
+		ordered[offset] = assignments[(start+offset)%len(assignments)]
+	}
+	r.next = (start + 1) % len(assignments)
+	errorsByLane := make(chan error, 2)
+	var wait sync.WaitGroup
+	for _, lane := range []struct {
+		name    Lane
+		workers int
+	}{{RollbackLane, r.configuration.RollbackReserved}, {OrdinaryLane, r.configuration.Concurrency - r.configuration.RollbackReserved}} {
+		lane := lane
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			errorsByLane <- r.runLanePool(ctx, ordered, lane.name, lane.workers)
+		}()
+	}
+	wait.Wait()
+	close(errorsByLane)
+	for err := range errorsByLane {
+		if err != nil {
 			return err
 		}
 	}
-	r.next = (start + 1) % len(assignments)
 	return nil
+}
+
+func (r *Runtime) runLanePool(ctx context.Context, assignments []core.SkillOrchestratorScope, lane Lane, workers int) error {
+	queue := make(chan core.SkillOrchestratorScope)
+	failed := make(chan error, 1)
+	poolCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	var wait sync.WaitGroup
+	for index := 0; index < workers; index++ {
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			for scope := range queue {
+				if err := r.worker.RunSkillWorkerLane(poolCtx, scope, lane, 1); err != nil {
+					select {
+					case failed <- err:
+						cancel()
+					default:
+					}
+					return
+				}
+			}
+		}()
+	}
+send:
+	for _, scope := range assignments {
+		select {
+		case queue <- scope:
+		case <-poolCtx.Done():
+			break send
+		}
+	}
+	close(queue)
+	wait.Wait()
+	select {
+	case err := <-failed:
+		return err
+	default:
+		return poolCtx.Err()
+	}
 }
 
 func (r *Runtime) Drain(ctx context.Context) error {

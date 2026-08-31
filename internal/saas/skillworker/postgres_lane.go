@@ -18,6 +18,7 @@ type PostgresLaneWorker struct {
 	repository LaneRepository
 	registry   *application.SkillStageRegistry
 	config     RuntimeConfig
+	capacity   *application.SkillCapacityCoordinator
 }
 
 func NewPostgresLaneWorker(repository LaneRepository, registry *application.SkillStageRegistry, configuration RuntimeConfig) (*PostgresLaneWorker, error) {
@@ -27,7 +28,18 @@ func NewPostgresLaneWorker(repository LaneRepository, registry *application.Skil
 	if err := configuration.Validate(); err != nil {
 		return nil, err
 	}
-	return &PostgresLaneWorker{repository: repository, registry: registry, config: configuration}, nil
+	stages := make(map[core.SkillOrchestratorStage]int)
+	for _, stage := range []core.SkillOrchestratorStage{core.SkillStageDetect, core.SkillStageBuild, core.SkillStageEvaluate, core.SkillStageDecide, core.SkillStageStartCanary, core.SkillStageAnalyzeCanary, core.SkillStageActivate, core.SkillStageObserveSafety, core.SkillStageRollback, core.SkillStageReconcileMaterialization} {
+		stages[stage] = configuration.Concurrency
+	}
+	stages[core.SkillStageEvaluate] = max(1, configuration.Concurrency/2)
+	stages[core.SkillStageActivate] = 1
+	stages[core.SkillStageRollback] = configuration.RollbackReserved
+	capacity, err := application.NewSkillCapacityCoordinator(application.SkillCapacityLimits{Global: configuration.Concurrency, Tenant: configuration.TenantConcurrency, Workspace: configuration.WorkspaceConcurrency, RollbackReserved: configuration.RollbackReserved, Stages: stages})
+	if err != nil {
+		return nil, err
+	}
+	return &PostgresLaneWorker{repository: repository, registry: registry, config: configuration, capacity: capacity}, nil
 }
 
 func (w *PostgresLaneWorker) RunSkillWorkerLane(ctx context.Context, scope core.SkillOrchestratorScope, lane Lane, limit int) error {
@@ -46,6 +58,7 @@ func (w *PostgresLaneWorker) RunSkillWorkerLane(ctx context.Context, scope core.
 	if err != nil {
 		return err
 	}
+	worker.WithCapacityCoordinator(w.capacity)
 	_, err = worker.RunOnce(ctx)
 	return err
 }

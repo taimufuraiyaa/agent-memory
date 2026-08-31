@@ -159,6 +159,12 @@ type SkillOrchestratorWorker struct {
 	retryPolicy *SkillRetryPolicy
 	metrics     *observability.SkillOrchestratorMetrics
 	now         func() time.Time
+	capacity    *SkillCapacityCoordinator
+}
+
+func (w *SkillOrchestratorWorker) WithCapacityCoordinator(capacity *SkillCapacityCoordinator) *SkillOrchestratorWorker {
+	w.capacity = capacity
+	return w
 }
 
 func NewSkillOrchestratorWorker(repository SkillWorkerRepository, registry *SkillStageRegistry, config SkillWorkerConfig) (*SkillOrchestratorWorker, error) {
@@ -284,6 +290,25 @@ func (w *SkillOrchestratorWorker) runJob(parent context.Context, job core.SkillJ
 	done := make(chan struct{})
 	renewalFailed := make(chan error, 1)
 	go w.superviseLease(stageCtx, leaseCancel, done, renewalFailed, job)
+	var permit SkillCapacityPermit
+	if w.capacity != nil {
+		permit, err = w.capacity.Acquire(stageCtx, job)
+		if err != nil {
+			close(done)
+			cause := context.Cause(stageCtx)
+			deadlineCancel()
+			if cause != nil {
+				select {
+				case <-renewalFailed:
+					return SkillWorkerRunReport{LeaseLost: 1}
+				default:
+					return SkillWorkerRunReport{Cancelled: 1}
+				}
+			}
+			return SkillWorkerRunReport{AdapterFailed: 1}
+		}
+		defer permit.Release()
+	}
 	result, executeErr := adapter.Execute(stageCtx, job)
 	close(done)
 	cause := context.Cause(stageCtx)

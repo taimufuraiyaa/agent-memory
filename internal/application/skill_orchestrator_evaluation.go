@@ -12,7 +12,7 @@ import (
 	"github.com/taimufuraiyaa/agent-memory/internal/core"
 )
 
-var ErrSkillEvaluationBudgetExhausted = errors.New("skill evaluation budget exhausted")
+var ErrSkillEvaluationBudgetExhausted = core.ErrSkillEvaluationBudgetExhausted
 
 type SkillEvaluationStageConfiguration struct {
 	Signal                 SkillSignalConfiguration

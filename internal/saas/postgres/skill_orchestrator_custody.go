@@ -158,7 +158,7 @@ func (r *SkillOrchestratorRepository) ExportSkillOrchestratorArchive(ctx context
 		return nil, err
 	}
 	defer tx.Rollback(ctx)
-	tables := map[string]string{"orchestrator_workflows": "saas_skill_orchestrator_workflows", "orchestrator_jobs": "saas_skill_orchestrator_jobs", "orchestrator_attempts": "saas_skill_orchestrator_job_attempts", "orchestrator_signals": "saas_skill_orchestrator_safety_signals", "orchestrator_configs": "saas_skill_orchestrator_configurations", "orchestrator_holds": "saas_skill_orchestrator_legal_holds", "orchestrator_tombstones": "saas_skill_orchestrator_tombstones"}
+	tables := map[string]string{"orchestrator_workflows": "saas_skill_orchestrator_workflows", "orchestrator_jobs": "saas_skill_orchestrator_jobs", "orchestrator_attempts": "saas_skill_orchestrator_job_attempts", "orchestrator_signals": "saas_skill_orchestrator_safety_signals", "orchestrator_configs": "saas_skill_orchestrator_configurations", "orchestrator_holds": "saas_skill_orchestrator_legal_holds", "orchestrator_tombstones": "saas_skill_orchestrator_tombstones", "orchestrator_budget_accounts": "saas_skill_orchestrator_budget_accounts", "orchestrator_budget_reservations": "saas_skill_orchestrator_budget_reservations"}
 	archive := make(map[string][]map[string]any, len(tables))
 	for name, table := range tables {
 		var encoded []byte
