@@ -150,6 +150,19 @@ type SkillWorkflow struct {
 	TerminalAt           time.Time               `json:"terminal_at,omitempty"`
 }
 
+type SkillOrchestrationEvent struct {
+	ID         int64     `json:"id"`
+	WorkflowID string    `json:"workflow_id"`
+	JobID      string    `json:"job_id,omitempty"`
+	Kind       string    `json:"kind"`
+	FromState  string    `json:"from_state,omitempty"`
+	ToState    string    `json:"to_state,omitempty"`
+	ActorID    string    `json:"actor_id"`
+	Fence      int64     `json:"fence"`
+	ReasonCode string    `json:"reason_code,omitempty"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+
 func (w SkillWorkflow) Validate() error {
 	if !validSkillOrchestratorIdentifier(w.ID) {
 		return errors.New("skill workflow id is invalid")

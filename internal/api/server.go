@@ -52,6 +52,7 @@ type Service struct {
 	SkillApprovalAuthorizer   application.SkillApprovalAuthorizer
 	SkillResolutionAuthorizer application.SkillResolutionAuthorizer
 	SkillMutationAuthorizer   SkillMutationAuthorizer
+	SkillOrchestrationDrainer interface{ Drain(context.Context) error }
 
 	mu             sync.RWMutex
 	stores         map[string]*workspaceAssets
@@ -311,6 +312,8 @@ func NewMux(svc *Service) *http.ServeMux {
 	mux.HandleFunc("/api/v1/skills/lifecycle/list", skillListHandler(svc))
 	mux.HandleFunc("/api/v1/skills/inspect", skillInspectHandler(svc))
 	mux.HandleFunc("/api/v1/skills/lifecycle", skillLifecycleHandler(svc))
+	mux.HandleFunc("/api/v1/skills/orchestration/status", skillOrchestrationStatusHandler(svc))
+	mux.HandleFunc("/api/v1/skills/orchestration/control", skillOrchestrationControlHandler(svc))
 	mux.HandleFunc("/api/v1/projects/init", projectsInitHandler(svc))
 	mux.HandleFunc("/api/v1/projects/rename", projectsRenameHandler(svc))
 	mux.HandleFunc("/api/v1/projects/list", projectsListHandler(svc))

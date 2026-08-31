@@ -186,7 +186,7 @@
 
 ## Phase 5 — Control Surfaces and Product Visibility
 
-- [ ] **Task 21: Add standalone CLI and HTTP orchestration controls**
+- [x] **Task 21: Add standalone CLI and HTTP orchestration controls**
   - Acceptance: Status, history, pause, resume, cancel, reconcile, retry, dead-letter replay, and drain are authorized, paginated, stable, and idempotent.
   - Verify: success, stale generation, replay, unauthorized, unknown workspace, invalid target, running cancellation, drain timeout, and content-free output tests.
   - Dependencies: Tasks 17 and 19 contracts.
