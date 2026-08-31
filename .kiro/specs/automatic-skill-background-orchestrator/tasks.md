@@ -133,7 +133,7 @@
   - Files: activation adapter, enablement guard, materialization integration tests.
   - Estimated scope: Medium.
 
-- [ ] **Task 16: Add authenticated safety ingress and priority rollback adapter**
+- [x] **Task 16: Add authenticated safety ingress and priority rollback adapter**
   - Acceptance: Revision-bound verified signals deduplicate, hard signals disable allocation before priority rollback, soft signals enter cooldown, and rollback restores only recorded last-known-good.
   - Verify: every accepted signal, forged/cross-scope signal, repeated signal, soft cooldown, rollback priority under backlog, lease replay, rollback failure, and oscillation tests.
   - Dependencies: Tasks 7-10 and 15.

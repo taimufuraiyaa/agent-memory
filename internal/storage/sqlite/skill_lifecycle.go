@@ -564,14 +564,14 @@ func (s *Store) CreateSkillSafetySignal(ctx context.Context, signal core.SkillSa
 	if err := signal.Validate(); err != nil {
 		return err
 	}
-	_, err := s.db.ExecContext(ctx, `INSERT INTO skill_safety_signals(id,workspace,environment,skill_id,revision_id,kind,state,verified,occurrences,cooldown_until,last_error,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`, signal.ID, signal.Workspace, signal.Environment, signal.SkillID, signal.RevisionID, signal.Kind, signal.State, signal.Verified, signal.Occurrences, formatOptionalSkillTime(signal.CooldownUntil), signal.LastError, formatSkillTime(signal.CreatedAt), formatSkillTime(signal.UpdatedAt))
+	_, err := s.db.ExecContext(ctx, `INSERT INTO skill_safety_signals(id,workspace,environment,skill_id,revision_id,kind,state,verified,source_type,verifier_id,evidence_reference,deduplication_digest,policy_version,occurrences,cooldown_until,last_error,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, signal.ID, signal.Workspace, signal.Environment, signal.SkillID, signal.RevisionID, signal.Kind, signal.State, signal.Verified, signal.SourceType, signal.VerifierID, signal.EvidenceRef, signal.DedupDigest, signal.PolicyVersion, signal.Occurrences, formatOptionalSkillTime(signal.CooldownUntil), signal.LastError, formatSkillTime(signal.CreatedAt), formatSkillTime(signal.UpdatedAt))
 	return err
 }
 
 func (s *Store) GetSkillSafetySignal(ctx context.Context, workspace, signalID string) (core.SkillSafetySignal, error) {
 	var signal core.SkillSafetySignal
 	var cooldown, created, updated string
-	err := s.db.QueryRowContext(ctx, `SELECT id,workspace,environment,skill_id,revision_id,kind,state,verified,occurrences,cooldown_until,last_error,created_at,updated_at FROM skill_safety_signals WHERE workspace=? AND id=?`, strings.TrimSpace(workspace), strings.TrimSpace(signalID)).Scan(&signal.ID, &signal.Workspace, &signal.Environment, &signal.SkillID, &signal.RevisionID, &signal.Kind, &signal.State, &signal.Verified, &signal.Occurrences, &cooldown, &signal.LastError, &created, &updated)
+	err := s.db.QueryRowContext(ctx, `SELECT id,workspace,environment,skill_id,revision_id,kind,state,verified,source_type,verifier_id,evidence_reference,deduplication_digest,policy_version,occurrences,cooldown_until,last_error,created_at,updated_at FROM skill_safety_signals WHERE workspace=? AND id=?`, strings.TrimSpace(workspace), strings.TrimSpace(signalID)).Scan(&signal.ID, &signal.Workspace, &signal.Environment, &signal.SkillID, &signal.RevisionID, &signal.Kind, &signal.State, &signal.Verified, &signal.SourceType, &signal.VerifierID, &signal.EvidenceRef, &signal.DedupDigest, &signal.PolicyVersion, &signal.Occurrences, &cooldown, &signal.LastError, &created, &updated)
 	if err != nil {
 		return core.SkillSafetySignal{}, err
 	}

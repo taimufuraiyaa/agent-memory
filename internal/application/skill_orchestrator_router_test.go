@@ -22,8 +22,9 @@ func TestSkillSignalRouterMapsVerifiedLifecycleSignalsToStableJobs(t *testing.T)
 		{SkillSignalEvaluation, core.SkillStageDecide},
 		{SkillSignalDecision, core.SkillStageStartCanary},
 		{SkillSignalCanary, core.SkillStageAnalyzeCanary},
+		{SkillSignalPromotion, core.SkillStageActivate},
 		{SkillSignalExecution, core.SkillStageAnalyzeCanary},
-		{SkillSignalSafety, core.SkillStageObserveSafety},
+		{SkillSignalSafety, core.SkillStageRollback},
 	}
 	for _, test := range tests {
 		t.Run(string(test.kind), func(t *testing.T) {

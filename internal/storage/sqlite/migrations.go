@@ -44,6 +44,22 @@ var schemaMigrations = []migrationStep{
 	{24, "skill-safety-signals", migrateSkillSafetySignals},
 	{25, "skill-lifecycle-custody", migrateSkillLifecycleCustody},
 	{26, "skill-background-orchestrator", migrateSkillBackgroundOrchestrator},
+	{27, "authenticated-skill-safety-signals", migrateAuthenticatedSkillSafetySignals},
+}
+
+func migrateAuthenticatedSkillSafetySignals(ctx context.Context, s *Store) error {
+	for column, statement := range map[string]string{
+		"source_type":          `ALTER TABLE skill_safety_signals ADD COLUMN source_type TEXT NOT NULL DEFAULT ''`,
+		"verifier_id":          `ALTER TABLE skill_safety_signals ADD COLUMN verifier_id TEXT NOT NULL DEFAULT ''`,
+		"evidence_reference":   `ALTER TABLE skill_safety_signals ADD COLUMN evidence_reference TEXT NOT NULL DEFAULT ''`,
+		"deduplication_digest": `ALTER TABLE skill_safety_signals ADD COLUMN deduplication_digest TEXT NOT NULL DEFAULT ''`,
+		"policy_version":       `ALTER TABLE skill_safety_signals ADD COLUMN policy_version INTEGER NOT NULL DEFAULT 0`,
+	} {
+		if err := s.ensureColumn(ctx, "skill_safety_signals", column, statement); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func migrateSkillBackgroundOrchestrator(ctx context.Context, s *Store) error {

@@ -1023,6 +1023,11 @@ type SkillSafetySignal struct {
 	Kind          SkillSafetySignalKind  `json:"kind"`
 	State         SkillSafetySignalState `json:"state"`
 	Verified      bool                   `json:"verified"`
+	SourceType    string                 `json:"source_type,omitempty"`
+	VerifierID    string                 `json:"verifier_id,omitempty"`
+	EvidenceRef   string                 `json:"evidence_reference,omitempty"`
+	DedupDigest   string                 `json:"deduplication_digest,omitempty"`
+	PolicyVersion int64                  `json:"policy_version,omitempty"`
 	Occurrences   int64                  `json:"occurrences"`
 	CooldownUntil time.Time              `json:"cooldown_until,omitempty"`
 	LastError     string                 `json:"last_error,omitempty"`
@@ -1038,6 +1043,16 @@ func (s SkillSafetySignal) Validate() error {
 	}
 	if !s.Kind.Valid() || s.Occurrences < 1 || !s.Verified || s.CreatedAt.IsZero() || s.UpdatedAt.Before(s.CreatedAt) {
 		return errors.New("skill safety signal classification, verification, occurrences, or timestamps are invalid")
+	}
+	if s.SourceType != "" || s.VerifierID != "" || s.EvidenceRef != "" || s.DedupDigest != "" || s.PolicyVersion != 0 {
+		for field, value := range map[string]string{"source_type": s.SourceType, "verifier_id": s.VerifierID, "evidence_reference": s.EvidenceRef} {
+			if err := requireSkillText(field, value, 256); err != nil {
+				return err
+			}
+		}
+		if !validSkillDigest(s.DedupDigest) || s.PolicyVersion < 1 {
+			return errors.New("skill safety signal deduplication digest and policy version are invalid")
+		}
 	}
 	if s.State != SkillSafetyCooldown && s.State != SkillSafetyRollbackPending && s.State != SkillSafetyRollbackFailed && s.State != SkillSafetyResolved {
 		return errors.New("skill safety signal state is invalid")

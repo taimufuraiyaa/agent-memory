@@ -167,7 +167,7 @@ func stageForSkillSignal(kind SkillLifecycleSignalKind) core.SkillOrchestratorSt
 	case SkillSignalCanary, SkillSignalExecution:
 		return core.SkillStageAnalyzeCanary
 	case SkillSignalSafety:
-		return core.SkillStageObserveSafety
+		return core.SkillStageRollback
 	default:
 		return ""
 	}
