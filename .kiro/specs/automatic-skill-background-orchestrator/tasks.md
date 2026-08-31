@@ -31,7 +31,7 @@
   - Files: SQLite repository, scanner helpers, focused tests.
   - Estimated scope: Medium.
 
-- [ ] **Task 4: Add hosted orchestration schema with RLS**
+- [x] **Task 4: Add hosted orchestration schema with RLS**
   - Acceptance: PostgreSQL tables mirror domain semantics, all rows are tenant/workspace scoped, RLS is fail-closed, and ready/expired/status indexes support bounded queries.
   - Verify: migration lint, RLS two-tenant isolation, forged scope, missing tenant context, index-plan, and rollback tests.
   - Dependencies: Tasks 1 and 2 contract freeze.

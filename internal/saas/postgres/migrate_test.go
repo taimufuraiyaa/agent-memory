@@ -195,6 +195,59 @@ func TestGraphIndexMigrationIsTenantScopedAndRollbackPreservesCanonicalData(t *t
 	}
 }
 
+func TestSkillOrchestratorMigrationIsTenantWorkspaceScopedAndReversible(t *testing.T) {
+	t.Parallel()
+	migrations := mustMigrations(t)
+	var orchestrator *Migration
+	for index := range migrations {
+		if migrations[index].Version == "0033_skill_background_orchestrator" {
+			orchestrator = &migrations[index]
+			break
+		}
+	}
+	if orchestrator == nil {
+		t.Fatal("skill background orchestrator migration is missing")
+	}
+
+	tables := []string{
+		"saas_skill_orchestrator_workflows", "saas_skill_orchestrator_jobs", "saas_skill_orchestrator_job_dependencies",
+		"saas_skill_orchestrator_job_attempts", "saas_skill_orchestrator_safety_signals", "saas_skill_orchestrator_configurations",
+		"saas_skill_orchestrator_leader_leases", "saas_skill_orchestrator_reconciliation_cursors", "saas_skill_orchestrator_events",
+	}
+	for _, table := range tables {
+		if !strings.Contains(orchestrator.Up, "CREATE TABLE "+table) {
+			t.Errorf("orchestrator migration missing table %s", table)
+		}
+		if !strings.Contains(orchestrator.Up, "ALTER TABLE "+table+" FORCE ROW LEVEL SECURITY") {
+			t.Errorf("orchestrator migration missing forced RLS for %s", table)
+		}
+		if !strings.Contains(orchestrator.Down, "DROP TABLE IF EXISTS "+table) {
+			t.Errorf("orchestrator rollback missing table %s", table)
+		}
+	}
+	for _, required := range []string{
+		"FOREIGN KEY (tenant_id, workspace_id)",
+		"current_setting('app.tenant_id', true)::uuid",
+		"current_setting('app.workspace_id', true)::uuid",
+		"contract_version = 'skill-orchestrator/v1'",
+		"saas_skill_orchestrator_jobs_ready",
+		"saas_skill_orchestrator_jobs_claim_priority",
+		"saas_skill_orchestrator_jobs_expired",
+		"saas_skill_orchestrator_jobs_status",
+		"jsonb_typeof(result_references) = 'array'",
+		"octet_length(result_references::text) <= 8192",
+	} {
+		if !strings.Contains(orchestrator.Up, required) {
+			t.Errorf("orchestrator migration missing %q", required)
+		}
+	}
+	for _, canonical := range []string{"saas_workspaces", "saas_graph_configurations", "saas_memories"} {
+		if strings.Contains(orchestrator.Down, "DROP TABLE IF EXISTS "+canonical) {
+			t.Errorf("orchestrator rollback must preserve canonical table %s", canonical)
+		}
+	}
+}
+
 func TestApplyRollbackAndTenantRLS(t *testing.T) {
 	connectionURL := strings.TrimSpace(os.Getenv("AGENT_MEMORY_TEST_POSTGRES_URL"))
 	if connectionURL == "" {
@@ -288,6 +341,108 @@ func TestApplyRollbackAndTenantRLS(t *testing.T) {
 	}
 	if err := Apply(ctx, pool); err != nil {
 		t.Fatalf("re-apply after rollback error = %v", err)
+	}
+}
+
+func TestSkillOrchestratorMigrationTenantWorkspaceRLSAndClaimIndex(t *testing.T) {
+	connectionURL := strings.TrimSpace(os.Getenv("AGENT_MEMORY_TEST_POSTGRES_URL"))
+	if connectionURL == "" {
+		t.Skip("AGENT_MEMORY_TEST_POSTGRES_URL is not configured")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	pool, err := Open(ctx, connectionURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pool.Close()
+	if err := Apply(ctx, pool); err != nil {
+		t.Fatal(err)
+	}
+
+	account1, account2 := uuid.New(), uuid.New()
+	tenant1, tenant2 := uuid.New(), uuid.New()
+	workspace1, workspace2 := uuid.New(), uuid.New()
+	now := time.Now().UTC()
+	for _, values := range []struct{ account, tenant, workspace uuid.UUID }{{account1, tenant1, workspace1}, {account2, tenant2, workspace2}} {
+		if _, err := pool.Exec(ctx, `INSERT INTO saas_accounts(id,external_subject,verified_email,state,created_at,updated_at) VALUES($1,$2,$3,'active',$4,$4)`, values.account, values.account.String(), values.account.String()+"@example.test", now); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := pool.Exec(ctx, `INSERT INTO saas_tenants(id,kind,state,personal_owner_account_id,created_at,updated_at) VALUES($1,'personal','active',$2,$3,$3)`, values.tenant, values.account, now); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := pool.Exec(ctx, `INSERT INTO saas_workspaces(tenant_id,id,name,state,created_at,updated_at) VALUES($1,$2,'orchestrator-test','active',$3,$3)`, values.tenant, values.workspace, now); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := pool.Exec(ctx, `INSERT INTO saas_skill_orchestrator_workflows(
+			tenant_id,workspace_id,id,environment,origin_kind,origin_id,workflow_kind,contract_version,input_digest,
+			state,current_stage,generation,configuration_version,policy_digest,created_at,updated_at
+		) VALUES($1,$2,$3,'production','tool_lesson','lesson-rls','automatic_revision','skill-orchestrator/v1',$4,'open','detect',1,1,$4,$5,$5)`, values.tenant, values.workspace, uuid.New(), "sha256:"+strings.Repeat("a", 64), now); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	const role = "saas_skill_orchestrator_rls_test"
+	_, _ = pool.Exec(ctx, "DROP OWNED BY "+role)
+	_, _ = pool.Exec(ctx, "DROP ROLE IF EXISTS "+role)
+	if _, err := pool.Exec(ctx, "CREATE ROLE "+role+" NOLOGIN"); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		_, _ = pool.Exec(context.Background(), "DROP OWNED BY "+role)
+		_, _ = pool.Exec(context.Background(), "DROP ROLE IF EXISTS "+role)
+	}()
+	if _, err := pool.Exec(ctx, "GRANT USAGE ON SCHEMA public TO "+role+"; GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public TO "+role); err != nil {
+		t.Fatal(err)
+	}
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback(ctx)
+	if _, err := tx.Exec(ctx, "SET LOCAL ROLE "+role); err != nil {
+		t.Fatal(err)
+	}
+	var count int
+	if err := tx.QueryRow(ctx, `SELECT count(*) FROM saas_skill_orchestrator_workflows`).Scan(&count); err != nil || count != 0 {
+		t.Fatalf("missing tenant/workspace context count=%d err=%v", count, err)
+	}
+	if _, err := tx.Exec(ctx, "SELECT set_config('app.tenant_id',$1,true)", tenant1.String()); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.QueryRow(ctx, `SELECT count(*) FROM saas_skill_orchestrator_workflows`).Scan(&count); err != nil || count != 0 {
+		t.Fatalf("missing workspace context count=%d err=%v", count, err)
+	}
+	if _, err := tx.Exec(ctx, "SELECT set_config('app.workspace_id',$1,true)", workspace1.String()); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.QueryRow(ctx, `SELECT count(*) FROM saas_skill_orchestrator_workflows`).Scan(&count); err != nil || count != 1 {
+		t.Fatalf("tenant/workspace scoped count=%d err=%v", count, err)
+	}
+	if tag, err := tx.Exec(ctx, `DELETE FROM saas_skill_orchestrator_workflows WHERE tenant_id=$1 AND workspace_id=$2`, tenant2, workspace2); err != nil || tag.RowsAffected() != 0 {
+		t.Fatalf("cross-tenant delete affected=%d err=%v", tag.RowsAffected(), err)
+	}
+	if _, err := tx.Exec(ctx, `SET LOCAL enable_seqscan=off`); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := tx.Query(ctx, `EXPLAIN SELECT id FROM saas_skill_orchestrator_jobs WHERE tenant_id=$1 AND workspace_id=$2 AND environment='production' AND state='queued' AND ready_at<=$3 ORDER BY priority DESC,ready_at,created_at LIMIT 10`, tenant1, workspace1, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var plan strings.Builder
+	for rows.Next() {
+		var line string
+		if err := rows.Scan(&line); err != nil {
+			t.Fatal(err)
+		}
+		plan.WriteString(line)
+	}
+	rows.Close()
+	if !strings.Contains(plan.String(), "saas_skill_orchestrator_jobs_claim_priority") {
+		t.Fatalf("claim plan does not use priority-ready index: %s", plan.String())
+	}
+	if err := tx.Rollback(ctx); err != nil {
+		t.Fatal(err)
 	}
 }
 

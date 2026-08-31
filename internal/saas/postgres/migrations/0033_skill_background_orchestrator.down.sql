@@ -1,0 +1,9 @@
+DROP TABLE IF EXISTS saas_skill_orchestrator_events;
+DROP TABLE IF EXISTS saas_skill_orchestrator_reconciliation_cursors;
+DROP TABLE IF EXISTS saas_skill_orchestrator_leader_leases;
+DROP TABLE IF EXISTS saas_skill_orchestrator_configurations;
+DROP TABLE IF EXISTS saas_skill_orchestrator_safety_signals;
+DROP TABLE IF EXISTS saas_skill_orchestrator_job_attempts;
+DROP TABLE IF EXISTS saas_skill_orchestrator_job_dependencies;
+DROP TABLE IF EXISTS saas_skill_orchestrator_jobs;
+DROP TABLE IF EXISTS saas_skill_orchestrator_workflows;
