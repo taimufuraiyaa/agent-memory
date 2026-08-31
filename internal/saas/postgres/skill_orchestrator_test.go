@@ -41,6 +41,18 @@ func TestPostgresSkillOrchestratorChaosCertification(t *testing.T) {
 	}
 }
 
+func TestPostgresSkillOrchestratorTwoTenantSecurityIsolation(t *testing.T) {
+	pool := openSkillOrchestratorPostgres(t)
+	repository := NewSkillOrchestratorRepository(pool)
+	result, err := orchestratortest.RunSecurityIsolationReview(
+		context.Background(), repository,
+		createSkillOrchestratorHostedScope(t, pool), createSkillOrchestratorHostedScope(t, pool),
+	)
+	if err != nil || !result.Passed() {
+		t.Fatalf("security isolation=%+v err=%v", result, err)
+	}
+}
+
 func TestPostgresSkillOrchestratorDependencyContract(t *testing.T) {
 	pool := openSkillOrchestratorPostgres(t)
 	scope := createSkillOrchestratorHostedScope(t, pool)

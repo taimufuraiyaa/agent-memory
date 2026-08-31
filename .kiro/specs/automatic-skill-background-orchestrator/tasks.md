@@ -267,7 +267,7 @@
   - Files: certification harness, fault adapters, report generator, focused tests.
   - Estimated scope: Medium.
 
-- [ ] **Task 30: Add independent isolation and security release gate**
+- [x] **Task 30: Add independent isolation and security release gate**
   - Acceptance: Two-tenant/two-workspace review proves RLS, authorization, filesystem custody, worker privilege, forged IDs/tokens/signals, timing behavior, payload/log redaction, and least-privilege evaluation.
   - Verify: security suite plus independent accountable evidence receipt bound to build and migrations.
   - Dependencies: Tasks 20, 22, 24, 26, and 29.

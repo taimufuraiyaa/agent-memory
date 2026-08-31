@@ -38,6 +38,18 @@ func TestSQLiteSkillOrchestratorChaosCertification(t *testing.T) {
 	}
 }
 
+func TestSQLiteSkillOrchestratorTwoWorkspaceSecurityIsolation(t *testing.T) {
+	store := openSkillOrchestratorStore(t)
+	result, err := orchestratortest.RunSecurityIsolationReview(
+		context.Background(), store,
+		core.SkillOrchestratorScope{WorkspaceID: "security-a", Environment: "production"},
+		core.SkillOrchestratorScope{WorkspaceID: "security-b", Environment: "production"},
+	)
+	if err != nil || !result.Passed() {
+		t.Fatalf("security isolation=%+v err=%v", result, err)
+	}
+}
+
 func TestSQLiteSkillOrchestratorDependencyContract(t *testing.T) {
 	store := openSkillOrchestratorStore(t)
 	orchestratortest.RunDependencyContract(t, store, core.SkillOrchestratorScope{WorkspaceID: "ws", Environment: "production"})

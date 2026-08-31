@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-memory.local/schemas/evidence/v1/skill-orchestrator-independent-security-review.schema.json",
+  "title": "Externally signed skill orchestrator independent security review",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema", "classification", "review_id", "release_id", "build_digest",
+    "migration_digest", "isolation_receipt_digest", "chaos_certificate_digest",
+    "reviewer_role", "completed_at", "expires_at", "signing_key_id", "signature"
+  ],
+  "properties": {
+    "schema": {"const": "agent-memory/skill-orchestrator-independent-security-review/v1"},
+    "classification": {"const": "independent_external"},
+    "review_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"},
+    "release_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"},
+    "build_digest": {"$ref": "#/$defs/digest"},
+    "migration_digest": {"$ref": "#/$defs/digest"},
+    "isolation_receipt_digest": {"$ref": "#/$defs/digest"},
+    "chaos_certificate_digest": {"$ref": "#/$defs/digest"},
+    "reviewer_role": {"const": "independent_security"},
+    "completed_at": {"type": "string", "format": "date-time"},
+    "expires_at": {"type": "string", "format": "date-time"},
+    "signing_key_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"},
+    "signature": {"type": "string", "minLength": 88, "maxLength": 88}
+  },
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}
+  }
+}
