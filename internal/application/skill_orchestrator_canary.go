@@ -60,6 +60,16 @@ type SkillCanaryStartAdapter struct {
 	repository    SkillCanaryStageRepository
 	service       *SkillCanaryStartService
 	configuration SkillCanaryStageConfiguration
+	downstream    *SkillCanaryDueScheduler
+}
+
+func (a *SkillCanaryStartAdapter) WithDownstreamRouter(router SkillLessonSignalRouter) error {
+	scheduler, err := NewSkillCanaryDueScheduler(router, a.configuration)
+	if err != nil {
+		return err
+	}
+	a.downstream = scheduler
+	return nil
 }
 
 func NewSkillCanaryStartAdapter(repository SkillCanaryStageRepository, configuration SkillCanaryStageConfiguration, now func() time.Time) (*SkillCanaryStartAdapter, error) {
@@ -104,7 +114,7 @@ func (a *SkillCanaryStartAdapter) Execute(ctx context.Context, job core.SkillJob
 		return SkillStageResult{}, canaryStageError(core.SkillFailureDependencyUnavailable, "canary_activation_unavailable", err)
 	}
 	if revision.State == core.SkillRevisionCanary && activation.CanaryRevisionID == revision.ID && activation.CanaryDigest == revision.BundleDigest && activation.PolicyDecisionID == decision.ID {
-		return canaryStartResult(activation), nil
+		return a.completeCanaryStart(ctx, activation, revision)
 	}
 	activation, err = a.service.Start(ctx, SkillCanaryStartInput{Workspace: job.Scope.WorkspaceID, Environment: job.Scope.Environment,
 		SkillID: decision.SkillID, CandidateRevisionID: revision.ID, PolicyDecisionID: decision.ID,
@@ -119,6 +129,16 @@ func (a *SkillCanaryStartAdapter) Execute(ctx context.Context, job core.SkillJob
 			class, code = core.SkillFailurePolicyBlock, "canary_approval_required"
 		}
 		return SkillStageResult{}, canaryStageError(class, code, err)
+	}
+	revision.State = core.SkillRevisionCanary
+	return a.completeCanaryStart(ctx, activation, revision)
+}
+
+func (a *SkillCanaryStartAdapter) completeCanaryStart(ctx context.Context, activation core.SkillActivation, revision core.SkillRevision) (SkillStageResult, error) {
+	if a.downstream != nil {
+		if _, err := a.downstream.Schedule(ctx, SkillCanaryDueRequest{Activation: activation, Revision: revision, WindowStarted: activation.UpdatedAt, Now: activation.UpdatedAt}); err != nil {
+			return SkillStageResult{}, canaryStageError(core.SkillFailureDependencyUnavailable, "canary_wakeup_unavailable", err)
+		}
 	}
 	return canaryStartResult(activation), nil
 }
@@ -180,7 +200,15 @@ func (s *SkillCanaryDueScheduler) Schedule(ctx context.Context, request SkillCan
 		if maximumAt.Before(next) {
 			next = maximumAt
 		}
-		return SkillCanaryDueResult{NextAt: next}, nil
+		signal, err := SkillLifecycleSignalForCanary(request.Activation, request.Revision, request.WindowStarted, next, s.configuration.Signal)
+		if err != nil {
+			return SkillCanaryDueResult{}, err
+		}
+		routed, err := s.router.Route(ctx, signal)
+		if err != nil {
+			return SkillCanaryDueResult{}, err
+		}
+		return SkillCanaryDueResult{NextAt: next, Route: routed}, nil
 	}
 	signal, err := SkillLifecycleSignalForCanary(request.Activation, request.Revision, request.WindowStarted, request.Now, s.configuration.Signal)
 	if err != nil {
@@ -229,6 +257,17 @@ type SkillCanaryAnalysisAdapter struct {
 	policy        skillPolicyDecider
 	configuration SkillCanaryStageConfiguration
 	now           func() time.Time
+	downstream    SkillLessonSignalRouter
+	due           *SkillCanaryDueScheduler
+}
+
+func (a *SkillCanaryAnalysisAdapter) WithDownstreamRouter(router SkillLessonSignalRouter) error {
+	scheduler, err := NewSkillCanaryDueScheduler(router, a.configuration)
+	if err != nil {
+		return err
+	}
+	a.downstream, a.due = router, scheduler
+	return nil
 }
 
 func NewSkillCanaryAnalysisAdapter(repository SkillCanaryAnalysisStageRepository, policy skillPolicyDecider, configuration SkillCanaryStageConfiguration, now func() time.Time) (*SkillCanaryAnalysisAdapter, error) {
@@ -291,6 +330,19 @@ func (a *SkillCanaryAnalysisAdapter) Execute(ctx context.Context, job core.Skill
 		MaximumCanaryAgeExceeded: now.Sub(windowStarted) >= a.configuration.MaximumWindowAge})
 	if err != nil {
 		return SkillStageResult{}, canaryStageError(core.SkillFailureDependencyUnavailable, "canary_policy_analysis_failed", err)
+	}
+	if a.downstream != nil && decision.Decision == core.SkillDecisionPromote {
+		signal, signalErr := SkillLifecycleSignalForPromotion(decision, a.configuration.Signal)
+		if signalErr != nil {
+			return SkillStageResult{}, canaryStageError(core.SkillFailurePermanentValidation, "promotion_signal_invalid", signalErr)
+		}
+		if _, routeErr := a.downstream.Route(ctx, signal); routeErr != nil {
+			return SkillStageResult{}, canaryStageError(core.SkillFailureDependencyUnavailable, "promotion_signal_unavailable", routeErr)
+		}
+	} else if a.due != nil && decision.Decision == core.SkillDecisionCanary {
+		if _, scheduleErr := a.due.Schedule(ctx, SkillCanaryDueRequest{Activation: activation, Revision: revision, WindowStarted: windowStarted, VerifiedSamples: candidate.VerifiedSamples, Now: now}); scheduleErr != nil {
+			return SkillStageResult{}, canaryStageError(core.SkillFailureDependencyUnavailable, "canary_recheck_unavailable", scheduleErr)
+		}
 	}
 	return SkillStageResult{ResultKind: core.SkillJobResultSucceeded, References: []core.SkillOrchestratorReference{{Kind: core.SkillReferencePolicyDecision, ID: decision.ID}}}, nil
 }

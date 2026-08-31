@@ -82,6 +82,12 @@ type SkillEvaluationAdapter struct {
 	readiness     SkillEvaluationExecutorReadiness
 	budget        SkillEvaluationBudget
 	configuration SkillEvaluationStageConfiguration
+	downstream    SkillLessonSignalRouter
+}
+
+func (a *SkillEvaluationAdapter) WithDownstreamRouter(router SkillLessonSignalRouter) *SkillEvaluationAdapter {
+	a.downstream = router
+	return a
 }
 
 func NewSkillEvaluationAdapter(repository SkillEvaluationStageRepository, runner RestrictedSkillEvaluationRunner, baselines SkillEvaluationBaselineResolver, readiness SkillEvaluationExecutorReadiness, budget SkillEvaluationBudget, configuration SkillEvaluationStageConfiguration, now func() time.Time) (*SkillEvaluationAdapter, error) {
@@ -143,7 +149,7 @@ func (a *SkillEvaluationAdapter) Execute(ctx context.Context, job core.SkillJob)
 		if replayErr != nil {
 			return SkillStageResult{}, replayErr
 		}
-		return evaluationStageResult(*replay), nil
+		return a.completeEvaluation(ctx, *replay)
 	}
 	if err := a.readiness.CheckSkillEvaluationExecutor(ctx, a.configuration.Evaluator, a.configuration.EvaluatorVersion, a.configuration.EnvironmentFingerprint); err != nil {
 		return SkillStageResult{}, evaluationStageError(core.SkillFailureDependencyUnavailable, "evaluation_executor_unready", err)
@@ -185,6 +191,19 @@ func (a *SkillEvaluationAdapter) Execute(ctx context.Context, job core.SkillJob)
 		return SkillStageResult{}, evaluationStageError(core.SkillFailureDependencyUnavailable, "evaluation_budget_commit_failed", err)
 	}
 	committed = true
+	return a.completeEvaluation(ctx, result)
+}
+
+func (a *SkillEvaluationAdapter) completeEvaluation(ctx context.Context, result SkillEvaluationResult) (SkillStageResult, error) {
+	if a.downstream != nil {
+		next, err := SkillLifecycleSignalForEvaluation(result.Candidate, result.Baseline, a.configuration.Signal)
+		if err != nil {
+			return SkillStageResult{}, evaluationStageError(core.SkillFailurePermanentValidation, "evaluation_signal_invalid", err)
+		}
+		if _, err := a.downstream.Route(ctx, next); err != nil {
+			return SkillStageResult{}, evaluationStageError(core.SkillFailureDependencyUnavailable, "evaluation_signal_unavailable", err)
+		}
+	}
 	return evaluationStageResult(result), nil
 }
 
@@ -254,6 +273,12 @@ type SkillPolicyDecisionAdapter struct {
 	repository    SkillPolicyStageRepository
 	engine        *SkillPolicyEngine
 	configuration SkillPolicyStageConfiguration
+	downstream    SkillLessonSignalRouter
+}
+
+func (a *SkillPolicyDecisionAdapter) WithDownstreamRouter(router SkillLessonSignalRouter) *SkillPolicyDecisionAdapter {
+	a.downstream = router
+	return a
 }
 
 func NewSkillPolicyDecisionAdapter(repository SkillPolicyStageRepository, configuration SkillPolicyStageConfiguration, now func() time.Time) (*SkillPolicyDecisionAdapter, error) {
@@ -326,7 +351,7 @@ func (a *SkillPolicyDecisionAdapter) Execute(ctx context.Context, job core.Skill
 		if !policyDecisionMatches(existing, candidate, baseline, a.configuration) {
 			return SkillStageResult{}, evaluationStageError(core.SkillFailurePermanentValidation, "policy_replay_mismatch", errors.New("stored policy decision does not match immutable inputs"))
 		}
-		return policyStageResult(existing), nil
+		return a.completePolicyDecision(ctx, existing)
 	}
 	decision, err := a.engine.Decide(ctx, SkillPolicyInput{DecisionID: decisionID, Workspace: job.Scope.WorkspaceID,
 		SkillID: candidate.SkillID, RevisionID: candidate.RevisionID, PolicyID: a.configuration.PolicyID,
@@ -334,9 +359,31 @@ func (a *SkillPolicyDecisionAdapter) Execute(ctx context.Context, job core.Skill
 		CanarySamples: a.configuration.CanarySamples})
 	if err != nil {
 		if existing, getErr := a.repository.GetSkillPolicyDecision(ctx, job.Scope.WorkspaceID, decisionID); getErr == nil && policyDecisionMatches(existing, candidate, baseline, a.configuration) {
-			return policyStageResult(existing), nil
+			return a.completePolicyDecision(ctx, existing)
 		}
 		return SkillStageResult{}, evaluationStageError(core.SkillFailureDependencyUnavailable, "policy_decision_failed", err)
+	}
+	return a.completePolicyDecision(ctx, decision)
+}
+
+func (a *SkillPolicyDecisionAdapter) completePolicyDecision(ctx context.Context, decision core.SkillPolicyDecision) (SkillStageResult, error) {
+	if a.downstream != nil {
+		var signal SkillLifecycleSignal
+		var err error
+		switch decision.Decision {
+		case core.SkillDecisionCanary, core.SkillDecisionApprovalRequired:
+			signal, err = SkillLifecycleSignalForDecision(decision, a.configuration.Signal)
+		case core.SkillDecisionPromote:
+			signal, err = SkillLifecycleSignalForPromotion(decision, a.configuration.Signal)
+		}
+		if err != nil {
+			return SkillStageResult{}, evaluationStageError(core.SkillFailurePermanentValidation, "policy_signal_invalid", err)
+		}
+		if signal.ID != "" {
+			if _, routeErr := a.downstream.Route(ctx, signal); routeErr != nil {
+				return SkillStageResult{}, evaluationStageError(core.SkillFailureDependencyUnavailable, "policy_signal_unavailable", routeErr)
+			}
+		}
 	}
 	return policyStageResult(decision), nil
 }

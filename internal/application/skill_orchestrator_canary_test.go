@@ -72,7 +72,7 @@ func TestSkillCanaryDueSchedulerBoundsLowTrafficAndDeduplicatesWakeups(t *testin
 		Materialization: core.SkillMaterializationReady, ActivatedBy: "controller", ActivatedAt: now, UpdatedAt: now}
 
 	insufficient, err := scheduler.Schedule(context.Background(), SkillCanaryDueRequest{Activation: activation, Revision: revision, WindowStarted: now, VerifiedSamples: 5, Now: now.Add(10 * time.Minute)})
-	if err != nil || insufficient.Due || insufficient.NextAt.IsZero() || router.calls != 0 {
+	if err != nil || insufficient.Due || insufficient.NextAt.IsZero() || !insufficient.Route.Created || router.calls != 1 {
 		t.Fatalf("insufficient schedule = %+v calls=%d err=%v", insufficient, router.calls, err)
 	}
 	maximum, err := scheduler.Schedule(context.Background(), SkillCanaryDueRequest{Activation: activation, Revision: revision, WindowStarted: now, VerifiedSamples: 5, Now: now.Add(time.Hour)})
@@ -80,7 +80,7 @@ func TestSkillCanaryDueSchedulerBoundsLowTrafficAndDeduplicatesWakeups(t *testin
 		t.Fatalf("maximum-age schedule = %+v, %v", maximum, err)
 	}
 	replay, err := scheduler.Schedule(context.Background(), SkillCanaryDueRequest{Activation: activation, Revision: revision, WindowStarted: now, VerifiedSamples: 5, Now: now.Add(time.Hour)})
-	if err != nil || replay.Route.Created || router.calls != 2 {
+	if err != nil || replay.Route.Created || router.calls != 3 {
 		t.Fatalf("duplicate wakeup = %+v calls=%d err=%v", replay, router.calls, err)
 	}
 	due, err := scheduler.Schedule(context.Background(), SkillCanaryDueRequest{Activation: activation, Revision: revision, WindowStarted: now, VerifiedSamples: 10, Now: now.Add(5 * time.Minute)})

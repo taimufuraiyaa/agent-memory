@@ -29,6 +29,8 @@ func TestSkillRevisionBuildAdapterBuildsImmutableDraftAndReplaysLease(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
+	downstream := &domainLoopRouter{seen: map[string]struct{}{}}
+	adapter.WithDownstreamRouter(downstream)
 	first, err := adapter.Execute(ctx, routed.Job)
 	if err != nil || first.ResultKind != core.SkillJobResultSucceeded || len(first.References) != 1 || first.References[0].Kind != core.SkillReferenceRevision {
 		t.Fatalf("first=%+v err=%v", first, err)
@@ -39,6 +41,9 @@ func TestSkillRevisionBuildAdapterBuildsImmutableDraftAndReplaysLease(t *testing
 	}
 	if author.last.MaximumFiles != core.MaxSkillBundleFiles || author.last.MaximumBytes != maxSkillDraftTotalBytes || author.last.RequiredRoot == "" {
 		t.Fatalf("unbounded author request %+v", author.last)
+	}
+	if !downstream.has(SkillSignalRevision) {
+		t.Fatal("build did not automatically route revision evaluation")
 	}
 	revision, err := store.GetSkillRevision(ctx, "ws", first.References[0].ID)
 	if err != nil || revision.CandidateID != candidate.ID || revision.State != core.SkillRevisionDraft {

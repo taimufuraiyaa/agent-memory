@@ -65,6 +65,12 @@ type SkillRevisionBuildAdapter struct {
 	author         SkillDraftAuthor
 	configuration  SkillSignalConfiguration
 	registeredRoot string
+	downstream     SkillLessonSignalRouter
+}
+
+func (a *SkillRevisionBuildAdapter) WithDownstreamRouter(router SkillLessonSignalRouter) *SkillRevisionBuildAdapter {
+	a.downstream = router
+	return a
 }
 
 func NewSkillRevisionBuildAdapter(repository SkillRevisionBuildAdapterRepository, bundles SkillRevisionBundleStore, author SkillDraftAuthor, configuration SkillSignalConfiguration, registeredRoot string) (*SkillRevisionBuildAdapter, error) {
@@ -123,6 +129,15 @@ func (a *SkillRevisionBuildAdapter) Execute(ctx context.Context, job core.SkillJ
 			class, code = core.SkillFailureSafetyRejection, "draft_safety_rejected"
 		}
 		return SkillStageResult{}, skillBuildStageError(class, code, err)
+	}
+	if a.downstream != nil {
+		next, signalErr := SkillLifecycleSignalForRevision(result.Revision, a.configuration)
+		if signalErr != nil {
+			return SkillStageResult{}, skillBuildStageError(core.SkillFailurePermanentValidation, "revision_signal_invalid", signalErr)
+		}
+		if _, routeErr := a.downstream.Route(ctx, next); routeErr != nil {
+			return SkillStageResult{}, skillBuildStageError(core.SkillFailureDependencyUnavailable, "revision_signal_unavailable", routeErr)
+		}
 	}
 	return SkillStageResult{ResultKind: core.SkillJobResultSucceeded, References: []core.SkillOrchestratorReference{{Kind: core.SkillReferenceRevision, ID: result.Revision.ID}}}, nil
 }

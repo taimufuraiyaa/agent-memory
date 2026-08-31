@@ -142,10 +142,10 @@
 
 ### Checkpoint C — Complete Domain Loop
 
-- [ ] Repeated verified work can reach canary without manual stage calls.
-- [ ] Automatic activation remains impossible without approved low-risk enablement.
-- [ ] Exact acknowledged execution evidence controls canary analysis.
-- [ ] Verified hard failures stop allocation and enqueue rollback ahead of ordinary work.
+- [x] Repeated verified work can reach canary without manual stage calls.
+- [x] Automatic activation remains impossible without approved low-risk enablement.
+- [x] Exact acknowledged execution evidence controls canary analysis.
+- [x] Verified hard failures stop allocation and enqueue rollback ahead of ordinary work.
 
 ## Phase 4 — Standalone and Hosted Runtimes
 
