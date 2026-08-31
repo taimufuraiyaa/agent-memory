@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/taimufuraiyaa/agent-memory/internal/contracts"
 	"github.com/taimufuraiyaa/agent-memory/internal/core"
 )
 
@@ -20,43 +21,11 @@ var (
 	ErrSkillOrchestratorGeneration = errors.New("skill orchestrator workflow generation is stale")
 )
 
-type SkillJobFinalization struct {
-	Scope                      core.SkillOrchestratorScope
-	JobID                      string
-	Owner                      string
-	Fence                      int64
-	ExpectedWorkflowGeneration int64
-	ResultKind                 core.SkillJobResultKind
-	ResultReferences           []core.SkillOrchestratorReference
-	FailureClass               core.SkillJobFailureClass
-	FailureCode                string
-	DeadLetter                 bool
-	Now                        time.Time
-}
+type SkillJobFinalization = contracts.SkillJobFinalization
+type SkillJobRetry = contracts.SkillJobRetry
+type SkillJobBlock = contracts.SkillJobBlock
 
-type SkillJobRetry struct {
-	Scope                      core.SkillOrchestratorScope
-	JobID                      string
-	Owner                      string
-	Fence                      int64
-	ExpectedWorkflowGeneration int64
-	FailureClass               core.SkillJobFailureClass
-	FailureCode                string
-	ReadyAt                    time.Time
-	Now                        time.Time
-}
-
-type SkillJobBlock struct {
-	Scope                      core.SkillOrchestratorScope
-	JobID                      string
-	Owner                      string
-	Fence                      int64
-	ExpectedWorkflowGeneration int64
-	FailureClass               core.SkillJobFailureClass
-	ReasonCode                 string
-	RecheckAt                  time.Time
-	Now                        time.Time
-}
+var _ contracts.SkillOrchestratorRepository = (*Store)(nil)
 
 func (s *Store) CreateSkillWorkflow(ctx context.Context, workflow core.SkillWorkflow) (core.SkillWorkflow, bool, error) {
 	if err := workflow.Validate(); err != nil {

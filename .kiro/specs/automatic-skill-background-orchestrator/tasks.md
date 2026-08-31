@@ -38,7 +38,7 @@
   - Files: hosted migration, RLS policy, migration tests.
   - Estimated scope: Medium.
 
-- [ ] **Task 5: Implement PostgreSQL workflow repository parity**
+- [x] **Task 5: Implement PostgreSQL workflow repository parity**
   - Acceptance: Hosted operations pass the shared repository contract and use skip-locked claim, owner/fence compare-and-swap, and tenant-scoped transactions.
   - Verify: shared parity fixtures plus concurrent claim, noisy tenant, lease takeover, stale worker, dead-letter, and timing-safe unknown-scope tests.
   - Dependencies: Tasks 3 and 4.
@@ -47,10 +47,10 @@
 
 ### Checkpoint A — Durable Queue Authority
 
-- [ ] SQLite and PostgreSQL satisfy one behavior contract.
-- [ ] Duplicate delivery and stale workers cannot duplicate job completion.
-- [ ] Hosted RLS and standalone workspace scope fail closed.
-- [ ] Schema upgrades preserve existing skill lifecycle state.
+- [x] SQLite and PostgreSQL satisfy one behavior contract.
+- [x] Duplicate delivery and stale workers cannot duplicate job completion.
+- [x] Hosted RLS and standalone workspace scope fail closed.
+- [x] Schema upgrades preserve existing skill lifecycle state.
 
 ## Phase 2 — Enqueue, Worker, and Recovery Engine
 

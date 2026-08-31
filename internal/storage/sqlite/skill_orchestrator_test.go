@@ -10,7 +10,13 @@ import (
 	"time"
 
 	"github.com/taimufuraiyaa/agent-memory/internal/core"
+	orchestratortest "github.com/taimufuraiyaa/agent-memory/internal/testkit/skillorchestrator"
 )
+
+func TestSQLiteSkillOrchestratorSharedRepositoryContract(t *testing.T) {
+	store := openSkillOrchestratorStore(t)
+	orchestratortest.RunRepositoryContract(t, store, core.SkillOrchestratorScope{WorkspaceID: "ws", Environment: "production"})
+}
 
 func TestSQLiteSkillOrchestratorCreateAndEnqueueAreIdempotent(t *testing.T) {
 	store := openSkillOrchestratorStore(t)
