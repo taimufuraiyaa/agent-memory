@@ -22,6 +22,25 @@ func TestPostgresSkillOrchestratorSharedRepositoryContract(t *testing.T) {
 	orchestratortest.RunRepositoryContract(t, repository, scope)
 }
 
+func TestPostgresSkillOrchestratorChaosCertification(t *testing.T) {
+	pool := openSkillOrchestratorPostgres(t)
+	scope := createSkillOrchestratorHostedScope(t, pool)
+	observations, err := orchestratortest.RunRepositoryChaosCertification(
+		context.Background(), NewSkillOrchestratorRepository(pool), scope, core.SkillChaosHosted,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(observations) != len(core.RequiredSkillChaosCaseIDs()) {
+		t.Fatalf("chaos observations = %d", len(observations))
+	}
+	for _, observation := range observations {
+		if !observation.Passed || !observation.Converged || observation.UnsafeActivations != 0 {
+			t.Fatalf("unsafe chaos observation: %+v", observation)
+		}
+	}
+}
+
 func TestPostgresSkillOrchestratorDependencyContract(t *testing.T) {
 	pool := openSkillOrchestratorPostgres(t)
 	scope := createSkillOrchestratorHostedScope(t, pool)

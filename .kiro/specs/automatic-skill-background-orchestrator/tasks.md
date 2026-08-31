@@ -260,7 +260,7 @@
   - Files: migration verifier, shadow executor, representative fixtures, operator documentation.
   - Estimated scope: Medium.
 
-- [ ] **Task 29: Add crash, lease, and recovery chaos certification**
+- [x] **Task 29: Add crash, lease, and recovery chaos certification**
   - Acceptance: Injected failure before/after every domain side effect, renewal loss, duplicate enqueue, stale fence, database outage, evaluator timeout, cancellation, and worker restart converges without unsafe activation.
   - Verify: deterministic chaos suite for standalone and hosted plus signed bounded report.
   - Dependencies: Tasks 11-20 and 28.

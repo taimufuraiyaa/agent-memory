@@ -18,6 +18,26 @@ func TestSQLiteSkillOrchestratorSharedRepositoryContract(t *testing.T) {
 	orchestratortest.RunRepositoryContract(t, store, core.SkillOrchestratorScope{WorkspaceID: "ws", Environment: "production"})
 }
 
+func TestSQLiteSkillOrchestratorChaosCertification(t *testing.T) {
+	store := openSkillOrchestratorStore(t)
+	observations, err := orchestratortest.RunRepositoryChaosCertification(
+		context.Background(), store,
+		core.SkillOrchestratorScope{WorkspaceID: "chaos-ws", Environment: "production"},
+		core.SkillChaosStandalone,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(observations) != len(core.RequiredSkillChaosCaseIDs()) {
+		t.Fatalf("chaos observations = %d", len(observations))
+	}
+	for _, observation := range observations {
+		if !observation.Passed || !observation.Converged || observation.UnsafeActivations != 0 {
+			t.Fatalf("unsafe chaos observation: %+v", observation)
+		}
+	}
+}
+
 func TestSQLiteSkillOrchestratorDependencyContract(t *testing.T) {
 	store := openSkillOrchestratorStore(t)
 	orchestratortest.RunDependencyContract(t, store, core.SkillOrchestratorScope{WorkspaceID: "ws", Environment: "production"})

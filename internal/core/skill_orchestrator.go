@@ -742,6 +742,45 @@ type SkillMigrationInventory struct {
 	Truncated            bool                          `json:"truncated"`
 }
 
+type SkillChaosRuntime string
+
+const (
+	SkillChaosStandalone SkillChaosRuntime = "standalone"
+	SkillChaosHosted     SkillChaosRuntime = "hosted"
+)
+
+type SkillChaosFaultPoint string
+
+const (
+	SkillChaosBeforeSideEffect SkillChaosFaultPoint = "before_side_effect"
+	SkillChaosAfterSideEffect  SkillChaosFaultPoint = "after_side_effect"
+)
+
+type SkillChaosObservation struct {
+	CaseID            string                 `json:"case_id"`
+	Runtime           SkillChaosRuntime      `json:"runtime"`
+	Stage             SkillOrchestratorStage `json:"stage,omitempty"`
+	FaultPoint        SkillChaosFaultPoint   `json:"fault_point,omitempty"`
+	Passed            bool                   `json:"passed"`
+	Converged         bool                   `json:"converged"`
+	DomainSideEffects int                    `json:"domain_side_effects"`
+	UnsafeActivations int                    `json:"unsafe_activations"`
+	DurationMillis    int64                  `json:"duration_millis"`
+}
+
+func RequiredSkillChaosCaseIDs() []string {
+	stages := []SkillOrchestratorStage{
+		SkillStageDetect, SkillStageBuild, SkillStageEvaluate, SkillStageDecide,
+		SkillStageStartCanary, SkillStageAnalyzeCanary, SkillStageActivate,
+		SkillStageObserveSafety, SkillStageRollback, SkillStageReconcileMaterialization,
+	}
+	result := make([]string, 0, len(stages)*2+7)
+	for _, stage := range stages {
+		result = append(result, "crash_before:"+string(stage), "crash_after:"+string(stage))
+	}
+	return append(result, "renewal_loss", "duplicate_enqueue", "stale_fence", "database_outage", "evaluator_timeout", "cancellation", "worker_restart")
+}
+
 func (t SkillOrchestratorAlertTargets) Validate() error {
 	if t.ReadyQueueStuckAfter < time.Second || t.ReadyQueueStuckAfter > 30*24*time.Hour || t.LeaseChurnWindow < time.Second || t.LeaseChurnWindow > 24*time.Hour || t.LeaseFailureCount < 1 || t.LeaseFailureCount > 1_000 || t.CanaryStaleAfter < time.Second || t.CanaryStaleAfter > 30*24*time.Hour || t.RollbackFailureAfter < time.Second || t.RollbackFailureAfter > 24*time.Hour {
 		return errors.New("skill orchestrator alert targets are missing or outside bounds")
