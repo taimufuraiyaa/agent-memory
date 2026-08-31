@@ -91,6 +91,30 @@ func TestSignSkillProductionReleaseEvidenceAndProductApproval(t *testing.T) {
 	}
 }
 
+func TestSkillOrchestratorConfigurationReceiptVerifiesExactSignedConfiguration(t *testing.T) {
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	configuration := newSkillConfigurationFixture(t, core.SkillOrchestratorShadow).change.Configuration
+	receipt, err := SignSkillOrchestratorConfigurationReceipt(SkillOrchestratorConfigurationReceipt{
+		Schema: SkillOrchestratorConfigurationReceiptSchemaV1, ReceiptID: "configuration-shadow-v1",
+		ReleaseID: "release-33", BuildDigest: digestFor("build"), MigrationDigest: digestFor("migration"),
+		Configuration: configuration, SignerID: "release-signer", SignedAt: configuration.CreatedAt.Add(time.Minute), SigningKeyID: "release-key",
+	}, privateKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := VerifySkillOrchestratorConfigurationReceipt(receipt, map[string]ed25519.PublicKey{"release-key": publicKey}); err != nil {
+		t.Fatal(err)
+	}
+	tampered := receipt
+	tampered.Configuration.Mode = core.SkillOrchestratorManual
+	if err := VerifySkillOrchestratorConfigurationReceipt(tampered, map[string]ed25519.PublicKey{"release-key": publicKey}); err == nil {
+		t.Fatal("tampered staged configuration receipt was accepted")
+	}
+}
+
 type skillReleaseFixture struct {
 	now             time.Time
 	config          SkillReleaseGateConfig
