@@ -65,7 +65,7 @@ spec:
     matchExpressions:
       - key: app.kubernetes.io/component
         operator: In
-        values: [api, worker, reconciler, graph-worker]
+        values: [api, worker, skill-worker, reconciler, graph-worker]
   policyTypes: [Ingress]
   ingress:
     - from:

@@ -16,6 +16,11 @@ for environment in staging production staging-graphrag production-graphrag; do
   grep -q 'readOnlyRootFilesystem: true' "$rendered"
   grep -q 'runAsNonRoot: true' "$rendered"
   grep -q 'automountServiceAccountToken: false' "$rendered"
+  grep -q 'name: agent-memory-skill-worker' "$rendered"
+  grep -q 'serviceAccountName: agent-memory-skill-worker' "$rendered"
+  grep -q 'AGENT_MEMORY_SKILL_WORKER_ENABLED' "$rendered"
+  grep -q 'AGENT_MEMORY_SKILL_RECONCILER_ENABLED' "$rendered"
+  grep -q 'terminationGracePeriodSeconds: 40' "$rendered"
 
   if awk '/^[[:space:]]+image:/{print $2}' "$rendered" | grep -Ev '@sha256:[a-f0-9]{64}$' | grep -q .; then
     echo "$environment contains a mutable image reference" >&2
@@ -29,6 +34,9 @@ for environment in staging production staging-graphrag production-graphrag; do
     echo "$environment exposes a workload directly" >&2
     exit 1
   fi
+  skill_replicas="$(awk '$0 == "kind: Deployment" { deployment=1 } deployment && $0 == "  name: agent-memory-skill-worker" { target=1 } target && /replicas:/ { print $2; exit }' "$rendered")"
+  [[ "$skill_replicas" == "0" ]]
+  grep -A8 'name: agent-memory-skill-worker' "$rendered" | grep -q 'automountServiceAccountToken: false'
   rm -f "$rendered"
   trap - EXIT
 done
@@ -44,7 +52,7 @@ for environment in staging production; do
 done
 
 accounts="$("$kubectl_cmd" kustomize "$base_dir/overlays/staging" | awk '/^kind: ServiceAccount$/{found=1} found && /^  name: agent-memory-/{print $2; found=0}')"
-for account in agent-memory-api agent-memory-worker agent-memory-reconciler agent-memory-migration agent-memory-graph-worker; do
+for account in agent-memory-api agent-memory-worker agent-memory-skill-worker agent-memory-reconciler agent-memory-migration agent-memory-graph-worker; do
   grep -qx "$account" <<<"$accounts"
 done
 

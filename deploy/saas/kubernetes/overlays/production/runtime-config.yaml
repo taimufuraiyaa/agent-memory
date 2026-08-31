@@ -20,3 +20,5 @@ data:
   AGENT_MEMORY_OIDC_ISSUER: https://replace-with-production-issuer.example
   AGENT_MEMORY_OIDC_AUDIENCE: agent-memory-production
   AGENT_MEMORY_SAAS_SHUTDOWN_TIMEOUT: 20s
+  AGENT_MEMORY_SKILL_WORKER_ENABLED: "false"
+  AGENT_MEMORY_SKILL_RECONCILER_ENABLED: "false"

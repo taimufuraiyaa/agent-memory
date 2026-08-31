@@ -209,6 +209,38 @@ services:
         condition: service_completed_successfully
       nats:
         condition: service_healthy
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs: [/tmp:size=512m,mode=1777]
+    stop_grace_period: 40s
+
+  skill-worker:
+    profiles: ["skill-orchestrator"]
+    build:
+      <<: *service-build
+      args:
+        SERVICE: agent-memory-skill-worker
+    environment:
+      AGENT_MEMORY_SKILL_WORKER_ENABLED: ${AGENT_MEMORY_SKILL_WORKER_ENABLED:-false}
+      AGENT_MEMORY_DATABASE_URL: ${AGENT_MEMORY_SKILL_WORKER_DATABASE_URL:-}
+      AGENT_MEMORY_SKILL_WORKER_DATABASE_ROLE: agent_memory_skill_worker
+      AGENT_MEMORY_SKILL_WORKER_ID: ${AGENT_MEMORY_SKILL_WORKER_ID:-compose-skill-worker}
+      AGENT_MEMORY_SKILL_WORKER_ASSIGNMENTS: ${AGENT_MEMORY_SKILL_WORKER_ASSIGNMENTS:-[]}
+      AGENT_MEMORY_TELEMETRY_LISTEN_ADDR: :9090
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs: [/tmp:size=512m,mode=1777]
+    stop_grace_period: 40s
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:9090/health/live"]
+      interval: 5s
+      timeout: 2s
+      retries: 6
 
   reconciler:
     build:
@@ -220,6 +252,10 @@ services:
       AGENT_MEMORY_SAAS_SERVICE: reconciler
       AGENT_MEMORY_OBJECT_ACCESS_KEY: agent-memory-reconciler
       AGENT_MEMORY_OBJECT_SECRET_KEY: reconciler-local-development-only
+      AGENT_MEMORY_SKILL_RECONCILER_ENABLED: ${AGENT_MEMORY_SKILL_RECONCILER_ENABLED:-false}
+      AGENT_MEMORY_SKILL_RECONCILER_DATABASE_URL: ${AGENT_MEMORY_SKILL_RECONCILER_DATABASE_URL:-}
+      AGENT_MEMORY_SKILL_RECONCILER_DATABASE_ROLE: agent_memory_skill_reconciler
+      AGENT_MEMORY_SKILL_RECONCILER_ASSIGNMENTS: ${AGENT_MEMORY_SKILL_RECONCILER_ASSIGNMENTS:-[]}
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -227,6 +263,11 @@ services:
         condition: service_healthy
       object-init:
         condition: service_completed_successfully
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs: [/tmp:size=256m,mode=1777]
+    stop_grace_period: 40s
 
   graph-worker:
     profiles: ["graphrag"]

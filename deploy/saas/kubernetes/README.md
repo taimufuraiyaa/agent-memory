@@ -36,6 +36,7 @@ secret values. Before a release, the platform must create these scoped secrets:
 |---|---|---|
 | `agent-memory-api-secrets` | API | PostgreSQL URL, object credentials/endpoint, export encryption key, secret reference, edge-country HMAC secret; production model endpoint/key; OIDC values may override the ConfigMap |
 | `agent-memory-worker-secrets` | Worker | PostgreSQL URL, object credentials/endpoints, queue URL, encryption keys, secret reference; production model endpoint/key |
+| `agent-memory-skill-worker-secrets` | Skill worker (default disabled) | `AGENT_MEMORY_DATABASE_URL` for the `agent_memory_skill_worker` role plus tenant/workspace assignments; no API, migration, or object-store credentials |
 | `agent-memory-reconciler-secrets` | Reconciler | PostgreSQL URL, object credentials/endpoint, and secret reference |
 | `agent-memory-migration-secrets` | Migration | PostgreSQL URL only |
 | `agent-memory-graph-worker-secrets` | Isolated graph worker | Queue credentials, graph-projection read credentials, graph-artifact staging write credentials, approved indexing-model credentials/endpoints; **no PostgreSQL URL or canonical database credential** |
@@ -49,11 +50,26 @@ policy allows DNS, HTTPS model access, NATS, and object storage; it deliberately
 has no PostgreSQL egress. API, general worker, reconciler, and migration secrets
 must never be reused by the graph worker.
 
+Automatic skill execution is also disabled in every base overlay. The isolated
+`agent-memory-skill-worker` Deployment has zero replicas and its feature flag is
+false. The existing reconciler's skill partition loop is false as well. An
+approved rollout must supply separate `agent_memory_skill_worker` and
+`agent_memory_skill_reconciler` PostgreSQL credentials, bounded JSON
+tenant/workspace assignments, set the corresponding feature flags, and then
+scale only the skill-worker Deployment. Migration `0035_skill_runtime_roles`
+creates passwordless, non-superuser, non-`BYPASSRLS` roles; the platform secret
+controller provisions authentication outside Git.
+
 The self-managed Compose topology follows the same boundary through the
 optional `graphrag` profile. Its graph worker receives queue/object/model
 settings only and no `AGENT_MEMORY_POSTGRES_URL`. Enable it with
 `docker compose --profile graphrag config` after supplying the certified
 `AGENT_MEMORY_GRAPHRAG_IMAGE` digest.
+
+The optional Compose `skill-orchestrator` profile follows the same default-off
+boundary. Supply the two database URLs and assignments through the environment;
+the Compose file contains no skill-runtime password. Keeping the flags false is
+safe even if the profile is rendered.
 
 Internal secret synchronization and workload-identity bindings must grant each
 service only its contract. Never commit `Secret`, `data`, or `stringData`

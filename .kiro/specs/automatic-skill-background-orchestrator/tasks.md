@@ -170,7 +170,7 @@
   - Files: reconciler integration, hosted sweep adapter, focused tests.
   - Estimated scope: Medium.
 
-- [ ] **Task 20: Add deployment and least-privilege manifests**
+- [x] **Task 20: Add deployment and least-privilege manifests**
   - Acceptance: Local Compose and Kubernetes define worker/reconciler identities, resources, shutdown grace, probes, network policy, database permissions, and default-disabled configuration without new secrets in source.
   - Verify: Compose profiles, Kubernetes schema/policy checks, service-account capability tests, secret inventory, rollout/rollback rendering, and non-root image checks.
   - Dependencies: Tasks 18 and 19.

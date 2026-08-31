@@ -112,7 +112,7 @@ func (r *partitionReconciler) RunOnce(context.Context) (application.SkillReconci
 }
 
 func reconcilerTestConfig() RuntimeConfig {
-	return RuntimeConfig{Enabled: true, Owner: "reconciler-a", PartitionLimit: 4, LeaseDuration: time.Minute, PollInterval: time.Second,
+	return RuntimeConfig{Enabled: true, DatabaseURL: "postgres://skill-reconciler@example.test/agent-memory", DatabaseRole: DatabaseRole, Owner: "reconciler-a", PartitionLimit: 4, LeaseDuration: time.Minute, PollInterval: time.Second,
 		Assignments: []core.SkillOrchestratorScope{{TenantID: "tenant-a", WorkspaceID: "workspace-a", Environment: "production"},
 			{TenantID: "tenant-b", WorkspaceID: "workspace-b", Environment: "production"},
 			{TenantID: "tenant-c", WorkspaceID: "workspace-c", Environment: "production"},

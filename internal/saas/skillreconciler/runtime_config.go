@@ -16,7 +16,8 @@ func LoadRuntimeConfig() (RuntimeConfig, error) {
 		return RuntimeConfig{}, errors.New("AGENT_MEMORY_SKILL_RECONCILER_ENABLED must be true or false")
 	}
 	configuration := RuntimeConfig{
-		Enabled: enabled, Owner: envSkillReconciler("AGENT_MEMORY_SKILL_RECONCILER_ID", "skill-reconciler"),
+		Enabled: enabled, DatabaseURL: strings.TrimSpace(os.Getenv("AGENT_MEMORY_SKILL_RECONCILER_DATABASE_URL")),
+		DatabaseRole: envSkillReconciler("AGENT_MEMORY_SKILL_RECONCILER_DATABASE_ROLE", DatabaseRole), Owner: envSkillReconciler("AGENT_MEMORY_SKILL_RECONCILER_ID", "skill-reconciler"),
 		PartitionLimit: 32, LeaseDuration: 2 * time.Minute, PollInterval: 30 * time.Second,
 	}
 	if raw := strings.TrimSpace(os.Getenv("AGENT_MEMORY_SKILL_RECONCILER_ASSIGNMENTS")); raw != "" {

@@ -26,7 +26,7 @@ type hostedSkillReconcilerRuntime interface {
 	Run(context.Context)
 }
 
-var buildHostedSkillReconcilerRuntime = func(context.Context, *saaspostgres.SkillOrchestratorRepository, skillreconciler.RuntimeConfig) (hostedSkillReconcilerRuntime, error) {
+var buildHostedSkillReconcilerRuntime = func(context.Context, skillreconciler.RuntimeConfig) (hostedSkillReconcilerRuntime, error) {
 	return nil, errors.New("hosted skill reconciliation domains are not linked into this process")
 }
 
@@ -59,7 +59,7 @@ func run(cfg config.Config) error {
 		return fmt.Errorf("load skill reconciler configuration: %w", err)
 	}
 	if skillConfiguration.Enabled {
-		skillRuntime, buildErr := buildHostedSkillReconcilerRuntime(ctx, saaspostgres.NewSkillOrchestratorRepository(pool), skillConfiguration)
+		skillRuntime, buildErr := buildHostedSkillReconcilerRuntime(ctx, skillConfiguration)
 		if buildErr != nil {
 			return fmt.Errorf("build skill reconciler: %w", buildErr)
 		}

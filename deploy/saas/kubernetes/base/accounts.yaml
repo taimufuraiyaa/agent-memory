@@ -13,6 +13,12 @@ automountServiceAccountToken: false
 apiVersion: v1
 kind: ServiceAccount
 metadata:
+  name: agent-memory-skill-worker
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
   name: agent-memory-reconciler
 automountServiceAccountToken: false
 ---

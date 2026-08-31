@@ -13,6 +13,7 @@ func TestRuntimeConfigIsDisabledByDefault(t *testing.T) {
 
 func TestRuntimeConfigRequiresBoundedUniqueAssignmentsWhenEnabled(t *testing.T) {
 	t.Setenv("AGENT_MEMORY_SKILL_RECONCILER_ENABLED", "true")
+	t.Setenv("AGENT_MEMORY_SKILL_RECONCILER_DATABASE_URL", "postgres://skill-reconciler@example.test/agent-memory")
 	t.Setenv("AGENT_MEMORY_SKILL_RECONCILER_ASSIGNMENTS", `[{"tenant_id":"tenant-a","workspace_id":"workspace-a","environment":"production"}]`)
 	t.Setenv("AGENT_MEMORY_SKILL_RECONCILER_PARTITION_LIMIT", "1")
 	configuration, err := LoadRuntimeConfig()

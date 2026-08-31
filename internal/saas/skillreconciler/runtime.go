@@ -3,6 +3,7 @@ package skillreconciler
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"time"
 
@@ -10,6 +11,8 @@ import (
 	"github.com/taimufuraiyaa/agent-memory/internal/core"
 	saaspostgres "github.com/taimufuraiyaa/agent-memory/internal/saas/postgres"
 )
+
+const DatabaseRole = "agent_memory_skill_reconciler"
 
 type PartitionRepository interface {
 	ClaimSkillReconciliationPartition(context.Context, core.SkillOrchestratorScope, string, time.Duration, time.Time) (saaspostgres.SkillReconciliationPartitionLease, bool, error)
@@ -26,6 +29,8 @@ type ReconcilerFactory interface {
 
 type RuntimeConfig struct {
 	Enabled        bool
+	DatabaseURL    string
+	DatabaseRole   string
 	Owner          string
 	Assignments    []core.SkillOrchestratorScope
 	PartitionLimit int
@@ -37,7 +42,7 @@ func (c RuntimeConfig) Validate() error {
 	if !c.Enabled {
 		return nil
 	}
-	if c.Owner == "" || len(c.Assignments) == 0 || len(c.Assignments) > 10_000 || c.PartitionLimit < 1 || c.PartitionLimit > 1_000 || c.LeaseDuration < time.Second || c.LeaseDuration > time.Hour || c.PollInterval < 10*time.Millisecond || c.PollInterval > time.Hour {
+	if strings.TrimSpace(c.DatabaseURL) == "" || c.DatabaseRole != DatabaseRole || c.Owner == "" || len(c.Assignments) == 0 || len(c.Assignments) > 10_000 || c.PartitionLimit < 1 || c.PartitionLimit > 1_000 || c.LeaseDuration < time.Second || c.LeaseDuration > time.Hour || c.PollInterval < 10*time.Millisecond || c.PollInterval > time.Hour {
 		return errors.New("hosted skill reconciler configuration is invalid")
 	}
 	seen := make(map[core.SkillOrchestratorScope]struct{}, len(c.Assignments))

@@ -278,6 +278,43 @@ func TestSkillReconciliationPartitionMigrationIsScopedBoundedAndReversible(t *te
 	}
 }
 
+func TestSkillRuntimeRoleMigrationIsLeastPrivilegeAndReversible(t *testing.T) {
+	t.Parallel()
+	migrations := mustMigrations(t)
+	var roles *Migration
+	for index := range migrations {
+		if migrations[index].Version == "0035_skill_runtime_roles" {
+			roles = &migrations[index]
+			break
+		}
+	}
+	if roles == nil {
+		t.Fatal("skill runtime role migration is missing")
+	}
+	for _, required := range []string{
+		"CREATE ROLE agent_memory_skill_worker LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS",
+		"CREATE ROLE agent_memory_skill_reconciler LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS",
+		"GRANT SELECT, INSERT, UPDATE ON",
+		"saas_skill_orchestrator_reconciliation_partitions",
+		"GRANT SELECT ON saas_skill_orchestrator_configurations TO agent_memory_skill_worker",
+	} {
+		if !strings.Contains(roles.Up, required) {
+			t.Errorf("skill runtime role migration missing %q", required)
+		}
+	}
+	for _, forbidden := range []string{"SUPERUSER", "BYPASSRLS", "GRANT DELETE", "GRANT ALL"} {
+		if forbidden == "SUPERUSER" || forbidden == "BYPASSRLS" {
+			continue
+		}
+		if strings.Contains(roles.Up, forbidden) {
+			t.Errorf("skill runtime role migration contains overbroad capability %q", forbidden)
+		}
+	}
+	if !strings.Contains(roles.Down, "DROP ROLE IF EXISTS agent_memory_skill_worker") || !strings.Contains(roles.Down, "DROP ROLE IF EXISTS agent_memory_skill_reconciler") {
+		t.Fatal("skill runtime role rollback is incomplete")
+	}
+}
+
 func TestApplyRollbackAndTenantRLS(t *testing.T) {
 	connectionURL := strings.TrimSpace(os.Getenv("AGENT_MEMORY_TEST_POSTGRES_URL"))
 	if connectionURL == "" {
@@ -371,6 +408,53 @@ func TestApplyRollbackAndTenantRLS(t *testing.T) {
 	}
 	if err := Apply(ctx, pool); err != nil {
 		t.Fatalf("re-apply after rollback error = %v", err)
+	}
+}
+
+func TestSkillRuntimeDatabaseRolesHaveOnlyDeclaredCapabilities(t *testing.T) {
+	connectionURL := strings.TrimSpace(os.Getenv("AGENT_MEMORY_TEST_POSTGRES_URL"))
+	if connectionURL == "" {
+		t.Skip("AGENT_MEMORY_TEST_POSTGRES_URL is not configured")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	pool, err := Open(ctx, connectionURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pool.Close()
+	if err := Apply(ctx, pool); err != nil {
+		t.Fatal(err)
+	}
+	for _, role := range []string{"agent_memory_skill_worker", "agent_memory_skill_reconciler"} {
+		var superuser, createDB, createRole, bypassRLS bool
+		if err := pool.QueryRow(ctx, `SELECT rolsuper,rolcreatedb,rolcreaterole,rolbypassrls FROM pg_roles WHERE rolname=$1`, role).Scan(&superuser, &createDB, &createRole, &bypassRLS); err != nil {
+			t.Fatal(err)
+		}
+		if superuser || createDB || createRole || bypassRLS {
+			t.Fatalf("role %s has administrative capability", role)
+		}
+		var canSelect, canUpdate, canDelete bool
+		if err := pool.QueryRow(ctx, `SELECT has_table_privilege($1,'saas_skill_orchestrator_jobs','SELECT'),has_table_privilege($1,'saas_skill_orchestrator_jobs','UPDATE'),has_table_privilege($1,'saas_skill_orchestrator_jobs','DELETE')`, role).Scan(&canSelect, &canUpdate, &canDelete); err != nil {
+			t.Fatal(err)
+		}
+		if !canSelect || !canUpdate || canDelete {
+			t.Fatalf("role %s jobs capabilities select=%v update=%v delete=%v", role, canSelect, canUpdate, canDelete)
+		}
+	}
+	var workerCanPartition, reconcilerCanPartition bool
+	if err := pool.QueryRow(ctx, `SELECT has_table_privilege('agent_memory_skill_worker','saas_skill_orchestrator_reconciliation_partitions','SELECT'),has_table_privilege('agent_memory_skill_reconciler','saas_skill_orchestrator_reconciliation_partitions','UPDATE')`).Scan(&workerCanPartition, &reconcilerCanPartition); err != nil {
+		t.Fatal(err)
+	}
+	if workerCanPartition || !reconcilerCanPartition {
+		t.Fatalf("partition capability worker=%v reconciler=%v", workerCanPartition, reconcilerCanPartition)
+	}
+	var workerCanReadMemories, workerCanRunMigrations bool
+	if err := pool.QueryRow(ctx, `SELECT has_table_privilege('agent_memory_skill_worker','saas_memories','SELECT'),has_table_privilege('agent_memory_skill_worker','saas_schema_migrations','UPDATE')`).Scan(&workerCanReadMemories, &workerCanRunMigrations); err != nil {
+		t.Fatal(err)
+	}
+	if workerCanReadMemories || workerCanRunMigrations {
+		t.Fatalf("skill worker overlaps API or migration privilege memories=%v migrations=%v", workerCanReadMemories, workerCanRunMigrations)
 	}
 }
 
