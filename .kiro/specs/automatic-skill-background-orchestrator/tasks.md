@@ -179,10 +179,10 @@
 
 ### Checkpoint D — Operable Runtime Parity
 
-- [ ] Standalone and hosted execute identical workflow fixtures.
-- [ ] Horizontal hosted scaling and standalone restart preserve one logical outcome.
-- [ ] Worker, API, and reconciler privileges are separated.
-- [ ] All automation is disabled in default shipped configuration.
+- [x] Standalone and hosted execute identical workflow fixtures.
+- [x] Horizontal hosted scaling and standalone restart preserve one logical outcome.
+- [x] Worker, API, and reconciler privileges are separated.
+- [x] All automation is disabled in default shipped configuration.
 
 ## Phase 5 — Control Surfaces and Product Visibility
 
