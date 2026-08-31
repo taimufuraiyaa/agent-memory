@@ -193,7 +193,7 @@
   - Files: CLI commands, local HTTP handler, request/response contracts, focused tests.
   - Estimated scope: Medium.
 
-- [ ] **Task 22: Add expanded MCP and registered-project hosted parity**
+- [x] **Task 22: Add expanded MCP and registered-project hosted parity**
   - Acceptance: Expanded MCP and local-owner hosted adapters expose equivalent orchestration status/controls; legacy profiles and managed-hosted unavailable states remain unchanged.
   - Verify: MCP snapshots, two-workspace authorization, two-tenant isolation, path injection, idempotency, pagination, and capability-discovery tests.
   - Dependencies: Task 21.

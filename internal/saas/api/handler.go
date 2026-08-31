@@ -187,6 +187,10 @@ func NewHandler(deps Dependencies) (http.Handler, error) {
 			protected.Handle("GET /v1/local-project-skills/lifecycle", localProjectOwnerBoundary(deps.LocalOwner, "memory:read", localProjectSkillLifecycle(skills)))
 			protected.Handle("POST /v1/local-project-skills/lifecycle", localProjectOwnerBoundary(deps.LocalOwner, "memory:write", localProjectSkillLifecycle(skills)))
 		}
+		if orchestration, ok := deps.LocalProjects.(LocalProjectSkillOrchestrationService); ok {
+			protected.Handle("GET /v1/local-project-skills/orchestration/status", localProjectOwnerBoundary(deps.LocalOwner, "memory:read", localProjectSkillOrchestrationStatus(orchestration)))
+			protected.Handle("POST /v1/local-project-skills/orchestration/control", localProjectOwnerBoundary(deps.LocalOwner, "memory:write", localProjectSkillOrchestrationControl(orchestration)))
+		}
 		if clients, ok := deps.LocalProjects.(LocalClientProfileService); ok {
 			protected.Handle("GET /v1/local-client-profiles", localProjectBoundary("memory:read", localClientProfiles(clients)))
 			protected.Handle("POST /v1/local-client-profiles", localProjectBoundary("memory:write", localClientProfiles(clients)))

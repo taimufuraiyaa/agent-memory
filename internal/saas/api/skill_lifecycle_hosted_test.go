@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/taimufuraiyaa/agent-memory/internal/application"
 	"github.com/taimufuraiyaa/agent-memory/internal/core"
 	"github.com/taimufuraiyaa/agent-memory/internal/saas/auth"
 	"github.com/taimufuraiyaa/agent-memory/internal/saas/control"
@@ -72,11 +73,79 @@ func TestHostedSkillLifecycleListsAndInspectsBoundedRegistryState(t *testing.T) 
 	}
 }
 
+func TestHostedSkillOrchestrationBindsOwnerScopeAndPagination(t *testing.T) {
+	fixture := &hostedSkillOrchestrationFixture{}
+	owner := hostedOwnerFixture{status: control.LocalOwnerStatus{State: "authenticated", Account: control.PersonalAccount{TenantID: "tenant-1", AccountID: "account-1"}}}
+	handler := localProjectOwnerBoundary(owner, "memory:read", localProjectSkillOrchestrationStatus(fixture))
+	request := httptest.NewRequest(http.MethodGet, "/v1/local-project-skills/orchestration/status?workspace=agent-memory&environment=staging&workflow_id=workflow-1&job_cursor=job-8&event_cursor=17&limit=25", nil)
+	request = request.WithContext(auth.WithRequestContext(request.Context(), hostedSkillCaller("tenant-1", "account-1", "memory:read")))
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK || fixture.statusInput.Actor != "subject-1" || fixture.statusInput.TenantID != "tenant-1" || fixture.statusInput.JobCursor != "job-8" || fixture.statusInput.EventCursor != "17" || fixture.statusInput.Limit != 25 {
+		t.Fatalf("orchestration status scope was not bound: status=%d input=%+v body=%s", recorder.Code, fixture.statusInput, recorder.Body.String())
+	}
+
+	fixture.called = false
+	request = httptest.NewRequest(http.MethodGet, "/v1/local-project-skills/orchestration/status?workspace=agent-memory&workflow_id=workflow-1", nil)
+	request = request.WithContext(auth.WithRequestContext(request.Context(), hostedSkillCaller("tenant-2", "account-2", "memory:read")))
+	recorder = httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusForbidden || fixture.called {
+		t.Fatalf("cross-tenant orchestration status reached service: status=%d called=%v", recorder.Code, fixture.called)
+	}
+}
+
+func TestHostedSkillOrchestrationControlsAreBoundedAndContentFree(t *testing.T) {
+	fixture := &hostedSkillOrchestrationFixture{}
+	owner := hostedOwnerFixture{status: control.LocalOwnerStatus{State: "authenticated", Account: control.PersonalAccount{TenantID: "tenant-1", AccountID: "account-1"}}}
+	handler := localProjectOwnerBoundary(owner, "memory:write", localProjectSkillOrchestrationControl(fixture))
+	request := httptest.NewRequest(http.MethodPost, "/v1/local-project-skills/orchestration/control", strings.NewReader(`{"workspace":"agent-memory","environment":"staging","action":"replay","job_id":"job-3","reason_code":"operator_retry","idempotency_key":"replay-1"}`))
+	request = request.WithContext(auth.WithRequestContext(request.Context(), hostedSkillCaller("tenant-1", "account-1", "memory:write")))
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK || fixture.controlInput.Actor != "subject-1" || fixture.controlInput.JobID != "job-3" || fixture.controlInput.IdempotencyKey != "replay-1" {
+		t.Fatalf("orchestration control scope was not bound: status=%d input=%+v body=%s", recorder.Code, fixture.controlInput, recorder.Body.String())
+	}
+
+	for _, body := range []string{
+		`{"workspace":"../escape","action":"drain"}`,
+		`{"workspace":"agent-memory","action":"pause","workflow_id":"../../escape"}`,
+		`{"workspace":"agent-memory","action":"replay","job_id":"job-1"}`,
+	} {
+		fixture.called = false
+		request = httptest.NewRequest(http.MethodPost, "/v1/local-project-skills/orchestration/control", strings.NewReader(body))
+		request = request.WithContext(auth.WithRequestContext(request.Context(), hostedSkillCaller("tenant-1", "account-1", "memory:write")))
+		recorder = httptest.NewRecorder()
+		handler.ServeHTTP(recorder, request)
+		if recorder.Code != http.StatusBadRequest || fixture.called || strings.Contains(recorder.Body.String(), "../../escape") {
+			t.Fatalf("unsafe orchestration input reached service: status=%d called=%v body=%s", recorder.Code, fixture.called, recorder.Body.String())
+		}
+	}
+}
+
 type hostedSkillLifecycleFixture struct {
 	input  LocalProjectSkillLifecycleInput
 	called bool
 	err    error
 	skills []core.LogicalSkill
+}
+
+type hostedSkillOrchestrationFixture struct {
+	statusInput  LocalProjectSkillOrchestrationStatusInput
+	controlInput LocalProjectSkillOrchestrationControlInput
+	called       bool
+}
+
+func (f *hostedSkillOrchestrationFixture) StatusSkillOrchestration(_ context.Context, input LocalProjectSkillOrchestrationStatusInput) (application.SkillOrchestrationStatus, error) {
+	f.called = true
+	f.statusInput = input
+	return application.SkillOrchestrationStatus{Workflow: core.SkillWorkflow{ID: input.WorkflowID, Scope: core.SkillOrchestratorScope{WorkspaceID: input.Workspace, Environment: input.Environment}}}, nil
+}
+
+func (f *hostedSkillOrchestrationFixture) ControlSkillOrchestration(_ context.Context, input LocalProjectSkillOrchestrationControlInput) (any, error) {
+	f.called = true
+	f.controlInput = input
+	return map[string]any{"accepted": true}, nil
 }
 
 func (f *hostedSkillLifecycleFixture) ListSkillLifecycle(context.Context, string) ([]core.LogicalSkill, error) {

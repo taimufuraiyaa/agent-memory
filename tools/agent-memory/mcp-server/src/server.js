@@ -188,6 +188,16 @@ const allTools = [
   tool("skill_review", "Run an authorized evaluation, approval, canary, promotion, disable, pin, or rollback operation", {
     workspace: { type: "string" }, actor: { type: "string" }, operation: { type: "string", enum: ["evaluate", "approve", "canary", "promote", "disable", "pin", "rollback"] }, payload: { type: "object" },
   }, ["actor", "operation", "payload"]),
+  tool("skill_orchestration_status", "Inspect one skill workflow with bounded job and event pages", {
+    workspace: { type: "string" }, actor: { type: "string" }, workflow_id: { type: "string" }, environment: { type: "string" },
+    job_cursor: { type: "string", maxLength: 2048 }, event_cursor: { type: "string", maxLength: 2048 }, limit: { type: "integer", minimum: 1, maximum: 200 },
+  }, ["actor", "workflow_id"]),
+  tool("skill_orchestration_control", "Pause, resume, cancel, reconcile, retry, replay, or drain skill orchestration work", {
+    workspace: { type: "string" }, environment: { type: "string" }, actor: { type: "string" },
+    action: { type: "string", enum: ["pause", "resume", "cancel", "reconcile", "retry", "replay", "drain"] },
+    workflow_id: { type: "string" }, job_id: { type: "string" }, expected_generation: { type: "integer", minimum: 0 },
+    reason_code: { type: "string" }, idempotency_key: { type: "string" }, limit: { type: "integer", minimum: 1, maximum: 200 },
+  }, ["actor", "action"]),
 ];
 const defaultToolNames = new Set([
   "memory_write",
@@ -424,13 +434,41 @@ async function callTool(name, args) {
     case "skill_review":
       requireLocalSolutionTool();
       return requestService("/api/v1/skills/lifecycle", { body: { operation: args.operation, workspace: args.workspace, actor: args.actor, payload: args.payload } });
+    case "skill_orchestration_status": {
+      requireLocalSkillOrchestrationTool();
+      const query = new URLSearchParams();
+      for (const key of ["workspace", "actor", "workflow_id", "environment", "job_cursor", "event_cursor", "limit"]) {
+        if (args[key] !== undefined && args[key] !== "") query.set(key, String(args[key]));
+      }
+      return requestService(`/api/v1/skills/orchestration/status?${query}`, { method: "GET" });
+    }
+    case "skill_orchestration_control":
+      requireLocalSkillOrchestrationTool();
+      validateSkillOrchestrationControl(args);
+      return requestService("/api/v1/skills/orchestration/control", { body: args });
     default:
       throw new Error(`tool execution is not available for ${name}`);
   }
 }
 
+function validateSkillOrchestrationControl(args) {
+  if (new Set(["pause", "resume", "reconcile"]).has(args.action) && !args.workflow_id) {
+    throw new Error(`workflow_id is required for ${args.action}`);
+  }
+  if (new Set(["cancel", "retry", "replay"]).has(args.action) && !args.job_id) {
+    throw new Error(`job_id is required for ${args.action}`);
+  }
+  if (args.action === "replay" && (!args.reason_code || !args.idempotency_key)) {
+    throw new Error("reason_code and idempotency_key are required for replay");
+  }
+}
+
 function requireLocalSolutionTool() {
   if (serviceMode === "hosted") throw new Error("solution continuation tools are available only in local mode");
+}
+
+function requireLocalSkillOrchestrationTool() {
+  if (serviceMode === "hosted") throw new Error("skill orchestration tools are available only in local mode");
 }
 
 async function dispatch(message) {

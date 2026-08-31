@@ -97,6 +97,8 @@ test("lists operational tools only in the expanded profile", async (t) => {
 	"skill_acknowledge",
 	"skill_complete",
 	"skill_review",
+	"skill_orchestration_status",
+	"skill_orchestration_control",
   ]);
 });
 
@@ -201,6 +203,32 @@ test("proxies expanded skill lifecycle through the standalone contract", async (
   assert.deepEqual(requests[6].body.payload, { id: "approval-1" });
 });
 
+test("proxies expanded skill orchestration with bounded pagination and idempotency", async (t) => {
+  const requests = [];
+  const server = http.createServer((request, response) => {
+    let body = ""; request.on("data", (chunk) => { body += chunk; }); request.on("end", () => {
+      requests.push({ method: request.method, url: request.url, body: body ? JSON.parse(body) : null });
+      response.writeHead(200, { "content-type": "application/json" }); response.end(JSON.stringify({ ok: true, data: {} }));
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve)); t.after(() => server.close());
+  const child = startServer({ AGENT_MEMORY_MCP_PROFILE: "expanded", AGENT_MEMORY_URL: `http://127.0.0.1:${server.address().port}` }); t.after(() => child.kill());
+
+  child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 68, method: "tools/call", params: { name: "skill_orchestration_status", arguments: {
+    workspace: "ws", actor: "operator", workflow_id: "workflow-1", environment: "staging", job_cursor: "job-9", event_cursor: "17", limit: 25,
+  } } })}\n`);
+  await readMessage(child);
+  child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 69, method: "tools/call", params: { name: "skill_orchestration_control", arguments: {
+    workspace: "ws", actor: "operator", action: "replay", job_id: "job-3", environment: "staging", reason_code: "operator_retry", idempotency_key: "replay-1",
+  } } })}\n`);
+  await readMessage(child);
+
+  assert.deepEqual(requests, [
+    { method: "GET", url: "/api/v1/skills/orchestration/status?workspace=ws&actor=operator&workflow_id=workflow-1&environment=staging&job_cursor=job-9&event_cursor=17&limit=25", body: null },
+    { method: "POST", url: "/api/v1/skills/orchestration/control", body: { workspace: "ws", actor: "operator", action: "replay", job_id: "job-3", environment: "staging", reason_code: "operator_retry", idempotency_key: "replay-1" } },
+  ]);
+});
+
 test("rejects calls to tools hidden from the default profile", async (t) => {
   const child = startServer();
   t.after(() => child.kill());
@@ -210,6 +238,24 @@ test("rejects calls to tools hidden from the default profile", async (t) => {
 
   assert.equal(response.result.isError, true);
   assert.match(response.result.content[0].text, /unknown tool: memory_health/);
+});
+
+test("keeps orchestration controls unavailable in managed hosted compatibility mode", async (t) => {
+  const child = startServer({
+    AGENT_MEMORY_MCP_PROFILE: "expanded",
+    AGENT_MEMORY_MODE: "hosted",
+    AGENT_MEMORY_API_URL: "http://127.0.0.1:1",
+    AGENT_MEMORY_TOKEN: "hosted-secret",
+    AGENT_MEMORY_TENANT_ID: "tenant-1",
+  });
+  t.after(() => child.kill());
+  child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 70, method: "tools/call", params: { name: "skill_orchestration_status", arguments: { actor: "operator", workflow_id: "workflow-1" } } })}\n`);
+
+  const response = await readMessage(child);
+
+  assert.equal(response.result.isError, true);
+  assert.match(response.result.content[0].text, /available only in local mode/);
+  assert.doesNotMatch(response.result.content[0].text, /ECONNREFUSED/);
 });
 
 test("fails closed for an unsupported tool profile", async () => {
@@ -246,7 +292,7 @@ test("resolves distinct persisted profiles by client id before listing tools", a
 
   const [codexResponse, claudeResponse] = await Promise.all([readMessage(codex), readMessage(claude)]);
 	assert.equal(codexResponse.result.tools.length, 13);
-	assert.equal(claudeResponse.result.tools.length, 25);
+	assert.equal(claudeResponse.result.tools.length, 27);
   assert.ok(claudeResponse.result.tools.some((tool) => tool.name === "memory_sessions"));
   assert.ok(claudeResponse.result.tools.some((tool) => tool.name === "solution_checkpoint"));
 });

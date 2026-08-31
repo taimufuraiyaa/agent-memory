@@ -225,6 +225,38 @@ type LocalProjectSkillLifecycleService interface {
 	OperateSkillLifecycle(context.Context, LocalProjectSkillLifecycleInput) (any, error)
 }
 
+type LocalProjectSkillOrchestrationStatusInput struct {
+	Workspace   string
+	Environment string
+	WorkflowID  string
+	JobCursor   string
+	EventCursor string
+	Limit       int
+	TenantID    string
+	AccountID   string
+	Actor       string
+}
+
+type LocalProjectSkillOrchestrationControlInput struct {
+	Workspace      string `json:"workspace"`
+	Environment    string `json:"environment"`
+	Action         string `json:"action"`
+	WorkflowID     string `json:"workflow_id"`
+	JobID          string `json:"job_id"`
+	Generation     int64  `json:"expected_generation"`
+	ReasonCode     string `json:"reason_code"`
+	IdempotencyKey string `json:"idempotency_key"`
+	Limit          int    `json:"limit"`
+	TenantID       string `json:"-"`
+	AccountID      string `json:"-"`
+	Actor          string `json:"-"`
+}
+
+type LocalProjectSkillOrchestrationService interface {
+	StatusSkillOrchestration(context.Context, LocalProjectSkillOrchestrationStatusInput) (application.SkillOrchestrationStatus, error)
+	ControlSkillOrchestration(context.Context, LocalProjectSkillOrchestrationControlInput) (any, error)
+}
+
 type LocalClientProfileService interface {
 	ListClientProfiles(context.Context) ([]clientprofile.Profile, error)
 	CreateClientProfile(context.Context, clientprofile.Input) (clientprofile.Profile, error)
@@ -342,6 +374,119 @@ func localProjectSkillLifecycle(service LocalProjectSkillLifecycleService) http.
 			writeError(response, 405, requestID(request), "method_not_allowed", "method not allowed")
 		}
 	}
+}
+
+func localProjectSkillOrchestrationStatus(service LocalProjectSkillOrchestrationService) http.HandlerFunc {
+	return func(response http.ResponseWriter, request *http.Request) {
+		if request.Method != http.MethodGet {
+			writeError(response, http.StatusMethodNotAllowed, requestID(request), "method_not_allowed", "method not allowed")
+			return
+		}
+		caller, ok := auth.FromContext(request.Context())
+		if !ok {
+			writeError(response, http.StatusForbidden, requestID(request), "browser_owner_required", "A browser owner session is required.")
+			return
+		}
+		input := LocalProjectSkillOrchestrationStatusInput{
+			Workspace: strings.TrimSpace(request.URL.Query().Get("workspace")), Environment: strings.TrimSpace(request.URL.Query().Get("environment")),
+			WorkflowID: strings.TrimSpace(request.URL.Query().Get("workflow_id")), JobCursor: request.URL.Query().Get("job_cursor"),
+			EventCursor: request.URL.Query().Get("event_cursor"), Limit: boundedLocalSkillLimit(request.URL.Query().Get("limit")),
+			TenantID: caller.TenantID, AccountID: caller.AccountID, Actor: caller.SubjectID,
+		}
+		if !validLocalOrchestrationScope(input.Workspace, input.Environment, input.WorkflowID) {
+			writeError(response, http.StatusBadRequest, requestID(request), "invalid_skill_orchestration", "workspace, environment, or workflow is invalid")
+			return
+		}
+		status, err := service.StatusSkillOrchestration(request.Context(), input)
+		if err != nil {
+			writeError(response, http.StatusBadRequest, requestID(request), "skill_orchestration_unavailable", err.Error())
+			return
+		}
+		writeSuccess(response, http.StatusOK, requestID(request), status)
+	}
+}
+
+func localProjectSkillOrchestrationControl(service LocalProjectSkillOrchestrationService) http.HandlerFunc {
+	return func(response http.ResponseWriter, request *http.Request) {
+		if request.Method != http.MethodPost {
+			writeError(response, http.StatusMethodNotAllowed, requestID(request), "method_not_allowed", "method not allowed")
+			return
+		}
+		caller, ok := auth.FromContext(request.Context())
+		if !ok {
+			writeError(response, http.StatusForbidden, requestID(request), "browser_owner_required", "A browser owner session is required.")
+			return
+		}
+		var input LocalProjectSkillOrchestrationControlInput
+		if decodeJSON(request, &input) != nil {
+			writeError(response, http.StatusBadRequest, requestID(request), "invalid_request", "request body is invalid")
+			return
+		}
+		input.Workspace, input.Environment, input.Action = strings.TrimSpace(input.Workspace), strings.TrimSpace(input.Environment), strings.TrimSpace(input.Action)
+		input.WorkflowID, input.JobID = strings.TrimSpace(input.WorkflowID), strings.TrimSpace(input.JobID)
+		if !validLocalOrchestrationControl(input) {
+			writeError(response, http.StatusBadRequest, requestID(request), "invalid_skill_orchestration", "workspace or control target is invalid")
+			return
+		}
+		input.TenantID, input.AccountID, input.Actor = caller.TenantID, caller.AccountID, caller.SubjectID
+		result, err := service.ControlSkillOrchestration(request.Context(), input)
+		if err != nil {
+			writeError(response, http.StatusBadRequest, requestID(request), "skill_orchestration_failed", err.Error())
+			return
+		}
+		writeSuccess(response, http.StatusOK, requestID(request), map[string]any{"action": input.Action, "result": result})
+	}
+}
+
+func validLocalOrchestrationScope(workspaceName, environment, workflowID string) bool {
+	if _, valid := validLocalProjectWorkspace(workspaceName); !valid {
+		return false
+	}
+	return validLocalOrchestrationID(environment, true) && validLocalOrchestrationID(workflowID, false)
+}
+
+func validLocalOrchestrationControl(input LocalProjectSkillOrchestrationControlInput) bool {
+	if _, valid := validLocalProjectWorkspace(input.Workspace); !valid || !validLocalOrchestrationID(input.Environment, true) {
+		return false
+	}
+	switch input.Action {
+	case "pause", "resume", "reconcile":
+		return validLocalOrchestrationID(input.WorkflowID, false)
+	case "cancel", "retry":
+		return validLocalOrchestrationID(input.JobID, false)
+	case "replay":
+		return validLocalOrchestrationID(input.JobID, false) && strings.TrimSpace(input.ReasonCode) != "" && strings.TrimSpace(input.IdempotencyKey) != ""
+	case "drain":
+		return true
+	default:
+		return false
+	}
+}
+
+func validLocalOrchestrationID(value string, optional bool) bool {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return optional
+	}
+	return len(value) <= 128 && !strings.Contains(value, "..") && !strings.ContainsAny(value, `/\\`)
+}
+
+func boundedLocalSkillLimit(raw string) int {
+	limit := 20
+	if raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil {
+			return 20
+		}
+		limit = parsed
+	}
+	if limit < 1 {
+		return 20
+	}
+	if limit > 200 {
+		return 200
+	}
+	return limit
 }
 
 func validLocalSkillOperation(value string) bool {

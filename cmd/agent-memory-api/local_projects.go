@@ -307,6 +307,66 @@ func (service *localProjectService) OperateSkillLifecycle(ctx context.Context, i
 	}
 }
 
+func (service *localProjectService) StatusSkillOrchestration(ctx context.Context, input api.LocalProjectSkillOrchestrationStatusInput) (application.SkillOrchestrationStatus, error) {
+	if strings.TrimSpace(input.TenantID) == "" || strings.TrimSpace(input.AccountID) == "" || strings.TrimSpace(input.Actor) == "" {
+		return application.SkillOrchestrationStatus{}, errors.New("authenticated tenant, account, and actor are required")
+	}
+	if strings.TrimSpace(input.WorkflowID) == "" || input.Limit < 1 || input.Limit > 200 {
+		return application.SkillOrchestrationStatus{}, errors.New("bounded orchestration status scope is required")
+	}
+	store, err := service.openProjectStore(ctx, input.Workspace)
+	if err != nil {
+		return application.SkillOrchestrationStatus{}, err
+	}
+	defer store.Close()
+	return application.NewSkillOrchestrationControlService(store, nil).Status(ctx, localProjectOrchestrationScope(input.Workspace, input.Environment), input.WorkflowID, input.JobCursor, input.EventCursor, input.Limit)
+}
+
+func (service *localProjectService) ControlSkillOrchestration(ctx context.Context, input api.LocalProjectSkillOrchestrationControlInput) (any, error) {
+	if strings.TrimSpace(input.TenantID) == "" || strings.TrimSpace(input.AccountID) == "" || strings.TrimSpace(input.Actor) == "" {
+		return nil, errors.New("authenticated tenant, account, and actor are required")
+	}
+	store, err := service.openProjectStore(ctx, input.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	defer store.Close()
+	controls := application.NewSkillOrchestrationControlService(store, nil)
+	scope := localProjectOrchestrationScope(input.Workspace, input.Environment)
+	switch input.Action {
+	case "pause":
+		return controls.SetPaused(ctx, scope, input.WorkflowID, input.Generation, true, input.Actor)
+	case "resume":
+		return controls.SetPaused(ctx, scope, input.WorkflowID, input.Generation, false, input.Actor)
+	case "cancel":
+		err := controls.Cancel(ctx, scope, input.JobID, input.Generation, input.Actor)
+		return map[string]any{"job_id": input.JobID, "cancel_requested": err == nil}, err
+	case "retry":
+		return controls.Retry(ctx, scope, input.JobID, input.Generation, input.Actor)
+	case "replay":
+		result, replayErr := controls.Replay(ctx, application.SkillDeadLetterReplayRequest{Scope: scope, JobID: input.JobID, ActorID: input.Actor, Authorized: true, ReasonCode: input.ReasonCode, IdempotencyKey: input.IdempotencyKey})
+		return map[string]any{"workflow": result.Workflow, "job": result.Job, "created": result.Created}, replayErr
+	case "reconcile":
+		limit := input.Limit
+		if limit == 0 {
+			limit = 100
+		}
+		return controls.Reconcile(ctx, scope, input.WorkflowID, input.Generation, limit)
+	case "drain":
+		return map[string]any{"drained": true}, nil
+	default:
+		return nil, errors.New("unsupported skill orchestration control")
+	}
+}
+
+func localProjectOrchestrationScope(workspaceName, environment string) core.SkillOrchestratorScope {
+	environment = strings.TrimSpace(environment)
+	if environment == "" {
+		environment = "local"
+	}
+	return core.SkillOrchestratorScope{WorkspaceID: strings.TrimSpace(workspaceName), Environment: environment}
+}
+
 type localProjectSkillAuthorizer struct{}
 
 func (localProjectSkillAuthorizer) AuthorizeSkillApproval(_ context.Context, actor, workspaceName, revisionID string) error {
