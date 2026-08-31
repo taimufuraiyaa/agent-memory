@@ -16,6 +16,25 @@ type SkillStageResult struct {
 	References []core.SkillOrchestratorReference
 }
 
+type SkillStageError struct {
+	Failure SkillStageFailure
+	Err     error
+}
+
+func (e *SkillStageError) Error() string {
+	if e == nil || e.Err == nil {
+		return "skill stage failed"
+	}
+	return e.Err.Error()
+}
+
+func (e *SkillStageError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.Err
+}
+
 func (r SkillStageResult) Validate() error {
 	if r.ResultKind != core.SkillJobResultSucceeded && r.ResultKind != core.SkillJobResultRejected {
 		return errors.New("skill stage result_kind must be succeeded or rejected")
@@ -84,6 +103,8 @@ type SkillWorkerRepository interface {
 	SkillWorkflowGeneration(context.Context, core.SkillOrchestratorScope, string) (int64, error)
 	RenewSkillJobLease(context.Context, core.SkillOrchestratorScope, string, string, int64, time.Time, time.Time) error
 	FinalizeSkillJob(context.Context, contracts.SkillJobFinalization) error
+	RetrySkillJob(context.Context, contracts.SkillJobRetry) error
+	BlockSkillJob(context.Context, contracts.SkillJobBlock) error
 }
 
 type SkillWorkerConfig struct {
@@ -117,13 +138,16 @@ type SkillWorkerRunReport struct {
 	Cancelled      int
 	AdapterFailed  int
 	FinalizeFailed int
+	Retried        int
+	Blocked        int
 }
 
 type SkillOrchestratorWorker struct {
-	repository SkillWorkerRepository
-	registry   *SkillStageRegistry
-	config     SkillWorkerConfig
-	now        func() time.Time
+	repository  SkillWorkerRepository
+	registry    *SkillStageRegistry
+	config      SkillWorkerConfig
+	retryPolicy *SkillRetryPolicy
+	now         func() time.Time
 }
 
 func NewSkillOrchestratorWorker(repository SkillWorkerRepository, registry *SkillStageRegistry, config SkillWorkerConfig) (*SkillOrchestratorWorker, error) {
@@ -133,7 +157,14 @@ func NewSkillOrchestratorWorker(repository SkillWorkerRepository, registry *Skil
 	if err := config.Validate(); err != nil {
 		return nil, err
 	}
-	return &SkillOrchestratorWorker{repository: repository, registry: registry, config: config, now: time.Now}, nil
+	retryPolicy, err := NewSkillRetryPolicy(SkillRetryPolicyConfig{
+		InitialBackoff: time.Second, MaximumBackoff: 5 * time.Minute,
+		MaximumRetryAge: 24 * time.Hour, BlockedRecheck: 5 * time.Minute,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &SkillOrchestratorWorker{repository: repository, registry: registry, config: config, retryPolicy: retryPolicy, now: time.Now}, nil
 }
 
 func (w *SkillOrchestratorWorker) RunOnce(ctx context.Context) (SkillWorkerRunReport, error) {
@@ -176,6 +207,8 @@ func (w *SkillOrchestratorWorker) RunOnce(ctx context.Context) (SkillWorkerRunRe
 		report.Cancelled += result.Cancelled
 		report.AdapterFailed += result.AdapterFailed
 		report.FinalizeFailed += result.FinalizeFailed
+		report.Retried += result.Retried
+		report.Blocked += result.Blocked
 	}
 	return report, nil
 }
@@ -217,7 +250,12 @@ func (w *SkillOrchestratorWorker) runJob(parent context.Context, job core.SkillJ
 		}
 	}
 	if executeErr != nil {
-		return SkillWorkerRunReport{AdapterFailed: 1}
+		failure := SkillStageFailure{Class: core.SkillFailureUnknownInternal, Code: "stage_execution_failed"}
+		var stageErr *SkillStageError
+		if errors.As(executeErr, &stageErr) {
+			failure = stageErr.Failure
+		}
+		return w.applyFailure(parent, job, generation, failure)
 	}
 	if err := result.Validate(); err != nil {
 		return w.deadLetterInvalid(parent, job, generation, "invalid_stage_result")
@@ -235,6 +273,59 @@ func (w *SkillOrchestratorWorker) runJob(parent context.Context, job core.SkillJ
 		return SkillWorkerRunReport{FinalizeFailed: 1}
 	}
 	return SkillWorkerRunReport{Completed: 1}
+}
+
+func (w *SkillOrchestratorWorker) applyFailure(ctx context.Context, job core.SkillJob, generation int64, failure SkillStageFailure) SkillWorkerRunReport {
+	now := w.now().UTC()
+	decision := w.retryPolicy.Decide(job, failure, now)
+	switch decision.Action {
+	case SkillFailureRetry:
+		err := w.repository.RetrySkillJob(ctx, contracts.SkillJobRetry{
+			Scope: job.Scope, JobID: job.ID, Owner: job.LeaseOwner, Fence: job.Fence,
+			ExpectedWorkflowGeneration: generation, FailureClass: decision.FailureClass,
+			FailureCode: decision.FailureCode, ReadyAt: decision.RetryAt, Now: now,
+		})
+		if err == nil {
+			return SkillWorkerRunReport{AdapterFailed: 1, Retried: 1}
+		}
+	case SkillFailureBlock:
+		err := w.repository.BlockSkillJob(ctx, contracts.SkillJobBlock{
+			Scope: job.Scope, JobID: job.ID, Owner: job.LeaseOwner, Fence: job.Fence,
+			ExpectedWorkflowGeneration: generation, FailureClass: decision.FailureClass,
+			ReasonCode: decision.FailureCode, RecheckAt: decision.RecheckAt, Now: now,
+		})
+		if err == nil {
+			return SkillWorkerRunReport{AdapterFailed: 1, Blocked: 1}
+		}
+	case SkillFailureDeadLetter:
+		err := w.repository.FinalizeSkillJob(ctx, contracts.SkillJobFinalization{
+			Scope: job.Scope, JobID: job.ID, Owner: job.LeaseOwner, Fence: job.Fence,
+			ExpectedWorkflowGeneration: generation, ResultKind: core.SkillJobResultRejected,
+			FailureClass: decision.FailureClass, FailureCode: decision.FailureCode, DeadLetter: true, Now: now,
+		})
+		if err == nil {
+			return SkillWorkerRunReport{AdapterFailed: 1, DeadLettered: 1}
+		}
+	case SkillFailureCompleteRejected:
+		err := w.repository.FinalizeSkillJob(ctx, contracts.SkillJobFinalization{
+			Scope: job.Scope, JobID: job.ID, Owner: job.LeaseOwner, Fence: job.Fence,
+			ExpectedWorkflowGeneration: generation, ResultKind: core.SkillJobResultRejected,
+			FailureClass: decision.FailureClass, FailureCode: decision.FailureCode, Now: now,
+		})
+		if err == nil {
+			return SkillWorkerRunReport{AdapterFailed: 1, Completed: 1}
+		}
+	case SkillFailureCancel:
+		err := w.repository.FinalizeSkillJob(ctx, contracts.SkillJobFinalization{
+			Scope: job.Scope, JobID: job.ID, Owner: job.LeaseOwner, Fence: job.Fence,
+			ExpectedWorkflowGeneration: generation, ResultKind: core.SkillJobResultCancelled,
+			FailureClass: decision.FailureClass, FailureCode: decision.FailureCode, Now: now,
+		})
+		if err == nil {
+			return SkillWorkerRunReport{AdapterFailed: 1, Cancelled: 1}
+		}
+	}
+	return SkillWorkerRunReport{AdapterFailed: 1, FinalizeFailed: 1}
 }
 
 func (w *SkillOrchestratorWorker) superviseLease(ctx context.Context, cancel context.CancelCauseFunc, done <-chan struct{}, failed chan<- error, job core.SkillJob) {

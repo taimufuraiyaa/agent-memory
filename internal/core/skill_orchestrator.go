@@ -328,6 +328,7 @@ type SkillJob struct {
 	ResultReferences  []SkillOrchestratorReference `json:"result_references,omitempty"`
 	FailureClass      SkillJobFailureClass         `json:"failure_class,omitempty"`
 	FailureCode       string                       `json:"failure_code,omitempty"`
+	ReplayOfJobID     string                       `json:"replay_of_job_id,omitempty"`
 	CreatedAt         time.Time                    `json:"created_at"`
 	UpdatedAt         time.Time                    `json:"updated_at"`
 	CompletedAt       time.Time                    `json:"completed_at,omitempty"`
@@ -369,6 +370,9 @@ func (j SkillJob) Validate() error {
 	}
 	if j.FailureCode != "" && !validSkillOrchestratorCode(j.FailureCode, MaxSkillOrchestratorFailureCodeBytes) {
 		return errors.New("skill job failure_code must be a bounded safe code")
+	}
+	if j.ReplayOfJobID != "" && (!validSkillOrchestratorIdentifier(j.ReplayOfJobID) || j.ReplayOfJobID == j.ID) {
+		return errors.New("skill job replay_of_job_id is invalid")
 	}
 	if len(j.ResultReferences) > MaxSkillOrchestratorReferences {
 		return errors.New("skill job result_references exceed bound")

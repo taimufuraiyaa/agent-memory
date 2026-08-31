@@ -65,5 +65,6 @@ type SkillOrchestratorRepository interface {
 	BlockSkillJob(context.Context, SkillJobBlock) error
 	CancelSkillJob(context.Context, core.SkillOrchestratorScope, string, int64, string, time.Time) error
 	GetSkillJob(context.Context, core.SkillOrchestratorScope, string) (core.SkillJob, error)
+	GetSkillWorkflow(context.Context, core.SkillOrchestratorScope, string) (core.SkillWorkflow, error)
 	ListSkillJobs(context.Context, core.SkillOrchestratorScope, string, string, int) ([]core.SkillJob, string, error)
 }

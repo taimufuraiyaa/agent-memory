@@ -159,9 +159,61 @@ func TestSkillOrchestratorWorkerBoundsBatchAndConcurrency(t *testing.T) {
 	}
 }
 
+func TestSkillOrchestratorWorkerAppliesFailurePolicy(t *testing.T) {
+	now := time.Now().UTC()
+	tests := []struct {
+		name    string
+		failure SkillStageFailure
+		check   func(*testing.T, SkillWorkerRunReport, *workerRepository)
+	}{
+		{"retry", SkillStageFailure{Class: core.SkillFailureContention, Code: "busy"}, func(t *testing.T, report SkillWorkerRunReport, repository *workerRepository) {
+			if report.Retried != 1 || len(repository.retried) != 1 || !repository.retried[0].ReadyAt.After(now) {
+				t.Fatalf("retry report=%+v mutations=%+v", report, repository.retried)
+			}
+		}},
+		{"block", SkillStageFailure{Class: core.SkillFailurePolicyBlock, Code: "approval_required"}, func(t *testing.T, report SkillWorkerRunReport, repository *workerRepository) {
+			if report.Blocked != 1 || len(repository.blocked) != 1 || repository.blocked[0].ReasonCode != "approval_required" {
+				t.Fatalf("block report=%+v mutations=%+v", report, repository.blocked)
+			}
+		}},
+		{"dead_letter", SkillStageFailure{Class: core.SkillFailurePermanentValidation, Code: "invalid_input"}, func(t *testing.T, report SkillWorkerRunReport, repository *workerRepository) {
+			if report.DeadLettered != 1 || len(repository.finalized) != 1 || !repository.finalized[0].DeadLetter {
+				t.Fatalf("dead-letter report=%+v mutations=%+v", report, repository.finalized)
+			}
+		}},
+		{"reject", SkillStageFailure{Class: core.SkillFailureSafetyRejection, Code: "unsafe_revision"}, func(t *testing.T, report SkillWorkerRunReport, repository *workerRepository) {
+			if report.Completed != 1 || len(repository.finalized) != 1 || repository.finalized[0].DeadLetter {
+				t.Fatalf("reject report=%+v mutations=%+v", report, repository.finalized)
+			}
+		}},
+		{"cancel", SkillStageFailure{Class: core.SkillFailureCancellation, Code: "shutdown"}, func(t *testing.T, report SkillWorkerRunReport, repository *workerRepository) {
+			if report.Cancelled != 1 || len(repository.finalized) != 1 || repository.finalized[0].ResultKind != core.SkillJobResultCancelled {
+				t.Fatalf("cancel report=%+v mutations=%+v", report, repository.finalized)
+			}
+		}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			repository := &workerRepository{claimed: []core.SkillJob{runningWorkerJob(now, "job-"+test.name)}}
+			registry := NewSkillStageRegistry()
+			failure := test.failure
+			_ = registry.Register(core.SkillOrchestratorContractVersion, core.SkillStageDetect, SkillStageAdapterFunc(func(context.Context, core.SkillJob) (SkillStageResult, error) {
+				return SkillStageResult{}, &SkillStageError{Failure: failure, Err: errors.New("adapter detail must not persist")}
+			}))
+			report, err := newTestSkillWorker(t, repository, registry).RunOnce(context.Background())
+			if err != nil || report.AdapterFailed != 1 {
+				t.Fatalf("report=%+v err=%v", report, err)
+			}
+			test.check(t, report, repository)
+		})
+	}
+}
+
 type workerRepository struct {
 	claimed     []core.SkillJob
 	finalized   []contracts.SkillJobFinalization
+	retried     []contracts.SkillJobRetry
+	blocked     []contracts.SkillJobBlock
 	renewErr    error
 	finalizeErr error
 	renewals    atomic.Int64
@@ -184,7 +236,18 @@ func (r *workerRepository) FinalizeSkillJob(_ context.Context, input contracts.S
 	r.finalized = append(r.finalized, input)
 	return r.finalizeErr
 }
-
+func (r *workerRepository) RetrySkillJob(_ context.Context, input contracts.SkillJobRetry) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.retried = append(r.retried, input)
+	return r.finalizeErr
+}
+func (r *workerRepository) BlockSkillJob(_ context.Context, input contracts.SkillJobBlock) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.blocked = append(r.blocked, input)
+	return r.finalizeErr
+}
 func newTestSkillWorker(t *testing.T, repository SkillWorkerRepository, registry *SkillStageRegistry) *SkillOrchestratorWorker {
 	t.Helper()
 	worker, err := NewSkillOrchestratorWorker(repository, registry, SkillWorkerConfig{

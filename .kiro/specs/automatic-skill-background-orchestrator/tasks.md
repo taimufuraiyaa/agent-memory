@@ -68,7 +68,7 @@
   - Files: worker core, registry contract, focused tests.
   - Estimated scope: Medium.
 
-- [ ] **Task 8: Add retry, blocked-condition, and dead-letter policy**
+- [x] **Task 8: Add retry, blocked-condition, and dead-letter policy**
   - Acceptance: Stable failure classes drive bounded deterministic-jitter backoff, blocked rechecks avoid attempt burn, permanent failures dead-letter, and authorized replay creates a linked successor.
   - Verify: every failure class, delay bounds, maximum attempts/age, duplicate failure, replay authorization, immutable-input preservation, and content-leak tests.
   - Dependencies: Task 7.

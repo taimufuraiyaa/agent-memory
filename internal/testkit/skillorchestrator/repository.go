@@ -65,4 +65,37 @@ func RunRepositoryContract(t *testing.T, repository contracts.SkillOrchestratorR
 	if err != nil || len(listed) != 1 || next != "" {
 		t.Fatalf("list=%+v next=%q err=%v", listed, next, err)
 	}
+	if gotWorkflow, err := repository.GetSkillWorkflow(ctx, scope, workflow.ID); err != nil || gotWorkflow.ID != workflow.ID {
+		t.Fatalf("get workflow=%+v err=%v", gotWorkflow, err)
+	}
+	replayWorkflow := workflow
+	replayWorkflow.ID = uuid.NewString()
+	replayWorkflow.OriginKind = core.SkillWorkflowOriginOperator
+	replayWorkflow.OriginID = uuid.NewString()
+	replayWorkflow.CurrentStage = core.SkillStageEvaluate
+	replayWorkflow.CreatedAt = now.Add(2 * time.Minute)
+	replayWorkflow.UpdatedAt = replayWorkflow.CreatedAt
+	if _, created, err := repository.CreateSkillWorkflow(ctx, replayWorkflow); err != nil || !created {
+		t.Fatalf("create replay workflow created=%v err=%v", created, err)
+	}
+	replayJob := job
+	replayJob.ID = uuid.NewString()
+	replayJob.WorkflowID = replayWorkflow.ID
+	replayJob.Stage = core.SkillStageEvaluate
+	replayJob.State = core.SkillJobQueued
+	replayJob.ReadyAt = replayWorkflow.CreatedAt
+	replayJob.Attempt = 0
+	replayJob.Fence = 0
+	replayJob.ResultKind = core.SkillJobResultNone
+	replayJob.ReplayOfJobID = job.ID
+	replayJob.CreatedAt = replayWorkflow.CreatedAt
+	replayJob.UpdatedAt = replayWorkflow.CreatedAt
+	replayJob.CompletedAt = time.Time{}
+	if _, created, err := repository.EnqueueSkillJob(ctx, replayJob, nil); err != nil || !created {
+		t.Fatalf("enqueue replay created=%v err=%v", created, err)
+	}
+	storedReplay, err := repository.GetSkillJob(ctx, scope, replayJob.ID)
+	if err != nil || storedReplay.ReplayOfJobID != job.ID || storedReplay.InputDigest != job.InputDigest || storedReplay.PolicyVersion != job.PolicyVersion {
+		t.Fatalf("stored replay=%+v err=%v", storedReplay, err)
+	}
 }

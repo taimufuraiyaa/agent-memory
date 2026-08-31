@@ -102,15 +102,15 @@ func (s *Store) RouteSkillSignal(ctx context.Context, workflow core.SkillWorkflo
 	jobResult, err := tx.ExecContext(ctx, `INSERT INTO skill_orchestrator_jobs(
 		id,workflow_id,tenant_id,workspace_id,environment,skill_id,stage,contract_version,input_digest,policy_version,
 		state,priority,ready_at,dependency_count,blocked_reason,attempt,max_attempts,lease_owner,lease_expires_at,fence,
-		timeout_at,cancel_requested_at,result_kind,result_references_json,failure_class,failure_code,created_at,updated_at,completed_at
-	) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+		timeout_at,cancel_requested_at,result_kind,result_references_json,failure_class,failure_code,replay_of_job_id,created_at,updated_at,completed_at
+	) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 	ON CONFLICT(workflow_id,stage,input_digest) DO NOTHING`,
 		job.ID, job.WorkflowID, job.Scope.TenantID, job.Scope.WorkspaceID, job.Scope.Environment, job.SkillID,
 		job.Stage, job.ContractVersion, job.InputDigest, job.PolicyVersion, job.State, job.Priority,
 		formatSkillOrchestratorTime(job.ReadyAt), job.DependencyCount, job.BlockedReason, job.Attempt, job.MaxAttempts,
 		job.LeaseOwner, formatOptionalSkillOrchestratorTime(job.LeaseExpiresAt), job.Fence,
 		formatOptionalSkillOrchestratorTime(job.TimeoutAt), formatOptionalSkillOrchestratorTime(job.CancelRequestedAt),
-		job.ResultKind, string(refs), job.FailureClass, job.FailureCode,
+		job.ResultKind, string(refs), job.FailureClass, job.FailureCode, job.ReplayOfJobID,
 		formatSkillOrchestratorTime(job.CreatedAt), formatSkillOrchestratorTime(job.UpdatedAt), formatOptionalSkillOrchestratorTime(job.CompletedAt))
 	if err != nil {
 		return contracts.SkillSignalRouteResult{}, err
@@ -171,15 +171,15 @@ func (s *Store) EnqueueSkillJob(ctx context.Context, job core.SkillJob, dependen
 	result, err := tx.ExecContext(ctx, `INSERT INTO skill_orchestrator_jobs(
 		id,workflow_id,tenant_id,workspace_id,environment,skill_id,stage,contract_version,input_digest,policy_version,
 		state,priority,ready_at,dependency_count,blocked_reason,attempt,max_attempts,lease_owner,lease_expires_at,fence,
-		timeout_at,cancel_requested_at,result_kind,result_references_json,failure_class,failure_code,created_at,updated_at,completed_at
-	) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+		timeout_at,cancel_requested_at,result_kind,result_references_json,failure_class,failure_code,replay_of_job_id,created_at,updated_at,completed_at
+	) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 	ON CONFLICT(workflow_id,stage,input_digest) DO NOTHING`,
 		job.ID, job.WorkflowID, job.Scope.TenantID, job.Scope.WorkspaceID, job.Scope.Environment, job.SkillID,
 		job.Stage, job.ContractVersion, job.InputDigest, job.PolicyVersion, job.State, job.Priority,
 		formatSkillOrchestratorTime(job.ReadyAt), job.DependencyCount, job.BlockedReason, job.Attempt, job.MaxAttempts,
 		job.LeaseOwner, formatOptionalSkillOrchestratorTime(job.LeaseExpiresAt), job.Fence,
 		formatOptionalSkillOrchestratorTime(job.TimeoutAt), formatOptionalSkillOrchestratorTime(job.CancelRequestedAt),
-		job.ResultKind, string(resultJSON), job.FailureClass, job.FailureCode,
+		job.ResultKind, string(resultJSON), job.FailureClass, job.FailureCode, job.ReplayOfJobID,
 		formatSkillOrchestratorTime(job.CreatedAt), formatSkillOrchestratorTime(job.UpdatedAt), formatOptionalSkillOrchestratorTime(job.CompletedAt))
 	if err != nil {
 		return core.SkillJob{}, false, err
@@ -344,6 +344,8 @@ func (s *Store) FinalizeSkillJob(ctx context.Context, finalization SkillJobFinal
 	target := core.SkillJobCompleted
 	if finalization.DeadLetter {
 		target = core.SkillJobDeadLettered
+	} else if finalization.ResultKind == core.SkillJobResultCancelled {
+		target = core.SkillJobCancelled
 	}
 	return s.finishRunningSkillJob(ctx, finalization.Scope, finalization.JobID, finalization.Owner, finalization.Fence,
 		finalization.ExpectedWorkflowGeneration, target, finalization.ResultKind, finalization.ResultReferences,
@@ -510,6 +512,17 @@ func (s *Store) GetSkillJob(ctx context.Context, scope core.SkillOrchestratorSco
 	return job, err
 }
 
+func (s *Store) GetSkillWorkflow(ctx context.Context, scope core.SkillOrchestratorScope, workflowID string) (core.SkillWorkflow, error) {
+	if err := scope.Validate(); err != nil {
+		return core.SkillWorkflow{}, err
+	}
+	workflow, err := scanSkillWorkflow(s.db.QueryRowContext(ctx, `SELECT id,tenant_id,workspace_id,environment,skill_id,origin_kind,origin_id,workflow_kind,contract_version,input_digest,state,current_stage,generation,configuration_version,policy_digest,created_at,updated_at,terminal_at FROM skill_orchestrator_workflows WHERE id=? AND tenant_id=? AND workspace_id=? AND environment=?`, workflowID, scope.TenantID, scope.WorkspaceID, scope.Environment))
+	if errors.Is(err, sql.ErrNoRows) {
+		return core.SkillWorkflow{}, ErrSkillOrchestratorNotFound
+	}
+	return workflow, err
+}
+
 func (s *Store) ListSkillJobs(ctx context.Context, scope core.SkillOrchestratorScope, workflowID, afterID string, limit int) ([]core.SkillJob, string, error) {
 	if err := scope.Validate(); err != nil {
 		return nil, "", err
@@ -551,7 +564,7 @@ func skillWorkflowByOriginQuery(ctx context.Context, queryer skillOrchestratorQu
 	return scanSkillWorkflow(row)
 }
 
-const skillJobSelect = `SELECT id,workflow_id,tenant_id,workspace_id,environment,skill_id,stage,contract_version,input_digest,policy_version,state,priority,ready_at,dependency_count,blocked_reason,attempt,max_attempts,lease_owner,lease_expires_at,fence,timeout_at,cancel_requested_at,result_kind,result_references_json,failure_class,failure_code,created_at,updated_at,completed_at FROM skill_orchestrator_jobs`
+const skillJobSelect = `SELECT id,workflow_id,tenant_id,workspace_id,environment,skill_id,stage,contract_version,input_digest,policy_version,state,priority,ready_at,dependency_count,blocked_reason,attempt,max_attempts,lease_owner,lease_expires_at,fence,timeout_at,cancel_requested_at,result_kind,result_references_json,failure_class,failure_code,replay_of_job_id,created_at,updated_at,completed_at FROM skill_orchestrator_jobs`
 
 type skillOrchestratorScanner interface{ Scan(...any) error }
 
@@ -578,7 +591,7 @@ func scanSkillJob(scanner skillOrchestratorScanner) (core.SkillJob, error) {
 		&job.SkillID, &job.Stage, &job.ContractVersion, &job.InputDigest, &job.PolicyVersion, &job.State, &job.Priority,
 		&readyAt, &job.DependencyCount, &job.BlockedReason, &job.Attempt, &job.MaxAttempts, &job.LeaseOwner,
 		&leaseExpiresAt, &job.Fence, &timeoutAt, &cancelAt, &job.ResultKind, &referencesJSON, &job.FailureClass,
-		&job.FailureCode, &createdAt, &updatedAt, &completedAt)
+		&job.FailureCode, &job.ReplayOfJobID, &createdAt, &updatedAt, &completedAt)
 	if err != nil {
 		return core.SkillJob{}, err
 	}
