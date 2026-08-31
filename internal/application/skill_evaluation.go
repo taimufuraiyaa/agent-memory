@@ -46,7 +46,7 @@ type SkillEvaluationResult struct {
 type skillEvaluationRepositoryContract interface {
 	GetSkillEvaluationSuite(context.Context, string, string, int64) (core.SkillEvaluationSuite, error)
 	GetSkillRevision(context.Context, string, string) (core.SkillRevision, error)
-	CreateSkillEvaluationRun(context.Context, core.SkillEvaluationRun) error
+	CreateSkillEvaluationRuns(context.Context, core.SkillEvaluationRun, core.SkillEvaluationRun) error
 }
 
 type RestrictedSkillEvaluationRunner interface {
@@ -93,10 +93,7 @@ func (o *SkillEvaluationOrchestrator) Evaluate(ctx context.Context, input SkillE
 	}
 	candidateRun := o.runRevision(ctx, input.ID+"-candidate", input, suite, candidate, baseline)
 	baselineRun := o.runRevision(ctx, input.ID+"-baseline", input, suite, baseline, core.SkillRevision{})
-	if err := o.repository.CreateSkillEvaluationRun(ctx, candidateRun); err != nil {
-		return SkillEvaluationResult{}, err
-	}
-	if err := o.repository.CreateSkillEvaluationRun(ctx, baselineRun); err != nil {
+	if err := o.repository.CreateSkillEvaluationRuns(ctx, candidateRun, baselineRun); err != nil {
 		return SkillEvaluationResult{}, err
 	}
 	return SkillEvaluationResult{Candidate: candidateRun, Baseline: baselineRun}, nil

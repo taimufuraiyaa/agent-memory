@@ -112,7 +112,7 @@
   - Files: build adapter, bundle integration, focused tests.
   - Estimated scope: Medium.
 
-- [ ] **Task 13: Add queued evaluation and policy-decision adapters**
+- [x] **Task 13: Add queued evaluation and policy-decision adapters**
   - Acceptance: Candidate and baseline bind exact digests/suite/environment; executor readiness, timeout, cancellation, budget reservation, and immutable policy decisions remain enforced.
   - Verify: pass, regression, inconclusive, evaluator outage, timeout, budget exhaustion, stale suite, duplicate run, policy version change, and high-risk denial tests.
   - Dependencies: Tasks 8, 9, and 12.

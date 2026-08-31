@@ -96,8 +96,8 @@ func (r *skillEvaluationRepository) GetSkillRevision(_ context.Context, workspac
 	return revision, nil
 }
 
-func (r *skillEvaluationRepository) CreateSkillEvaluationRun(_ context.Context, run core.SkillEvaluationRun) error {
-	r.runs = append(r.runs, run)
+func (r *skillEvaluationRepository) CreateSkillEvaluationRuns(_ context.Context, candidate, baseline core.SkillEvaluationRun) error {
+	r.runs = append(r.runs, candidate, baseline)
 	return nil
 }
 

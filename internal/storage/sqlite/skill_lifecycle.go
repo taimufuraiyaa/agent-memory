@@ -700,14 +700,35 @@ func (s *Store) GetSkillEvaluationSuite(ctx context.Context, workspace, suiteID 
 }
 
 func (s *Store) CreateSkillEvaluationRun(ctx context.Context, run core.SkillEvaluationRun) error {
-	if err := run.Validate(); err != nil {
-		return err
+	return s.CreateSkillEvaluationRuns(ctx, run)
+}
+
+func (s *Store) CreateSkillEvaluationRuns(ctx context.Context, runs ...core.SkillEvaluationRun) error {
+	if len(runs) == 0 || len(runs) > 2 {
+		return errors.New("one or two skill evaluation runs are required")
+	}
+	for _, run := range runs {
+		if err := run.Validate(); err != nil {
+			return err
+		}
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
+	for _, run := range runs {
+		if err := createSkillEvaluationRun(ctx, tx, run); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+func createSkillEvaluationRun(ctx context.Context, tx *sql.Tx, run core.SkillEvaluationRun) error {
+	if err := run.Validate(); err != nil {
+		return err
+	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO skill_evaluation_runs(id,workspace,skill_id,revision_id,revision_digest,baseline_revision_id,baseline_digest,suite_id,suite_version,suite_digest,evaluator,evaluator_version,environment_fingerprint,verdict,started_at,completed_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, run.ID, run.Workspace, run.SkillID, run.RevisionID, run.RevisionDigest, run.BaselineRevisionID, run.BaselineDigest, run.SuiteID, run.SuiteVersion, run.SuiteDigest, run.Evaluator, run.EvaluatorVersion, run.EnvironmentFingerprint, run.Verdict, formatSkillTime(run.StartedAt), formatSkillTime(run.CompletedAt)); err != nil {
 		return err
 	}
@@ -716,7 +737,7 @@ func (s *Store) CreateSkillEvaluationRun(ctx context.Context, run core.SkillEval
 			return err
 		}
 	}
-	return tx.Commit()
+	return nil
 }
 
 func (s *Store) CreateSkillPromotionPolicy(ctx context.Context, policy core.SkillPromotionPolicy) error {
