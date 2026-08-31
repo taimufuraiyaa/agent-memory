@@ -10,7 +10,7 @@
 
 ## Phase 1 — Durable Contracts and Storage
 
-- [ ] **Task 1: Define workflow, job, dependency, attempt, signal, and configuration domain contracts**
+- [x] **Task 1: Define workflow, job, dependency, attempt, signal, and configuration domain contracts**
   - Acceptance: Versioned bounded types validate every state, transition, scope, input digest, fence, result, and failure class; invalid or content-bearing payloads fail closed.
   - Verify: table-driven validation, state-transition, size-bound, timestamp, contract-version, and redaction tests.
   - Dependencies: Existing automatic-skill lifecycle Tasks 1-28.
