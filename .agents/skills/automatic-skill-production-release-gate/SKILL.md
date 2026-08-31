@@ -23,7 +23,9 @@ Keep implementation completion separate from production enablement. Repository t
 The gate must fail closed unless all of these are true:
 
 - Release evidence and product approval have independent valid Ed25519 signatures.
+- Every staged mode contains a verified signature over the complete immutable configuration; a signed boolean or digest-only assertion is insufficient.
 - Both payloads bind the exact release, build, migration, and policy digests.
+- Accountable product approval binds the final automatic configuration digest and the exact release-evidence digest.
 - Rollout order is exactly `disabled` → `shadow` → `manual` → `canary` → `automatic_low_risk`.
 - At least two complete staging iterations cover pause, drain, restore, and shutdown.
 - Every drill preserves the active skill digest and never decreases audit history.
@@ -33,6 +35,8 @@ The gate must fail closed unless all of these are true:
 - Product approver and release signer satisfy separation of duty and approval is fresh.
 
 Do not accept booleans or references as substitutes for cryptographic verification at the release boundary. Do not put skill content, prompts, credentials, paths, or customer identifiers in evidence.
+
+The external contracts are `api/evidence/v2/skill-orchestrator-configuration-receipt.schema.json`, `skill-orchestrator-production-release-evidence.schema.json`, and `skill-orchestrator-product-approval.schema.json`. Version 1 release and approval payloads fail closed.
 
 ## Deployment invariants
 

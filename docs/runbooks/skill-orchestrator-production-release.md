@@ -6,7 +6,7 @@ This runbook controls the only supported path from a default-off deployment to a
 
 1. Pin the immutable build digest and migration digest. Apply migrations before starting a worker.
 2. Verify the migration, standalone natural-flow, hosted natural-flow, chaos, independent security, capacity, and alert-routing report digests.
-3. Verify the proposed signed configuration digest, policy digest, evaluation budgets, retention, retry/dead-letter policy, canary thresholds, rollback SLO, and drain timeout.
+3. Verify each staged configuration through a signed configuration receipt. Recompute its configuration digest, then verify its policy digest, evaluation budgets, retention, retry/dead-letter policy, canary thresholds, rollback SLO, and drain timeout.
 4. Confirm the base Kubernetes deployment still has zero skill-worker replicas and `AGENT_MEMORY_SKILL_WORKER_ENABLED=false`.
 5. Confirm the release signer and accountable product approver use separate trusted keys and identities.
 
@@ -38,7 +38,7 @@ This runbook controls the only supported path from a default-off deployment to a
 
 1. Collect the exact release evidence bundle after both complete staging iterations pass.
 2. Obtain an independently signed accountable product approval for risk classes, thresholds, canary policy, retry/dead-letter policy, budgets, retention, SLOs, and automatic-low-risk enablement.
-3. Verify both signatures, freshness, separation of duty, release ID, configuration digest, policy digest, build digest, and migration digest with the production release gate.
+3. Verify every configuration-receipt signature plus the release-evidence and product-approval signatures, freshness, separation of duty, release ID, final automatic configuration digest, release-evidence digest, policy digest, build digest, and migration digest with the production release gate.
 4. Only a `ready: true` gate report may be referenced by an `automatic_low_risk` configuration. Medium risk still requires revision approval; high risk never activates automatically.
 
 ## Pause and drain drill
@@ -62,10 +62,12 @@ This runbook controls the only supported path from a default-off deployment to a
 
 ## Evidence signing and verification
 
-1. Produce the canonical content-free evidence payload; never hand-edit a signed payload.
-2. Sign release evidence with the trusted release key. Sign accountable product approval with a distinct trusted product key.
-3. Run the release gate at the deployment boundary. Archive the payloads, signatures, public-key identifiers, and resulting evidence and approval digests.
-4. Any changed configuration, policy, build, migration, runbook, alert routing, or prerequisite report invalidates the old bundle and requires new staging drills and signatures.
+1. Produce payloads that validate against `api/evidence/v2/skill-orchestrator-configuration-receipt.schema.json`, `skill-orchestrator-production-release-evidence.schema.json`, and `skill-orchestrator-product-approval.schema.json`; never hand-edit a signed payload.
+2. Sign each full staged configuration receipt and the release evidence with the trusted release identity. A boolean claiming that a configuration signature was checked is not evidence.
+3. Compute the release-evidence digest, bind it and the final automatic configuration digest into the accountable product approval, and sign that approval with a distinct trusted product key.
+4. Run the release gate at the deployment boundary. Archive the payloads, signatures, public-key identifiers, configuration digest, evidence digest, and approval digest.
+5. Version 1 release-evidence and product-approval payloads are rejected because they do not cryptographically bind the full staged configurations. Regenerate them under the version 2 schemas.
+6. Any changed configuration, policy, build, migration, runbook, alert routing, or prerequisite report invalidates the old bundle and requires new staging drills and signatures.
 
 ## Abort conditions
 

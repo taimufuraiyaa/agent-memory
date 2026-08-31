@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-memory.local/schemas/evidence/v2/skill-orchestrator-product-approval.schema.json",
+  "title": "Signed accountable product approval for automatic skill orchestration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema", "approval_id", "release_id", "build_digest", "migration_digest", "policy_digest",
+    "configuration_digest", "release_evidence_digest", "approver_id", "approver_role",
+    "risk_classes_approved", "thresholds_approved", "canary_policy_approved", "retry_dead_letter_approved",
+    "budgets_approved", "retention_approved", "slos_approved", "automatic_low_risk_approved",
+    "approved_at", "expires_at", "signing_key_id", "signature"
+  ],
+  "properties": {
+    "schema": {"const": "agent-memory/skill-orchestrator-product-approval/v2"},
+    "approval_id": {"$ref": "#/$defs/reference"},
+    "release_id": {"$ref": "#/$defs/reference"},
+    "build_digest": {"$ref": "#/$defs/digest"},
+    "migration_digest": {"$ref": "#/$defs/digest"},
+    "policy_digest": {"$ref": "#/$defs/digest"},
+    "configuration_digest": {"$ref": "#/$defs/digest"},
+    "release_evidence_digest": {"$ref": "#/$defs/digest"},
+    "approver_id": {"$ref": "#/$defs/reference"},
+    "approver_role": {"const": "accountable_product"},
+    "risk_classes_approved": {"const": true},
+    "thresholds_approved": {"const": true},
+    "canary_policy_approved": {"const": true},
+    "retry_dead_letter_approved": {"const": true},
+    "budgets_approved": {"const": true},
+    "retention_approved": {"const": true},
+    "slos_approved": {"const": true},
+    "automatic_low_risk_approved": {"const": true},
+    "approved_at": {"type": "string", "format": "date-time"},
+    "expires_at": {"type": "string", "format": "date-time"},
+    "signing_key_id": {"$ref": "#/$defs/reference"},
+    "signature": {"type": "string", "minLength": 88, "maxLength": 88}
+  },
+  "$defs": {
+    "reference": {"type": "string", "minLength": 1, "maxLength": 256, "pattern": "^[^\\r\\n\\t]+$"},
+    "digest": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}
+  }
+}

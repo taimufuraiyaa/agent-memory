@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-memory.local/schemas/evidence/v2/skill-orchestrator-production-release-evidence.schema.json",
+  "title": "Signed skill orchestrator production release evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema", "release_id", "build_digest", "migration_digest", "policy_digest", "rollout", "drills",
+    "rollback_slo_millis", "standalone_report_digest", "hosted_report_digest", "chaos_certificate_digest",
+    "security_report_digest", "capacity_report_digest", "migration_report_digest", "alert_routing_digest",
+    "generated_at", "signer_id", "signing_key_id", "signature"
+  ],
+  "properties": {
+    "schema": {"const": "agent-memory/skill-orchestrator-production-release-evidence/v2"},
+    "release_id": {"$ref": "#/$defs/reference"},
+    "build_digest": {"$ref": "#/$defs/digest"},
+    "migration_digest": {"$ref": "#/$defs/digest"},
+    "policy_digest": {"$ref": "#/$defs/digest"},
+    "rollout": {"type": "array", "minItems": 5, "maxItems": 5, "items": {"$ref": "#/$defs/rollout_observation"}},
+    "drills": {"type": "array", "minItems": 8, "maxItems": 64, "items": {"$ref": "#/$defs/drill"}},
+    "rollback_slo_millis": {"type": "integer", "minimum": 1, "maximum": 600000},
+    "standalone_report_digest": {"$ref": "#/$defs/digest"},
+    "hosted_report_digest": {"$ref": "#/$defs/digest"},
+    "chaos_certificate_digest": {"$ref": "#/$defs/digest"},
+    "security_report_digest": {"$ref": "#/$defs/digest"},
+    "capacity_report_digest": {"$ref": "#/$defs/digest"},
+    "migration_report_digest": {"$ref": "#/$defs/digest"},
+    "alert_routing_digest": {"$ref": "#/$defs/digest"},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "signer_id": {"$ref": "#/$defs/reference"},
+    "signing_key_id": {"$ref": "#/$defs/reference"},
+    "signature": {"type": "string", "minLength": 88, "maxLength": 88}
+  },
+  "$defs": {
+    "reference": {"type": "string", "minLength": 1, "maxLength": 256, "pattern": "^[^\\r\\n\\t]+$"},
+    "digest": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+    "rollout_observation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sequence", "configuration_receipt", "passed"],
+      "properties": {
+        "sequence": {"type": "integer", "minimum": 1, "maximum": 5},
+        "configuration_receipt": {"$ref": "skill-orchestrator-configuration-receipt.schema.json"},
+        "passed": {"const": true}
+      }
+    },
+    "drill": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "iteration", "operation", "passed", "active_skill_digest_before", "active_skill_digest_after",
+        "audit_records_before", "audit_records_after", "rollback_millis", "alerts_routed", "runbook_id", "runbook_digest"
+      ],
+      "properties": {
+        "iteration": {"type": "integer", "minimum": 1, "maximum": 2},
+        "operation": {"enum": ["pause", "drain", "restore", "shutdown"]},
+        "passed": {"const": true},
+        "active_skill_digest_before": {"$ref": "#/$defs/digest"},
+        "active_skill_digest_after": {"$ref": "#/$defs/digest"},
+        "audit_records_before": {"type": "integer", "minimum": 0},
+        "audit_records_after": {"type": "integer", "minimum": 0},
+        "rollback_millis": {"type": "integer", "minimum": 0},
+        "alerts_routed": {"const": true},
+        "runbook_id": {"$ref": "#/$defs/reference"},
+        "runbook_digest": {"$ref": "#/$defs/digest"}
+      }
+    }
+  }
+}

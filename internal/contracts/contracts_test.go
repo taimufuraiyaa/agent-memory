@@ -1790,6 +1790,48 @@ func TestPublicBetaApprovalExportSchemasAreClosedAndContentFree(t *testing.T) {
 	}
 }
 
+func TestSkillOrchestratorProductionReleaseSchemasAreClosedAndCryptographicallyBound(t *testing.T) {
+	expectations := map[string][]string{
+		"skill-orchestrator-configuration-receipt.schema.json": {
+			"schema", "receipt_id", "release_id", "build_digest", "migration_digest", "configuration", "signer_id", "signed_at", "signing_key_id", "signature",
+		},
+		"skill-orchestrator-production-release-evidence.schema.json": {
+			"schema", "release_id", "build_digest", "migration_digest", "policy_digest", "rollout", "drills", "rollback_slo_millis", "generated_at", "signer_id", "signing_key_id", "signature",
+		},
+		"skill-orchestrator-product-approval.schema.json": {
+			"schema", "approval_id", "release_id", "build_digest", "migration_digest", "policy_digest", "configuration_digest", "release_evidence_digest", "approver_id", "approver_role", "approved_at", "expires_at", "signing_key_id", "signature",
+		},
+	}
+	for name, requiredFields := range expectations {
+		contents := readFile(t, "api", "evidence", "v2", name)
+		var schema struct {
+			AdditionalProperties bool                       `json:"additionalProperties"`
+			Required             []string                   `json:"required"`
+			Properties           map[string]json.RawMessage `json:"properties"`
+		}
+		if err := json.Unmarshal(contents, &schema); err != nil {
+			t.Fatalf("parse skill orchestrator release schema %s: %v", name, err)
+		}
+		if schema.AdditionalProperties {
+			t.Fatalf("skill orchestrator release schema %s must reject unknown fields", name)
+		}
+		required := make(map[string]bool, len(schema.Required))
+		for _, field := range schema.Required {
+			required[field] = true
+		}
+		for _, field := range requiredFields {
+			if !required[field] || schema.Properties[field] == nil {
+				t.Errorf("skill orchestrator release schema %s must require and define %q", name, field)
+			}
+		}
+		for _, forbidden := range []string{"content", "prompt", "credential", "password", "token", "private_key", "raw_output", "filesystem_path"} {
+			if bytes.Contains(contents, []byte(`"`+forbidden+`"`)) {
+				t.Errorf("skill orchestrator release schema %s exposes forbidden field %q", name, forbidden)
+			}
+		}
+	}
+}
+
 func TestCompatibilityMapExists(t *testing.T) {
 	contents := string(readFile(t, "api", "compatibility.md"))
 	for _, marker := range []string{

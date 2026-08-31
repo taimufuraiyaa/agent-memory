@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-memory.local/schemas/evidence/v2/skill-orchestrator-configuration-receipt.schema.json",
+  "title": "Signed skill orchestrator configuration receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema", "receipt_id", "release_id", "build_digest", "migration_digest",
+    "configuration", "signer_id", "signed_at", "signing_key_id", "signature"
+  ],
+  "properties": {
+    "schema": {"const": "agent-memory/skill-orchestrator-configuration-receipt/v1"},
+    "receipt_id": {"$ref": "#/$defs/reference"},
+    "release_id": {"$ref": "#/$defs/reference"},
+    "build_digest": {"$ref": "#/$defs/digest"},
+    "migration_digest": {"$ref": "#/$defs/digest"},
+    "configuration": {"$ref": "#/$defs/configuration"},
+    "signer_id": {"$ref": "#/$defs/reference"},
+    "signed_at": {"type": "string", "format": "date-time"},
+    "signing_key_id": {"$ref": "#/$defs/reference"},
+    "signature": {"type": "string", "minLength": 88, "maxLength": 88}
+  },
+  "$defs": {
+    "reference": {"type": "string", "minLength": 1, "maxLength": 256, "pattern": "^[^\\r\\n\\t]+$"},
+    "digest": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["workspace_id", "environment"],
+      "properties": {
+        "tenant_id": {"$ref": "#/$defs/reference"},
+        "workspace_id": {"$ref": "#/$defs/reference"},
+        "environment": {"type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[^\\r\\n\\t]+$"}
+      }
+    },
+    "alert_targets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ready_queue_stuck_after", "lease_churn_window", "lease_failure_count", "canary_stale_after", "rollback_failure_after"],
+      "properties": {
+        "ready_queue_stuck_after": {"type": "integer", "minimum": 1000000000},
+        "lease_churn_window": {"type": "integer", "minimum": 1000000000},
+        "lease_failure_count": {"type": "integer", "minimum": 1, "maximum": 1000},
+        "canary_stale_after": {"type": "integer", "minimum": 1000000000},
+        "rollback_failure_after": {"type": "integer", "minimum": 1000000000}
+      }
+    },
+    "stage_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stage", "enabled", "lease_duration", "renewal_interval", "timeout", "max_attempts", "initial_backoff", "maximum_backoff"],
+      "properties": {
+        "stage": {"enum": ["detect", "build", "evaluate", "decide", "start_canary", "analyze_canary", "activate", "observe_safety", "rollback", "reconcile_materialization"]},
+        "enabled": {"type": "boolean"},
+        "lease_duration": {"type": "integer", "minimum": 1000000000},
+        "renewal_interval": {"type": "integer", "minimum": 1},
+        "timeout": {"type": "integer", "minimum": 1},
+        "max_attempts": {"type": "integer", "minimum": 1, "maximum": 100},
+        "initial_backoff": {"type": "integer", "minimum": 1},
+        "maximum_backoff": {"type": "integer", "minimum": 1}
+      }
+    },
+    "configuration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scope", "version", "contract_version", "digest", "policy_digest", "mode",
+        "poll_interval", "reconciliation_interval", "claim_batch", "worker_concurrency",
+        "tenant_concurrency", "workspace_concurrency", "drain_timeout", "stale_readiness_threshold",
+        "evaluation_budget_units", "alert_targets", "stage_policies", "created_by", "created_at"
+      ],
+      "properties": {
+        "scope": {"$ref": "#/$defs/scope"},
+        "version": {"type": "integer", "minimum": 1},
+        "contract_version": {"const": "skill-orchestrator/v1"},
+        "digest": {"$ref": "#/$defs/digest"},
+        "policy_digest": {"$ref": "#/$defs/digest"},
+        "mode": {"enum": ["disabled", "shadow", "manual", "canary", "automatic_low_risk"]},
+        "poll_interval": {"type": "integer", "minimum": 100000000},
+        "reconciliation_interval": {"type": "integer", "minimum": 1000000000},
+        "claim_batch": {"type": "integer", "minimum": 1, "maximum": 1000},
+        "worker_concurrency": {"type": "integer", "minimum": 1, "maximum": 1000},
+        "tenant_concurrency": {"type": "integer", "minimum": 1, "maximum": 1000},
+        "workspace_concurrency": {"type": "integer", "minimum": 1, "maximum": 1000},
+        "drain_timeout": {"type": "integer", "minimum": 1000000000},
+        "stale_readiness_threshold": {"type": "integer", "minimum": 1000000000},
+        "evaluation_budget_units": {"type": "integer", "minimum": 0},
+        "alert_targets": {"$ref": "#/$defs/alert_targets"},
+        "stage_policies": {"type": "array", "minItems": 1, "maxItems": 10, "uniqueItems": true, "items": {"$ref": "#/$defs/stage_policy"}},
+        "approval_reference": {"$ref": "#/$defs/reference"},
+        "release_evidence_reference": {"$ref": "#/$defs/reference"},
+        "signature_reference": {"$ref": "#/$defs/reference"},
+        "created_by": {"$ref": "#/$defs/reference"},
+        "created_at": {"type": "string", "format": "date-time"}
+      }
+    }
+  }
+}
