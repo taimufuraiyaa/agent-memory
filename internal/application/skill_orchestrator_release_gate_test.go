@@ -72,6 +72,25 @@ func TestSkillOrchestratorReleaseEvidenceRejectsContentBearingFields(t *testing.
 	}
 }
 
+func TestSignSkillProductionReleaseEvidenceAndProductApproval(t *testing.T) {
+	fixture := newSkillReleaseFixture(t)
+	fixture.evidence.Signature = ""
+	signedEvidence, err := SignSkillProductionReleaseEvidence(fixture.evidence, fixture.releasePrivate)
+	if err != nil || signedEvidence.Signature == "" {
+		t.Fatalf("signed evidence=%+v err=%v", signedEvidence, err)
+	}
+	fixture.approval.Signature = ""
+	signedApproval, err := SignSkillProductApproval(fixture.approval, fixture.approvalPrivate)
+	if err != nil || signedApproval.Signature == "" {
+		t.Fatalf("signed approval=%+v err=%v", signedApproval, err)
+	}
+	fixture.evidence, fixture.approval = signedEvidence, signedApproval
+	report, err := EvaluateSkillOrchestratorReleaseGate(fixture.config, fixture.evidence, fixture.approval, fixture.now)
+	if err != nil || !report.Ready {
+		t.Fatalf("report=%+v err=%v", report, err)
+	}
+}
+
 type skillReleaseFixture struct {
 	now             time.Time
 	config          SkillReleaseGateConfig

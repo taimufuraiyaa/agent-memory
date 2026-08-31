@@ -174,6 +174,33 @@ func RequiredSkillReleaseDrillOperations() []SkillReleaseDrillOperation {
 	return append([]SkillReleaseDrillOperation(nil), requiredSkillReleaseDrills...)
 }
 
+func SignSkillProductionReleaseEvidence(evidence SkillProductionReleaseEvidence, privateKey ed25519.PrivateKey) (SkillProductionReleaseEvidence, error) {
+	if len(privateKey) != ed25519.PrivateKeySize {
+		return SkillProductionReleaseEvidence{}, errors.New("valid production release evidence signing key is required")
+	}
+	if err := validateSkillReleaseEvidenceBounds(evidence); err != nil {
+		return SkillProductionReleaseEvidence{}, err
+	}
+	payload, err := json.Marshal(skillProductionReleaseEvidenceUnsigned(evidence))
+	if err != nil {
+		return SkillProductionReleaseEvidence{}, err
+	}
+	evidence.Signature = base64.StdEncoding.EncodeToString(ed25519.Sign(privateKey, payload))
+	return evidence, nil
+}
+
+func SignSkillProductApproval(approval SkillProductApproval, privateKey ed25519.PrivateKey) (SkillProductApproval, error) {
+	if len(privateKey) != ed25519.PrivateKeySize || !boundedReleaseReference(approval.SigningKeyID) {
+		return SkillProductApproval{}, errors.New("valid product approval signing identity is required")
+	}
+	payload, err := json.Marshal(skillProductApprovalUnsigned(approval))
+	if err != nil {
+		return SkillProductApproval{}, err
+	}
+	approval.Signature = base64.StdEncoding.EncodeToString(ed25519.Sign(privateKey, payload))
+	return approval, nil
+}
+
 func EvaluateSkillOrchestratorReleaseGate(config SkillReleaseGateConfig, evidence SkillProductionReleaseEvidence, approval SkillProductApproval, now time.Time) (SkillReleaseGateReport, error) {
 	if err := validateSkillReleaseGateConfig(config, now); err != nil {
 		return SkillReleaseGateReport{}, err
