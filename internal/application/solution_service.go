@@ -24,10 +24,12 @@ const (
 )
 
 type SolutionService struct {
-	store     *sqlite.Store
-	admission *engine.SolutionAdmissionPolicy
-	writer    *engine.WritePipeline
-	now       func() time.Time
+	store                    *sqlite.Store
+	admission                *engine.SolutionAdmissionPolicy
+	writer                   *engine.WritePipeline
+	skillLessonRouter        SkillLessonSignalRouter
+	skillLessonConfiguration SkillLessonSignalConfiguration
+	now                      func() time.Time
 }
 
 type SolutionServiceOption func(*SolutionService)
@@ -44,6 +46,15 @@ func WithSolutionWriter(writer *engine.WritePipeline) SolutionServiceOption {
 	return func(service *SolutionService) {
 		if writer != nil {
 			service.writer = writer
+		}
+	}
+}
+
+func WithSolutionSkillLessonEnqueue(router SkillLessonSignalRouter, configuration SkillLessonSignalConfiguration) SolutionServiceOption {
+	return func(service *SolutionService) {
+		if router != nil {
+			service.skillLessonRouter = router
+			service.skillLessonConfiguration = configuration
 		}
 	}
 }
@@ -729,12 +740,12 @@ func (s *SolutionService) DeriveToolLesson(ctx context.Context, input SolutionTo
 	}
 	lesson.Fallback = admittedFallback
 	stored, _, err := s.store.PutSolutionToolLesson(ctx, lesson)
-	if err == nil && stored.Validation == core.SolutionValidationVerified {
-		// Candidate detection is advisory and must never make validated lesson
-		// capture or normal retrieval unavailable.
-		_, _ = NewSkillRecurrenceScheduler(s.store, SkillRecurrencePolicy{}).Run(ctx, SkillRecurrenceInput{
-			Workspace: stored.Workspace, PrincipalID: input.PrincipalID, CreatedBy: "skill-recurrence-scheduler",
-		})
+	if err == nil && stored.Validation == core.SolutionValidationVerified && s.skillLessonRouter != nil {
+		// Enqueue is deliberately best-effort for request availability. The
+		// lifecycle-parity reconciliation sweep repairs a missing intent.
+		if signal, signalErr := SkillLifecycleSignalForLesson(stored, s.skillLessonConfiguration); signalErr == nil {
+			_, _ = s.skillLessonRouter.Route(ctx, signal)
+		}
 	}
 	return stored, err
 }

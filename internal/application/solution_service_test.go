@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -358,7 +359,8 @@ func TestToolLessonPromotionSeparatesConsiderationVerificationAndVersionConflict
 	ctx := context.Background()
 	store := openSolutionServiceStore(t)
 	defer func() { _ = store.Close() }()
-	svc := NewSolutionService(store, engine.NewSolutionAdmissionPolicy())
+	routeRepository := &skillSignalRouteRepository{}
+	svc := NewSolutionService(store, engine.NewSolutionAdmissionPolicy(), WithSolutionSkillLessonEnqueue(NewSkillSignalRouter(routeRepository), testLessonSignalConfiguration()))
 	episode, _, err := svc.Start(ctx, safeSolutionStart("tool-lessons"))
 	if err != nil {
 		t.Fatal(err)
@@ -389,6 +391,9 @@ func TestToolLessonPromotionSeparatesConsiderationVerificationAndVersionConflict
 	if lesson.Validation != core.SolutionValidationProposed || lesson.SuccessCount != 0 {
 		t.Fatalf("consideration was treated as success: %+v", lesson)
 	}
+	if routeRepository.calls != 0 {
+		t.Fatal("proposed lesson was enqueued")
+	}
 
 	unverified := record("event-unverified", appendStep("unverified-step", "Tool returned success without task verification.", core.SolutionStepCompleted), core.SolutionToolResult, core.SolutionToolResultSuccess, "1.0", false)
 	lesson, err = svc.DeriveToolLesson(ctx, SolutionToolLessonInput{Workspace: "ws", PrincipalID: "principal-1", EventIDs: []string{unverified.ID}, Fallback: "Run an independent check."})
@@ -408,6 +413,17 @@ func TestToolLessonPromotionSeparatesConsiderationVerificationAndVersionConflict
 	if lesson.Validation != core.SolutionValidationVerified || lesson.SuccessCount != 2 {
 		t.Fatalf("repeated verified success was not learned: %+v", lesson)
 	}
+	if routeRepository.routeCount != 1 || routeRepository.executed {
+		t.Fatalf("verified lesson enqueue routes=%d executed=%v", routeRepository.routeCount, routeRepository.executed)
+	}
+	routeRepository.err = errors.New("worker queue unavailable")
+	verified3 := record("event-verified-3", appendStep("verified-step-3", "Third task-level verification passed.", core.SolutionStepCompleted), core.SolutionToolResult, core.SolutionToolResultSuccess, "1.0", true)
+	verified4 := record("event-verified-4", appendStep("verified-step-4", "Fourth task-level verification passed.", core.SolutionStepCompleted), core.SolutionToolResult, core.SolutionToolResultSuccess, "1.0", true)
+	outageLesson, outageErr := svc.DeriveToolLesson(ctx, SolutionToolLessonInput{Workspace: "ws", PrincipalID: "principal-1", EventIDs: []string{verified3.ID, verified4.ID}, Fallback: "Run tests manually."})
+	if outageErr != nil || outageLesson.Validation != core.SolutionValidationVerified || routeRepository.calls != 2 {
+		t.Fatalf("lesson capture depended on queue availability lesson=%+v calls=%d err=%v", outageLesson, routeRepository.calls, outageErr)
+	}
+	routeRepository.err = nil
 	verifiedLesson := lesson
 	promotion, err := svc.PromoteToolLesson(ctx, ToolLessonPromotionInput{Workspace: "ws", PrincipalID: "principal-1", LessonID: verifiedLesson.ID, IdempotencyKey: "lesson-promotion"})
 	if err != nil || promotion.State != core.SolutionPromotionPublished || promotion.TargetID == "" {

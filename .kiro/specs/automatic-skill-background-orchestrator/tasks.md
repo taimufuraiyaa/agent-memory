@@ -98,7 +98,7 @@
 
 ## Phase 3 — Lifecycle Stage Adapters
 
-- [ ] **Task 11: Move recurrence detection behind durable enqueue**
+- [x] **Task 11: Move recurrence detection behind durable enqueue**
   - Acceptance: Verified lesson capture commits normally and enqueues detection; synchronous request execution is removed, reconciliation repairs missing detection jobs, and candidate deduplication remains unchanged.
   - Verify: capture availability during worker outage, duplicate lessons, unauthorized evidence, suppressed evidence, restart, and existing recurrence regression tests.
   - Dependencies: Checkpoint B.

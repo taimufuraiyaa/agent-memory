@@ -124,6 +124,7 @@ func (r *skillSignalRouteRepository) RouteSkillSignal(_ context.Context, workflo
 		r.byWorkflow = map[string]SkillSignalRouteResult{}
 	}
 	if existing, ok := r.byWorkflow[workflow.ID]; ok {
+		existing.Created = false
 		return existing, nil
 	}
 	result := SkillSignalRouteResult{Workflow: workflow, Job: job, Dependencies: dependencies, Created: true}

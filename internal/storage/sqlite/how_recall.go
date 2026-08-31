@@ -81,6 +81,31 @@ func (s *Store) ListCurrentSolutionToolLessons(ctx context.Context, workspace st
 	return lessons, rows.Err()
 }
 
+func (s *Store) ListCurrentVerifiedSolutionToolLessonsAfter(ctx context.Context, workspace, afterID string, limit int) ([]core.SolutionToolLesson, error) {
+	if limit < 1 || limit > 1_000 {
+		return nil, errors.New("invalid verified tool lesson page")
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT lesson_json,superseded_by FROM solution_tool_lessons WHERE workspace=? AND superseded_by='' AND id>? AND json_extract(lesson_json,'$.validation')='verified' ORDER BY id LIMIT ?`, strings.TrimSpace(workspace), strings.TrimSpace(afterID), limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	lessons := make([]core.SolutionToolLesson, 0, limit)
+	for rows.Next() {
+		var raw, superseded string
+		if err := rows.Scan(&raw, &superseded); err != nil {
+			return nil, err
+		}
+		var lesson core.SolutionToolLesson
+		if err := json.Unmarshal([]byte(raw), &lesson); err != nil {
+			return nil, err
+		}
+		lesson.SupersededBy = superseded
+		lessons = append(lessons, lesson)
+	}
+	return lessons, rows.Err()
+}
+
 func (s *Store) FindSolutionWorkingStateForSession(ctx context.Context, workspace, principalID, sessionID string, now time.Time) (core.SolutionWorkingState, error) {
 	var raw string
 	err := s.db.QueryRowContext(ctx, `SELECT state_json FROM solution_working_state WHERE workspace = ? AND principal_id = ? AND session_id = ? AND expires_at > ? ORDER BY updated_at DESC LIMIT 1`,
