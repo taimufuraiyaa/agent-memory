@@ -18,8 +18,9 @@ const (
 )
 
 var (
-	skillOrchestratorIdentifierPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:@-]{0,255}$`)
-	skillOrchestratorCodePattern       = regexp.MustCompile(`^[a-z0-9]+(?:[._-][a-z0-9]+)*$`)
+	skillOrchestratorIdentifierPattern        = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:@-]{0,255}$`)
+	skillOrchestratorCodePattern              = regexp.MustCompile(`^[a-z0-9]+(?:[._-][a-z0-9]+)*$`)
+	ErrSkillOrchestratorConfigurationNotFound = errors.New("skill orchestrator configuration not found")
 )
 
 type SkillOrchestratorScope struct {
@@ -652,6 +653,7 @@ type SkillOrchestratorConfiguration struct {
 	Version                  int64                          `json:"version"`
 	ContractVersion          string                         `json:"contract_version"`
 	Digest                   string                         `json:"digest"`
+	PolicyDigest             string                         `json:"policy_digest"`
 	Mode                     SkillOrchestratorMode          `json:"mode"`
 	PollInterval             time.Duration                  `json:"poll_interval"`
 	ReconciliationInterval   time.Duration                  `json:"reconciliation_interval"`
@@ -668,6 +670,16 @@ type SkillOrchestratorConfiguration struct {
 	SignatureReference       string                         `json:"signature_reference,omitempty"`
 	CreatedBy                string                         `json:"created_by"`
 	CreatedAt                time.Time                      `json:"created_at"`
+}
+
+type SkillOrchestratorConfigurationAudit struct {
+	ActorID     string    `json:"actor_id"`
+	RequestID   string    `json:"request_id"`
+	Operation   string    `json:"operation"`
+	FromVersion int64     `json:"from_version"`
+	ToVersion   int64     `json:"to_version"`
+	ReasonCode  string    `json:"reason_code"`
+	OccurredAt  time.Time `json:"occurred_at"`
 }
 
 type SkillReconciliationDomain string
@@ -741,7 +753,7 @@ func (c SkillOrchestratorConfiguration) Validate() error {
 	if err := c.Scope.Validate(); err != nil {
 		return err
 	}
-	if c.Version < 1 || c.ContractVersion != SkillOrchestratorContractVersion || !validSkillDigest(c.Digest) {
+	if c.Version < 1 || c.ContractVersion != SkillOrchestratorContractVersion || !validSkillDigest(c.Digest) || !validSkillDigest(c.PolicyDigest) {
 		return errors.New("skill orchestrator configuration version, contract_version, or digest is invalid")
 	}
 	if !c.Mode.Valid() {
@@ -781,6 +793,41 @@ func (c SkillOrchestratorConfiguration) Validate() error {
 		return errors.New("automatic low-risk mode requires approval, release evidence, and signature references")
 	}
 	return nil
+}
+
+// ClaimsEnabled reports whether this immutable configuration permits new work
+// for a stage. Disabled configurations stop all new claims; stage flags then
+// narrow the progressively more capable master modes.
+func (c SkillOrchestratorConfiguration) ClaimsEnabled(stage SkillOrchestratorStage) bool {
+	if !stage.Valid() || c.Mode == SkillOrchestratorDisabled {
+		return false
+	}
+	for _, policy := range c.StagePolicies {
+		if policy.Stage != stage || !policy.Enabled {
+			continue
+		}
+		switch c.Mode {
+		case SkillOrchestratorShadow:
+			return stage == SkillStageDetect || stage == SkillStageEvaluate || stage == SkillStageDecide || stage == SkillStageObserveSafety
+		case SkillOrchestratorManual:
+			return stage != SkillStageActivate && stage != SkillStageRollback
+		case SkillOrchestratorCanary:
+			return stage != SkillStageActivate
+		case SkillOrchestratorAutomaticLowRisk:
+			return true
+		}
+	}
+	return false
+}
+
+// MayDrainRunning preserves only recovery work after master disablement. New
+// claims remain stopped by ClaimsEnabled; an already leased safety or rollback
+// job may finish so disablement cannot strand recovery halfway through.
+func (c SkillOrchestratorConfiguration) MayDrainRunning(stage SkillOrchestratorStage) bool {
+	if c.Mode == SkillOrchestratorDisabled {
+		return stage == SkillStageObserveSafety || stage == SkillStageRollback || stage == SkillStageReconcileMaterialization
+	}
+	return c.ClaimsEnabled(stage)
 }
 
 func validSkillOrchestratorIdentifier(value string) bool {

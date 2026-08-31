@@ -211,6 +211,19 @@ func TestSkillOrchestratorConfigurationValidatesSafeBoundsAndPromotionCustody(t 
 	if err := configuration.Validate(); err != nil {
 		t.Fatalf("expected promotion-enabled configuration with custody, got %v", err)
 	}
+	configuration.StagePolicies[0].Enabled = true
+	if !configuration.ClaimsEnabled(SkillStageDetect) {
+		t.Fatal("expected enabled automatic stage to accept new claims")
+	}
+	configuration.Mode = SkillOrchestratorShadow
+	configuration.StagePolicies[0].Stage = SkillStageActivate
+	if configuration.ClaimsEnabled(SkillStageActivate) {
+		t.Fatal("shadow mode must never claim activation")
+	}
+	configuration.Mode = SkillOrchestratorDisabled
+	if configuration.ClaimsEnabled(SkillStageRollback) || !configuration.MayDrainRunning(SkillStageRollback) || configuration.MayDrainRunning(SkillStageDetect) {
+		t.Fatal("disablement must stop new claims while allowing only running recovery work to drain")
+	}
 
 	configuration.StagePolicies[0].RenewalInterval = configuration.StagePolicies[0].LeaseDuration
 	if err := configuration.Validate(); err == nil || !strings.Contains(err.Error(), "renewal_interval") {
@@ -224,6 +237,25 @@ func TestSkillOrchestratorReferenceRejectsPathsAndContent(t *testing.T) {
 		reference := SkillOrchestratorReference{Kind: SkillReferenceRevision, ID: value}
 		if err := reference.Validate(); err == nil {
 			t.Errorf("expected unsafe reference %q to be rejected", value)
+		}
+	}
+}
+
+func TestSkillOrchestratorConfigurationModesBoundStageClaims(t *testing.T) {
+	now := time.Now().UTC()
+	configuration := validSkillOrchestratorConfiguration(now)
+	configuration.StagePolicies = []SkillOrchestratorStagePolicy{
+		{Stage: SkillStageDetect, Enabled: true, LeaseDuration: time.Minute, RenewalInterval: time.Second, Timeout: time.Minute, MaxAttempts: 1, InitialBackoff: time.Second, MaximumBackoff: time.Second},
+		{Stage: SkillStageStartCanary, Enabled: true, LeaseDuration: time.Minute, RenewalInterval: time.Second, Timeout: time.Minute, MaxAttempts: 1, InitialBackoff: time.Second, MaximumBackoff: time.Second},
+		{Stage: SkillStageActivate, Enabled: true, LeaseDuration: time.Minute, RenewalInterval: time.Second, Timeout: time.Minute, MaxAttempts: 1, InitialBackoff: time.Second, MaximumBackoff: time.Second},
+	}
+	for _, test := range []struct {
+		mode                     SkillOrchestratorMode
+		detect, canary, activate bool
+	}{{SkillOrchestratorDisabled, false, false, false}, {SkillOrchestratorShadow, true, false, false}, {SkillOrchestratorManual, true, true, false}, {SkillOrchestratorCanary, true, true, false}, {SkillOrchestratorAutomaticLowRisk, true, true, true}} {
+		configuration.Mode = test.mode
+		if configuration.ClaimsEnabled(SkillStageDetect) != test.detect || configuration.ClaimsEnabled(SkillStageStartCanary) != test.canary || configuration.ClaimsEnabled(SkillStageActivate) != test.activate {
+			t.Fatalf("unexpected stage claims for mode %s", test.mode)
 		}
 	}
 }
@@ -270,7 +302,7 @@ func validSkillJob(now time.Time) SkillJob {
 func validSkillOrchestratorConfiguration(now time.Time) SkillOrchestratorConfiguration {
 	return SkillOrchestratorConfiguration{
 		Scope:   SkillOrchestratorScope{WorkspaceID: "agent-memory", Environment: "production"},
-		Version: 1, ContractVersion: SkillOrchestratorContractVersion, Digest: sha256Digest('d'),
+		Version: 1, ContractVersion: SkillOrchestratorContractVersion, Digest: sha256Digest('d'), PolicyDigest: sha256Digest('e'),
 		Mode: SkillOrchestratorDisabled, PollInterval: time.Second, ReconciliationInterval: time.Minute,
 		ClaimBatch: 10, WorkerConcurrency: 4, TenantConcurrency: 4, WorkspaceConcurrency: 2,
 		DrainTimeout: 30 * time.Second, StaleReadinessThreshold: 5 * time.Minute,

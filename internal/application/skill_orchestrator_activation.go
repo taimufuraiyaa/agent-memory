@@ -49,20 +49,32 @@ type SkillAutomaticActivationRepository interface {
 	GetSkillActivation(context.Context, string, string, string) (core.SkillActivation, error)
 }
 
+type SkillActiveOrchestratorConfigurationSource interface {
+	GetLatestSkillOrchestratorConfiguration(context.Context, core.SkillOrchestratorScope) (core.SkillOrchestratorConfiguration, error)
+}
+
 type SkillAutomaticActivationAdapter struct {
 	repository    SkillAutomaticActivationRepository
 	activator     skillRevisionActivator
 	configuration SkillAutomaticActivationConfiguration
+	activeConfig  SkillActiveOrchestratorConfigurationSource
 }
 
-func NewSkillAutomaticActivationAdapter(repository SkillAutomaticActivationRepository, activator skillRevisionActivator, configuration SkillAutomaticActivationConfiguration) (*SkillAutomaticActivationAdapter, error) {
+func NewSkillAutomaticActivationAdapter(repository SkillAutomaticActivationRepository, activator skillRevisionActivator, configuration SkillAutomaticActivationConfiguration, sources ...SkillActiveOrchestratorConfigurationSource) (*SkillAutomaticActivationAdapter, error) {
 	if repository == nil || activator == nil {
 		return nil, errors.New("automatic activation adapter dependencies are required")
 	}
 	if err := configuration.Validate(); err != nil {
 		return nil, err
 	}
-	return &SkillAutomaticActivationAdapter{repository: repository, activator: activator, configuration: configuration}, nil
+	if len(sources) > 1 || (configuration.Enabled && (len(sources) != 1 || sources[0] == nil)) {
+		return nil, errors.New("enabled automatic activation requires one active configuration source")
+	}
+	var source SkillActiveOrchestratorConfigurationSource
+	if len(sources) == 1 {
+		source = sources[0]
+	}
+	return &SkillAutomaticActivationAdapter{repository: repository, activator: activator, configuration: configuration, activeConfig: source}, nil
 }
 
 func (a *SkillAutomaticActivationAdapter) Execute(ctx context.Context, job core.SkillJob) (SkillStageResult, error) {
@@ -75,6 +87,15 @@ func (a *SkillAutomaticActivationAdapter) Execute(ctx context.Context, job core.
 	workflow, err := a.repository.GetSkillWorkflow(ctx, job.Scope, job.WorkflowID)
 	if err != nil {
 		return SkillStageResult{}, activationStageError(core.SkillFailureDependencyUnavailable, "activation_workflow_unavailable", err)
+	}
+	if a.activeConfig != nil {
+		active, configErr := a.activeConfig.GetLatestSkillOrchestratorConfiguration(ctx, job.Scope)
+		if configErr != nil {
+			return SkillStageResult{}, activationStageError(core.SkillFailureDependencyUnavailable, "activation_configuration_unavailable", configErr)
+		}
+		if active.Version != workflow.ConfigurationVersion || active.PolicyDigest != workflow.PolicyDigest || !active.ClaimsEnabled(core.SkillStageActivate) || active.ApprovalReference != a.configuration.ApprovalReference || active.ReleaseEvidenceReference != a.configuration.ReleaseEvidenceReference || active.SignatureReference != a.configuration.SignatureReference {
+			return SkillStageResult{}, activationStageError(core.SkillFailurePolicyBlock, "automatic_activation_configuration_disabled", errors.New("active configuration no longer permits this activation"))
+		}
 	}
 	decision, err := a.repository.GetSkillPolicyDecision(ctx, job.Scope.WorkspaceID, workflow.OriginID)
 	if err != nil {

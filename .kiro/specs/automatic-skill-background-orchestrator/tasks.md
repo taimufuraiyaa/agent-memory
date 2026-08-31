@@ -216,7 +216,7 @@
 
 ## Phase 6 — Governance, Observability, and Data Lifecycle
 
-- [ ] **Task 24: Add versioned configuration and accountable enablement**
+- [x] **Task 24: Add versioned configuration and accountable enablement**
   - Acceptance: Backend-owned configuration validates every bound, audits changes, supports per-stage modes, and requires signed product-policy/release evidence before automatic low-risk activation claims.
   - Verify: invalid bounds, missing evidence, digest mismatch, staged modes, mid-flight disable, safety drain, configuration rollback, and separation-of-duty tests.
   - Dependencies: Tasks 15, 17, and 18.

@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -50,6 +51,37 @@ func TestSkillAutomaticActivationAdapterFailsClosedOnEnablementAndBinding(t *tes
 	fixture.job.PolicyVersion++
 	_, err = fixture.adapter.Execute(context.Background(), fixture.job)
 	assertSkillStageFailure(t, err, core.SkillFailurePermanentValidation, "activation_binding_mismatch")
+}
+
+func TestSkillAutomaticActivationAdapterRevalidatesMidFlightDisable(t *testing.T) {
+	fixture := newAutomaticActivationFixture(t)
+	configuration := automaticActivationTestConfiguration()
+	active := core.SkillOrchestratorConfiguration{
+		Scope: fixture.job.Scope, Version: configuration.Signal.ConfigurationVersion, ContractVersion: core.SkillOrchestratorContractVersion,
+		Digest: "sha256:" + strings.Repeat("f", 64), PolicyDigest: configuration.Signal.PolicyDigest, Mode: core.SkillOrchestratorDisabled,
+		PollInterval: time.Second, ReconciliationInterval: time.Minute, ClaimBatch: 1, WorkerConcurrency: 1, TenantConcurrency: 1, WorkspaceConcurrency: 1,
+		DrainTimeout: time.Second, StaleReadinessThreshold: time.Minute,
+		StagePolicies:     []core.SkillOrchestratorStagePolicy{{Stage: core.SkillStageActivate, Enabled: true, LeaseDuration: time.Minute, RenewalInterval: time.Second, Timeout: time.Minute, MaxAttempts: 1, InitialBackoff: time.Second, MaximumBackoff: time.Second}},
+		ApprovalReference: configuration.ApprovalReference, ReleaseEvidenceReference: configuration.ReleaseEvidenceReference, SignatureReference: configuration.SignatureReference,
+		CreatedBy: "operator", CreatedAt: time.Now().UTC(),
+	}
+	adapter, err := NewSkillAutomaticActivationAdapter(fixture.repository, fixture.activator, configuration, skillActiveConfigurationFixture{configuration: active})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = adapter.Execute(context.Background(), fixture.job)
+	assertSkillStageFailure(t, err, core.SkillFailurePolicyBlock, "automatic_activation_configuration_disabled")
+	if fixture.activator.calls != 0 {
+		t.Fatal("disabled activation must not call activator")
+	}
+}
+
+type skillActiveConfigurationFixture struct {
+	configuration core.SkillOrchestratorConfiguration
+}
+
+func (f skillActiveConfigurationFixture) GetLatestSkillOrchestratorConfiguration(context.Context, core.SkillOrchestratorScope) (core.SkillOrchestratorConfiguration, error) {
+	return f.configuration, nil
 }
 
 func TestSkillAutomaticActivationAdapterClassifiesStaleGenerationAndCrashReplay(t *testing.T) {
@@ -151,13 +183,25 @@ func newAutomaticActivationFixture(t *testing.T) automaticActivationFixture {
 	result.Generation, result.PolicyDecisionID = activation.Generation+1, decision.ID
 	repository := &automaticActivationRepository{workflow: workflow, decision: decision, policy: policy, activation: activation}
 	activator := &automaticRevisionActivator{result: result}
-	adapter, err := NewSkillAutomaticActivationAdapter(repository, activator, configuration)
+	adapter, err := NewSkillAutomaticActivationAdapter(repository, activator, configuration, skillActiveConfigurationFixture{configuration: automaticActiveConfiguration(configuration, signal.Scope, now)})
 	if err != nil {
 		t.Fatal(err)
 	}
 	job := core.SkillJob{ID: "job-activate", WorkflowID: workflow.ID, Scope: signal.Scope, SkillID: decision.SkillID,
 		Stage: core.SkillStageActivate, InputDigest: digest, PolicyVersion: decision.PolicyVersion}
 	return automaticActivationFixture{repository: repository, activator: activator, adapter: adapter, job: job}
+}
+
+func automaticActiveConfiguration(configuration SkillAutomaticActivationConfiguration, scope core.SkillOrchestratorScope, now time.Time) core.SkillOrchestratorConfiguration {
+	return core.SkillOrchestratorConfiguration{
+		Scope: scope, Version: configuration.Signal.ConfigurationVersion, ContractVersion: core.SkillOrchestratorContractVersion,
+		Digest: "sha256:" + strings.Repeat("f", 64), PolicyDigest: configuration.Signal.PolicyDigest, Mode: core.SkillOrchestratorAutomaticLowRisk,
+		PollInterval: time.Second, ReconciliationInterval: time.Minute, ClaimBatch: 1, WorkerConcurrency: 1, TenantConcurrency: 1, WorkspaceConcurrency: 1,
+		DrainTimeout: time.Second, StaleReadinessThreshold: time.Minute,
+		StagePolicies:     []core.SkillOrchestratorStagePolicy{{Stage: core.SkillStageActivate, Enabled: true, LeaseDuration: time.Minute, RenewalInterval: time.Second, Timeout: time.Minute, MaxAttempts: 1, InitialBackoff: time.Second, MaximumBackoff: time.Second}},
+		ApprovalReference: configuration.ApprovalReference, ReleaseEvidenceReference: configuration.ReleaseEvidenceReference, SignatureReference: configuration.SignatureReference,
+		CreatedBy: "operator", CreatedAt: now,
+	}
 }
 
 func automaticActivationTestConfiguration() SkillAutomaticActivationConfiguration {
