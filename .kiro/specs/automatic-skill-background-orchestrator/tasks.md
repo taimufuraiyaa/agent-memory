@@ -17,7 +17,7 @@
   - Files: `internal/core/skill_orchestrator.go`, focused tests, contract documentation.
   - Estimated scope: Medium.
 
-- [ ] **Task 2: Add standalone orchestration schema and migration**
+- [x] **Task 2: Add standalone orchestration schema and migration**
   - Acceptance: SQLite stores workflows, jobs, dependencies, attempts, safety signals, configuration, leader leases, and reconciliation cursors with claim/recovery indexes and foreign-key lineage.
   - Verify: fresh and upgraded migration, rollback compatibility, constraint, index-plan, duplicate, retention, and concurrent-reader tests.
   - Dependencies: Task 1.

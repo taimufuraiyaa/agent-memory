@@ -43,6 +43,129 @@ var schemaMigrations = []migrationStep{
 	{23, "skill-execution-feedback-class", migrateSkillExecutionFeedbackClass},
 	{24, "skill-safety-signals", migrateSkillSafetySignals},
 	{25, "skill-lifecycle-custody", migrateSkillLifecycleCustody},
+	{26, "skill-background-orchestrator", migrateSkillBackgroundOrchestrator},
+}
+
+func migrateSkillBackgroundOrchestrator(ctx context.Context, s *Store) error {
+	statements := []string{
+		`CREATE TABLE IF NOT EXISTS skill_orchestrator_workflows (
+			id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL DEFAULT '', workspace_id TEXT NOT NULL, environment TEXT NOT NULL,
+			skill_id TEXT NOT NULL DEFAULT '', origin_kind TEXT NOT NULL, origin_id TEXT NOT NULL, workflow_kind TEXT NOT NULL,
+			contract_version TEXT NOT NULL, input_digest TEXT NOT NULL, state TEXT NOT NULL, current_stage TEXT NOT NULL,
+			generation INTEGER NOT NULL, configuration_version INTEGER NOT NULL, policy_digest TEXT NOT NULL,
+			created_at TEXT NOT NULL, updated_at TEXT NOT NULL, terminal_at TEXT NOT NULL DEFAULT '',
+			CHECK(length(id) BETWEEN 1 AND 256), CHECK(length(workspace_id) BETWEEN 1 AND 256),
+			CHECK(length(environment) BETWEEN 1 AND 64), CHECK(contract_version = 'skill-orchestrator/v1'),
+			CHECK(state IN ('open','paused','completed','cancelled','rejected','dead_lettered')),
+			CHECK(current_stage IN ('detect','build','evaluate','decide','start_canary','analyze_canary','activate','observe_safety','rollback','reconcile_materialization')),
+			CHECK(generation >= 1), CHECK(configuration_version >= 1),
+			UNIQUE(tenant_id,workspace_id,environment,workflow_kind,origin_kind,origin_id,input_digest)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_skill_orchestrator_workflows_status
+			ON skill_orchestrator_workflows(tenant_id,workspace_id,environment,state,updated_at DESC,id)`,
+		`CREATE TABLE IF NOT EXISTS skill_orchestrator_jobs (
+			id TEXT PRIMARY KEY, workflow_id TEXT NOT NULL, tenant_id TEXT NOT NULL DEFAULT '', workspace_id TEXT NOT NULL,
+			environment TEXT NOT NULL, skill_id TEXT NOT NULL DEFAULT '', stage TEXT NOT NULL, contract_version TEXT NOT NULL,
+			input_digest TEXT NOT NULL, policy_version INTEGER NOT NULL, state TEXT NOT NULL, priority INTEGER NOT NULL,
+			ready_at TEXT NOT NULL, dependency_count INTEGER NOT NULL DEFAULT 0, blocked_reason TEXT NOT NULL DEFAULT '',
+			attempt INTEGER NOT NULL DEFAULT 0, max_attempts INTEGER NOT NULL, lease_owner TEXT NOT NULL DEFAULT '',
+			lease_expires_at TEXT NOT NULL DEFAULT '', fence INTEGER NOT NULL DEFAULT 0, timeout_at TEXT NOT NULL DEFAULT '',
+			cancel_requested_at TEXT NOT NULL DEFAULT '', result_kind TEXT NOT NULL DEFAULT '',
+			result_references_json TEXT NOT NULL DEFAULT '[]', failure_class TEXT NOT NULL DEFAULT '',
+			failure_code TEXT NOT NULL DEFAULT '', replay_of_job_id TEXT NOT NULL DEFAULT '',
+			created_at TEXT NOT NULL, updated_at TEXT NOT NULL, completed_at TEXT NOT NULL DEFAULT '',
+			CHECK(length(id) BETWEEN 1 AND 256), CHECK(contract_version = 'skill-orchestrator/v1'),
+			CHECK(stage IN ('detect','build','evaluate','decide','start_canary','analyze_canary','activate','observe_safety','rollback','reconcile_materialization')),
+			CHECK(state IN ('queued','blocked','running','retry_wait','completed','cancelled','dead_lettered')),
+			CHECK(priority BETWEEN 0 AND 1000000), CHECK(dependency_count BETWEEN 0 AND 32),
+			CHECK(attempt >= 0 AND max_attempts BETWEEN 1 AND 100 AND attempt <= max_attempts), CHECK(fence >= 0),
+			CHECK(length(blocked_reason) <= 128), CHECK(length(failure_code) <= 128),
+			CHECK(json_valid(result_references_json) AND length(result_references_json) <= 8192),
+			UNIQUE(workflow_id,stage,input_digest),
+			FOREIGN KEY(workflow_id) REFERENCES skill_orchestrator_workflows(id) ON DELETE CASCADE
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_skill_orchestrator_jobs_ready
+			ON skill_orchestrator_jobs(tenant_id,workspace_id,environment,state,ready_at,priority DESC,created_at,id)`,
+		`CREATE INDEX IF NOT EXISTS idx_skill_orchestrator_jobs_expired
+			ON skill_orchestrator_jobs(state,lease_expires_at,tenant_id,workspace_id,id)`,
+		`CREATE INDEX IF NOT EXISTS idx_skill_orchestrator_jobs_workflow
+			ON skill_orchestrator_jobs(workflow_id,created_at,id)`,
+		`CREATE TABLE IF NOT EXISTS skill_orchestrator_job_dependencies (
+			job_id TEXT NOT NULL, parent_job_id TEXT NOT NULL, accepted_result_kinds_json TEXT NOT NULL,
+			created_at TEXT NOT NULL, PRIMARY KEY(job_id,parent_job_id), CHECK(job_id <> parent_job_id),
+			CHECK(json_valid(accepted_result_kinds_json) AND length(accepted_result_kinds_json) <= 256),
+			FOREIGN KEY(job_id) REFERENCES skill_orchestrator_jobs(id) ON DELETE CASCADE,
+			FOREIGN KEY(parent_job_id) REFERENCES skill_orchestrator_jobs(id) ON DELETE CASCADE
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_skill_orchestrator_dependencies_parent
+			ON skill_orchestrator_job_dependencies(parent_job_id,job_id)`,
+		`CREATE TABLE IF NOT EXISTS skill_orchestrator_job_attempts (
+			id TEXT PRIMARY KEY, job_id TEXT NOT NULL, attempt INTEGER NOT NULL, owner TEXT NOT NULL, fence INTEGER NOT NULL,
+			started_at TEXT NOT NULL, lease_expires_at TEXT NOT NULL, ended_at TEXT NOT NULL DEFAULT '',
+			result_kind TEXT NOT NULL DEFAULT '', failure_class TEXT NOT NULL DEFAULT '', failure_code TEXT NOT NULL DEFAULT '',
+			duration_ms INTEGER NOT NULL DEFAULT 0, renewal_count INTEGER NOT NULL DEFAULT 0,
+			CHECK(attempt >= 1), CHECK(fence >= 1), CHECK(duration_ms >= 0), CHECK(renewal_count >= 0),
+			CHECK(length(failure_code) <= 128), UNIQUE(job_id,attempt), UNIQUE(job_id,fence),
+			FOREIGN KEY(job_id) REFERENCES skill_orchestrator_jobs(id) ON DELETE CASCADE
+		)`,
+		`CREATE TABLE IF NOT EXISTS skill_orchestrator_safety_signals (
+			id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL DEFAULT '', workspace_id TEXT NOT NULL, environment TEXT NOT NULL,
+			skill_id TEXT NOT NULL, revision_id TEXT NOT NULL, source TEXT NOT NULL, verifier_id TEXT NOT NULL,
+			severity TEXT NOT NULL, evidence_reference TEXT NOT NULL, deduplication_digest TEXT NOT NULL,
+			policy_version INTEGER NOT NULL, disposition TEXT NOT NULL, allocation_disabled INTEGER NOT NULL DEFAULT 0,
+			created_at TEXT NOT NULL, updated_at TEXT NOT NULL, accepted_at TEXT NOT NULL DEFAULT '',
+			CHECK(severity IN ('soft','hard')), CHECK(disposition IN ('pending','accepted','rejected')),
+			CHECK(policy_version >= 1), CHECK(allocation_disabled IN (0,1)),
+			CHECK(length(evidence_reference) BETWEEN 1 AND 256),
+			UNIQUE(tenant_id,workspace_id,environment,deduplication_digest),
+			FOREIGN KEY(skill_id) REFERENCES skills(id) ON DELETE CASCADE,
+			FOREIGN KEY(revision_id) REFERENCES skill_revisions(id)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_skill_orchestrator_safety_revision
+			ON skill_orchestrator_safety_signals(tenant_id,workspace_id,environment,revision_id,severity,created_at DESC)`,
+		`CREATE TABLE IF NOT EXISTS skill_orchestrator_configurations (
+			tenant_id TEXT NOT NULL DEFAULT '', workspace_id TEXT NOT NULL, environment TEXT NOT NULL, version INTEGER NOT NULL,
+			contract_version TEXT NOT NULL, digest TEXT NOT NULL, mode TEXT NOT NULL, configuration_json TEXT NOT NULL,
+			approval_reference TEXT NOT NULL DEFAULT '', release_evidence_reference TEXT NOT NULL DEFAULT '',
+			signature_reference TEXT NOT NULL DEFAULT '', created_by TEXT NOT NULL, created_at TEXT NOT NULL,
+			PRIMARY KEY(tenant_id,workspace_id,environment,version),
+			CHECK(contract_version = 'skill-orchestrator/v1'),
+			CHECK(mode IN ('disabled','shadow','manual','canary','automatic_low_risk')),
+			CHECK(json_valid(configuration_json) AND length(configuration_json) <= 32768),
+			UNIQUE(tenant_id,workspace_id,environment,digest)
+		)`,
+		`CREATE TABLE IF NOT EXISTS skill_orchestrator_leader_leases (
+			installation_id TEXT NOT NULL, database_id TEXT NOT NULL, owner TEXT NOT NULL DEFAULT '',
+			fence INTEGER NOT NULL DEFAULT 0, lease_expires_at TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL,
+			PRIMARY KEY(installation_id,database_id), CHECK(fence >= 0)
+		)`,
+		`CREATE TABLE IF NOT EXISTS skill_orchestrator_reconciliation_cursors (
+			tenant_id TEXT NOT NULL DEFAULT '', workspace_id TEXT NOT NULL, environment TEXT NOT NULL, domain TEXT NOT NULL,
+			cursor TEXT NOT NULL DEFAULT '', configuration_version INTEGER NOT NULL, last_completed_at TEXT NOT NULL DEFAULT '',
+			scanned INTEGER NOT NULL DEFAULT 0, repaired INTEGER NOT NULL DEFAULT 0, skipped INTEGER NOT NULL DEFAULT 0,
+			blocked INTEGER NOT NULL DEFAULT 0, failed INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL,
+			PRIMARY KEY(tenant_id,workspace_id,environment,domain), CHECK(configuration_version >= 1),
+			CHECK(scanned >= 0 AND repaired >= 0 AND skipped >= 0 AND blocked >= 0 AND failed >= 0),
+			CHECK(length(cursor) <= 512)
+		)`,
+		`CREATE TABLE IF NOT EXISTS skill_orchestrator_events (
+			id INTEGER PRIMARY KEY AUTOINCREMENT, workflow_id TEXT NOT NULL, job_id TEXT,
+			event_kind TEXT NOT NULL, from_state TEXT NOT NULL DEFAULT '', to_state TEXT NOT NULL DEFAULT '',
+			actor_id TEXT NOT NULL, fence INTEGER NOT NULL DEFAULT 0, reason_code TEXT NOT NULL DEFAULT '',
+			created_at TEXT NOT NULL, CHECK(length(event_kind) BETWEEN 1 AND 128),
+			CHECK(length(reason_code) <= 128), CHECK(fence >= 0),
+			FOREIGN KEY(workflow_id) REFERENCES skill_orchestrator_workflows(id) ON DELETE CASCADE,
+			FOREIGN KEY(job_id) REFERENCES skill_orchestrator_jobs(id) ON DELETE CASCADE
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_skill_orchestrator_events_workflow
+			ON skill_orchestrator_events(workflow_id,id)`,
+	}
+	for _, statement := range statements {
+		if _, err := s.db.ExecContext(ctx, statement); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func migrateSkillLifecycleCustody(ctx context.Context, s *Store) error {
