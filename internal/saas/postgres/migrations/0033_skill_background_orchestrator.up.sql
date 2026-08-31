@@ -4,7 +4,7 @@ CREATE TABLE saas_skill_orchestrator_workflows (
     id uuid NOT NULL,
     environment text NOT NULL CHECK (octet_length(environment) BETWEEN 1 AND 64),
     skill_id text NOT NULL DEFAULT '',
-    origin_kind text NOT NULL CHECK (origin_kind IN ('solution_episode','tool_lesson','safety_signal','operator','reconciliation')),
+    origin_kind text NOT NULL CHECK (origin_kind IN ('solution_episode','tool_lesson','safety_signal','operator','reconciliation','lifecycle_signal')),
     origin_id text NOT NULL CHECK (octet_length(origin_id) BETWEEN 1 AND 256),
     workflow_kind text NOT NULL CHECK (workflow_kind IN ('automatic_revision','safety_rollback','materialization_recovery')),
     contract_version text NOT NULL CHECK (contract_version = 'skill-orchestrator/v1'),

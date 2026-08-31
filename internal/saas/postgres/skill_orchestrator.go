@@ -72,6 +72,87 @@ func (r *SkillOrchestratorRepository) CreateSkillWorkflow(ctx context.Context, w
 	return stored, created, nil
 }
 
+func (r *SkillOrchestratorRepository) RouteSkillSignal(ctx context.Context, workflow core.SkillWorkflow, job core.SkillJob, dependencies []core.SkillJobDependency) (contracts.SkillSignalRouteResult, error) {
+	job.DependencyCount = len(dependencies)
+	if err := workflow.Validate(); err != nil {
+		return contracts.SkillSignalRouteResult{}, err
+	}
+	if err := job.Validate(); err != nil {
+		return contracts.SkillSignalRouteResult{}, err
+	}
+	if job.WorkflowID != workflow.ID || job.Scope != workflow.Scope || job.InputDigest != workflow.InputDigest {
+		return contracts.SkillSignalRouteResult{}, ErrSkillOrchestratorScope
+	}
+	for index := range dependencies {
+		dependencies[index].JobID = job.ID
+		if err := dependencies[index].Validate(); err != nil {
+			return contracts.SkillSignalRouteResult{}, err
+		}
+	}
+	tx, err := r.begin(ctx, workflow.Scope)
+	if err != nil {
+		return contracts.SkillSignalRouteResult{}, err
+	}
+	defer tx.Rollback(ctx)
+	workflowTag, err := tx.Exec(ctx, `INSERT INTO saas_skill_orchestrator_workflows(
+		tenant_id,workspace_id,id,environment,skill_id,origin_kind,origin_id,workflow_kind,contract_version,
+		input_digest,state,current_stage,generation,configuration_version,policy_digest,created_at,updated_at,terminal_at
+	) VALUES($1::uuid,$2::uuid,$3::uuid,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+	ON CONFLICT(tenant_id,workspace_id,environment,workflow_kind,origin_kind,origin_id,input_digest) DO NOTHING`,
+		workflow.Scope.TenantID, workflow.Scope.WorkspaceID, workflow.ID, workflow.Scope.Environment, workflow.SkillID,
+		workflow.OriginKind, workflow.OriginID, workflow.Kind, workflow.ContractVersion, workflow.InputDigest,
+		workflow.State, workflow.CurrentStage, workflow.Generation, workflow.ConfigurationVersion, workflow.PolicyDigest,
+		workflow.CreatedAt, workflow.UpdatedAt, nullableSkillOrchestratorTime(workflow.TerminalAt))
+	if err != nil {
+		return contracts.SkillSignalRouteResult{}, err
+	}
+	storedWorkflow, _, err := scanHostedSkillWorkflowCreated(tx.QueryRow(ctx, `SELECT id::text,tenant_id::text,workspace_id::text,environment,skill_id,origin_kind,origin_id,workflow_kind,contract_version,input_digest,state,current_stage,generation,configuration_version,policy_digest,created_at,updated_at,terminal_at,false FROM saas_skill_orchestrator_workflows WHERE tenant_id=$1::uuid AND workspace_id=$2::uuid AND environment=$3 AND workflow_kind=$4 AND origin_kind=$5 AND origin_id=$6 AND input_digest=$7`, workflow.Scope.TenantID, workflow.Scope.WorkspaceID, workflow.Scope.Environment, workflow.Kind, workflow.OriginKind, workflow.OriginID, workflow.InputDigest))
+	if err != nil {
+		return contracts.SkillSignalRouteResult{}, err
+	}
+	if storedWorkflow.ID != workflow.ID || storedWorkflow.PolicyDigest != workflow.PolicyDigest {
+		return contracts.SkillSignalRouteResult{}, ErrSkillOrchestratorConflict
+	}
+	refs := marshalHostedSkillReferences(nil)
+	jobTag, err := tx.Exec(ctx, `INSERT INTO saas_skill_orchestrator_jobs(
+		tenant_id,workspace_id,id,workflow_id,environment,skill_id,stage,contract_version,input_digest,policy_version,
+		state,priority,ready_at,dependency_count,blocked_reason,attempt,max_attempts,lease_owner,lease_expires_at,fence,
+		timeout_at,cancel_requested_at,result_kind,result_references,failure_class,failure_code,created_at,updated_at,completed_at
+	) VALUES($1::uuid,$2::uuid,$3::uuid,$4::uuid,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24::jsonb,$25,$26,$27,$28,$29)
+	ON CONFLICT(tenant_id,workspace_id,workflow_id,stage,input_digest) DO NOTHING`,
+		job.Scope.TenantID, job.Scope.WorkspaceID, job.ID, job.WorkflowID, job.Scope.Environment, job.SkillID,
+		job.Stage, job.ContractVersion, job.InputDigest, job.PolicyVersion, job.State, job.Priority, job.ReadyAt,
+		job.DependencyCount, job.BlockedReason, job.Attempt, job.MaxAttempts, job.LeaseOwner,
+		nullableSkillOrchestratorTime(job.LeaseExpiresAt), job.Fence, nullableSkillOrchestratorTime(job.TimeoutAt),
+		nullableSkillOrchestratorTime(job.CancelRequestedAt), job.ResultKind, refs, job.FailureClass, job.FailureCode,
+		job.CreatedAt, job.UpdatedAt, nullableSkillOrchestratorTime(job.CompletedAt))
+	if err != nil {
+		return contracts.SkillSignalRouteResult{}, err
+	}
+	storedJob, err := scanHostedSkillJob(tx.QueryRow(ctx, `SELECT `+hostedSkillJobColumns+` FROM saas_skill_orchestrator_jobs WHERE tenant_id=$1::uuid AND workspace_id=$2::uuid AND workflow_id=$3::uuid AND stage=$4 AND input_digest=$5`, job.Scope.TenantID, job.Scope.WorkspaceID, job.WorkflowID, job.Stage, job.InputDigest))
+	if err != nil {
+		return contracts.SkillSignalRouteResult{}, err
+	}
+	if storedJob.ID != job.ID || storedJob.Scope != job.Scope {
+		return contracts.SkillSignalRouteResult{}, ErrSkillOrchestratorConflict
+	}
+	if jobTag.RowsAffected() == 1 {
+		for _, dependency := range dependencies {
+			accepted, _ := json.Marshal(dependency.AcceptedResultKinds)
+			if _, err := tx.Exec(ctx, `INSERT INTO saas_skill_orchestrator_job_dependencies(tenant_id,workspace_id,job_id,parent_job_id,accepted_result_kinds,created_at) VALUES($1::uuid,$2::uuid,$3::uuid,$4::uuid,$5::jsonb,$6)`, job.Scope.TenantID, job.Scope.WorkspaceID, dependency.JobID, dependency.ParentJobID, accepted, dependency.CreatedAt); err != nil {
+				return contracts.SkillSignalRouteResult{}, err
+			}
+		}
+		if err := insertHostedSkillEvent(ctx, tx, storedJob, "signal_routed", "", string(job.State), "router", 0, "", job.CreatedAt); err != nil {
+			return contracts.SkillSignalRouteResult{}, err
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return contracts.SkillSignalRouteResult{}, err
+	}
+	return contracts.SkillSignalRouteResult{Workflow: storedWorkflow, Job: storedJob, Dependencies: dependencies, Created: workflowTag.RowsAffected() == 1 || jobTag.RowsAffected() == 1}, nil
+}
+
 func (r *SkillOrchestratorRepository) EnqueueSkillJob(ctx context.Context, job core.SkillJob, dependencies []core.SkillJobDependency) (core.SkillJob, bool, error) {
 	job.DependencyCount = len(dependencies)
 	if err := job.Validate(); err != nil {

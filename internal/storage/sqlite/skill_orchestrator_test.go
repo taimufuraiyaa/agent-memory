@@ -18,6 +18,41 @@ func TestSQLiteSkillOrchestratorSharedRepositoryContract(t *testing.T) {
 	orchestratortest.RunRepositoryContract(t, store, core.SkillOrchestratorScope{WorkspaceID: "ws", Environment: "production"})
 }
 
+func TestSQLiteSkillSignalRouteIsAtomicAndIdempotent(t *testing.T) {
+	store := openSkillOrchestratorStore(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	workflow := sqliteValidSkillWorkflow(now, "workflow-signal", "signal-1")
+	workflow.OriginKind = core.SkillWorkflowOriginLifecycleSignal
+	job := sqliteValidSkillJob(now, "job-signal", workflow.ID, core.SkillStageDetect)
+	job.InputDigest = workflow.InputDigest
+
+	first, err := store.RouteSkillSignal(ctx, workflow, job, nil)
+	if err != nil || !first.Created {
+		t.Fatalf("first route=%+v err=%v", first, err)
+	}
+	second, err := store.RouteSkillSignal(ctx, workflow, job, nil)
+	if err != nil || second.Created || second.Workflow.ID != first.Workflow.ID || second.Job.ID != first.Job.ID {
+		t.Fatalf("duplicate route=%+v err=%v", second, err)
+	}
+
+	rollbackWorkflow := sqliteValidSkillWorkflow(now, "workflow-rollback", "signal-rollback")
+	rollbackWorkflow.OriginKind = core.SkillWorkflowOriginLifecycleSignal
+	rollbackJob := sqliteValidSkillJob(now, "job-rollback", rollbackWorkflow.ID, core.SkillStageBuild)
+	rollbackJob.InputDigest = rollbackWorkflow.InputDigest
+	dependency := core.SkillJobDependency{JobID: rollbackJob.ID, ParentJobID: "missing-parent", AcceptedResultKinds: []core.SkillJobResultKind{core.SkillJobResultSucceeded}, CreatedAt: now}
+	if _, err := store.RouteSkillSignal(ctx, rollbackWorkflow, rollbackJob, []core.SkillJobDependency{dependency}); err == nil {
+		t.Fatal("expected missing dependency to roll back route")
+	}
+	var count int
+	if err := store.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM skill_orchestrator_workflows WHERE id=?`, rollbackWorkflow.ID).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Fatalf("transaction left partial workflow count=%d", count)
+	}
+}
+
 func TestSQLiteSkillOrchestratorCreateAndEnqueueAreIdempotent(t *testing.T) {
 	store := openSkillOrchestratorStore(t)
 	ctx := context.Background()

@@ -60,11 +60,12 @@ const (
 	SkillWorkflowOriginSafetySignal    SkillWorkflowOriginKind = "safety_signal"
 	SkillWorkflowOriginOperator        SkillWorkflowOriginKind = "operator"
 	SkillWorkflowOriginReconciliation  SkillWorkflowOriginKind = "reconciliation"
+	SkillWorkflowOriginLifecycleSignal SkillWorkflowOriginKind = "lifecycle_signal"
 )
 
 func (k SkillWorkflowOriginKind) Valid() bool {
 	switch k {
-	case SkillWorkflowOriginSolutionEpisode, SkillWorkflowOriginToolLesson, SkillWorkflowOriginSafetySignal, SkillWorkflowOriginOperator, SkillWorkflowOriginReconciliation:
+	case SkillWorkflowOriginSolutionEpisode, SkillWorkflowOriginToolLesson, SkillWorkflowOriginSafetySignal, SkillWorkflowOriginOperator, SkillWorkflowOriginReconciliation, SkillWorkflowOriginLifecycleSignal:
 		return true
 	default:
 		return false

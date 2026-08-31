@@ -54,7 +54,7 @@
 
 ## Phase 2 — Enqueue, Worker, and Recovery Engine
 
-- [ ] **Task 6: Add transactional signal-to-job router**
+- [x] **Task 6: Add transactional signal-to-job router**
   - Acceptance: Verified lifecycle signals create stable workflows/jobs with immutable digests and dependencies; duplicate signals converge and request paths do not execute long-running stages.
   - Verify: lesson, candidate, revision, evaluation, decision, canary, execution, safety, duplicate, tombstone, unauthorized, and transaction-rollback tests.
   - Dependencies: Checkpoint A.

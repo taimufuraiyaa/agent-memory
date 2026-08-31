@@ -22,6 +22,39 @@ func TestPostgresSkillOrchestratorSharedRepositoryContract(t *testing.T) {
 	orchestratortest.RunRepositoryContract(t, repository, scope)
 }
 
+func TestPostgresSkillSignalRouteIsAtomicAndIdempotent(t *testing.T) {
+	pool := openSkillOrchestratorPostgres(t)
+	scope := createSkillOrchestratorHostedScope(t, pool)
+	repository := NewSkillOrchestratorRepository(pool)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	workflow, job := hostedSkillWorkflowAndJob(now, scope)
+	workflow.OriginKind = core.SkillWorkflowOriginLifecycleSignal
+
+	first, err := repository.RouteSkillSignal(ctx, workflow, job, nil)
+	if err != nil || !first.Created {
+		t.Fatalf("first route=%+v err=%v", first, err)
+	}
+	second, err := repository.RouteSkillSignal(ctx, workflow, job, nil)
+	if err != nil || second.Created || second.Job.ID != first.Job.ID {
+		t.Fatalf("duplicate route=%+v err=%v", second, err)
+	}
+
+	rollbackWorkflow, rollbackJob := hostedSkillWorkflowAndJob(now, scope)
+	rollbackWorkflow.OriginKind = core.SkillWorkflowOriginLifecycleSignal
+	dependency := core.SkillJobDependency{JobID: rollbackJob.ID, ParentJobID: uuid.NewString(), AcceptedResultKinds: []core.SkillJobResultKind{core.SkillJobResultSucceeded}, CreatedAt: now}
+	if _, err := repository.RouteSkillSignal(ctx, rollbackWorkflow, rollbackJob, []core.SkillJobDependency{dependency}); err == nil {
+		t.Fatal("expected missing parent dependency to roll back route")
+	}
+	var count int
+	if err := pool.QueryRow(ctx, `SELECT COUNT(*) FROM saas_skill_orchestrator_workflows WHERE tenant_id=$1 AND id=$2`, scope.TenantID, rollbackWorkflow.ID).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Fatalf("transaction left partial workflow count=%d", count)
+	}
+}
+
 func TestPostgresSkillOrchestratorConcurrentClaimLeaseTakeoverAndScopeSafety(t *testing.T) {
 	pool := openSkillOrchestratorPostgres(t)
 	scope := createSkillOrchestratorHostedScope(t, pool)

@@ -57,6 +57,90 @@ func (s *Store) CreateSkillWorkflow(ctx context.Context, workflow core.SkillWork
 	return stored, rows == 1, nil
 }
 
+func (s *Store) RouteSkillSignal(ctx context.Context, workflow core.SkillWorkflow, job core.SkillJob, dependencies []core.SkillJobDependency) (contracts.SkillSignalRouteResult, error) {
+	job.DependencyCount = len(dependencies)
+	if err := workflow.Validate(); err != nil {
+		return contracts.SkillSignalRouteResult{}, err
+	}
+	if err := job.Validate(); err != nil {
+		return contracts.SkillSignalRouteResult{}, err
+	}
+	if job.WorkflowID != workflow.ID || job.Scope != workflow.Scope || job.InputDigest != workflow.InputDigest {
+		return contracts.SkillSignalRouteResult{}, ErrSkillOrchestratorScope
+	}
+	for index := range dependencies {
+		dependencies[index].JobID = job.ID
+		if err := dependencies[index].Validate(); err != nil {
+			return contracts.SkillSignalRouteResult{}, err
+		}
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return contracts.SkillSignalRouteResult{}, err
+	}
+	defer tx.Rollback()
+	workflowResult, err := tx.ExecContext(ctx, `INSERT INTO skill_orchestrator_workflows(
+		id,tenant_id,workspace_id,environment,skill_id,origin_kind,origin_id,workflow_kind,contract_version,
+		input_digest,state,current_stage,generation,configuration_version,policy_digest,created_at,updated_at,terminal_at
+	) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+	ON CONFLICT(tenant_id,workspace_id,environment,workflow_kind,origin_kind,origin_id,input_digest) DO NOTHING`,
+		workflow.ID, workflow.Scope.TenantID, workflow.Scope.WorkspaceID, workflow.Scope.Environment, workflow.SkillID,
+		workflow.OriginKind, workflow.OriginID, workflow.Kind, workflow.ContractVersion, workflow.InputDigest,
+		workflow.State, workflow.CurrentStage, workflow.Generation, workflow.ConfigurationVersion, workflow.PolicyDigest,
+		formatSkillOrchestratorTime(workflow.CreatedAt), formatSkillOrchestratorTime(workflow.UpdatedAt), formatOptionalSkillOrchestratorTime(workflow.TerminalAt))
+	if err != nil {
+		return contracts.SkillSignalRouteResult{}, err
+	}
+	storedWorkflow, err := skillWorkflowByOriginQuery(ctx, tx, workflow)
+	if err != nil {
+		return contracts.SkillSignalRouteResult{}, err
+	}
+	if storedWorkflow.ID != workflow.ID || storedWorkflow.PolicyDigest != workflow.PolicyDigest {
+		return contracts.SkillSignalRouteResult{}, ErrSkillOrchestratorConflict
+	}
+	refs := []byte("[]")
+	jobResult, err := tx.ExecContext(ctx, `INSERT INTO skill_orchestrator_jobs(
+		id,workflow_id,tenant_id,workspace_id,environment,skill_id,stage,contract_version,input_digest,policy_version,
+		state,priority,ready_at,dependency_count,blocked_reason,attempt,max_attempts,lease_owner,lease_expires_at,fence,
+		timeout_at,cancel_requested_at,result_kind,result_references_json,failure_class,failure_code,created_at,updated_at,completed_at
+	) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+	ON CONFLICT(workflow_id,stage,input_digest) DO NOTHING`,
+		job.ID, job.WorkflowID, job.Scope.TenantID, job.Scope.WorkspaceID, job.Scope.Environment, job.SkillID,
+		job.Stage, job.ContractVersion, job.InputDigest, job.PolicyVersion, job.State, job.Priority,
+		formatSkillOrchestratorTime(job.ReadyAt), job.DependencyCount, job.BlockedReason, job.Attempt, job.MaxAttempts,
+		job.LeaseOwner, formatOptionalSkillOrchestratorTime(job.LeaseExpiresAt), job.Fence,
+		formatOptionalSkillOrchestratorTime(job.TimeoutAt), formatOptionalSkillOrchestratorTime(job.CancelRequestedAt),
+		job.ResultKind, string(refs), job.FailureClass, job.FailureCode,
+		formatSkillOrchestratorTime(job.CreatedAt), formatSkillOrchestratorTime(job.UpdatedAt), formatOptionalSkillOrchestratorTime(job.CompletedAt))
+	if err != nil {
+		return contracts.SkillSignalRouteResult{}, err
+	}
+	storedJob, err := skillJobByBinding(ctx, tx, job.WorkflowID, job.Stage, job.InputDigest)
+	if err != nil {
+		return contracts.SkillSignalRouteResult{}, err
+	}
+	if storedJob.ID != job.ID || storedJob.Scope != job.Scope {
+		return contracts.SkillSignalRouteResult{}, ErrSkillOrchestratorConflict
+	}
+	jobRows, _ := jobResult.RowsAffected()
+	if jobRows == 1 {
+		for _, dependency := range dependencies {
+			accepted, _ := json.Marshal(dependency.AcceptedResultKinds)
+			if _, err := tx.ExecContext(ctx, `INSERT INTO skill_orchestrator_job_dependencies(job_id,parent_job_id,accepted_result_kinds_json,created_at) VALUES(?,?,?,?)`, dependency.JobID, dependency.ParentJobID, string(accepted), formatSkillOrchestratorTime(dependency.CreatedAt)); err != nil {
+				return contracts.SkillSignalRouteResult{}, err
+			}
+		}
+		if err := insertSkillOrchestratorEvent(ctx, tx, job.WorkflowID, job.ID, "signal_routed", "", string(job.State), "router", 0, "", job.CreatedAt); err != nil {
+			return contracts.SkillSignalRouteResult{}, err
+		}
+	}
+	workflowRows, _ := workflowResult.RowsAffected()
+	if err := tx.Commit(); err != nil {
+		return contracts.SkillSignalRouteResult{}, err
+	}
+	return contracts.SkillSignalRouteResult{Workflow: storedWorkflow, Job: storedJob, Dependencies: dependencies, Created: workflowRows == 1 || jobRows == 1}, nil
+}
+
 func (s *Store) EnqueueSkillJob(ctx context.Context, job core.SkillJob, dependencies []core.SkillJobDependency) (core.SkillJob, bool, error) {
 	job.DependencyCount = len(dependencies)
 	if err := job.Validate(); err != nil {
@@ -446,7 +530,11 @@ func (s *Store) ListSkillJobs(ctx context.Context, scope core.SkillOrchestratorS
 }
 
 func (s *Store) skillWorkflowByOrigin(ctx context.Context, workflow core.SkillWorkflow) (core.SkillWorkflow, error) {
-	row := s.db.QueryRowContext(ctx, `SELECT id,tenant_id,workspace_id,environment,skill_id,origin_kind,origin_id,workflow_kind,contract_version,input_digest,state,current_stage,generation,configuration_version,policy_digest,created_at,updated_at,terminal_at FROM skill_orchestrator_workflows WHERE tenant_id=? AND workspace_id=? AND environment=? AND workflow_kind=? AND origin_kind=? AND origin_id=? AND input_digest=?`,
+	return skillWorkflowByOriginQuery(ctx, s.db, workflow)
+}
+
+func skillWorkflowByOriginQuery(ctx context.Context, queryer skillOrchestratorQueryer, workflow core.SkillWorkflow) (core.SkillWorkflow, error) {
+	row := queryer.QueryRowContext(ctx, `SELECT id,tenant_id,workspace_id,environment,skill_id,origin_kind,origin_id,workflow_kind,contract_version,input_digest,state,current_stage,generation,configuration_version,policy_digest,created_at,updated_at,terminal_at FROM skill_orchestrator_workflows WHERE tenant_id=? AND workspace_id=? AND environment=? AND workflow_kind=? AND origin_kind=? AND origin_id=? AND input_digest=?`,
 		workflow.Scope.TenantID, workflow.Scope.WorkspaceID, workflow.Scope.Environment, workflow.Kind, workflow.OriginKind, workflow.OriginID, workflow.InputDigest)
 	return scanSkillWorkflow(row)
 }

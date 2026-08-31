@@ -45,7 +45,16 @@ type SkillJobBlock struct {
 	Now                        time.Time
 }
 
+type SkillSignalRouteResult struct {
+	Workflow     core.SkillWorkflow
+	Job          core.SkillJob
+	Dependencies []core.SkillJobDependency
+	Created      bool
+	Ignored      bool
+}
+
 type SkillOrchestratorRepository interface {
+	RouteSkillSignal(context.Context, core.SkillWorkflow, core.SkillJob, []core.SkillJobDependency) (SkillSignalRouteResult, error)
 	CreateSkillWorkflow(context.Context, core.SkillWorkflow) (core.SkillWorkflow, bool, error)
 	EnqueueSkillJob(context.Context, core.SkillJob, []core.SkillJobDependency) (core.SkillJob, bool, error)
 	ClaimSkillJobs(context.Context, core.SkillOrchestratorScope, string, int, time.Duration, time.Duration, time.Time) ([]core.SkillJob, error)
