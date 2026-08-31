@@ -98,6 +98,11 @@ func (r *SkillStageRegistry) resolve(version string, stage core.SkillOrchestrato
 	return adapter, ok
 }
 
+func (r *SkillStageRegistry) Supports(version string, stage core.SkillOrchestratorStage) bool {
+	_, ok := r.resolve(version, stage)
+	return ok
+}
+
 type SkillWorkerRepository interface {
 	ClaimSkillJobs(context.Context, core.SkillOrchestratorScope, string, int, time.Duration, time.Duration, time.Time) ([]core.SkillJob, error)
 	SkillWorkflowGeneration(context.Context, core.SkillOrchestratorScope, string) (int64, error)

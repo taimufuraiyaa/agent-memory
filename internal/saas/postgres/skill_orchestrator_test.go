@@ -67,6 +67,36 @@ func TestPostgresSkillSignalRouteIsAtomicAndIdempotent(t *testing.T) {
 	}
 }
 
+func TestPostgresSkillWorkerLaneClaimsReserveRollbackCapacity(t *testing.T) {
+	pool := openSkillOrchestratorPostgres(t)
+	scope := createSkillOrchestratorHostedScope(t, pool)
+	repository := NewSkillOrchestratorRepository(pool)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	ordinaryWorkflow, ordinaryJob := hostedSkillWorkflowAndJob(now, scope)
+	rollbackWorkflow, rollbackJob := hostedSkillWorkflowAndJob(now, scope)
+	rollbackWorkflow.Kind, rollbackWorkflow.CurrentStage = core.SkillWorkflowSafetyRollback, core.SkillStageRollback
+	rollbackJob.Stage, rollbackJob.Priority = core.SkillStageRollback, 1_000
+	for _, pair := range [][2]any{{ordinaryWorkflow, ordinaryJob}, {rollbackWorkflow, rollbackJob}} {
+		workflow := pair[0].(core.SkillWorkflow)
+		job := pair[1].(core.SkillJob)
+		if _, _, err := repository.CreateSkillWorkflow(ctx, workflow); err != nil {
+			t.Fatal(err)
+		}
+		if _, _, err := repository.EnqueueSkillJob(ctx, job, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ordinary, err := repository.ClaimSkillJobsByLane(ctx, scope, "ordinary-worker", 1, time.Minute, 30*time.Second, now.Add(time.Second), false)
+	if err != nil || len(ordinary) != 1 || ordinary[0].ID != ordinaryJob.ID {
+		t.Fatalf("ordinary lane claim=%+v err=%v", ordinary, err)
+	}
+	rollback, err := repository.ClaimSkillJobsByLane(ctx, scope, "rollback-worker", 1, time.Minute, 30*time.Second, now.Add(time.Second), true)
+	if err != nil || len(rollback) != 1 || rollback[0].ID != rollbackJob.ID {
+		t.Fatalf("rollback lane claim=%+v err=%v", rollback, err)
+	}
+}
+
 func TestPostgresSkillOrchestratorConcurrentClaimLeaseTakeoverAndScopeSafety(t *testing.T) {
 	pool := openSkillOrchestratorPostgres(t)
 	scope := createSkillOrchestratorHostedScope(t, pool)

@@ -491,6 +491,18 @@ func (r *SkillOrchestratorRepository) ResolveSkillJobDependencies(ctx context.Co
 }
 
 func (r *SkillOrchestratorRepository) ClaimSkillJobs(ctx context.Context, scope core.SkillOrchestratorScope, owner string, limit int, lease, timeout time.Duration, now time.Time) ([]core.SkillJob, error) {
+	return r.claimSkillJobs(ctx, scope, owner, limit, lease, timeout, now, "")
+}
+
+func (r *SkillOrchestratorRepository) ClaimSkillJobsByLane(ctx context.Context, scope core.SkillOrchestratorScope, owner string, limit int, lease, timeout time.Duration, now time.Time, rollback bool) ([]core.SkillJob, error) {
+	lane := "ordinary"
+	if rollback {
+		lane = "rollback"
+	}
+	return r.claimSkillJobs(ctx, scope, owner, limit, lease, timeout, now, lane)
+}
+
+func (r *SkillOrchestratorRepository) claimSkillJobs(ctx context.Context, scope core.SkillOrchestratorScope, owner string, limit int, lease, timeout time.Duration, now time.Time, lane string) ([]core.SkillJob, error) {
 	if strings.TrimSpace(owner) == "" || len(owner) > 256 || limit < 1 || limit > 100 || lease <= 0 || timeout <= 0 || timeout > lease || now.IsZero() {
 		return nil, errors.New("invalid skill job claim")
 	}
@@ -506,6 +518,7 @@ func (r *SkillOrchestratorRepository) ClaimSkillJobs(ctx context.Context, scope 
 		SELECT j.id,j.state FROM saas_skill_orchestrator_jobs j
 		JOIN saas_skill_orchestrator_workflows w ON w.tenant_id=j.tenant_id AND w.workspace_id=j.workspace_id AND w.id=j.workflow_id
 		WHERE j.tenant_id=$1::uuid AND j.workspace_id=$2::uuid AND j.environment=$3 AND w.state='open'
+		AND ($9='' OR ($9='rollback' AND j.stage='rollback') OR ($9='ordinary' AND j.stage<>'rollback'))
 		AND j.contract_version='skill-orchestrator/v1' AND j.attempt<j.max_attempts AND (
 			(j.state='queued' AND j.ready_at<=$4 AND NOT EXISTS(
 				SELECT 1 FROM saas_skill_orchestrator_job_dependencies d
@@ -517,7 +530,7 @@ func (r *SkillOrchestratorRepository) ClaimSkillJobs(ctx context.Context, scope 
 	) UPDATE saas_skill_orchestrator_jobs j SET state='running',attempt=j.attempt+1,lease_owner=$6,
 		lease_expires_at=$7,fence=j.fence+1,timeout_at=$8,blocked_reason='',failure_class='',failure_code='',updated_at=$4
 	FROM candidates c WHERE j.tenant_id=$1::uuid AND j.id=c.id
-	RETURNING `+qualifiedHostedSkillJobColumns("j"), scope.TenantID, scope.WorkspaceID, scope.Environment, now, limit, owner, now.Add(lease), now.Add(timeout))
+		RETURNING `+qualifiedHostedSkillJobColumns("j"), scope.TenantID, scope.WorkspaceID, scope.Environment, now, limit, owner, now.Add(lease), now.Add(timeout), lane)
 	if err != nil {
 		return nil, err
 	}
