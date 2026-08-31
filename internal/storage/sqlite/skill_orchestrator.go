@@ -1047,3 +1047,70 @@ func skillOrchestratorReferencesEqual(left, right []core.SkillOrchestratorRefere
 	}
 	return true
 }
+
+func (s *Store) AcquireSkillOrchestratorLeader(ctx context.Context, installationID, databaseID, owner string, leaseDuration time.Duration, now time.Time) (int64, bool, error) {
+	if !validSkillOrchestratorStorageID(installationID) || !validSkillOrchestratorStorageID(databaseID) || !validSkillOrchestratorStorageID(owner) || leaseDuration <= 0 || now.IsZero() {
+		return 0, false, errors.New("skill orchestrator leader acquisition is invalid")
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, false, err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO skill_orchestrator_leader_leases(installation_id,database_id,owner,fence,lease_expires_at,updated_at) VALUES(?,?, '',0,'',?)`, installationID, databaseID, formatSkillTime(now)); err != nil {
+		return 0, false, err
+	}
+	var currentOwner, expires string
+	var fence int64
+	if err := tx.QueryRowContext(ctx, `SELECT owner,fence,lease_expires_at FROM skill_orchestrator_leader_leases WHERE installation_id=? AND database_id=?`, installationID, databaseID).Scan(&currentOwner, &fence, &expires); err != nil {
+		return 0, false, err
+	}
+	available := currentOwner == "" || currentOwner == owner
+	if !available && expires != "" {
+		expiresAt, parseErr := time.Parse(time.RFC3339Nano, expires)
+		available = parseErr == nil && !expiresAt.After(now)
+	}
+	if !available {
+		return fence, false, tx.Commit()
+	}
+	nextFence := fence + 1
+	result, err := tx.ExecContext(ctx, `UPDATE skill_orchestrator_leader_leases SET owner=?,fence=?,lease_expires_at=?,updated_at=? WHERE installation_id=? AND database_id=? AND fence=?`, owner, nextFence, formatSkillTime(now.Add(leaseDuration)), formatSkillTime(now), installationID, databaseID, fence)
+	if err != nil {
+		return 0, false, err
+	}
+	if changed, _ := result.RowsAffected(); changed != 1 {
+		return 0, false, ErrSkillOrchestratorStaleLease
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, false, err
+	}
+	return nextFence, true, nil
+}
+
+func (s *Store) RenewSkillOrchestratorLeader(ctx context.Context, installationID, databaseID, owner string, fence int64, leaseDuration time.Duration, now time.Time) error {
+	if fence < 1 || leaseDuration <= 0 || now.IsZero() {
+		return errors.New("skill orchestrator leader renewal is invalid")
+	}
+	result, err := s.db.ExecContext(ctx, `UPDATE skill_orchestrator_leader_leases SET lease_expires_at=?,updated_at=? WHERE installation_id=? AND database_id=? AND owner=? AND fence=? AND lease_expires_at>?`, formatSkillTime(now.Add(leaseDuration)), formatSkillTime(now), installationID, databaseID, owner, fence, formatSkillTime(now))
+	if err != nil {
+		return err
+	}
+	if changed, _ := result.RowsAffected(); changed != 1 {
+		return ErrSkillOrchestratorStaleLease
+	}
+	return nil
+}
+
+func (s *Store) ReleaseSkillOrchestratorLeader(ctx context.Context, installationID, databaseID, owner string, fence int64, now time.Time) error {
+	if fence < 1 || now.IsZero() {
+		return errors.New("skill orchestrator leader release is invalid")
+	}
+	result, err := s.db.ExecContext(ctx, `UPDATE skill_orchestrator_leader_leases SET owner='',lease_expires_at='',updated_at=? WHERE installation_id=? AND database_id=? AND owner=? AND fence=?`, formatSkillTime(now), installationID, databaseID, owner, fence)
+	if err != nil {
+		return err
+	}
+	if changed, _ := result.RowsAffected(); changed != 1 {
+		return ErrSkillOrchestratorStaleLease
+	}
+	return nil
+}

@@ -149,7 +149,7 @@
 
 ## Phase 4 — Standalone and Hosted Runtimes
 
-- [ ] **Task 17: Embed bounded standalone worker runtime**
+- [x] **Task 17: Embed bounded standalone worker runtime**
   - Acceptance: The exact SQLite-backed service owns one leader sweep and bounded worker pool, resumes after restart, drains gracefully, and never creates a goroutine per skill.
   - Verify: disabled startup, wrong DB, leader contention, restart, SIGTERM drain, lease expiry, multiple workspaces, SQLite responsiveness, and feature-shutdown tests.
   - Dependencies: Checkpoint C.
