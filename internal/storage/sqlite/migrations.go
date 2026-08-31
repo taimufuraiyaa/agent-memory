@@ -47,6 +47,16 @@ var schemaMigrations = []migrationStep{
 	{27, "authenticated-skill-safety-signals", migrateAuthenticatedSkillSafetySignals},
 	{28, "scoped-skill-orchestrator-custody", migrateScopedSkillOrchestratorCustody},
 	{29, "skill-orchestrator-evaluation-budget", migrateSkillOrchestratorEvaluationBudget},
+	{30, "skill-orchestrator-migration-control", migrateSkillOrchestratorMigrationControl},
+}
+
+func migrateSkillOrchestratorMigrationControl(ctx context.Context, s *Store) error {
+	_, err := s.db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS skill_orchestrator_migration_controls (
+		tenant_id TEXT NOT NULL DEFAULT '', workspace_id TEXT NOT NULL, environment TEXT NOT NULL,
+		restore_paused INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL,
+		PRIMARY KEY(tenant_id,workspace_id,environment), CHECK(restore_paused IN (0,1))
+	)`)
+	return err
 }
 
 func migrateSkillOrchestratorEvaluationBudget(ctx context.Context, s *Store) error {

@@ -713,6 +713,35 @@ type SkillEvaluationBudgetReservationRequest struct {
 	Now           time.Time
 }
 
+type SkillMigrationInventoryKind string
+
+const (
+	SkillMigrationCandidate           SkillMigrationInventoryKind = "candidate"
+	SkillMigrationTestingRevision     SkillMigrationInventoryKind = "testing_revision"
+	SkillMigrationCanary              SkillMigrationInventoryKind = "canary"
+	SkillMigrationActivationOperation SkillMigrationInventoryKind = "activation_operation"
+)
+
+type SkillMigrationInventoryItem struct {
+	Kind                 SkillMigrationInventoryKind `json:"kind"`
+	ID                   string                      `json:"id"`
+	SkillID              string                      `json:"skill_id,omitempty"`
+	State                string                      `json:"state"`
+	EvidenceDigest       string                      `json:"evidence_digest"`
+	ExistingOpenWorkflow bool                        `json:"existing_open_workflow"`
+}
+
+type SkillMigrationInventory struct {
+	Scope                SkillOrchestratorScope        `json:"scope"`
+	SchemaVersion        string                        `json:"schema_version"`
+	RestorePaused        bool                          `json:"restore_paused"`
+	ConfigurationMode    SkillOrchestratorMode         `json:"configuration_mode"`
+	Items                []SkillMigrationInventoryItem `json:"items"`
+	UnsupportedContracts []string                      `json:"unsupported_contracts,omitempty"`
+	ExistingWorkflows    int64                         `json:"existing_workflows"`
+	Truncated            bool                          `json:"truncated"`
+}
+
 func (t SkillOrchestratorAlertTargets) Validate() error {
 	if t.ReadyQueueStuckAfter < time.Second || t.ReadyQueueStuckAfter > 30*24*time.Hour || t.LeaseChurnWindow < time.Second || t.LeaseChurnWindow > 24*time.Hour || t.LeaseFailureCount < 1 || t.LeaseFailureCount > 1_000 || t.CanaryStaleAfter < time.Second || t.CanaryStaleAfter > 30*24*time.Hour || t.RollbackFailureAfter < time.Second || t.RollbackFailureAfter > 24*time.Hour {
 		return errors.New("skill orchestrator alert targets are missing or outside bounds")

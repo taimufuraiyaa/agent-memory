@@ -253,7 +253,7 @@
 
 ## Phase 7 — Migration and Release Evidence
 
-- [ ] **Task 28: Add shadow discovery and migration gate**
+- [x] **Task 28: Add shadow discovery and migration gate**
   - Acceptance: Existing candidates, testing revisions, canaries, and activation operations are reported without fabricated history; shadow jobs predict deterministic decisions but execute no domain mutation.
   - Verify: fresh/upgraded database matrix, empty/existing/incomplete lifecycle states, shadow parity, mixed versions, restore pause, and rollback tests.
   - Dependencies: Checkpoint F.

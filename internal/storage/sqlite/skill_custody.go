@@ -208,6 +208,7 @@ func (s *Store) ExportSkillLifecycle(ctx context.Context, workspace string) (map
 		"orchestrator_tombstones":          `SELECT * FROM skill_orchestrator_tombstones WHERE workspace_id=? ORDER BY environment,record_kind,record_id`,
 		"orchestrator_budget_accounts":     `SELECT * FROM skill_orchestrator_budget_accounts WHERE workspace_id=? ORDER BY environment,policy_version,period_start`,
 		"orchestrator_budget_reservations": `SELECT * FROM skill_orchestrator_budget_reservations WHERE workspace_id=? ORDER BY environment,created_at,job_id`,
+		"orchestrator_migration_controls":  `SELECT * FROM skill_orchestrator_migration_controls WHERE workspace_id=? ORDER BY environment`,
 	}
 	archive := make(map[string][]map[string]any, len(queries))
 	for name, query := range queries {

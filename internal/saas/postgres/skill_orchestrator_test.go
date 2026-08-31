@@ -236,6 +236,24 @@ func TestPostgresSkillEvaluationBudgetSerializesHorizontalReservations(t *testin
 	}
 }
 
+func TestPostgresSkillMigrationInventoryReportsRestorePauseWithoutMutation(t *testing.T) {
+	pool := openSkillOrchestratorPostgres(t)
+	scope := createSkillOrchestratorHostedScope(t, pool)
+	repository := NewSkillOrchestratorRepository(pool)
+	ctx, now := context.Background(), time.Now().UTC()
+	inventory, err := repository.InspectSkillOrchestratorMigration(ctx, scope, 100)
+	if err != nil || inventory.SchemaVersion != "0037_skill_orchestrator_budget" || inventory.RestorePaused || inventory.ConfigurationMode != core.SkillOrchestratorDisabled || inventory.ExistingWorkflows != 0 {
+		t.Fatalf("inventory=%+v err=%v", inventory, err)
+	}
+	if err := repository.SetSkillReconciliationRestorePaused(ctx, scope, true, now); err != nil {
+		t.Fatal(err)
+	}
+	inventory, err = repository.InspectSkillOrchestratorMigration(ctx, scope, 100)
+	if err != nil || !inventory.RestorePaused || inventory.ExistingWorkflows != 0 {
+		t.Fatalf("paused inventory=%+v err=%v", inventory, err)
+	}
+}
+
 func openSkillOrchestratorPostgres(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 	connectionURL := strings.TrimSpace(os.Getenv("AGENT_MEMORY_TEST_POSTGRES_URL"))
