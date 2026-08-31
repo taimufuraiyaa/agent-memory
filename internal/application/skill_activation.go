@@ -223,8 +223,8 @@ func validateSkillActivationRequest(request SkillActivationRequest) error {
 	if request.Rollback && strings.TrimSpace(request.ReasonCode) == "" {
 		return errors.New("skill rollback reason_code is required")
 	}
-	if !request.Rollback && (request.Automatic || request.ReasonCode != "") {
-		return errors.New("automatic and reason_code are rollback-only fields")
+	if !request.Rollback && request.ReasonCode != "" {
+		return errors.New("reason_code is rollback-only")
 	}
 	return nil
 }

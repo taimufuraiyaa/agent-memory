@@ -126,7 +126,7 @@
   - Files: canary stage adapters, due scheduler, focused tests.
   - Estimated scope: Medium.
 
-- [ ] **Task 15: Add automatic activation adapter**
+- [x] **Task 15: Add automatic activation adapter**
   - Acceptance: Only explicit promote decisions under enabled approved low-risk policy enqueue activation; existing activation/materialization saga remains authoritative and replay-safe.
   - Verify: feature disabled, missing approval reference, digest mismatch, stale generation, concurrent promotion, crash recovery, read-only root, duplicate job, and mixed configuration tests.
   - Dependencies: Task 14.

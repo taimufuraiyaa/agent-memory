@@ -32,13 +32,14 @@ const (
 	SkillSignalEvaluation SkillLifecycleSignalKind = "evaluation"
 	SkillSignalDecision   SkillLifecycleSignalKind = "decision"
 	SkillSignalCanary     SkillLifecycleSignalKind = "canary"
+	SkillSignalPromotion  SkillLifecycleSignalKind = "promotion"
 	SkillSignalExecution  SkillLifecycleSignalKind = "execution"
 	SkillSignalSafety     SkillLifecycleSignalKind = "safety"
 )
 
 func (k SkillLifecycleSignalKind) Valid() bool {
 	switch k {
-	case SkillSignalLesson, SkillSignalCandidate, SkillSignalRevision, SkillSignalEvaluation, SkillSignalDecision, SkillSignalCanary, SkillSignalExecution, SkillSignalSafety:
+	case SkillSignalLesson, SkillSignalCandidate, SkillSignalRevision, SkillSignalEvaluation, SkillSignalDecision, SkillSignalCanary, SkillSignalPromotion, SkillSignalExecution, SkillSignalSafety:
 		return true
 	default:
 		return false
@@ -161,6 +162,8 @@ func stageForSkillSignal(kind SkillLifecycleSignalKind) core.SkillOrchestratorSt
 		return core.SkillStageDecide
 	case SkillSignalDecision:
 		return core.SkillStageStartCanary
+	case SkillSignalPromotion:
+		return core.SkillStageActivate
 	case SkillSignalCanary, SkillSignalExecution:
 		return core.SkillStageAnalyzeCanary
 	case SkillSignalSafety:
