@@ -14,6 +14,8 @@ Release requires the permanent `TestAutomaticSkillLearningNaturalClosedLoop` reg
 
 Automatic promotion remains off when no policy exists and whenever `allow_automatic_activation` is false. Enabling it requires a versioned low-risk policy whose accountable product review records thresholds, canary allocation, false-promotion evidence, rollback evidence, isolation evidence, and retention approval. Medium risk requires accountable approval; high risk cannot enable automatic activation.
 
+The production boundary is `EvaluateSkillOrchestratorReleaseGate`. It verifies independently signed release evidence and accountable product approval bound to the same release, build, migration, and policy digests. The release evidence must contain the exact disabled → shadow → manual → canary → automatic-low-risk sequence and two complete pause, drain, restore, and shutdown staging iterations. Each drill preserves the active skill digest and audit history, meets the approved rollback SLO, and verifies alert routing and the production runbook.
+
 ## Release decision
 
-Do not enable automatic promotion merely because automated tests pass. The operator must retain the approved policy record and complete the final product-review checkbox in the production release record. Any failed or missing evidence keeps the feature disabled.
+Do not enable automatic promotion merely because automated tests pass. Follow [the production release runbook](runbooks/skill-orchestrator-production-release.md), retain both signed payloads and their gate report, and complete the final product-review checkbox in the production release record. Any failed or missing evidence keeps the feature disabled. The repository's base hosted deployment intentionally remains at zero skill-worker replicas with its feature flag false.

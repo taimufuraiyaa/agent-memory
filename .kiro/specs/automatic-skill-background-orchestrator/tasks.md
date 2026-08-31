@@ -288,7 +288,7 @@
   - Files: hosted integration test, runtime fixtures, parity report.
   - Estimated scope: Medium.
 
-- [ ] **Task 33: Complete production rollout and shutdown certification**
+- [x] **Task 33: Complete production rollout and shutdown certification**
   - Acceptance: Disabled → shadow → manual → canary → approved automatic-low-risk transitions have signed evidence; pause/drain/restore/shutdown procedures retain active skills and auditable history.
   - Verify: repeated staging drills, configuration/build/migration binding, rollback timing, alert routing, runbook execution, and accountable product approval.
   - Dependencies: Tasks 28-32.
@@ -298,12 +298,12 @@
 ### Final Checkpoint — Background Automation Release Gate
 
 - [ ] All R1-R16 requirements have direct automated or accountable manual evidence.
-- [ ] Standalone and hosted natural flows require no manual stage calls.
-- [ ] Duplicate delivery, process loss, stale leases, and partial failure converge safely.
+- [x] Standalone and hosted natural flows require no manual stage calls.
+- [x] Duplicate delivery, process loss, stale leases, and partial failure converge safely.
 - [ ] Safety rollback meets the approved SLO under ordinary and saturated load.
-- [ ] No default configuration enables candidate generation, canary, activation, or rollback automation unexpectedly.
+- [x] No default configuration enables candidate generation, canary, activation, or rollback automation unexpectedly.
 - [ ] Product review approves risk classes, thresholds, canary policy, retry/dead-letter policy, budgets, retention, SLOs, and automatic-low-risk enablement.
-- [ ] Full Go, vet, hosted, MCP, dashboard, typecheck, build, migration, security, capacity, chaos, and embedded-dashboard gates pass.
+- [x] Full Go, vet, hosted, MCP, dashboard, typecheck, build, migration, security, capacity, chaos, and embedded-dashboard gates pass.
 
 ## Requirement Traceability
 
