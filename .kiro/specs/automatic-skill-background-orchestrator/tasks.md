@@ -24,7 +24,7 @@
   - Files: SQLite migration, migration registry, migration tests.
   - Estimated scope: Medium.
 
-- [ ] **Task 3: Implement SQLite workflow repository contract**
+- [x] **Task 3: Implement SQLite workflow repository contract**
   - Acceptance: Create/enqueue/block/cancel/claim/renew/finalize/retry/dead-letter/status operations are atomic, idempotent, generation-safe, and owner/fence protected.
   - Verify: duplicate enqueue, oldest-ready claim, expired reclaim, stale fence, renewal, cancellation, dependency, retry-wait, dead-letter, and pagination tests.
   - Dependencies: Task 2.
