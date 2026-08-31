@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -16,9 +17,18 @@ import (
 	saaspostgres "github.com/taimufuraiyaa/agent-memory/internal/saas/postgres"
 	"github.com/taimufuraiyaa/agent-memory/internal/saas/retention"
 	"github.com/taimufuraiyaa/agent-memory/internal/saas/security"
+	"github.com/taimufuraiyaa/agent-memory/internal/saas/skillreconciler"
 	sourceservice "github.com/taimufuraiyaa/agent-memory/internal/saas/source"
 	"github.com/taimufuraiyaa/agent-memory/internal/saas/telemetry"
 )
+
+type hostedSkillReconcilerRuntime interface {
+	Run(context.Context)
+}
+
+var buildHostedSkillReconcilerRuntime = func(context.Context, *saaspostgres.SkillOrchestratorRepository, skillreconciler.RuntimeConfig) (hostedSkillReconcilerRuntime, error) {
+	return nil, errors.New("hosted skill reconciliation domains are not linked into this process")
+}
 
 func main() {
 	cfg, err := config.LoadFor(config.Reconciler)
@@ -44,6 +54,17 @@ func run(cfg config.Config) error {
 		return err
 	}
 	defer pool.Close()
+	skillConfiguration, err := skillreconciler.LoadRuntimeConfig()
+	if err != nil {
+		return fmt.Errorf("load skill reconciler configuration: %w", err)
+	}
+	if skillConfiguration.Enabled {
+		skillRuntime, buildErr := buildHostedSkillReconcilerRuntime(ctx, saaspostgres.NewSkillOrchestratorRepository(pool), skillConfiguration)
+		if buildErr != nil {
+			return fmt.Errorf("build skill reconciler: %w", buildErr)
+		}
+		go skillRuntime.Run(ctx)
+	}
 	objects, err := sourceservice.NewMinIOQuarantine(cfg.ObjectEndpoint, cfg.ObjectAccessKey, cfg.ObjectSecretKey)
 	if err != nil {
 		return fmt.Errorf("open source object stores: %w", err)

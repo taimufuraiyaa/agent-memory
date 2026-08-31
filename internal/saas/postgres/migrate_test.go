@@ -248,6 +248,36 @@ func TestSkillOrchestratorMigrationIsTenantWorkspaceScopedAndReversible(t *testi
 	}
 }
 
+func TestSkillReconciliationPartitionMigrationIsScopedBoundedAndReversible(t *testing.T) {
+	t.Parallel()
+	migrations := mustMigrations(t)
+	var partition *Migration
+	for index := range migrations {
+		if migrations[index].Version == "0034_skill_reconciliation_partitions" {
+			partition = &migrations[index]
+			break
+		}
+	}
+	if partition == nil {
+		t.Fatal("skill reconciliation partition migration is missing")
+	}
+	for _, required := range []string{
+		"PRIMARY KEY (tenant_id, workspace_id, environment)",
+		"FOREIGN KEY (tenant_id, workspace_id) REFERENCES saas_workspaces(tenant_id, id) ON DELETE CASCADE",
+		"idx_skill_reconciliation_partitions_claim",
+		"ALTER TABLE saas_skill_orchestrator_reconciliation_partitions FORCE ROW LEVEL SECURITY",
+		"current_setting('app.tenant_id', true)::uuid",
+		"current_setting('app.workspace_id', true)::uuid",
+	} {
+		if !strings.Contains(partition.Up, required) {
+			t.Errorf("skill reconciliation partition migration missing %q", required)
+		}
+	}
+	if !strings.Contains(partition.Down, "DROP TABLE IF EXISTS saas_skill_orchestrator_reconciliation_partitions") {
+		t.Fatal("skill reconciliation partition rollback is missing")
+	}
+}
+
 func TestApplyRollbackAndTenantRLS(t *testing.T) {
 	connectionURL := strings.TrimSpace(os.Getenv("AGENT_MEMORY_TEST_POSTGRES_URL"))
 	if connectionURL == "" {

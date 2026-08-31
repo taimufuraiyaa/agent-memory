@@ -163,7 +163,7 @@
   - Files: `internal/saas/skillworker/`, `cmd/agent-memory-skill-worker/`, configuration, focused tests.
   - Estimated scope: Medium.
 
-- [ ] **Task 19: Extend hosted reconciler for skill workflows**
+- [x] **Task 19: Extend hosted reconciler for skill workflows**
   - Acceptance: Bounded tenant/workspace cursor partitions repair orchestration drift without blocking existing reconciliation domains or requiring global table scans.
   - Verify: partition claiming, cursor restart, concurrent replicas, one-domain failure isolation, tenant deletion, restore pause, and bounded-query tests.
   - Dependencies: Tasks 10 and 18.
