@@ -22,6 +22,7 @@ type SkillCanaryStartInput struct {
 type skillCanaryStartRepository interface {
 	GetSkillRevision(context.Context, string, string) (core.SkillRevision, error)
 	GetSkillPolicyDecision(context.Context, string, string) (core.SkillPolicyDecision, error)
+	HasEffectiveSkillApproval(context.Context, string, string, string) (bool, error)
 	StartSkillCanary(context.Context, string, string, string, string, string, string, int64, time.Time) (core.SkillActivation, error)
 }
 
@@ -57,8 +58,22 @@ func (s *SkillCanaryStartService) Start(ctx context.Context, input SkillCanarySt
 	if err != nil {
 		return core.SkillActivation{}, err
 	}
-	if revision.SkillID != input.SkillID || revision.State != core.SkillRevisionTesting || decision.SkillID != input.SkillID || decision.RevisionID != revision.ID || decision.RiskTier != revision.RiskTier || decision.Decision != core.SkillDecisionCanary {
+	if revision.SkillID != input.SkillID || revision.State != core.SkillRevisionTesting || decision.SkillID != input.SkillID || decision.RevisionID != revision.ID || decision.RiskTier != revision.RiskTier {
 		return core.SkillActivation{}, errors.New("skill canary revision or policy decision is ineligible")
+	}
+	if revision.RiskTier == core.SkillRiskHigh {
+		return core.SkillActivation{}, errors.New("high-risk revision cannot enter automatic canary")
+	}
+	eligible := decision.Decision == core.SkillDecisionCanary && revision.RiskTier == core.SkillRiskLow
+	if decision.Decision == core.SkillDecisionApprovalRequired && revision.RiskTier == core.SkillRiskMedium {
+		approved, approvalErr := s.repository.HasEffectiveSkillApproval(ctx, input.Workspace, revision.ID, decision.ID)
+		if approvalErr != nil {
+			return core.SkillActivation{}, approvalErr
+		}
+		eligible = approved
+	}
+	if !eligible {
+		return core.SkillActivation{}, errors.New("skill canary policy decision is not eligible or approved")
 	}
 	return s.repository.StartSkillCanary(ctx, input.Workspace, input.Environment, input.SkillID, input.CandidateRevisionID, input.PolicyDecisionID, input.Actor, input.ExpectedGeneration, s.now().UTC())
 }

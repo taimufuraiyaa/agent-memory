@@ -25,6 +25,7 @@ type SkillPolicyInput struct {
 	BaselineCanaryVerifiedSuccessRate float64 `json:"baseline_canary_verified_success_rate"`
 	HarmfulFeedbackCount              int     `json:"harmful_feedback_count"`
 	EfficiencyImprovement             float64 `json:"efficiency_improvement"`
+	MaximumCanaryAgeExceeded          bool    `json:"maximum_canary_age_exceeded"`
 }
 
 type skillPolicyRepositoryContract interface {
@@ -107,6 +108,9 @@ func evaluatePromotionPolicy(input SkillPolicyInput, policy core.SkillPromotionP
 	}
 	if revision.RiskTier == core.SkillRiskMedium || revision.RiskTier == core.SkillRiskHigh || !policy.AllowAutomaticActivation {
 		return core.SkillDecisionApprovalRequired, []string{"accountable_approval_required"}
+	}
+	if input.MaximumCanaryAgeExceeded && input.CanarySamples < policy.MinimumCanarySamples {
+		return core.SkillDecisionApprovalRequired, []string{"canary_maximum_age_insufficient"}
 	}
 	if input.CanarySamples < policy.MinimumCanarySamples {
 		return core.SkillDecisionCanary, []string{"canary_samples_required"}

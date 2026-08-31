@@ -700,10 +700,14 @@ func (s *Store) GetSkillEvaluationSuite(ctx context.Context, workspace, suiteID 
 }
 
 func (s *Store) CreateSkillEvaluationRun(ctx context.Context, run core.SkillEvaluationRun) error {
-	return s.CreateSkillEvaluationRuns(ctx, run)
+	return s.createSkillEvaluationRuns(ctx, []core.SkillEvaluationRun{run})
 }
 
-func (s *Store) CreateSkillEvaluationRuns(ctx context.Context, runs ...core.SkillEvaluationRun) error {
+func (s *Store) CreateSkillEvaluationRuns(ctx context.Context, candidate, baseline core.SkillEvaluationRun) error {
+	return s.createSkillEvaluationRuns(ctx, []core.SkillEvaluationRun{candidate, baseline})
+}
+
+func (s *Store) createSkillEvaluationRuns(ctx context.Context, runs []core.SkillEvaluationRun) error {
 	if len(runs) == 0 || len(runs) > 2 {
 		return errors.New("one or two skill evaluation runs are required")
 	}

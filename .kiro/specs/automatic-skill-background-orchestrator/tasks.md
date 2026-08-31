@@ -119,7 +119,7 @@
   - Files: evaluation adapter, decision adapter, budget contract, focused tests.
   - Estimated scope: Medium.
 
-- [ ] **Task 14: Add canary-start and due-analysis adapters**
+- [x] **Task 14: Add canary-start and due-analysis adapters**
   - Acceptance: Eligible policy decisions start canary generation-safely; analysis schedules from bounded time/sample rules and never lowers thresholds for low traffic.
   - Verify: eligible low/approved medium/high denial, stale generation, insufficient samples, maximum age, ambiguous result, baseline regression, duplicate wakeup, and policy disablement tests.
   - Dependencies: Task 13.
