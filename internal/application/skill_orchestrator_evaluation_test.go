@@ -18,6 +18,9 @@ func TestSkillEvaluationAdapterBindsBudgetAndReplaysExactPair(t *testing.T) {
 	if fixture.budget.reserves != 1 || fixture.budget.reservation.committed != fixture.configuration.BudgetUnits || fixture.budget.reservation.released != 0 {
 		t.Fatalf("budget state = %+v", fixture.budget)
 	}
+	if fixture.repository.revisions["revision-2"].State != core.SkillRevisionTesting {
+		t.Fatalf("evaluated revision state = %s", fixture.repository.revisions["revision-2"].State)
+	}
 	runnerCalls := len(fixture.runner.requests)
 	result, err = fixture.adapter.Execute(context.Background(), fixture.job)
 	if err != nil || len(result.References) != 2 || len(fixture.runner.requests) != runnerCalls || fixture.budget.reserves != 1 {
@@ -114,6 +117,16 @@ func (r *evaluationAdapterRepository) GetSkillEvaluationRun(_ context.Context, w
 		}
 	}
 	return core.SkillEvaluationRun{}, errors.New("run not found")
+}
+
+func (r *evaluationAdapterRepository) TransitionSkillRevisionState(_ context.Context, workspace, revisionID string, from, to core.SkillRevisionState) (core.SkillRevision, error) {
+	revision, ok := r.revisions[revisionID]
+	if !ok || revision.Workspace != workspace || revision.State != from {
+		return core.SkillRevision{}, errors.New("revision transition conflict")
+	}
+	revision.State = to
+	r.revisions[revisionID] = revision
+	return revision, nil
 }
 
 type fixedEvaluationBaseline struct{ revision core.SkillRevision }

@@ -274,7 +274,7 @@
   - Files: security fixtures, evidence collector, release documentation.
   - Estimated scope: Medium.
 
-- [ ] **Task 31: Add natural standalone background-flow regression**
+- [x] **Task 31: Add natural standalone background-flow regression**
   - Acceptance: Public verified work with a running standalone service automatically reaches draft, evaluation, canary, approved low-risk activation, exact-use measurement, verified hard signal, and last-known-good rollback without manual stage operations; controlled restarts preserve progress.
   - Verify: permanent fresh-workspace test using public capture/status surfaces and real embedded worker runtime.
   - Dependencies: Tasks 21-29.

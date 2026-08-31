@@ -73,6 +73,7 @@ type SkillEvaluationStageRepository interface {
 	skillEvaluationRepositoryContract
 	GetSkillWorkflow(context.Context, core.SkillOrchestratorScope, string) (core.SkillWorkflow, error)
 	GetSkillEvaluationRun(context.Context, string, string) (core.SkillEvaluationRun, error)
+	TransitionSkillRevisionState(context.Context, string, string, core.SkillRevisionState, core.SkillRevisionState) (core.SkillRevision, error)
 }
 
 type SkillEvaluationAdapter struct {
@@ -136,6 +137,12 @@ func (a *SkillEvaluationAdapter) Execute(ctx context.Context, job core.SkillJob)
 	expectedDigest := digestSkillLifecycleSignal(signal, nil)
 	if workflow.OriginKind != core.SkillWorkflowOriginLifecycleSignal || job.InputDigest != expectedDigest || workflow.InputDigest != expectedDigest || job.PolicyVersion != a.configuration.Signal.PolicyVersion || workflow.ConfigurationVersion != a.configuration.Signal.ConfigurationVersion || workflow.PolicyDigest != a.configuration.Signal.PolicyDigest {
 		return SkillStageResult{}, evaluationStageError(core.SkillFailurePermanentValidation, "evaluation_binding_mismatch", errors.New("evaluation workflow binding mismatch"))
+	}
+	if candidate.State == core.SkillRevisionDraft {
+		candidate, err = a.repository.TransitionSkillRevisionState(ctx, job.Scope.WorkspaceID, candidate.ID, core.SkillRevisionDraft, core.SkillRevisionTesting)
+		if err != nil {
+			return SkillStageResult{}, evaluationStageError(core.SkillFailureContention, "evaluation_revision_transition_failed", err)
+		}
 	}
 	baseline, err := a.baselines.ResolveSkillEvaluationBaseline(ctx, candidate)
 	if err != nil {
