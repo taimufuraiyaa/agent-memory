@@ -156,7 +156,7 @@
   - Files: standalone runtime package, service wiring, runtime configuration, focused tests.
   - Estimated scope: Medium.
 
-- [ ] **Task 18: Add hosted skill-worker process**
+- [x] **Task 18: Add hosted skill-worker process**
   - Acceptance: A distinct least-privilege process validates configuration/readiness, claims tenant-safe work horizontally, renews leases, drains signals, and reserves rollback capacity.
   - Verify: configuration bounds, two replicas, worker loss, tenant fairness, RLS, readiness/liveness, SIGTERM drain, rollback lane, and no API-worker privilege overlap tests.
   - Dependencies: Checkpoint C and hosted Task 5.
