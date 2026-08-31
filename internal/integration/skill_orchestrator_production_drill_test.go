@@ -45,6 +45,14 @@ func TestSkillOrchestratorRepeatedProductionDrillsPreserveActiveSkillAndAuditHis
 	}
 	activeDigest := activation.ActiveDigest
 	scope := core.SkillOrchestratorScope{WorkspaceID: "ws", Environment: "local"}
+	releasePublic, releasePrivate, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	productPublic, productPrivate, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
 	modes := []core.SkillOrchestratorMode{
 		core.SkillOrchestratorDisabled, core.SkillOrchestratorShadow, core.SkillOrchestratorManual,
 		core.SkillOrchestratorCanary, core.SkillOrchestratorAutomaticLowRisk,
@@ -52,6 +60,10 @@ func TestSkillOrchestratorRepeatedProductionDrillsPreserveActiveSkillAndAuditHis
 	rollout := make([]application.SkillRolloutObservation, 0, len(modes))
 	for index, mode := range modes {
 		configuration := productionDrillConfiguration(scope, int64(index+1), mode, now.Add(time.Duration(index)*time.Minute))
+		receiptID := "configuration-" + string(rune('1'+index))
+		if mode == core.SkillOrchestratorAutomaticLowRisk {
+			configuration.SignatureReference = receiptID
+		}
 		configuration.Digest, err = application.ComputeSkillOrchestratorConfigurationDigest(configuration)
 		if err != nil {
 			t.Fatal(err)
@@ -63,10 +75,15 @@ func TestSkillOrchestratorRepeatedProductionDrillsPreserveActiveSkillAndAuditHis
 		if err != nil || !created {
 			t.Fatalf("store mode %s created=%v err=%v", mode, created, err)
 		}
-		rollout = append(rollout, application.SkillRolloutObservation{
-			Sequence: index + 1, Mode: mode, ConfigurationDigest: configuration.Digest,
-			ConfigurationSignatureValid: true, Passed: true,
-		})
+		receipt, err := application.SignSkillOrchestratorConfigurationReceipt(application.SkillOrchestratorConfigurationReceipt{
+			Schema: application.SkillOrchestratorConfigurationReceiptSchemaV1, ReceiptID: receiptID,
+			ReleaseID: "release-33", BuildDigest: productionDrillDigest("build"), MigrationDigest: productionDrillDigest("migration"),
+			Configuration: configuration, SignerID: "release-signer", SignedAt: configuration.CreatedAt.Add(30 * time.Second), SigningKeyID: "release-key",
+		}, releasePrivate)
+		if err != nil {
+			t.Fatal(err)
+		}
+		rollout = append(rollout, application.SkillRolloutObservation{Sequence: index + 1, ConfigurationReceipt: receipt, Passed: true})
 	}
 
 	drills := make([]application.SkillOperationalDrill, 0, 8)
@@ -107,33 +124,32 @@ func TestSkillOrchestratorRepeatedProductionDrillsPreserveActiveSkillAndAuditHis
 		}
 	}
 
-	releasePublic, releasePrivate, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatal(err)
-	}
-	productPublic, productPrivate, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatal(err)
-	}
 	evidence, err := application.SignSkillProductionReleaseEvidence(application.SkillProductionReleaseEvidence{
-		Schema: application.SkillProductionReleaseEvidenceSchemaV1, ReleaseID: "release-33",
+		Schema: application.SkillProductionReleaseEvidenceSchemaV2, ReleaseID: "release-33",
 		BuildDigest: productionDrillDigest("build"), MigrationDigest: productionDrillDigest("migration"), PolicyDigest: productionDrillDigest("policy"),
 		Rollout: rollout, Drills: drills, RollbackSLOMillis: 2000,
 		StandaloneReportDigest: productionDrillDigest("standalone"), HostedReportDigest: productionDrillDigest("hosted"),
 		ChaosCertificateDigest: productionDrillDigest("chaos"), SecurityReportDigest: productionDrillDigest("security"),
 		CapacityReportDigest: productionDrillDigest("capacity"), MigrationReportDigest: productionDrillDigest("migration-report"),
-		AlertRoutingDigest: productionDrillDigest("alerts"), GeneratedAt: now, SigningKeyID: "release-key",
+		AlertRoutingDigest: productionDrillDigest("alerts"), GeneratedAt: now.Add(10 * time.Minute),
+		SignerID: "release-signer", SigningKeyID: "release-key",
 	}, releasePrivate)
 	if err != nil {
 		t.Fatal(err)
 	}
+	evidenceDigest, err := application.ComputeSkillProductionReleaseEvidenceDigest(evidence)
+	if err != nil {
+		t.Fatal(err)
+	}
 	approval, err := application.SignSkillProductApproval(application.SkillProductApproval{
-		Schema: application.SkillProductApprovalSchemaV1, ApprovalID: "approval-33", ReleaseID: evidence.ReleaseID,
+		Schema: application.SkillProductApprovalSchemaV2, ApprovalID: "approval-33", ReleaseID: evidence.ReleaseID,
 		BuildDigest: evidence.BuildDigest, MigrationDigest: evidence.MigrationDigest, PolicyDigest: evidence.PolicyDigest,
-		ApproverID: "accountable-product-owner", ApproverRole: "accountable_product",
+		ConfigurationDigest:   rollout[len(rollout)-1].ConfigurationReceipt.Configuration.Digest,
+		ReleaseEvidenceDigest: evidenceDigest,
+		ApproverID:            "accountable-product-owner", ApproverRole: "accountable_product",
 		RiskClassesApproved: true, ThresholdsApproved: true, CanaryPolicyApproved: true, RetryDeadLetterApproved: true,
 		BudgetsApproved: true, RetentionApproved: true, SLOsApproved: true, AutomaticLowRiskApproved: true,
-		ApprovedAt: now, ExpiresAt: now.Add(7 * 24 * time.Hour), SigningKeyID: "product-key",
+		ApprovedAt: now.Add(15 * time.Minute), ExpiresAt: now.Add(7 * 24 * time.Hour), SigningKeyID: "product-key",
 	}, productPrivate)
 	if err != nil {
 		t.Fatal(err)

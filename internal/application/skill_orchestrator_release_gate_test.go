@@ -18,8 +18,21 @@ func TestSkillOrchestratorReleaseGateAcceptsCompleteSignedRollout(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !report.Ready || len(report.Blockers) != 0 || report.ApprovalDigest == "" || report.EvidenceDigest == "" {
+	if !report.Ready || len(report.Blockers) != 0 || report.ApprovalDigest == "" || report.EvidenceDigest == "" || report.ConfigurationDigest != fixture.approval.ConfigurationDigest {
 		t.Fatalf("report = %+v", report)
+	}
+}
+
+func TestSkillOrchestratorReleaseGateRejectsTamperedConfigurationReceipt(t *testing.T) {
+	fixture := newSkillReleaseFixture(t)
+	fixture.evidence.Rollout[4].ConfigurationReceipt.Configuration.Digest = digestFor("forged-automatic-configuration")
+	signSkillReleaseEvidence(t, fixture)
+	report, err := EvaluateSkillOrchestratorReleaseGate(fixture.config, fixture.evidence, fixture.approval, fixture.now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Ready || !containsString(report.Blockers, "configuration_receipt_invalid") {
+		t.Fatalf("tampered configuration receipt was accepted: %+v", report)
 	}
 }
 
@@ -29,17 +42,34 @@ func TestSkillOrchestratorReleaseGateFailsClosed(t *testing.T) {
 		mutate  func(*skillReleaseFixture)
 		blocker string
 	}{
-		{"rollout_order", func(f *skillReleaseFixture) { f.evidence.Rollout[1].Mode = core.SkillOrchestratorManual }, "rollout_sequence_invalid"},
-		{"unsigned_configuration", func(f *skillReleaseFixture) { f.evidence.Rollout[4].ConfigurationSignatureValid = false }, "rollout_sequence_invalid"},
+		{"rollout_order", func(f *skillReleaseFixture) {
+			f.evidence.Rollout[1].ConfigurationReceipt.Configuration.Mode = core.SkillOrchestratorManual
+		}, "rollout_sequence_invalid"},
+		{"unsigned_configuration", func(f *skillReleaseFixture) { f.evidence.Rollout[4].ConfigurationReceipt.Signature = "" }, "configuration_receipt_invalid"},
+		{"configuration_binding", func(f *skillReleaseFixture) {
+			f.evidence.Rollout[3].ConfigurationReceipt.BuildDigest = digestFor("other-build")
+		}, "configuration_receipt_binding_mismatch"},
 		{"single_drill", func(f *skillReleaseFixture) { f.evidence.Drills = f.evidence.Drills[:4] }, "staging_drills_incomplete"},
 		{"active_skill_changed", func(f *skillReleaseFixture) { f.evidence.Drills[0].ActiveSkillDigestAfter = digestFor("other-skill") }, "staging_drills_incomplete"},
 		{"audit_lost", func(f *skillReleaseFixture) { f.evidence.Drills[0].AuditRecordsAfter = 1 }, "staging_drills_incomplete"},
 		{"rollback_slow", func(f *skillReleaseFixture) { f.evidence.Drills[1].RollbackMillis = 1001 }, "staging_drills_incomplete"},
 		{"alert_unrouted", func(f *skillReleaseFixture) { f.evidence.Drills[2].AlertsRouted = false }, "staging_drills_incomplete"},
+		{"future_evidence", func(f *skillReleaseFixture) { f.evidence.GeneratedAt = f.now.Add(time.Minute) }, "release_evidence_stale"},
 		{"binding_mismatch", func(f *skillReleaseFixture) {
 			f.approval.BuildDigest = digestFor("other-build")
 			signSkillReleaseApproval(t, f)
 		}, "product_approval_binding_mismatch"},
+		{"approval_configuration_mismatch", func(f *skillReleaseFixture) {
+			f.approval.ConfigurationDigest = digestFor("other-configuration")
+			signSkillReleaseApproval(t, f)
+		}, "product_approval_binding_mismatch"},
+		{"approval_evidence_mismatch", func(f *skillReleaseFixture) {
+			f.approval.ReleaseEvidenceDigest = digestFor("other-evidence")
+			signSkillReleaseApproval(t, f)
+		}, "product_approval_binding_mismatch"},
+		{"automatic_reference_mismatch", func(f *skillReleaseFixture) {
+			f.evidence.Rollout[4].ConfigurationReceipt.Configuration.ApprovalReference = "other-approval"
+		}, "automatic_configuration_reference_mismatch"},
 		{"self_approval", func(f *skillReleaseFixture) {
 			f.approval.ApproverID = f.config.ReleaseSignerID
 			signSkillReleaseApproval(t, f)
@@ -48,6 +78,10 @@ func TestSkillOrchestratorReleaseGateFailsClosed(t *testing.T) {
 			f.approval.Signature = base64.StdEncoding.EncodeToString(make([]byte, ed25519.SignatureSize))
 		}, "product_approval_signature_invalid"},
 		{"expired", func(f *skillReleaseFixture) { f.now = f.approval.ExpiresAt }, "product_approval_stale"},
+		{"approval_predates_evidence", func(f *skillReleaseFixture) {
+			f.approval.ApprovedAt = f.evidence.GeneratedAt.Add(-time.Minute)
+			signSkillReleaseApproval(t, f)
+		}, "product_approval_stale"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -141,9 +175,27 @@ func newSkillReleaseFixture(t *testing.T) *skillReleaseFixture {
 	}
 	rollout := make([]SkillRolloutObservation, 0, len(modes))
 	for index, mode := range modes {
+		configuration := releaseTestConfiguration(mode, int64(index+1), now.Add(-2*time.Hour+time.Duration(index)*15*time.Minute))
+		receiptID := "configuration-" + string(rune('1'+index))
+		if mode == core.SkillOrchestratorAutomaticLowRisk {
+			configuration.ApprovalReference = "product-approval-33"
+			configuration.ReleaseEvidenceReference = "release-33"
+			configuration.SignatureReference = receiptID
+			configuration.Digest, err = ComputeSkillOrchestratorConfigurationDigest(configuration)
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+		receipt, err := SignSkillOrchestratorConfigurationReceipt(SkillOrchestratorConfigurationReceipt{
+			Schema: SkillOrchestratorConfigurationReceiptSchemaV1, ReceiptID: receiptID,
+			ReleaseID: "release-33", BuildDigest: digestFor("build"), MigrationDigest: digestFor("migration"),
+			Configuration: configuration, SignerID: "release-signer", SignedAt: configuration.CreatedAt.Add(5 * time.Minute), SigningKeyID: "release-key",
+		}, releasePrivate)
+		if err != nil {
+			t.Fatal(err)
+		}
 		rollout = append(rollout, SkillRolloutObservation{
-			Sequence: index + 1, Mode: mode, ConfigurationDigest: digestFor(string(mode)),
-			ConfigurationSignatureValid: true, Passed: true,
+			Sequence: index + 1, ConfigurationReceipt: receipt, Passed: true,
 		})
 	}
 	drills := make([]SkillOperationalDrill, 0, 8)
@@ -158,14 +210,14 @@ func newSkillReleaseFixture(t *testing.T) *skillReleaseFixture {
 		}
 	}
 	evidence := SkillProductionReleaseEvidence{
-		Schema: SkillProductionReleaseEvidenceSchemaV1, ReleaseID: "release-33",
+		Schema: SkillProductionReleaseEvidenceSchemaV2, ReleaseID: "release-33",
 		BuildDigest: digestFor("build"), MigrationDigest: digestFor("migration"), PolicyDigest: digestFor("policy"),
 		Rollout: rollout, Drills: drills, RollbackSLOMillis: 1000,
 		StandaloneReportDigest: digestFor("standalone"), HostedReportDigest: digestFor("hosted"),
 		ChaosCertificateDigest: digestFor("chaos"), SecurityReportDigest: digestFor("security"),
 		CapacityReportDigest: digestFor("capacity"), MigrationReportDigest: digestFor("migration-report"),
-		AlertRoutingDigest: digestFor("alerts"), GeneratedAt: now.Add(-time.Hour),
-		SigningKeyID: "release-key",
+		AlertRoutingDigest: digestFor("alerts"), GeneratedAt: now.Add(-30 * time.Minute),
+		SignerID: "release-signer", SigningKeyID: "release-key",
 	}
 	fixture := &skillReleaseFixture{
 		now: now, evidence: evidence, releasePrivate: releasePrivate, approvalPrivate: approvalPrivate,
@@ -175,19 +227,39 @@ func newSkillReleaseFixture(t *testing.T) *skillReleaseFixture {
 			TrustedReleaseKeys: map[string]ed25519.PublicKey{"release-key": releasePublic},
 			TrustedProductKeys: map[string]ed25519.PublicKey{"product-key": approvalPublic}, MaximumApprovalAge: 30 * 24 * time.Hour,
 		},
-		approval: SkillProductApproval{
-			Schema: SkillProductApprovalSchemaV1, ApprovalID: "product-approval-33", ReleaseID: evidence.ReleaseID,
-			BuildDigest: evidence.BuildDigest, MigrationDigest: evidence.MigrationDigest, PolicyDigest: evidence.PolicyDigest,
-			ApproverID: "accountable-product-owner", ApproverRole: "accountable_product",
-			RiskClassesApproved: true, ThresholdsApproved: true, CanaryPolicyApproved: true,
-			RetryDeadLetterApproved: true, BudgetsApproved: true, RetentionApproved: true,
-			SLOsApproved: true, AutomaticLowRiskApproved: true, ApprovedAt: now.Add(-30 * time.Minute),
-			ExpiresAt: now.Add(7 * 24 * time.Hour), SigningKeyID: "product-key",
-		},
 	}
 	signSkillReleaseEvidence(t, fixture)
+	evidenceDigest, err := ComputeSkillProductionReleaseEvidenceDigest(fixture.evidence)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixture.approval = SkillProductApproval{
+		Schema: SkillProductApprovalSchemaV2, ApprovalID: "product-approval-33", ReleaseID: evidence.ReleaseID,
+		BuildDigest: evidence.BuildDigest, MigrationDigest: evidence.MigrationDigest, PolicyDigest: evidence.PolicyDigest,
+		ConfigurationDigest:   rollout[len(rollout)-1].ConfigurationReceipt.Configuration.Digest,
+		ReleaseEvidenceDigest: evidenceDigest, ApproverID: "accountable-product-owner", ApproverRole: "accountable_product",
+		RiskClassesApproved: true, ThresholdsApproved: true, CanaryPolicyApproved: true,
+		RetryDeadLetterApproved: true, BudgetsApproved: true, RetentionApproved: true,
+		SLOsApproved: true, AutomaticLowRiskApproved: true, ApprovedAt: now.Add(-15 * time.Minute),
+		ExpiresAt: now.Add(7 * 24 * time.Hour), SigningKeyID: "product-key",
+	}
 	signSkillReleaseApproval(t, fixture)
 	return fixture
+}
+
+func releaseTestConfiguration(mode core.SkillOrchestratorMode, version int64, createdAt time.Time) core.SkillOrchestratorConfiguration {
+	configuration := core.SkillOrchestratorConfiguration{
+		Scope: core.SkillOrchestratorScope{WorkspaceID: "ws", Environment: "production"}, Version: version,
+		ContractVersion: core.SkillOrchestratorContractVersion, PolicyDigest: digestFor("policy"), Mode: mode,
+		PollInterval: time.Second, ReconciliationInterval: time.Minute, ClaimBatch: 10,
+		WorkerConcurrency: 4, TenantConcurrency: 4, WorkspaceConcurrency: 2,
+		DrainTimeout: 30 * time.Second, StaleReadinessThreshold: 5 * time.Minute, EvaluationBudgetUnits: 100,
+		AlertTargets:  core.SkillOrchestratorAlertTargets{ReadyQueueStuckAfter: 5 * time.Minute, LeaseChurnWindow: 15 * time.Minute, LeaseFailureCount: 5, CanaryStaleAfter: 24 * time.Hour, RollbackFailureAfter: 5 * time.Minute},
+		StagePolicies: []core.SkillOrchestratorStagePolicy{{Stage: core.SkillStageDetect, Enabled: true, LeaseDuration: time.Minute, RenewalInterval: 20 * time.Second, Timeout: 45 * time.Second, MaxAttempts: 3, InitialBackoff: time.Second, MaximumBackoff: time.Minute}},
+		CreatedBy:     "release-operator", CreatedAt: createdAt,
+	}
+	configuration.Digest, _ = ComputeSkillOrchestratorConfigurationDigest(configuration)
+	return configuration
 }
 
 func signSkillReleaseEvidence(t *testing.T, fixture *skillReleaseFixture) {

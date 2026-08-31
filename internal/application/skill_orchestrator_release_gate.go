@@ -16,7 +16,9 @@ import (
 
 const (
 	SkillProductionReleaseEvidenceSchemaV1 = "agent-memory/skill-orchestrator-production-release-evidence/v1"
+	SkillProductionReleaseEvidenceSchemaV2 = "agent-memory/skill-orchestrator-production-release-evidence/v2"
 	SkillProductApprovalSchemaV1           = "agent-memory/skill-orchestrator-product-approval/v1"
+	SkillProductApprovalSchemaV2           = "agent-memory/skill-orchestrator-product-approval/v2"
 	maxSkillReleaseReferenceBytes          = 256
 )
 
@@ -39,11 +41,9 @@ var requiredSkillReleaseModes = []core.SkillOrchestratorMode{
 }
 
 type SkillRolloutObservation struct {
-	Sequence                    int                        `json:"sequence"`
-	Mode                        core.SkillOrchestratorMode `json:"mode"`
-	ConfigurationDigest         string                     `json:"configuration_digest"`
-	ConfigurationSignatureValid bool                       `json:"configuration_signature_valid"`
-	Passed                      bool                       `json:"passed"`
+	Sequence             int                                   `json:"sequence"`
+	ConfigurationReceipt SkillOrchestratorConfigurationReceipt `json:"configuration_receipt"`
+	Passed               bool                                  `json:"passed"`
 }
 
 type SkillOperationalDrill struct {
@@ -77,6 +77,7 @@ type SkillProductionReleaseEvidence struct {
 	MigrationReportDigest  string                    `json:"migration_report_digest"`
 	AlertRoutingDigest     string                    `json:"alert_routing_digest"`
 	GeneratedAt            time.Time                 `json:"generated_at"`
+	SignerID               string                    `json:"signer_id"`
 	SigningKeyID           string                    `json:"signing_key_id"`
 	Signature              string                    `json:"signature"`
 }
@@ -98,6 +99,7 @@ type skillProductionReleaseEvidencePayload struct {
 	MigrationReportDigest  string                    `json:"migration_report_digest"`
 	AlertRoutingDigest     string                    `json:"alert_routing_digest"`
 	GeneratedAt            time.Time                 `json:"generated_at"`
+	SignerID               string                    `json:"signer_id"`
 	SigningKeyID           string                    `json:"signing_key_id"`
 }
 
@@ -108,6 +110,8 @@ type SkillProductApproval struct {
 	BuildDigest              string    `json:"build_digest"`
 	MigrationDigest          string    `json:"migration_digest"`
 	PolicyDigest             string    `json:"policy_digest"`
+	ConfigurationDigest      string    `json:"configuration_digest"`
+	ReleaseEvidenceDigest    string    `json:"release_evidence_digest"`
 	ApproverID               string    `json:"approver_id"`
 	ApproverRole             string    `json:"approver_role"`
 	RiskClassesApproved      bool      `json:"risk_classes_approved"`
@@ -131,6 +135,8 @@ type skillProductApprovalPayload struct {
 	BuildDigest              string    `json:"build_digest"`
 	MigrationDigest          string    `json:"migration_digest"`
 	PolicyDigest             string    `json:"policy_digest"`
+	ConfigurationDigest      string    `json:"configuration_digest"`
+	ReleaseEvidenceDigest    string    `json:"release_evidence_digest"`
 	ApproverID               string    `json:"approver_id"`
 	ApproverRole             string    `json:"approver_role"`
 	RiskClassesApproved      bool      `json:"risk_classes_approved"`
@@ -158,16 +164,17 @@ type SkillReleaseGateConfig struct {
 }
 
 type SkillReleaseGateReport struct {
-	Ready           bool      `json:"ready"`
-	ReleaseID       string    `json:"release_id"`
-	BuildDigest     string    `json:"build_digest"`
-	MigrationDigest string    `json:"migration_digest"`
-	PolicyDigest    string    `json:"policy_digest"`
-	EvidenceDigest  string    `json:"evidence_digest"`
-	ApprovalDigest  string    `json:"approval_digest"`
-	DrillIterations int       `json:"drill_iterations"`
-	Blockers        []string  `json:"blockers"`
-	VerifiedAt      time.Time `json:"verified_at"`
+	Ready               bool      `json:"ready"`
+	ReleaseID           string    `json:"release_id"`
+	BuildDigest         string    `json:"build_digest"`
+	MigrationDigest     string    `json:"migration_digest"`
+	PolicyDigest        string    `json:"policy_digest"`
+	ConfigurationDigest string    `json:"configuration_digest"`
+	EvidenceDigest      string    `json:"evidence_digest"`
+	ApprovalDigest      string    `json:"approval_digest"`
+	DrillIterations     int       `json:"drill_iterations"`
+	Blockers            []string  `json:"blockers"`
+	VerifiedAt          time.Time `json:"verified_at"`
 }
 
 func RequiredSkillReleaseDrillOperations() []SkillReleaseDrillOperation {
@@ -187,6 +194,17 @@ func SignSkillProductionReleaseEvidence(evidence SkillProductionReleaseEvidence,
 	}
 	evidence.Signature = base64.StdEncoding.EncodeToString(ed25519.Sign(privateKey, payload))
 	return evidence, nil
+}
+
+func ComputeSkillProductionReleaseEvidenceDigest(evidence SkillProductionReleaseEvidence) (string, error) {
+	if err := validateSkillReleaseEvidenceBounds(evidence); err != nil {
+		return "", err
+	}
+	payload, err := json.Marshal(skillProductionReleaseEvidenceUnsigned(evidence))
+	if err != nil {
+		return "", err
+	}
+	return releasePayloadDigest(payload), nil
 }
 
 func SignSkillProductApproval(approval SkillProductApproval, privateKey ed25519.PrivateKey) (SkillProductApproval, error) {
@@ -217,15 +235,18 @@ func EvaluateSkillOrchestratorReleaseGate(config SkillReleaseGateConfig, evidenc
 		return SkillReleaseGateReport{}, err
 	}
 	report.EvidenceDigest = releasePayloadDigest(evidencePayload)
-	if evidence.Schema != SkillProductionReleaseEvidenceSchemaV1 || evidence.ReleaseID != config.ReleaseID || evidence.BuildDigest != config.BuildDigest || evidence.MigrationDigest != config.MigrationDigest || evidence.PolicyDigest != config.PolicyDigest {
+	if evidence.Schema != SkillProductionReleaseEvidenceSchemaV2 || evidence.ReleaseID != config.ReleaseID || evidence.BuildDigest != config.BuildDigest || evidence.MigrationDigest != config.MigrationDigest || evidence.PolicyDigest != config.PolicyDigest || evidence.SignerID != config.ReleaseSignerID {
 		report.Blockers = append(report.Blockers, "release_evidence_binding_mismatch")
 	}
 	if !verifyReleaseSignature(config.TrustedReleaseKeys, evidence.SigningKeyID, evidence.Signature, evidencePayload) {
 		report.Blockers = append(report.Blockers, "release_evidence_signature_invalid")
 	}
-	if !validSkillRollout(evidence.Rollout) {
-		report.Blockers = append(report.Blockers, "rollout_sequence_invalid")
+	if evidence.GeneratedAt.After(now) || now.Sub(evidence.GeneratedAt) > config.MaximumApprovalAge {
+		report.Blockers = append(report.Blockers, "release_evidence_stale")
 	}
+	finalReceipt, rolloutBlockers := validateSignedSkillRollout(config, evidence)
+	report.Blockers = append(report.Blockers, rolloutBlockers...)
+	report.ConfigurationDigest = finalReceipt.Configuration.Digest
 	report.DrillIterations = completeSkillDrillIterations(evidence.Drills, evidence.RollbackSLOMillis)
 	if report.DrillIterations < 2 {
 		report.Blockers = append(report.Blockers, "staging_drills_incomplete")
@@ -238,22 +259,25 @@ func EvaluateSkillOrchestratorReleaseGate(config SkillReleaseGateConfig, evidenc
 		return SkillReleaseGateReport{}, err
 	}
 	report.ApprovalDigest = releasePayloadDigest(approvalPayload)
-	if approval.Schema != SkillProductApprovalSchemaV1 || approval.ApproverRole != "accountable_product" || !boundedReleaseReference(approval.ApprovalID) || !boundedReleaseReference(approval.ApproverID) {
+	if approval.Schema != SkillProductApprovalSchemaV2 || approval.ApproverRole != "accountable_product" || !boundedReleaseReference(approval.ApprovalID) || !boundedReleaseReference(approval.ApproverID) {
 		report.Blockers = append(report.Blockers, "product_approval_identity_invalid")
 	}
-	if approval.ReleaseID != config.ReleaseID || approval.BuildDigest != config.BuildDigest || approval.MigrationDigest != config.MigrationDigest || approval.PolicyDigest != config.PolicyDigest {
+	if approval.ReleaseID != config.ReleaseID || approval.BuildDigest != config.BuildDigest || approval.MigrationDigest != config.MigrationDigest || approval.PolicyDigest != config.PolicyDigest || approval.ConfigurationDigest != report.ConfigurationDigest || approval.ReleaseEvidenceDigest != report.EvidenceDigest {
 		report.Blockers = append(report.Blockers, "product_approval_binding_mismatch")
+	}
+	if finalReceipt.Configuration.Mode != core.SkillOrchestratorAutomaticLowRisk || finalReceipt.Configuration.ApprovalReference != approval.ApprovalID || finalReceipt.Configuration.ReleaseEvidenceReference != evidence.ReleaseID || finalReceipt.Configuration.SignatureReference != finalReceipt.ReceiptID {
+		report.Blockers = append(report.Blockers, "automatic_configuration_reference_mismatch")
 	}
 	if !allSkillProductControlsApproved(approval) {
 		report.Blockers = append(report.Blockers, "product_controls_unapproved")
 	}
-	if approval.ApprovedAt.IsZero() || approval.ExpiresAt.IsZero() || approval.ApprovedAt.After(now) || !now.Before(approval.ExpiresAt) || now.Sub(approval.ApprovedAt) > config.MaximumApprovalAge {
+	if approval.ApprovedAt.IsZero() || approval.ExpiresAt.IsZero() || approval.ApprovedAt.Before(evidence.GeneratedAt) || approval.ApprovedAt.After(now) || !now.Before(approval.ExpiresAt) || now.Sub(approval.ApprovedAt) > config.MaximumApprovalAge {
 		report.Blockers = append(report.Blockers, "product_approval_stale")
 	}
 	if !verifyReleaseSignature(config.TrustedProductKeys, approval.SigningKeyID, approval.Signature, approvalPayload) {
 		report.Blockers = append(report.Blockers, "product_approval_signature_invalid")
 	}
-	if approval.ApproverID == config.ReleaseSignerID || approval.SigningKeyID == evidence.SigningKeyID {
+	if approval.ApproverID == evidence.SignerID || approval.SigningKeyID == evidence.SigningKeyID {
 		report.Blockers = append(report.Blockers, "separation_of_duty_invalid")
 	}
 	report.Blockers = sortedUniqueStrings(report.Blockers)
@@ -269,7 +293,8 @@ func skillProductionReleaseEvidenceUnsigned(evidence SkillProductionReleaseEvide
 		StandaloneReportDigest: evidence.StandaloneReportDigest, HostedReportDigest: evidence.HostedReportDigest,
 		ChaosCertificateDigest: evidence.ChaosCertificateDigest, SecurityReportDigest: evidence.SecurityReportDigest,
 		CapacityReportDigest: evidence.CapacityReportDigest, MigrationReportDigest: evidence.MigrationReportDigest,
-		AlertRoutingDigest: evidence.AlertRoutingDigest, GeneratedAt: evidence.GeneratedAt.UTC(), SigningKeyID: evidence.SigningKeyID,
+		AlertRoutingDigest: evidence.AlertRoutingDigest, GeneratedAt: evidence.GeneratedAt.UTC(),
+		SignerID: evidence.SignerID, SigningKeyID: evidence.SigningKeyID,
 	}
 }
 
@@ -277,6 +302,7 @@ func skillProductApprovalUnsigned(approval SkillProductApproval) skillProductApp
 	return skillProductApprovalPayload{
 		Schema: approval.Schema, ApprovalID: approval.ApprovalID, ReleaseID: approval.ReleaseID,
 		BuildDigest: approval.BuildDigest, MigrationDigest: approval.MigrationDigest, PolicyDigest: approval.PolicyDigest,
+		ConfigurationDigest: approval.ConfigurationDigest, ReleaseEvidenceDigest: approval.ReleaseEvidenceDigest,
 		ApproverID: approval.ApproverID, ApproverRole: approval.ApproverRole,
 		RiskClassesApproved: approval.RiskClassesApproved, ThresholdsApproved: approval.ThresholdsApproved,
 		CanaryPolicyApproved: approval.CanaryPolicyApproved, RetryDeadLetterApproved: approval.RetryDeadLetterApproved,
@@ -302,7 +328,7 @@ func validateSkillReleaseGateConfig(config SkillReleaseGateConfig, now time.Time
 }
 
 func validateSkillReleaseEvidenceBounds(evidence SkillProductionReleaseEvidence) error {
-	if !boundedReleaseReference(evidence.ReleaseID) || !boundedReleaseReference(evidence.SigningKeyID) || evidence.GeneratedAt.IsZero() || len(evidence.Rollout) > 16 || len(evidence.Drills) > 64 || evidence.RollbackSLOMillis < 1 || evidence.RollbackSLOMillis > int64((10*time.Minute)/time.Millisecond) {
+	if !boundedReleaseReference(evidence.ReleaseID) || !boundedReleaseReference(evidence.SignerID) || !boundedReleaseReference(evidence.SigningKeyID) || evidence.GeneratedAt.IsZero() || len(evidence.Rollout) > 16 || len(evidence.Drills) > 64 || evidence.RollbackSLOMillis < 1 || evidence.RollbackSLOMillis > int64((10*time.Minute)/time.Millisecond) {
 		return errors.New("skill release evidence identity or bounds are invalid")
 	}
 	for _, drill := range evidence.Drills {
@@ -313,16 +339,32 @@ func validateSkillReleaseEvidenceBounds(evidence SkillProductionReleaseEvidence)
 	return nil
 }
 
-func validSkillRollout(rollout []SkillRolloutObservation) bool {
-	if len(rollout) != len(requiredSkillReleaseModes) {
-		return false
+func validateSignedSkillRollout(config SkillReleaseGateConfig, evidence SkillProductionReleaseEvidence) (SkillOrchestratorConfigurationReceipt, []string) {
+	blockers := []string{}
+	if len(evidence.Rollout) != len(requiredSkillReleaseModes) {
+		return SkillOrchestratorConfigurationReceipt{}, []string{"rollout_sequence_invalid"}
 	}
-	for index, observation := range rollout {
-		if observation.Sequence != index+1 || observation.Mode != requiredSkillReleaseModes[index] || !validSHA256Digest(observation.ConfigurationDigest) || !observation.ConfigurationSignatureValid || !observation.Passed {
-			return false
+	var finalReceipt SkillOrchestratorConfigurationReceipt
+	var previous core.SkillOrchestratorConfiguration
+	for index, observation := range evidence.Rollout {
+		receipt := observation.ConfigurationReceipt
+		configuration := receipt.Configuration
+		if observation.Sequence != index+1 || !observation.Passed || configuration.Mode != requiredSkillReleaseModes[index] {
+			blockers = append(blockers, "rollout_sequence_invalid")
 		}
+		if err := VerifySkillOrchestratorConfigurationReceipt(receipt, config.TrustedReleaseKeys); err != nil {
+			blockers = append(blockers, "configuration_receipt_invalid")
+		}
+		if receipt.ReleaseID != config.ReleaseID || receipt.BuildDigest != config.BuildDigest || receipt.MigrationDigest != config.MigrationDigest || receipt.SignerID != config.ReleaseSignerID || configuration.PolicyDigest != config.PolicyDigest || receipt.SignedAt.After(evidence.GeneratedAt) {
+			blockers = append(blockers, "configuration_receipt_binding_mismatch")
+		}
+		if index > 0 && (configuration.Scope != previous.Scope || configuration.Version != previous.Version+1 || configuration.CreatedAt.Before(previous.CreatedAt)) {
+			blockers = append(blockers, "rollout_sequence_invalid")
+		}
+		previous = configuration
+		finalReceipt = receipt
 	}
-	return true
+	return finalReceipt, sortedUniqueStrings(blockers)
 }
 
 func completeSkillDrillIterations(drills []SkillOperationalDrill, rollbackSLOMillis int64) int {
