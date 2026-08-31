@@ -281,7 +281,7 @@
   - Files: integration test, deterministic executor fixtures, release report.
   - Estimated scope: Medium.
 
-- [ ] **Task 32: Add hosted horizontal natural-flow regression**
+- [x] **Task 32: Add hosted horizontal natural-flow regression**
   - Acceptance: Two workers and two tenants execute the same lifecycle with fairness, lease takeover, RLS isolation, policy enablement, rollback priority, and API/dashboard status parity.
   - Verify: permanent hosted integration journey with worker kill/restart and exact standalone outcome parity.
   - Dependencies: Tasks 19-30.

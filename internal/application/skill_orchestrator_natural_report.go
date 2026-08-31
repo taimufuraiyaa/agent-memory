@@ -43,6 +43,7 @@ type SkillStandaloneNaturalFlowReport struct {
 	AutomaticActivation   bool                          `json:"automatic_activation"`
 	LastKnownGoodRestored bool                          `json:"last_known_good_restored"`
 	RollbackDurationMS    int64                         `json:"rollback_duration_ms"`
+	OutcomeDigest         string                        `json:"outcome_digest"`
 	ReportDigest          string                        `json:"report_digest"`
 }
 
@@ -60,6 +61,33 @@ type skillStandaloneNaturalFlowUnsignedReport struct {
 	AutomaticActivation   bool                          `json:"automatic_activation"`
 	LastKnownGoodRestored bool                          `json:"last_known_good_restored"`
 	RollbackDurationMS    int64                         `json:"rollback_duration_ms"`
+	OutcomeDigest         string                        `json:"outcome_digest"`
+}
+
+type SkillNaturalFlowOutcome struct {
+	CompletedStages       []core.SkillOrchestratorStage
+	ExactUsesPerJourney   int
+	AutomaticActivation   bool
+	LastKnownGoodRestored bool
+}
+
+func ComputeSkillNaturalFlowOutcomeDigest(outcome SkillNaturalFlowOutcome) (string, error) {
+	stages := append([]core.SkillOrchestratorStage(nil), outcome.CompletedStages...)
+	sort.Slice(stages, func(i, j int) bool { return stages[i] < stages[j] })
+	if err := validateNaturalFlowStages(stages); err != nil || outcome.ExactUsesPerJourney < 1 || outcome.ExactUsesPerJourney > 1_000_000 || !outcome.AutomaticActivation || !outcome.LastKnownGoodRestored {
+		return "", errors.New("natural-flow outcome is incomplete or outside bounds")
+	}
+	payload, err := json.Marshal(struct {
+		Stages                []core.SkillOrchestratorStage `json:"stages"`
+		ExactUsesPerJourney   int                           `json:"exact_uses_per_journey"`
+		AutomaticActivation   bool                          `json:"automatic_activation"`
+		LastKnownGoodRestored bool                          `json:"last_known_good_restored"`
+	}{stages, outcome.ExactUsesPerJourney, outcome.AutomaticActivation, outcome.LastKnownGoodRestored})
+	if err != nil {
+		return "", err
+	}
+	digest := sha256.Sum256(payload)
+	return "sha256:" + hex.EncodeToString(digest[:]), nil
 }
 
 func BuildSkillStandaloneNaturalFlowReport(input SkillStandaloneNaturalFlowReportInput) (SkillStandaloneNaturalFlowReport, error) {
@@ -73,6 +101,7 @@ func BuildSkillStandaloneNaturalFlowReport(input SkillStandaloneNaturalFlowRepor
 		LastKnownGoodRestored: input.LastKnownGoodRestored, RollbackDurationMS: input.RollbackDurationMS,
 	}
 	sort.Slice(unsigned.CompletedStages, func(i, j int) bool { return unsigned.CompletedStages[i] < unsigned.CompletedStages[j] })
+	unsigned.OutcomeDigest, _ = ComputeSkillNaturalFlowOutcomeDigest(SkillNaturalFlowOutcome{CompletedStages: unsigned.CompletedStages, ExactUsesPerJourney: unsigned.ExactUses, AutomaticActivation: unsigned.AutomaticActivation, LastKnownGoodRestored: unsigned.LastKnownGoodRestored})
 	if err := validateSkillStandaloneNaturalFlowUnsigned(unsigned); err != nil {
 		return SkillStandaloneNaturalFlowReport{}, err
 	}
@@ -87,7 +116,8 @@ func BuildSkillStandaloneNaturalFlowReport(input SkillStandaloneNaturalFlowRepor
 		CompletedStages: unsigned.CompletedStages, ControlledRestarts: unsigned.ControlledRestarts,
 		ExactUses: unsigned.ExactUses, VerifiedHardSignals: unsigned.VerifiedHardSignals,
 		AutomaticActivation: unsigned.AutomaticActivation, LastKnownGoodRestored: unsigned.LastKnownGoodRestored,
-		RollbackDurationMS: unsigned.RollbackDurationMS, ReportDigest: "sha256:" + hex.EncodeToString(digest[:]),
+		RollbackDurationMS: unsigned.RollbackDurationMS, OutcomeDigest: unsigned.OutcomeDigest,
+		ReportDigest: "sha256:" + hex.EncodeToString(digest[:]),
 	}, nil
 }
 
@@ -99,6 +129,7 @@ func VerifySkillStandaloneNaturalFlowReport(report SkillStandaloneNaturalFlowRep
 		ControlledRestarts: report.ControlledRestarts, ExactUses: report.ExactUses,
 		VerifiedHardSignals: report.VerifiedHardSignals, AutomaticActivation: report.AutomaticActivation,
 		LastKnownGoodRestored: report.LastKnownGoodRestored, RollbackDurationMS: report.RollbackDurationMS,
+		OutcomeDigest: report.OutcomeDigest,
 	}
 	if err := validateSkillStandaloneNaturalFlowUnsigned(unsigned); err != nil {
 		return err
@@ -121,21 +152,32 @@ func validateSkillStandaloneNaturalFlowUnsigned(report skillStandaloneNaturalFlo
 	if report.StartedAt.IsZero() || report.CompletedAt.Before(report.StartedAt) || report.CompletedAt.Sub(report.StartedAt) > 30*time.Minute || report.ControlledRestarts < 1 || report.ControlledRestarts > 100 || report.ExactUses < 1 || report.ExactUses > 1_000_000 || report.VerifiedHardSignals < 1 || report.VerifiedHardSignals > 1_000 || report.RollbackDurationMS < 0 || report.RollbackDurationMS > int64((10*time.Minute)/time.Millisecond) || !report.AutomaticActivation || !report.LastKnownGoodRestored {
 		return errors.New("standalone natural-flow report outcome is incomplete or outside bounds")
 	}
+	if err := validateNaturalFlowStages(report.CompletedStages); err != nil {
+		return err
+	}
+	outcomeDigest, err := ComputeSkillNaturalFlowOutcomeDigest(SkillNaturalFlowOutcome{CompletedStages: report.CompletedStages, ExactUsesPerJourney: report.ExactUses, AutomaticActivation: report.AutomaticActivation, LastKnownGoodRestored: report.LastKnownGoodRestored})
+	if err != nil || outcomeDigest != report.OutcomeDigest {
+		return errors.New("standalone natural-flow outcome digest mismatch")
+	}
+	return nil
+}
+
+func validateNaturalFlowStages(stages []core.SkillOrchestratorStage) error {
 	required := map[core.SkillOrchestratorStage]struct{}{
 		core.SkillStageDetect: {}, core.SkillStageBuild: {}, core.SkillStageEvaluate: {}, core.SkillStageDecide: {},
 		core.SkillStageStartCanary: {}, core.SkillStageAnalyzeCanary: {}, core.SkillStageActivate: {}, core.SkillStageRollback: {},
 	}
-	if len(report.CompletedStages) != len(required) {
-		return errors.New("standalone natural-flow report stage evidence is incomplete")
+	if len(stages) != len(required) {
+		return errors.New("natural-flow stage evidence is incomplete")
 	}
-	for _, stage := range report.CompletedStages {
+	for _, stage := range stages {
 		if _, ok := required[stage]; !ok {
-			return errors.New("standalone natural-flow report stage evidence is unexpected or duplicated")
+			return errors.New("natural-flow stage evidence is unexpected or duplicated")
 		}
 		delete(required, stage)
 	}
 	if len(required) != 0 {
-		return errors.New("standalone natural-flow report stage evidence is incomplete")
+		return errors.New("natural-flow stage evidence is incomplete")
 	}
 	return nil
 }

@@ -21,7 +21,7 @@ func TestStandaloneNaturalFlowReportRequiresCompleteContentFreeJourney(t *testin
 		AutomaticActivation: true, LastKnownGoodRestored: true, RollbackDurationMS: 20,
 	}
 	report, err := BuildSkillStandaloneNaturalFlowReport(input)
-	if err != nil || report.Schema != SkillStandaloneNaturalFlowReportSchemaV1 || !validSHA256Digest(report.ReportDigest) {
+	if err != nil || report.Schema != SkillStandaloneNaturalFlowReportSchemaV1 || !validSHA256Digest(report.ReportDigest) || !validSHA256Digest(report.OutcomeDigest) {
 		t.Fatalf("report = %+v, %v", report, err)
 	}
 	if err := VerifySkillStandaloneNaturalFlowReport(report); err != nil {
