@@ -55,16 +55,32 @@ func TestSkillLifecycleAlertFixtureIsLoadedAndRouted(t *testing.T) {
 			Rules []struct {
 				Alert, Expr string
 				Labels      map[string]string
+				Annotations map[string]string
 			} `yaml:"rules"`
 		} `yaml:"groups"`
 	}
 	if err := yaml.Unmarshal(raw, &rules); err != nil {
 		t.Fatal(err)
 	}
-	wanted := map[string]bool{"AgentMemorySkillMaterializationFailures": false, "AgentMemorySkillRollbackSpike": false, "AgentMemorySkillEvaluationFailures": false}
+	wanted := map[string]bool{
+		"AgentMemorySkillMaterializationFailures": false, "AgentMemorySkillRollbackSpike": false, "AgentMemorySkillEvaluationFailures": false,
+		"AgentMemorySkillOrchestratorStuckReadyWork": false, "AgentMemorySkillOrchestratorLeaseChurn": false,
+		"AgentMemorySkillOrchestratorDeadLetters": false, "AgentMemorySkillOrchestratorEvaluatorOutage": false,
+		"AgentMemorySkillOrchestratorStaleCanary": false, "AgentMemorySkillOrchestratorRollbackFailure": false,
+		"AgentMemorySkillOrchestratorReconciliationDrift": false, "AgentMemorySkillOrchestratorUnexpectedActivation": false,
+	}
 	for _, group := range rules.Groups {
 		for _, rule := range group.Rules {
-			if _, ok := wanted[rule.Alert]; ok && rule.Expr != "" && rule.Labels["owner"] == "agent-memory-operations" {
+			if strings.Contains(rule.Expr, "skill_id") || strings.Contains(rule.Expr, "revision_id") || strings.Contains(rule.Expr, "workspace_id") || strings.Contains(rule.Expr, "tenant_id") {
+				t.Fatalf("alert %s uses a content-bearing or unbounded label", rule.Alert)
+			}
+			switch rule.Alert {
+			case "AgentMemorySkillOrchestratorStuckReadyWork", "AgentMemorySkillOrchestratorLeaseChurn", "AgentMemorySkillOrchestratorStaleCanary", "AgentMemorySkillOrchestratorRollbackFailure":
+				if !strings.Contains(rule.Expr, "agent_memory_skill_orchestrator_slo_target") {
+					t.Fatalf("alert %s is not bound to an approved configuration target", rule.Alert)
+				}
+			}
+			if _, ok := wanted[rule.Alert]; ok && rule.Expr != "" && rule.Labels["owner"] == "agent-memory-operations" && strings.HasPrefix(rule.Annotations["runbook"], "docs/runbooks/skill-revision-lifecycle.md#") {
 				wanted[rule.Alert] = true
 			}
 		}
@@ -75,7 +91,7 @@ func TestSkillLifecycleAlertFixtureIsLoadedAndRouted(t *testing.T) {
 		}
 	}
 	prometheusConfig, err := os.ReadFile(filepath.Join(root, "deploy", "saas", "observability", "prometheus.yaml"))
-	if err != nil || !strings.Contains(string(prometheusConfig), "/etc/prometheus/skill-lifecycle-alerts.yaml") {
+	if err != nil || !strings.Contains(string(prometheusConfig), "/etc/prometheus/skill-lifecycle-alerts.yaml") || !strings.Contains(string(prometheusConfig), `targets: ["skill-worker:9090"]`) {
 		t.Fatal("Prometheus does not load skill lifecycle alerts")
 	}
 }

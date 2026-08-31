@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/taimufuraiyaa/agent-memory/internal/core"
+	"github.com/taimufuraiyaa/agent-memory/internal/observability"
 )
 
 type SkillCanaryStageConfiguration struct {
@@ -259,6 +260,7 @@ type SkillCanaryAnalysisAdapter struct {
 	now           func() time.Time
 	downstream    SkillLessonSignalRouter
 	due           *SkillCanaryDueScheduler
+	metrics       *observability.SkillOrchestratorMetrics
 }
 
 func (a *SkillCanaryAnalysisAdapter) WithDownstreamRouter(router SkillLessonSignalRouter) error {
@@ -280,7 +282,7 @@ func NewSkillCanaryAnalysisAdapter(repository SkillCanaryAnalysisStageRepository
 	if now == nil {
 		now = time.Now
 	}
-	return &SkillCanaryAnalysisAdapter{repository: repository, policy: policy, configuration: configuration, now: now}, nil
+	return &SkillCanaryAnalysisAdapter{repository: repository, policy: policy, configuration: configuration, now: now, metrics: observability.DefaultSkillOrchestratorMetrics()}, nil
 }
 
 func (a *SkillCanaryAnalysisAdapter) Execute(ctx context.Context, job core.SkillJob) (SkillStageResult, error) {
@@ -304,6 +306,7 @@ func (a *SkillCanaryAnalysisAdapter) Execute(ctx context.Context, job core.Skill
 	}
 	windowStarted := activation.UpdatedAt
 	now := a.now().UTC()
+	a.metrics.ObserveCanary(job.Scope.Environment, now.Sub(windowStarted))
 	signal, err := SkillLifecycleSignalForCanary(activation, revision, windowStarted, workflow.CreatedAt, a.configuration.Signal)
 	if err != nil || digestSkillLifecycleSignal(signal, nil) != job.InputDigest || workflow.InputDigest != job.InputDigest || job.PolicyVersion != a.configuration.Signal.PolicyVersion {
 		return SkillStageResult{}, canaryStageError(core.SkillFailurePermanentValidation, "canary_analysis_binding_mismatch", errors.Join(err, errors.New("canary analysis binding mismatch")))

@@ -87,6 +87,7 @@ func newSkillConfigurationFixture(t *testing.T, mode core.SkillOrchestratorMode)
 		ContractVersion: core.SkillOrchestratorContractVersion, PolicyDigest: "sha256:" + strings.Repeat("a", 64), Mode: mode,
 		PollInterval: time.Second, ReconciliationInterval: time.Minute, ClaimBatch: 10, WorkerConcurrency: 4, TenantConcurrency: 4, WorkspaceConcurrency: 2,
 		DrainTimeout: 30 * time.Second, StaleReadinessThreshold: 5 * time.Minute, EvaluationBudgetUnits: 100,
+		AlertTargets:  core.SkillOrchestratorAlertTargets{ReadyQueueStuckAfter: 5 * time.Minute, LeaseChurnWindow: 15 * time.Minute, LeaseFailureCount: 5, CanaryStaleAfter: 24 * time.Hour, RollbackFailureAfter: 5 * time.Minute},
 		StagePolicies: []core.SkillOrchestratorStagePolicy{{Stage: core.SkillStageDetect, Enabled: true, LeaseDuration: time.Minute, RenewalInterval: 20 * time.Second, Timeout: 45 * time.Second, MaxAttempts: 3, InitialBackoff: time.Second, MaximumBackoff: time.Minute}},
 		CreatedBy:     "operator-1", CreatedAt: now,
 	}

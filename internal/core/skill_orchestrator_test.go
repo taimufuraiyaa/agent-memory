@@ -211,6 +211,12 @@ func TestSkillOrchestratorConfigurationValidatesSafeBoundsAndPromotionCustody(t 
 	if err := configuration.Validate(); err != nil {
 		t.Fatalf("expected promotion-enabled configuration with custody, got %v", err)
 	}
+	approvedTargets := configuration.AlertTargets
+	configuration.AlertTargets = SkillOrchestratorAlertTargets{}
+	if err := configuration.Validate(); err == nil || !strings.Contains(err.Error(), "alert targets") {
+		t.Fatalf("expected missing approved target rejection, got %v", err)
+	}
+	configuration.AlertTargets = approvedTargets
 	configuration.StagePolicies[0].Enabled = true
 	if !configuration.ClaimsEnabled(SkillStageDetect) {
 		t.Fatal("expected enabled automatic stage to accept new claims")
@@ -306,6 +312,7 @@ func validSkillOrchestratorConfiguration(now time.Time) SkillOrchestratorConfigu
 		Mode: SkillOrchestratorDisabled, PollInterval: time.Second, ReconciliationInterval: time.Minute,
 		ClaimBatch: 10, WorkerConcurrency: 4, TenantConcurrency: 4, WorkspaceConcurrency: 2,
 		DrainTimeout: 30 * time.Second, StaleReadinessThreshold: 5 * time.Minute,
+		AlertTargets: SkillOrchestratorAlertTargets{ReadyQueueStuckAfter: 5 * time.Minute, LeaseChurnWindow: 15 * time.Minute, LeaseFailureCount: 5, CanaryStaleAfter: 24 * time.Hour, RollbackFailureAfter: 5 * time.Minute},
 		StagePolicies: []SkillOrchestratorStagePolicy{{
 			Stage: SkillStageDetect, Enabled: false, LeaseDuration: time.Minute,
 			RenewalInterval: 20 * time.Second, Timeout: 45 * time.Second, MaxAttempts: 3,

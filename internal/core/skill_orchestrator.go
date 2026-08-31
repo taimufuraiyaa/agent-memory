@@ -349,6 +349,14 @@ type SkillJob struct {
 	CompletedAt       time.Time                    `json:"completed_at,omitempty"`
 }
 
+type SkillOrchestratorQueueSnapshot struct {
+	Stage        SkillOrchestratorStage
+	State        SkillJobState
+	FailureClass SkillJobFailureClass
+	Depth        int
+	OldestAt     time.Time
+}
+
 func (j SkillJob) Validate() error {
 	if !validSkillOrchestratorIdentifier(j.ID) || !validSkillOrchestratorIdentifier(j.WorkflowID) {
 		return errors.New("skill job id or workflow_id is invalid")
@@ -664,12 +672,28 @@ type SkillOrchestratorConfiguration struct {
 	DrainTimeout             time.Duration                  `json:"drain_timeout"`
 	StaleReadinessThreshold  time.Duration                  `json:"stale_readiness_threshold"`
 	EvaluationBudgetUnits    int64                          `json:"evaluation_budget_units"`
+	AlertTargets             SkillOrchestratorAlertTargets  `json:"alert_targets"`
 	StagePolicies            []SkillOrchestratorStagePolicy `json:"stage_policies"`
 	ApprovalReference        string                         `json:"approval_reference,omitempty"`
 	ReleaseEvidenceReference string                         `json:"release_evidence_reference,omitempty"`
 	SignatureReference       string                         `json:"signature_reference,omitempty"`
 	CreatedBy                string                         `json:"created_by"`
 	CreatedAt                time.Time                      `json:"created_at"`
+}
+
+type SkillOrchestratorAlertTargets struct {
+	ReadyQueueStuckAfter time.Duration `json:"ready_queue_stuck_after"`
+	LeaseChurnWindow     time.Duration `json:"lease_churn_window"`
+	LeaseFailureCount    int           `json:"lease_failure_count"`
+	CanaryStaleAfter     time.Duration `json:"canary_stale_after"`
+	RollbackFailureAfter time.Duration `json:"rollback_failure_after"`
+}
+
+func (t SkillOrchestratorAlertTargets) Validate() error {
+	if t.ReadyQueueStuckAfter < time.Second || t.ReadyQueueStuckAfter > 30*24*time.Hour || t.LeaseChurnWindow < time.Second || t.LeaseChurnWindow > 24*time.Hour || t.LeaseFailureCount < 1 || t.LeaseFailureCount > 1_000 || t.CanaryStaleAfter < time.Second || t.CanaryStaleAfter > 30*24*time.Hour || t.RollbackFailureAfter < time.Second || t.RollbackFailureAfter > 24*time.Hour {
+		return errors.New("skill orchestrator alert targets are missing or outside bounds")
+	}
+	return nil
 }
 
 type SkillOrchestratorConfigurationAudit struct {
@@ -767,6 +791,11 @@ func (c SkillOrchestratorConfiguration) Validate() error {
 	}
 	if c.DrainTimeout < time.Second || c.DrainTimeout > time.Hour || c.StaleReadinessThreshold < time.Second || c.StaleReadinessThreshold > 7*24*time.Hour || c.EvaluationBudgetUnits < 0 {
 		return errors.New("skill orchestrator configuration timeout or budget bounds are invalid")
+	}
+	if c.Mode != SkillOrchestratorDisabled {
+		if err := c.AlertTargets.Validate(); err != nil {
+			return err
+		}
 	}
 	if len(c.StagePolicies) == 0 || len(c.StagePolicies) > MaxSkillOrchestratorStagePolicies {
 		return errors.New("skill orchestrator configuration stage_policies are required and bounded")

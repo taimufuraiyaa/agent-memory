@@ -28,3 +28,75 @@ groups:
         annotations:
           summary: Skill evaluation failures are elevated
           runbook: docs/runbooks/skill-revision-lifecycle.md#evaluation-failure
+      - alert: AgentMemorySkillOrchestratorStuckReadyWork
+        expr: max(agent_memory_skill_orchestrator_oldest_ready_age_seconds) > scalar(max(agent_memory_skill_orchestrator_slo_target{target="ready_queue_stuck_seconds"}))
+        for: 10m
+        labels:
+          severity: page
+          owner: agent-memory-operations
+        annotations:
+          summary: Skill orchestration ready work is stuck
+          runbook: docs/runbooks/skill-revision-lifecycle.md#safe-pause-and-drain
+      - alert: AgentMemorySkillOrchestratorLeaseChurn
+        expr: sum(increase(agent_memory_skill_orchestrator_lease_events_total{event=~"expired|renewal_failed"}[15m])) > scalar(max(agent_memory_skill_orchestrator_slo_target{target="lease_failure_count"}))
+        for: 5m
+        labels:
+          severity: page
+          owner: agent-memory-operations
+        annotations:
+          summary: Skill orchestration leases are repeatedly expiring
+          runbook: docs/runbooks/skill-revision-lifecycle.md#safe-pause-and-drain
+      - alert: AgentMemorySkillOrchestratorDeadLetters
+        expr: sum(increase(agent_memory_skill_orchestrator_dead_letters_total[30m])) > 0
+        for: 5m
+        labels:
+          severity: ticket
+          owner: agent-memory-operations
+        annotations:
+          summary: Skill orchestration has new dead letters
+          runbook: docs/runbooks/skill-revision-lifecycle.md#retry-and-dead-letter-review
+      - alert: AgentMemorySkillOrchestratorEvaluatorOutage
+        expr: sum(rate(agent_memory_skill_orchestrator_stage_duration_seconds_count{stage="evaluate",outcome="failure",failure_class="dependency_unavailable"}[10m])) > 0
+        for: 10m
+        labels:
+          severity: page
+          owner: agent-memory-operations
+        annotations:
+          summary: Skill evaluator dependency is unavailable
+          runbook: docs/runbooks/skill-revision-lifecycle.md#evaluator-outage
+      - alert: AgentMemorySkillOrchestratorStaleCanary
+        expr: max(agent_memory_skill_orchestrator_canary_wait_age_seconds) > scalar(max(agent_memory_skill_orchestrator_slo_target{target="canary_stale_seconds"}))
+        for: 15m
+        labels:
+          severity: ticket
+          owner: agent-memory-operations
+        annotations:
+          summary: Skill canary is stale
+          runbook: docs/runbooks/skill-revision-lifecycle.md#stuck-canary
+      - alert: AgentMemorySkillOrchestratorRollbackFailure
+        expr: sum(increase(agent_memory_skill_orchestrator_stage_duration_seconds_count{stage="rollback",outcome="failure"}[15m])) > 0 or histogram_quantile(0.99, sum by (le) (rate(agent_memory_skill_orchestrator_rollback_latency_seconds_bucket[15m]))) > scalar(max(agent_memory_skill_orchestrator_slo_target{target="rollback_failure_seconds"}))
+        for: 2m
+        labels:
+          severity: page
+          owner: agent-memory-operations
+        annotations:
+          summary: Skill rollback failed
+          runbook: docs/runbooks/skill-revision-lifecycle.md#rollback-failure
+      - alert: AgentMemorySkillOrchestratorReconciliationDrift
+        expr: sum(increase(agent_memory_skill_orchestrator_reconciliation_total{outcome="failed"}[30m])) > 0
+        for: 10m
+        labels:
+          severity: ticket
+          owner: agent-memory-operations
+        annotations:
+          summary: Skill orchestration reconciliation drift remains unrepaired
+          runbook: docs/runbooks/skill-revision-lifecycle.md#restore-recovery
+      - alert: AgentMemorySkillOrchestratorUnexpectedActivation
+        expr: sum(increase(agent_memory_skill_orchestrator_stage_duration_seconds_count{stage="activate",outcome="success"}[15m])) > 0 unless on() max(agent_memory_skill_orchestrator_configuration_mode{mode="automatic_low_risk"}) == 1
+        for: 1m
+        labels:
+          severity: page
+          owner: agent-memory-operations
+        annotations:
+          summary: Automatic skill activation occurred outside approved mode
+          runbook: docs/runbooks/skill-revision-lifecycle.md#complete-feature-shutdown

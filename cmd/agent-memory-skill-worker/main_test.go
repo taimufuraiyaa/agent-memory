@@ -30,3 +30,14 @@ func TestSkillWorkerHealthSeparatesLivenessAndReadiness(t *testing.T) {
 		t.Fatal("ready process failed readiness")
 	}
 }
+
+func TestSkillWorkerTelemetryExposesPrometheusMetrics(t *testing.T) {
+	var live, ready atomic.Bool
+	server := skillHealthServer(":0", &live, &ready)
+	request := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	response := httptest.NewRecorder()
+	server.Handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || response.Header().Get("Content-Type") == "" {
+		t.Fatalf("metrics response code=%d content-type=%q", response.Code, response.Header().Get("Content-Type"))
+	}
+}

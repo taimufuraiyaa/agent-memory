@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/taimufuraiyaa/agent-memory/internal/core"
+	"github.com/taimufuraiyaa/agent-memory/internal/observability"
 )
 
 type SkillSafetyIngressRequest struct {
@@ -50,6 +51,7 @@ type SkillSafetyIngress struct {
 	configuration SkillSignalConfiguration
 	cooldown      time.Duration
 	now           func() time.Time
+	metrics       *observability.SkillOrchestratorMetrics
 }
 
 func NewSkillSafetyIngress(repository SkillSafetyIngressRepository, authenticator SkillSafetyIngressAuthenticator, configuration SkillSignalConfiguration, cooldown time.Duration, now func() time.Time) (*SkillSafetyIngress, error) {
@@ -62,7 +64,7 @@ func NewSkillSafetyIngress(repository SkillSafetyIngressRepository, authenticato
 	if now == nil {
 		now = time.Now
 	}
-	return &SkillSafetyIngress{repository: repository, authenticator: authenticator, router: NewSkillSignalRouter(repository), configuration: configuration, cooldown: cooldown, now: now}, nil
+	return &SkillSafetyIngress{repository: repository, authenticator: authenticator, router: NewSkillSignalRouter(repository), configuration: configuration, cooldown: cooldown, now: now, metrics: observability.DefaultSkillOrchestratorMetrics()}, nil
 }
 
 func (i *SkillSafetyIngress) Admit(ctx context.Context, request SkillSafetyIngressRequest) (SkillSafetyIngressResult, error) {
@@ -108,6 +110,7 @@ func (i *SkillSafetyIngress) Admit(ctx context.Context, request SkillSafetyIngre
 	}
 	result := SkillSafetyIngressResult{Signal: signal, Duplicate: getErr == nil}
 	if !signal.Kind.Hard() {
+		i.metrics.ObserveSafety("soft", "success", signal.Environment, -1, -1)
 		return result, nil
 	}
 	// Allocation is disabled before rollback routing. If routing fails, the
@@ -116,6 +119,7 @@ func (i *SkillSafetyIngress) Admit(ctx context.Context, request SkillSafetyIngre
 	if err := i.repository.DisableSkillRevisionForSafety(ctx, signal.Workspace, signal.Environment, signal.SkillID, signal.RevisionID); err != nil {
 		return SkillSafetyIngressResult{}, err
 	}
+	i.metrics.ObserveSafety("hard", "success", signal.Environment, i.now().UTC().Sub(now), -1)
 	lifecycleSignal, err := SkillLifecycleSignalForSafety(signal, i.configuration)
 	if err != nil {
 		return SkillSafetyIngressResult{}, err
@@ -159,6 +163,8 @@ type SkillSafetyRollbackAdapter struct {
 	repository    SkillSafetyRollbackRepository
 	observer      *SkillSafetyObserver
 	configuration SkillSignalConfiguration
+	metrics       *observability.SkillOrchestratorMetrics
+	now           func() time.Time
 }
 
 func NewSkillSafetyRollbackAdapter(repository SkillSafetyRollbackRepository, activator skillRevisionActivator, cooldown time.Duration, configuration SkillSignalConfiguration, now func() time.Time) (*SkillSafetyRollbackAdapter, error) {
@@ -168,7 +174,10 @@ func NewSkillSafetyRollbackAdapter(repository SkillSafetyRollbackRepository, act
 	if err := configuration.Validate(); err != nil {
 		return nil, err
 	}
-	return &SkillSafetyRollbackAdapter{repository: repository, observer: NewSkillSafetyObserver(repository, activator, cooldown, now), configuration: configuration}, nil
+	if now == nil {
+		now = time.Now
+	}
+	return &SkillSafetyRollbackAdapter{repository: repository, observer: NewSkillSafetyObserver(repository, activator, cooldown, now), configuration: configuration, metrics: observability.DefaultSkillOrchestratorMetrics(), now: now}, nil
 }
 
 func (a *SkillSafetyRollbackAdapter) Execute(ctx context.Context, job core.SkillJob) (SkillStageResult, error) {
@@ -195,6 +204,7 @@ func (a *SkillSafetyRollbackAdapter) Execute(ctx context.Context, job core.Skill
 	if result.Activation != nil {
 		references = append(references, core.SkillOrchestratorReference{Kind: core.SkillReferenceActivation, ID: result.Activation.ID})
 	}
+	a.metrics.ObserveRollback(signal.Environment, "success", a.now().UTC().Sub(signal.CreatedAt))
 	return SkillStageResult{ResultKind: core.SkillJobResultSucceeded, References: references}, nil
 }
 

@@ -9,6 +9,7 @@ import (
 
 	"github.com/taimufuraiyaa/agent-memory/internal/contracts"
 	"github.com/taimufuraiyaa/agent-memory/internal/core"
+	"github.com/taimufuraiyaa/agent-memory/internal/observability"
 )
 
 type SkillStageResult struct {
@@ -112,6 +113,10 @@ type SkillWorkerRepository interface {
 	BlockSkillJob(context.Context, contracts.SkillJobBlock) error
 }
 
+type SkillWorkerQueueMetricsRepository interface {
+	SkillOrchestratorQueueSnapshots(context.Context, core.SkillOrchestratorScope) ([]core.SkillOrchestratorQueueSnapshot, error)
+}
+
 type SkillWorkerConfig struct {
 	Scope           core.SkillOrchestratorScope
 	Owner           string
@@ -152,6 +157,7 @@ type SkillOrchestratorWorker struct {
 	registry    *SkillStageRegistry
 	config      SkillWorkerConfig
 	retryPolicy *SkillRetryPolicy
+	metrics     *observability.SkillOrchestratorMetrics
 	now         func() time.Time
 }
 
@@ -169,7 +175,7 @@ func NewSkillOrchestratorWorker(repository SkillWorkerRepository, registry *Skil
 	if err != nil {
 		return nil, err
 	}
-	return &SkillOrchestratorWorker{repository: repository, registry: registry, config: config, retryPolicy: retryPolicy, now: time.Now}, nil
+	return &SkillOrchestratorWorker{repository: repository, registry: registry, config: config, retryPolicy: retryPolicy, metrics: observability.DefaultSkillOrchestratorMetrics(), now: time.Now}, nil
 }
 
 func (w *SkillOrchestratorWorker) RunOnce(ctx context.Context) (SkillWorkerRunReport, error) {
@@ -177,6 +183,24 @@ func (w *SkillOrchestratorWorker) RunOnce(ctx context.Context) (SkillWorkerRunRe
 		return SkillWorkerRunReport{}, errors.New("skill worker is not configured")
 	}
 	now := w.now().UTC()
+	if snapshots, ok := w.repository.(SkillWorkerQueueMetricsRepository); ok {
+		w.metrics.ResetQueue(w.config.Scope.Environment)
+		if values, snapshotErr := snapshots.SkillOrchestratorQueueSnapshots(ctx, w.config.Scope); snapshotErr == nil {
+			for _, value := range values {
+				age := now.Sub(value.OldestAt)
+				readyAge, runningAge, blockedAge := time.Duration(-1), time.Duration(-1), time.Duration(-1)
+				switch value.State {
+				case core.SkillJobQueued, core.SkillJobRetryWait:
+					readyAge = age
+				case core.SkillJobRunning:
+					runningAge = age
+				case core.SkillJobBlocked:
+					blockedAge = age
+				}
+				w.metrics.ObserveQueue(value.Stage, string(value.State), w.config.Scope.Environment, value.Depth, readyAge, -1, runningAge, blockedAge, value.FailureClass)
+			}
+		}
+	}
 	jobs, err := w.repository.ClaimSkillJobs(ctx, w.config.Scope, w.config.Owner, w.config.ClaimBatch, w.config.LeaseDuration, w.config.StageTimeout, now)
 	if err != nil {
 		return SkillWorkerRunReport{}, fmt.Errorf("claim skill jobs: %w", err)
@@ -184,6 +208,9 @@ func (w *SkillOrchestratorWorker) RunOnce(ctx context.Context) (SkillWorkerRunRe
 	report := SkillWorkerRunReport{Claimed: len(jobs)}
 	if len(jobs) == 0 {
 		return report, nil
+	}
+	for _, job := range jobs {
+		w.metrics.ObserveClaim(job.Stage, job.Scope.Environment, now.Sub(job.ReadyAt))
 	}
 	sem := make(chan struct{}, w.config.Concurrency)
 	results := make(chan SkillWorkerRunReport, len(jobs))
@@ -218,7 +245,22 @@ func (w *SkillOrchestratorWorker) RunOnce(ctx context.Context) (SkillWorkerRunRe
 	return report, nil
 }
 
-func (w *SkillOrchestratorWorker) runJob(parent context.Context, job core.SkillJob) SkillWorkerRunReport {
+func (w *SkillOrchestratorWorker) runJob(parent context.Context, job core.SkillJob) (report SkillWorkerRunReport) {
+	started := w.now().UTC()
+	failureClass := core.SkillFailureNone
+	defer func() {
+		outcome := "failure"
+		if report.Completed > 0 {
+			outcome = "success"
+		}
+		if report.Blocked > 0 {
+			outcome = "blocked"
+		}
+		if report.Cancelled > 0 {
+			outcome = "cancelled"
+		}
+		w.metrics.ObserveStage(job.Stage, job.Scope.Environment, outcome, failureClass, w.now().UTC().Sub(started))
+	}()
 	generation, err := w.repository.SkillWorkflowGeneration(parent, job.Scope, job.WorkflowID)
 	if err != nil {
 		return SkillWorkerRunReport{AdapterFailed: 1}
@@ -260,6 +302,7 @@ func (w *SkillOrchestratorWorker) runJob(parent context.Context, job core.SkillJ
 		if errors.As(executeErr, &stageErr) {
 			failure = stageErr.Failure
 		}
+		failureClass = failure.Class
 		return w.applyFailure(parent, job, generation, failure)
 	}
 	if err := result.Validate(); err != nil {
@@ -291,6 +334,7 @@ func (w *SkillOrchestratorWorker) applyFailure(ctx context.Context, job core.Ski
 			FailureCode: decision.FailureCode, ReadyAt: decision.RetryAt, Now: now,
 		})
 		if err == nil {
+			w.metrics.ObserveRetry(job.Stage, job.Scope.Environment, decision.FailureClass, false)
 			return SkillWorkerRunReport{AdapterFailed: 1, Retried: 1}
 		}
 	case SkillFailureBlock:
@@ -309,6 +353,7 @@ func (w *SkillOrchestratorWorker) applyFailure(ctx context.Context, job core.Ski
 			FailureClass: decision.FailureClass, FailureCode: decision.FailureCode, DeadLetter: true, Now: now,
 		})
 		if err == nil {
+			w.metrics.ObserveRetry(job.Stage, job.Scope.Environment, decision.FailureClass, true)
 			return SkillWorkerRunReport{AdapterFailed: 1, DeadLettered: 1}
 		}
 	case SkillFailureCompleteRejected:
@@ -346,6 +391,7 @@ func (w *SkillOrchestratorWorker) superviseLease(ctx context.Context, cancel con
 			now := w.now().UTC()
 			err := w.repository.RenewSkillJobLease(ctx, job.Scope, job.ID, job.LeaseOwner, job.Fence, now.Add(w.config.LeaseDuration), now)
 			if err != nil {
+				w.metrics.ObserveLease(job.Stage, "renewal_failed", job.Scope.Environment)
 				select {
 				case failed <- err:
 				default:
@@ -366,5 +412,6 @@ func (w *SkillOrchestratorWorker) deadLetterInvalid(ctx context.Context, job cor
 	if err != nil {
 		return SkillWorkerRunReport{FinalizeFailed: 1}
 	}
+	w.metrics.ObserveRetry(job.Stage, job.Scope.Environment, core.SkillFailurePermanentValidation, true)
 	return SkillWorkerRunReport{DeadLettered: 1}
 }

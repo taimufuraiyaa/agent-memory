@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/taimufuraiyaa/agent-memory/internal/core"
+	"github.com/taimufuraiyaa/agent-memory/internal/observability"
 )
 
 type Lane string
@@ -130,8 +131,14 @@ func (r *Runtime) Drain(ctx context.Context) error {
 	cancel()
 	select {
 	case <-done:
+		for _, scope := range r.configuration.Assignments {
+			observability.DefaultSkillOrchestratorMetrics().ObserveDrain(scope.Environment, "success")
+		}
 		return nil
 	case <-ctx.Done():
+		for _, scope := range r.configuration.Assignments {
+			observability.DefaultSkillOrchestratorMetrics().ObserveDrain(scope.Environment, "timeout")
+		}
 		return ctx.Err()
 	}
 }

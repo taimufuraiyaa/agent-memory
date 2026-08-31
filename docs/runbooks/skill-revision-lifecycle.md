@@ -1,6 +1,19 @@
 # Skill Revision Lifecycle Runbook
 
 Metrics and alerts are intentionally content-free. Use audit IDs and revision digests from the authorized lifecycle API for investigation; never add skill names, IDs, revision IDs, or content as metric labels.
+Alert thresholds are emitted from the active signed configuration. A missing target makes the affected stage unready; do not replace it with an ad hoc Prometheus number.
+
+## Safe pause and drain
+
+1. Set the active backend configuration to `disabled`; do not stop the database first.
+2. Confirm new claims stop. Allow only already-leased safety, rollback, and materialization-recovery jobs to finish within the configured drain timeout.
+3. If leases keep expiring, preserve the queue and audit ledger, stop the affected worker identity, and investigate database latency or renewal failure before resuming.
+
+## Retry and dead-letter review
+
+1. Inspect the bounded failure class, attempt history, configuration version, and evidence references through the authorized status API.
+2. Retry only retryable dependency or contention failures with the original immutable inputs. Never replay a policy or safety dead letter without accountable approval.
+3. For permanent validation, missing evidence, or digest mismatch, leave the job dead-lettered and correct the source configuration or evidence first.
 
 ## Materialization failure
 
@@ -33,13 +46,25 @@ Metrics and alerts are intentionally content-free. Use audit IDs and revision di
 2. Disable the canary revision if it is unsafe; otherwise keep the active revision authoritative while telemetry catches up.
 3. Never force promotion to clear a canary slot. Resolve the policy evidence or perform an authorized rollback/disable operation.
 
+## Rollback failure
+
+1. Keep allocation disabled and pause ordinary claims; rollback retains the reserved recovery lane.
+2. Verify the hard-signal evidence, activation generation, and recorded last-known-good digest. Never choose an unrecorded replacement revision.
+3. Repair materialization or storage availability, retry with the same rollback intent, and verify both activation state and root materialization before clearing the page.
+
+## Restore recovery
+
+1. Start in `disabled` mode after any database or object restore.
+2. Verify migrations, active configuration digest, leases, activation generations, safety-signal parity, and materialization drift before enabling shadow reconciliation.
+3. Resume stages progressively only after reconciliation reports no unresolved drift; automatic activation requires fresh evidence bound to the restored build and migration versions.
+
 ## Digest mismatch and disablement
 
 1. Treat a root, activation, or immutable-bundle digest mismatch as a hard safety signal.
 2. Disable the mismatched revision through the lifecycle API and verify it can no longer resolve or receive canary traffic.
 3. Roll back to the recorded last-known-good revision and verify materialization before restoring traffic.
 
-## Feature shutdown
+## Complete feature shutdown
 
 1. Disable recurrence scheduling and automatic-promotion controllers.
 2. Stop new canary allocation and restore every affected root skill to its verified last-known-good revision.

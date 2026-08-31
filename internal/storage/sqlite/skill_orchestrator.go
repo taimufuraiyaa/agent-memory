@@ -573,6 +573,34 @@ func (s *Store) ClaimSkillJobs(ctx context.Context, scope core.SkillOrchestrator
 	return claimed, nil
 }
 
+func (s *Store) SkillOrchestratorQueueSnapshots(ctx context.Context, scope core.SkillOrchestratorScope) ([]core.SkillOrchestratorQueueSnapshot, error) {
+	if s == nil || s.db == nil {
+		return nil, errors.New("sqlite store is required")
+	}
+	if err := scope.Validate(); err != nil {
+		return nil, err
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT stage,state,failure_class,COUNT(*),MIN(CASE WHEN state IN ('queued','retry_wait') THEN ready_at ELSE updated_at END) FROM skill_orchestrator_jobs WHERE tenant_id=? AND workspace_id=? AND environment=? AND state IN ('queued','blocked','running','retry_wait','dead_lettered') GROUP BY stage,state,failure_class ORDER BY stage,state,failure_class`, scope.TenantID, scope.WorkspaceID, scope.Environment)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := []core.SkillOrchestratorQueueSnapshot{}
+	for rows.Next() {
+		var value core.SkillOrchestratorQueueSnapshot
+		var oldest string
+		if err := rows.Scan(&value.Stage, &value.State, &value.FailureClass, &value.Depth, &oldest); err != nil {
+			return nil, err
+		}
+		value.OldestAt, err = parseSkillOrchestratorTime(oldest)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, value)
+	}
+	return result, rows.Err()
+}
+
 func (s *Store) RenewSkillJobLease(ctx context.Context, scope core.SkillOrchestratorScope, jobID, owner string, fence int64, expiresAt, now time.Time) error {
 	if err := scope.Validate(); err != nil {
 		return err

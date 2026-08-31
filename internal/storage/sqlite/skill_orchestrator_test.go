@@ -342,6 +342,28 @@ func TestSQLiteSkillOrchestratorGenerationAndScopeFailClosed(t *testing.T) {
 	}
 }
 
+func TestSQLiteSkillOrchestratorQueueSnapshotsAreScopedAndContentFree(t *testing.T) {
+	store := openSkillOrchestratorStore(t)
+	ctx := context.Background()
+	now := time.Now().UTC().Add(-time.Minute)
+	workflow := sqliteValidSkillWorkflow(now, "workflow-metrics", "origin-metrics")
+	job := sqliteValidSkillJob(now, "job-metrics", workflow.ID, core.SkillStageEvaluate)
+	job.InputDigest = workflow.InputDigest
+	if _, err := store.RouteSkillSignal(ctx, workflow, job, nil); err != nil {
+		t.Fatal(err)
+	}
+	values, err := store.SkillOrchestratorQueueSnapshots(ctx, workflow.Scope)
+	if err != nil || len(values) != 1 || values[0].Stage != core.SkillStageEvaluate || values[0].State != core.SkillJobQueued || values[0].Depth != 1 || !values[0].OldestAt.Equal(now) {
+		t.Fatalf("queue snapshots = %+v err=%v", values, err)
+	}
+	other := workflow.Scope
+	other.WorkspaceID = "other"
+	values, err = store.SkillOrchestratorQueueSnapshots(ctx, other)
+	if err != nil || len(values) != 0 {
+		t.Fatalf("cross-workspace snapshots = %+v err=%v", values, err)
+	}
+}
+
 func openSkillOrchestratorStore(t *testing.T) *Store {
 	t.Helper()
 	store, err := Open(context.Background(), filepath.Join(t.TempDir(), fmt.Sprintf("%s.db", strings.ReplaceAll(t.Name(), "/", "-"))))

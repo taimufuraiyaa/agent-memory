@@ -10,6 +10,7 @@ import (
 
 	"github.com/taimufuraiyaa/agent-memory/internal/contracts"
 	"github.com/taimufuraiyaa/agent-memory/internal/core"
+	"github.com/taimufuraiyaa/agent-memory/internal/observability"
 )
 
 type SkillReconciliationRequest struct {
@@ -115,6 +116,7 @@ type SkillOrchestratorReconciler struct {
 	repository SkillReconciliationRepository
 	registry   *SkillReconciliationRegistry
 	config     SkillReconcilerConfig
+	metrics    *observability.SkillOrchestratorMetrics
 	now        func() time.Time
 }
 
@@ -125,7 +127,7 @@ func NewSkillOrchestratorReconciler(repository SkillReconciliationRepository, re
 	if err := config.Validate(); err != nil {
 		return nil, err
 	}
-	return &SkillOrchestratorReconciler{repository: repository, registry: registry, config: config, now: time.Now}, nil
+	return &SkillOrchestratorReconciler{repository: repository, registry: registry, config: config, metrics: observability.DefaultSkillOrchestratorMetrics(), now: time.Now}, nil
 }
 
 func (r *SkillOrchestratorReconciler) RunOnce(ctx context.Context) (SkillReconciliationReport, error) {
@@ -146,6 +148,11 @@ func (r *SkillOrchestratorReconciler) RunOnce(ctx context.Context) (SkillReconci
 			break
 		}
 		domainReport := r.runDomain(ctx, domain, now, deadline)
+		r.metrics.ObserveReconciliation(domain, "scanned", r.config.Scope.Environment, domainReport.Counters.Scanned)
+		r.metrics.ObserveReconciliation(domain, "repaired", r.config.Scope.Environment, domainReport.Counters.Repaired)
+		r.metrics.ObserveReconciliation(domain, "skipped", r.config.Scope.Environment, domainReport.Counters.Skipped)
+		r.metrics.ObserveReconciliation(domain, "blocked", r.config.Scope.Environment, domainReport.Counters.Blocked)
+		r.metrics.ObserveReconciliation(domain, "failed", r.config.Scope.Environment, domainReport.Counters.Failed)
 		report.Domains = append(report.Domains, domainReport)
 	}
 	return report, nil

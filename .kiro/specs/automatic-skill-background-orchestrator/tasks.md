@@ -223,7 +223,7 @@
   - Files: configuration service, storage adapters, authorization, focused tests.
   - Estimated scope: Medium.
 
-- [ ] **Task 25: Add bounded metrics, alerts, readiness, and runbooks**
+- [x] **Task 25: Add bounded metrics, alerts, readiness, and runbooks**
   - Acceptance: Required queue/lease/retry/block/dead-letter/reconciliation/canary/safety/rollback metrics and alerts are content-free; readiness distinguishes stage degradation from process liveness.
   - Verify: metric registration/cardinality/content leak, alert fixtures, missing target, evaluator outage, stuck canary, rollback failure, and readiness/liveness tests.
   - Dependencies: Tasks 17-20 and 24.

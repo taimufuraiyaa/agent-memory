@@ -494,6 +494,34 @@ func (r *SkillOrchestratorRepository) ClaimSkillJobs(ctx context.Context, scope 
 	return r.claimSkillJobs(ctx, scope, owner, limit, lease, timeout, now, "")
 }
 
+func (r *SkillOrchestratorRepository) SkillOrchestratorQueueSnapshots(ctx context.Context, scope core.SkillOrchestratorScope) ([]core.SkillOrchestratorQueueSnapshot, error) {
+	tx, err := r.begin(ctx, scope)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+	rows, err := tx.Query(ctx, `SELECT stage,state,failure_class,COUNT(*)::int,MIN(CASE WHEN state IN ('queued','retry_wait') THEN ready_at ELSE updated_at END) FROM saas_skill_orchestrator_jobs WHERE tenant_id=$1::uuid AND workspace_id=$2::uuid AND environment=$3 AND state IN ('queued','blocked','running','retry_wait','dead_lettered') GROUP BY stage,state,failure_class ORDER BY stage,state,failure_class`, scope.TenantID, scope.WorkspaceID, scope.Environment)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := []core.SkillOrchestratorQueueSnapshot{}
+	for rows.Next() {
+		var value core.SkillOrchestratorQueueSnapshot
+		if err := rows.Scan(&value.Stage, &value.State, &value.FailureClass, &value.Depth, &value.OldestAt); err != nil {
+			return nil, err
+		}
+		result = append(result, value)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
 func (r *SkillOrchestratorRepository) ClaimSkillJobsByLane(ctx context.Context, scope core.SkillOrchestratorScope, owner string, limit int, lease, timeout time.Duration, now time.Time, rollback bool) ([]core.SkillJob, error) {
 	lane := "ordinary"
 	if rollback {

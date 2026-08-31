@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/taimufuraiyaa/agent-memory/internal/saas/skillworker"
 )
 
@@ -92,6 +93,7 @@ func run() error {
 
 func skillHealthServer(address string, live, ready *atomic.Bool) *http.Server {
 	mux := http.NewServeMux()
+	mux.Handle("/metrics", promhttp.Handler())
 	mux.HandleFunc("/health/live", func(response http.ResponseWriter, _ *http.Request) {
 		if !live.Load() {
 			http.Error(response, "not live", http.StatusServiceUnavailable)
