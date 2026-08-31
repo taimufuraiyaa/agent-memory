@@ -58,6 +58,7 @@ type SkillOrchestratorRepository interface {
 	CreateSkillWorkflow(context.Context, core.SkillWorkflow) (core.SkillWorkflow, bool, error)
 	EnqueueSkillJob(context.Context, core.SkillJob, []core.SkillJobDependency) (core.SkillJob, bool, error)
 	ClaimSkillJobs(context.Context, core.SkillOrchestratorScope, string, int, time.Duration, time.Duration, time.Time) ([]core.SkillJob, error)
+	SkillWorkflowGeneration(context.Context, core.SkillOrchestratorScope, string) (int64, error)
 	RenewSkillJobLease(context.Context, core.SkillOrchestratorScope, string, string, int64, time.Time, time.Time) error
 	FinalizeSkillJob(context.Context, SkillJobFinalization) error
 	RetrySkillJob(context.Context, SkillJobRetry) error

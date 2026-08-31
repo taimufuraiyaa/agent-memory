@@ -61,7 +61,7 @@
   - Files: application router, repository interface, lifecycle integration adapters, focused tests.
   - Estimated scope: Medium.
 
-- [ ] **Task 7: Implement provider-neutral worker loop with lease fencing**
+- [x] **Task 7: Implement provider-neutral worker loop with lease fencing**
   - Acceptance: Bounded `RunOnce` claims jobs, validates contracts, supervises deadlines and renewals, invokes registered adapters, and finalizes only with current owner/fence.
   - Verify: success, lease loss, renewal loss, context cancellation, unsupported version, invalid payload, batch bounds, semaphore bounds, and stale completion tests.
   - Dependencies: Tasks 3, 5, and 6.

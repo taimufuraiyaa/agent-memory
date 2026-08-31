@@ -307,6 +307,22 @@ func (r *SkillOrchestratorRepository) RenewSkillJobLease(ctx context.Context, sc
 	return tx.Commit(ctx)
 }
 
+func (r *SkillOrchestratorRepository) SkillWorkflowGeneration(ctx context.Context, scope core.SkillOrchestratorScope, workflowID string) (int64, error) {
+	tx, err := r.begin(ctx, scope)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback(ctx)
+	var generation int64
+	if err := tx.QueryRow(ctx, `SELECT generation FROM saas_skill_orchestrator_workflows WHERE tenant_id=$1::uuid AND workspace_id=$2::uuid AND id=$3::uuid`, scope.TenantID, scope.WorkspaceID, workflowID).Scan(&generation); err != nil {
+		return 0, mapHostedSkillNotFound(err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return 0, err
+	}
+	return generation, nil
+}
+
 func (r *SkillOrchestratorRepository) FinalizeSkillJob(ctx context.Context, input contracts.SkillJobFinalization) error {
 	target := core.SkillJobCompleted
 	if input.DeadLetter {

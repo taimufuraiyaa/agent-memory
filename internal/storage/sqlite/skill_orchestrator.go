@@ -328,6 +328,18 @@ func (s *Store) RenewSkillJobLease(ctx context.Context, scope core.SkillOrchestr
 	return tx.Commit()
 }
 
+func (s *Store) SkillWorkflowGeneration(ctx context.Context, scope core.SkillOrchestratorScope, workflowID string) (int64, error) {
+	if err := scope.Validate(); err != nil {
+		return 0, err
+	}
+	var generation int64
+	err := s.db.QueryRowContext(ctx, `SELECT generation FROM skill_orchestrator_workflows WHERE id=? AND tenant_id=? AND workspace_id=? AND environment=?`, workflowID, scope.TenantID, scope.WorkspaceID, scope.Environment).Scan(&generation)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, ErrSkillOrchestratorNotFound
+	}
+	return generation, err
+}
+
 func (s *Store) FinalizeSkillJob(ctx context.Context, finalization SkillJobFinalization) error {
 	target := core.SkillJobCompleted
 	if finalization.DeadLetter {
