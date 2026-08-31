@@ -75,7 +75,7 @@
   - Files: retry classifier, scheduler helper, repository integration, focused tests.
   - Estimated scope: Medium.
 
-- [ ] **Task 9: Add dependency resolution and successor scheduling**
+- [x] **Task 9: Add dependency resolution and successor scheduling**
   - Acceptance: Child jobs become ready only from authoritative parent outcomes; missing wakeups are harmless and incompatible terminal outcomes reject or block the workflow explicitly.
   - Verify: out-of-order delivery, duplicate completion, parent replay, rejected parent, cancelled workflow, multiple dependencies, and stale successor tests.
   - Dependencies: Tasks 6-8.

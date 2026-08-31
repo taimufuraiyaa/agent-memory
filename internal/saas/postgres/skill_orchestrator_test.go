@@ -22,6 +22,12 @@ func TestPostgresSkillOrchestratorSharedRepositoryContract(t *testing.T) {
 	orchestratortest.RunRepositoryContract(t, repository, scope)
 }
 
+func TestPostgresSkillOrchestratorDependencyContract(t *testing.T) {
+	pool := openSkillOrchestratorPostgres(t)
+	scope := createSkillOrchestratorHostedScope(t, pool)
+	orchestratortest.RunDependencyContract(t, NewSkillOrchestratorRepository(pool), scope)
+}
+
 func TestPostgresSkillSignalRouteIsAtomicAndIdempotent(t *testing.T) {
 	pool := openSkillOrchestratorPostgres(t)
 	scope := createSkillOrchestratorHostedScope(t, pool)

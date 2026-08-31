@@ -53,8 +53,33 @@ type SkillSignalRouteResult struct {
 	Ignored      bool
 }
 
+type SkillSuccessorSchedule struct {
+	Job                        core.SkillJob
+	Dependencies               []core.SkillJobDependency
+	ExpectedWorkflowGeneration int64
+	Now                        time.Time
+}
+
+type SkillDependencyResolutionState string
+
+const (
+	SkillDependenciesPending   SkillDependencyResolutionState = "pending"
+	SkillDependenciesReady     SkillDependencyResolutionState = "ready"
+	SkillDependenciesRejected  SkillDependencyResolutionState = "rejected"
+	SkillDependenciesCancelled SkillDependencyResolutionState = "cancelled"
+)
+
+type SkillDependencyResolution struct {
+	Workflow core.SkillWorkflow
+	Job      core.SkillJob
+	State    SkillDependencyResolutionState
+	Changed  bool
+}
+
 type SkillOrchestratorRepository interface {
 	RouteSkillSignal(context.Context, core.SkillWorkflow, core.SkillJob, []core.SkillJobDependency) (SkillSignalRouteResult, error)
+	ScheduleSkillSuccessor(context.Context, SkillSuccessorSchedule) (core.SkillJob, bool, error)
+	ResolveSkillJobDependencies(context.Context, core.SkillOrchestratorScope, string, int64, time.Time) (SkillDependencyResolution, error)
 	CreateSkillWorkflow(context.Context, core.SkillWorkflow) (core.SkillWorkflow, bool, error)
 	EnqueueSkillJob(context.Context, core.SkillJob, []core.SkillJobDependency) (core.SkillJob, bool, error)
 	ClaimSkillJobs(context.Context, core.SkillOrchestratorScope, string, int, time.Duration, time.Duration, time.Time) ([]core.SkillJob, error)

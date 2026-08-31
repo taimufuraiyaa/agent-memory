@@ -18,6 +18,11 @@ func TestSQLiteSkillOrchestratorSharedRepositoryContract(t *testing.T) {
 	orchestratortest.RunRepositoryContract(t, store, core.SkillOrchestratorScope{WorkspaceID: "ws", Environment: "production"})
 }
 
+func TestSQLiteSkillOrchestratorDependencyContract(t *testing.T) {
+	store := openSkillOrchestratorStore(t)
+	orchestratortest.RunDependencyContract(t, store, core.SkillOrchestratorScope{WorkspaceID: "ws", Environment: "production"})
+}
+
 func TestSQLiteSkillSignalRouteIsAtomicAndIdempotent(t *testing.T) {
 	store := openSkillOrchestratorStore(t)
 	ctx := context.Background()

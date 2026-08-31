@@ -213,6 +213,278 @@ func (s *Store) EnqueueSkillJob(ctx context.Context, job core.SkillJob, dependen
 	return stored, inserted == 1, nil
 }
 
+func (s *Store) ScheduleSkillSuccessor(ctx context.Context, input contracts.SkillSuccessorSchedule) (core.SkillJob, bool, error) {
+	job := input.Job
+	job.DependencyCount = len(input.Dependencies)
+	if input.ExpectedWorkflowGeneration < 1 || input.Now.IsZero() || len(input.Dependencies) == 0 {
+		return core.SkillJob{}, false, errors.New("invalid skill successor schedule")
+	}
+	if err := job.Validate(); err != nil {
+		return core.SkillJob{}, false, err
+	}
+	for index := range input.Dependencies {
+		input.Dependencies[index].JobID = job.ID
+		if err := input.Dependencies[index].Validate(); err != nil {
+			return core.SkillJob{}, false, err
+		}
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return core.SkillJob{}, false, err
+	}
+	defer tx.Rollback()
+	var generation int64
+	var state string
+	var currentStage core.SkillOrchestratorStage
+	if err := tx.QueryRowContext(ctx, `SELECT generation,state,current_stage FROM skill_orchestrator_workflows WHERE id=? AND tenant_id=? AND workspace_id=? AND environment=?`, job.WorkflowID, job.Scope.TenantID, job.Scope.WorkspaceID, job.Scope.Environment).Scan(&generation, &state, &currentStage); err != nil {
+		return core.SkillJob{}, false, mapSkillOrchestratorNotFound(err)
+	}
+	existing, existingErr := skillJobByBinding(ctx, tx, job.WorkflowID, job.Stage, job.InputDigest)
+	if existingErr == nil {
+		if existing.ID != job.ID || generation != input.ExpectedWorkflowGeneration+1 || currentStage != job.Stage {
+			return core.SkillJob{}, false, ErrSkillOrchestratorConflict
+		}
+		if matches, err := sqliteSkillDependenciesMatch(ctx, tx, job.ID, input.Dependencies); err != nil {
+			return core.SkillJob{}, false, err
+		} else if !matches {
+			return core.SkillJob{}, false, ErrSkillOrchestratorConflict
+		}
+		if err := tx.Commit(); err != nil {
+			return core.SkillJob{}, false, err
+		}
+		return existing, false, nil
+	}
+	if !errors.Is(existingErr, sql.ErrNoRows) {
+		return core.SkillJob{}, false, existingErr
+	}
+	if generation != input.ExpectedWorkflowGeneration {
+		return core.SkillJob{}, false, ErrSkillOrchestratorGeneration
+	}
+	if state != string(core.SkillWorkflowOpen) {
+		return core.SkillJob{}, false, ErrSkillOrchestratorConflict
+	}
+	result, err := tx.ExecContext(ctx, `INSERT INTO skill_orchestrator_jobs(
+		id,workflow_id,tenant_id,workspace_id,environment,skill_id,stage,contract_version,input_digest,policy_version,
+		state,priority,ready_at,dependency_count,blocked_reason,attempt,max_attempts,lease_owner,lease_expires_at,fence,
+		timeout_at,cancel_requested_at,result_kind,result_references_json,failure_class,failure_code,replay_of_job_id,created_at,updated_at,completed_at
+	) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+	ON CONFLICT(workflow_id,stage,input_digest) DO NOTHING`,
+		job.ID, job.WorkflowID, job.Scope.TenantID, job.Scope.WorkspaceID, job.Scope.Environment, job.SkillID,
+		job.Stage, job.ContractVersion, job.InputDigest, job.PolicyVersion, job.State, job.Priority,
+		formatSkillOrchestratorTime(job.ReadyAt), job.DependencyCount, job.BlockedReason, job.Attempt, job.MaxAttempts,
+		job.LeaseOwner, formatOptionalSkillOrchestratorTime(job.LeaseExpiresAt), job.Fence,
+		formatOptionalSkillOrchestratorTime(job.TimeoutAt), formatOptionalSkillOrchestratorTime(job.CancelRequestedAt),
+		job.ResultKind, "[]", job.FailureClass, job.FailureCode, job.ReplayOfJobID,
+		formatSkillOrchestratorTime(job.CreatedAt), formatSkillOrchestratorTime(job.UpdatedAt), formatOptionalSkillOrchestratorTime(job.CompletedAt))
+	if err != nil {
+		return core.SkillJob{}, false, err
+	}
+	inserted, _ := result.RowsAffected()
+	if inserted == 1 {
+		for _, dependency := range input.Dependencies {
+			accepted, _ := json.Marshal(dependency.AcceptedResultKinds)
+			if _, err := tx.ExecContext(ctx, `INSERT INTO skill_orchestrator_job_dependencies(job_id,parent_job_id,accepted_result_kinds_json,created_at) VALUES(?,?,?,?)`, dependency.JobID, dependency.ParentJobID, string(accepted), formatSkillOrchestratorTime(dependency.CreatedAt)); err != nil {
+				return core.SkillJob{}, false, err
+			}
+		}
+		if err := insertSkillOrchestratorEvent(ctx, tx, job.WorkflowID, job.ID, "successor_scheduled", "", string(job.State), "dependency_coordinator", 0, "", input.Now); err != nil {
+			return core.SkillJob{}, false, err
+		}
+	}
+	stored, err := skillJobByBinding(ctx, tx, job.WorkflowID, job.Stage, job.InputDigest)
+	if err != nil {
+		return core.SkillJob{}, false, err
+	}
+	if stored.ID != job.ID {
+		return core.SkillJob{}, false, ErrSkillOrchestratorConflict
+	}
+	if matches, err := sqliteSkillDependenciesMatch(ctx, tx, job.ID, input.Dependencies); err != nil {
+		return core.SkillJob{}, false, err
+	} else if !matches {
+		return core.SkillJob{}, false, ErrSkillOrchestratorConflict
+	}
+	workflowUpdate, err := tx.ExecContext(ctx, `UPDATE skill_orchestrator_workflows SET current_stage=?,generation=generation+1,updated_at=? WHERE id=? AND generation=? AND state='open'`, job.Stage, formatSkillOrchestratorTime(input.Now), job.WorkflowID, input.ExpectedWorkflowGeneration)
+	if err != nil {
+		return core.SkillJob{}, false, err
+	}
+	if changed, _ := workflowUpdate.RowsAffected(); changed != 1 {
+		return core.SkillJob{}, false, ErrSkillOrchestratorGeneration
+	}
+	if err := tx.Commit(); err != nil {
+		return core.SkillJob{}, false, err
+	}
+	return stored, inserted == 1, nil
+}
+
+func sqliteSkillDependenciesMatch(ctx context.Context, tx *sql.Tx, jobID string, expected []core.SkillJobDependency) (bool, error) {
+	rows, err := tx.QueryContext(ctx, `SELECT parent_job_id,accepted_result_kinds_json FROM skill_orchestrator_job_dependencies WHERE job_id=?`, jobID)
+	if err != nil {
+		return false, err
+	}
+	defer rows.Close()
+	actual := make(map[string]map[core.SkillJobResultKind]bool, len(expected))
+	for rows.Next() {
+		var parentID, acceptedJSON string
+		if err := rows.Scan(&parentID, &acceptedJSON); err != nil {
+			return false, err
+		}
+		var accepted []core.SkillJobResultKind
+		if err := json.Unmarshal([]byte(acceptedJSON), &accepted); err != nil {
+			return false, err
+		}
+		actual[parentID] = make(map[core.SkillJobResultKind]bool, len(accepted))
+		for _, kind := range accepted {
+			actual[parentID][kind] = true
+		}
+	}
+	if err := rows.Err(); err != nil || len(actual) != len(expected) {
+		return false, err
+	}
+	for _, dependency := range expected {
+		accepted, ok := actual[dependency.ParentJobID]
+		if !ok || len(accepted) != len(dependency.AcceptedResultKinds) {
+			return false, nil
+		}
+		for _, kind := range dependency.AcceptedResultKinds {
+			if !accepted[kind] {
+				return false, nil
+			}
+		}
+	}
+	return true, nil
+}
+
+func (s *Store) ResolveSkillJobDependencies(ctx context.Context, scope core.SkillOrchestratorScope, jobID string, expectedGeneration int64, now time.Time) (contracts.SkillDependencyResolution, error) {
+	if err := scope.Validate(); err != nil {
+		return contracts.SkillDependencyResolution{}, err
+	}
+	if !validSkillOrchestratorStorageID(jobID) || expectedGeneration < 1 || now.IsZero() {
+		return contracts.SkillDependencyResolution{}, errors.New("invalid skill dependency resolution")
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return contracts.SkillDependencyResolution{}, err
+	}
+	defer tx.Rollback()
+	job, err := skillJobByID(ctx, tx, scope, jobID)
+	if err != nil {
+		return contracts.SkillDependencyResolution{}, err
+	}
+	workflow, err := scanSkillWorkflow(tx.QueryRowContext(ctx, `SELECT id,tenant_id,workspace_id,environment,skill_id,origin_kind,origin_id,workflow_kind,contract_version,input_digest,state,current_stage,generation,configuration_version,policy_digest,created_at,updated_at,terminal_at FROM skill_orchestrator_workflows WHERE id=? AND tenant_id=? AND workspace_id=? AND environment=?`, job.WorkflowID, scope.TenantID, scope.WorkspaceID, scope.Environment))
+	if err != nil {
+		return contracts.SkillDependencyResolution{}, err
+	}
+	if workflow.Generation != expectedGeneration {
+		return contracts.SkillDependencyResolution{}, ErrSkillOrchestratorGeneration
+	}
+	state := contracts.SkillDependenciesPending
+	terminalCode := ""
+	if workflow.State != core.SkillWorkflowOpen {
+		if workflow.State == core.SkillWorkflowCancelled {
+			state, terminalCode = contracts.SkillDependenciesCancelled, "workflow_cancelled"
+		} else {
+			state, terminalCode = contracts.SkillDependenciesRejected, "workflow_not_open"
+		}
+	} else {
+		rows, err := tx.QueryContext(ctx, `SELECT p.state,p.result_kind,d.accepted_result_kinds_json FROM skill_orchestrator_job_dependencies d JOIN skill_orchestrator_jobs p ON p.id=d.parent_job_id WHERE d.job_id=? ORDER BY d.parent_job_id`, job.ID)
+		if err != nil {
+			return contracts.SkillDependencyResolution{}, err
+		}
+		count, pending, incompatible, cancelled := 0, 0, false, false
+		for rows.Next() {
+			count++
+			var parentState core.SkillJobState
+			var result core.SkillJobResultKind
+			var acceptedJSON string
+			if err := rows.Scan(&parentState, &result, &acceptedJSON); err != nil {
+				rows.Close()
+				return contracts.SkillDependencyResolution{}, err
+			}
+			if !parentState.Terminal() {
+				pending++
+				continue
+			}
+			var accepted []core.SkillJobResultKind
+			if err := json.Unmarshal([]byte(acceptedJSON), &accepted); err != nil {
+				rows.Close()
+				return contracts.SkillDependencyResolution{}, err
+			}
+			matched := false
+			for _, allowed := range accepted {
+				matched = matched || allowed == result
+			}
+			if !matched {
+				incompatible = true
+				cancelled = cancelled || result == core.SkillJobResultCancelled
+			}
+		}
+		if err := rows.Close(); err != nil {
+			return contracts.SkillDependencyResolution{}, err
+		}
+		if count == 0 {
+			return contracts.SkillDependencyResolution{}, errors.New("skill job has no dependencies")
+		}
+		switch {
+		case incompatible && cancelled:
+			state, terminalCode = contracts.SkillDependenciesCancelled, "dependency_cancelled"
+		case incompatible:
+			state, terminalCode = contracts.SkillDependenciesRejected, "dependency_rejected"
+		case pending > 0:
+			state = contracts.SkillDependenciesPending
+		case pending == 0:
+			state = contracts.SkillDependenciesReady
+		}
+	}
+	changed := false
+	if !job.State.Terminal() {
+		from := job.State
+		switch state {
+		case contracts.SkillDependenciesReady:
+			if job.State != core.SkillJobQueued || job.DependencyCount != 0 || job.BlockedReason != "" {
+				job.State, job.DependencyCount, job.BlockedReason = core.SkillJobQueued, 0, ""
+				job.ReadyAt, job.UpdatedAt, changed = now, now, true
+			}
+		case contracts.SkillDependenciesPending:
+			if job.State != core.SkillJobBlocked || job.BlockedReason != "dependencies_pending" {
+				job.State, job.BlockedReason, job.UpdatedAt, changed = core.SkillJobBlocked, "dependencies_pending", now, true
+			}
+		case contracts.SkillDependenciesRejected, contracts.SkillDependenciesCancelled:
+			job.State, job.FailureCode, job.CompletedAt, job.UpdatedAt, changed = core.SkillJobCompleted, terminalCode, now, now, true
+			job.ResultKind, job.FailureClass = core.SkillJobResultRejected, core.SkillFailurePermanentValidation
+			if state == contracts.SkillDependenciesCancelled {
+				job.State, job.ResultKind, job.FailureClass = core.SkillJobCancelled, core.SkillJobResultCancelled, core.SkillFailureCancellation
+			}
+		}
+		if changed {
+			if err := job.Validate(); err != nil {
+				return contracts.SkillDependencyResolution{}, err
+			}
+			if _, err := tx.ExecContext(ctx, `UPDATE skill_orchestrator_jobs SET state=?,ready_at=?,dependency_count=?,blocked_reason=?,result_kind=?,failure_class=?,failure_code=?,updated_at=?,completed_at=? WHERE id=? AND state=?`, job.State, formatSkillOrchestratorTime(job.ReadyAt), job.DependencyCount, job.BlockedReason, job.ResultKind, job.FailureClass, job.FailureCode, formatSkillOrchestratorTime(job.UpdatedAt), formatOptionalSkillOrchestratorTime(job.CompletedAt), job.ID, from); err != nil {
+				return contracts.SkillDependencyResolution{}, err
+			}
+			if err := insertSkillOrchestratorEvent(ctx, tx, job.WorkflowID, job.ID, "dependencies_resolved", string(from), string(job.State), "dependency_coordinator", job.Fence, terminalCode, now); err != nil {
+				return contracts.SkillDependencyResolution{}, err
+			}
+		}
+	}
+	if state == contracts.SkillDependenciesRejected && workflow.State == core.SkillWorkflowOpen {
+		workflow.State, workflow.UpdatedAt, workflow.TerminalAt = core.SkillWorkflowRejected, now, now
+		if _, err := tx.ExecContext(ctx, `UPDATE skill_orchestrator_workflows SET state='rejected',updated_at=?,terminal_at=? WHERE id=? AND generation=? AND state='open'`, formatSkillOrchestratorTime(now), formatSkillOrchestratorTime(now), workflow.ID, expectedGeneration); err != nil {
+			return contracts.SkillDependencyResolution{}, err
+		}
+	}
+	if state == contracts.SkillDependenciesCancelled && workflow.State == core.SkillWorkflowOpen {
+		workflow.State, workflow.UpdatedAt, workflow.TerminalAt = core.SkillWorkflowCancelled, now, now
+		if _, err := tx.ExecContext(ctx, `UPDATE skill_orchestrator_workflows SET state='cancelled',updated_at=?,terminal_at=? WHERE id=? AND generation=? AND state='open'`, formatSkillOrchestratorTime(now), formatSkillOrchestratorTime(now), workflow.ID, expectedGeneration); err != nil {
+			return contracts.SkillDependencyResolution{}, err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return contracts.SkillDependencyResolution{}, err
+	}
+	return contracts.SkillDependencyResolution{Workflow: workflow, Job: job, State: state, Changed: changed}, nil
+}
+
 func (s *Store) ClaimSkillJobs(ctx context.Context, scope core.SkillOrchestratorScope, owner string, limit int, lease, timeout time.Duration, now time.Time) ([]core.SkillJob, error) {
 	if err := scope.Validate(); err != nil {
 		return nil, err
