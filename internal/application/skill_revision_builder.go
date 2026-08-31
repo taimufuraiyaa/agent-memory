@@ -23,6 +23,8 @@ const (
 	maxSkillDraftTextBytes      = 256 * 1024
 )
 
+var ErrSkillBundleUnavailable = errors.New("skill revision bundle unavailable")
+
 type SkillRevisionBuildInput struct {
 	Workspace, CandidateID, SkillName, Description, OwnerGroup, CreatedBy string
 	ProposedFiles                                                         map[string][]byte
@@ -122,11 +124,11 @@ func (b *SkillRevisionBuilder) Build(ctx context.Context, input SkillRevisionBui
 		}
 		contents, err := b.bundles.ReadRevision(ctx, existing)
 		if err != nil {
-			return SkillRevisionBuildResult{}, err
+			return SkillRevisionBuildResult{}, fmt.Errorf("%w: %v", ErrSkillBundleUnavailable, err)
 		}
 		digest, duplicate, err := b.bundles.PublishRevision(ctx, existing, contents)
 		if err != nil {
-			return SkillRevisionBuildResult{}, err
+			return SkillRevisionBuildResult{}, fmt.Errorf("%w: %v", ErrSkillBundleUnavailable, err)
 		}
 		return SkillRevisionBuildResult{Skill: skill, Revision: existing, Bundle: SkillPublishedBundle{Digest: digest, Duplicate: duplicate}, Replayed: true}, nil
 	}
@@ -149,7 +151,7 @@ func (b *SkillRevisionBuilder) Build(ctx context.Context, input SkillRevisionBui
 		parent = &revisions[0]
 		baseFiles, err = b.bundles.ReadRevision(ctx, *parent)
 		if err != nil {
-			return SkillRevisionBuildResult{}, err
+			return SkillRevisionBuildResult{}, fmt.Errorf("%w: %v", ErrSkillBundleUnavailable, err)
 		}
 	} else {
 		if input.SkillName == "" {
@@ -221,7 +223,7 @@ func (b *SkillRevisionBuilder) Build(ctx context.Context, input SkillRevisionBui
 	}
 	publishedDigest, duplicate, err := b.bundles.PublishRevision(ctx, revision, files)
 	if err != nil {
-		return SkillRevisionBuildResult{}, err
+		return SkillRevisionBuildResult{}, fmt.Errorf("%w: %v", ErrSkillBundleUnavailable, err)
 	}
 	if parent == nil {
 		if err := skill.Validate(); err != nil {

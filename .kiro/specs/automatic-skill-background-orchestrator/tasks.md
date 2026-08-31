@@ -105,7 +105,7 @@
   - Files: solution service integration, detection adapter, router wiring, focused tests.
   - Estimated scope: Medium.
 
-- [ ] **Task 12: Add automatic revision-build adapter**
+- [x] **Task 12: Add automatic revision-build adapter**
   - Acceptance: Eligible candidates build deterministic immutable drafts through the existing builder with protected sections, provenance, registered-root custody, and bounded authoring inputs.
   - Verify: create/revise/merge/split, missing parent, deleted evidence, unsafe content, duplicate build, lease replay, and filesystem failure tests.
   - Dependencies: Task 11.

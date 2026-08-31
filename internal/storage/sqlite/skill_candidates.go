@@ -76,6 +76,37 @@ func (s *Store) GetSkillCandidate(ctx context.Context, workspace, id string) (co
 	return candidate, nil
 }
 
+func (s *Store) ListBuildableSkillCandidatesAfter(ctx context.Context, workspace, afterID string, limit int) ([]core.SkillCandidate, error) {
+	if limit < 1 || limit > 1_000 {
+		return nil, errors.New("invalid buildable skill candidate page")
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT id FROM skill_candidates WHERE workspace=? AND id>? AND state IN ('proposed','accepted') ORDER BY id LIMIT ?`, strings.TrimSpace(workspace), strings.TrimSpace(afterID), limit)
+	if err != nil {
+		return nil, err
+	}
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	result := make([]core.SkillCandidate, 0, len(ids))
+	for _, id := range ids {
+		candidate, err := s.GetSkillCandidate(ctx, workspace, id)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, candidate)
+	}
+	return result, nil
+}
+
 type skillCandidateQueryer interface {
 	QueryRowContext(context.Context, string, ...any) *sql.Row
 	QueryContext(context.Context, string, ...any) (*sql.Rows, error)

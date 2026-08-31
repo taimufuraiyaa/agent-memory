@@ -13,14 +13,14 @@ import (
 	"github.com/taimufuraiyaa/agent-memory/internal/core"
 )
 
-type SkillLessonSignalConfiguration struct {
+type SkillSignalConfiguration struct {
 	Environment          string
 	ConfigurationVersion int64
 	PolicyVersion        int64
 	PolicyDigest         string
 }
 
-func (c SkillLessonSignalConfiguration) Validate() error {
+func (c SkillSignalConfiguration) Validate() error {
 	scope := core.SkillOrchestratorScope{WorkspaceID: "validation", Environment: c.Environment}
 	if err := scope.Validate(); err != nil {
 		return err
@@ -30,6 +30,8 @@ func (c SkillLessonSignalConfiguration) Validate() error {
 	}
 	return nil
 }
+
+type SkillLessonSignalConfiguration = SkillSignalConfiguration
 
 type SkillLessonSignalRouter interface {
 	Route(context.Context, SkillLifecycleSignal) (SkillSignalRouteResult, error)
