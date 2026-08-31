@@ -95,6 +95,26 @@ func TestSQLiteSkillOrchestratorCreateAndEnqueueAreIdempotent(t *testing.T) {
 	}
 }
 
+func TestSQLiteSkillOrchestratorFindsLatestActiveWorkflowBySkill(t *testing.T) {
+	store := openSkillOrchestratorStore(t)
+	ctx := context.Background()
+	now := time.Date(2026, 9, 1, 9, 0, 0, 0, time.UTC)
+	terminal := sqliteValidSkillWorkflow(now, "workflow-terminal", "lesson-terminal")
+	terminal.SkillID, terminal.State, terminal.UpdatedAt = "skill-shared", core.SkillWorkflowCompleted, now.Add(time.Hour)
+	terminal.TerminalAt = terminal.UpdatedAt
+	open := sqliteValidSkillWorkflow(now, "workflow-open", "lesson-open")
+	open.SkillID = terminal.SkillID
+	for _, workflow := range []core.SkillWorkflow{terminal, open} {
+		if _, _, err := store.CreateSkillWorkflow(ctx, workflow); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := store.GetLatestSkillWorkflow(ctx, open.Scope, open.SkillID)
+	if err != nil || got.ID != open.ID {
+		t.Fatalf("latest active workflow=%+v err=%v", got, err)
+	}
+}
+
 func TestSQLiteSkillOrchestratorClaimsPriorityThenOldestAndPaginates(t *testing.T) {
 	store := openSkillOrchestratorStore(t)
 	ctx := context.Background()

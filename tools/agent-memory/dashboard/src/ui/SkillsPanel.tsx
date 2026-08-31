@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Alert, Badge, Button, Group, Paper, Stack, Table, Text, Title } from '@mantine/core'
-import type { SkillInfo, SkillLifecycleDetail, SkillLifecycleSummary } from '../lib/api'
+import type { SkillInfo, SkillLifecycleDetail, SkillLifecycleSummary, SkillOrchestrationControl, SkillOrchestrationJob, SkillOrchestrationStatus } from '../lib/api'
 import { MarkdownView } from './MarkdownView'
 import { ListPagination, paginateRecords } from './workspace/ListPagination'
 
@@ -14,15 +14,19 @@ type Props = {
   inspect: (skillId: string) => Promise<SkillLifecycleDetail>
   approve: (detail: SkillLifecycleDetail, revisionId: string) => Promise<void>
   rollback: (detail: SkillLifecycleDetail) => Promise<void>
+  inspectOrchestration: (skillId: string, signal?: AbortSignal) => Promise<SkillOrchestrationStatus>
+  controlOrchestration: (input: SkillOrchestrationControl) => Promise<void>
 }
 
 const short = (value?: string) => value ? `${value.slice(0, 12)}${value.length > 12 ? '…' : ''}` : 'N/A'
 
-export function SkillsPanel({ theme, workspace, skills, lifecycleSkills, busy, error, inspect, approve, rollback }: Props) {
+export function SkillsPanel({ theme, workspace, skills, lifecycleSkills, busy, error, inspect, approve, rollback, inspectOrchestration, controlOrchestration }: Props) {
   const [selectedId, setSelectedId] = useState('')
   const [detail, setDetail] = useState<SkillLifecycleDetail | null>(null)
   const [actionError, setActionError] = useState('')
   const [acting, setActing] = useState(false)
+  const [orchestration, setOrchestration] = useState<SkillOrchestrationStatus | null>(null)
+  const [orchestrationError, setOrchestrationError] = useState('')
   const [skillPage, setSkillPage] = useState(1)
   const pagedSkills = paginateRecords(lifecycleSkills, skillPage)
   const latest = detail?.revisions[0]
@@ -44,6 +48,20 @@ export function SkillsPanel({ theme, workspace, skills, lifecycleSkills, busy, e
     return () => { current = false }
   }, [inspect, selectedId])
 
+  useEffect(() => {
+    if (!selectedId) { setOrchestration(null); return }
+    const controller = new AbortController()
+    let current = true
+    const refresh = () => inspectOrchestration(selectedId, controller.signal).then((value) => {
+      if (current) { setOrchestration(value); setOrchestrationError('') }
+    }).catch((cause) => {
+      if (current && !controller.signal.aborted) { setOrchestration(null); setOrchestrationError(cause instanceof Error ? cause.message : String(cause)) }
+    })
+    void refresh()
+    const timer = window.setInterval(() => void refresh(), 5_000)
+    return () => { current = false; controller.abort(); window.clearInterval(timer) }
+  }, [inspectOrchestration, selectedId])
+
   async function run(action: () => Promise<void>) {
     setActing(true)
     setActionError('')
@@ -51,6 +69,18 @@ export function SkillsPanel({ theme, workspace, skills, lifecycleSkills, busy, e
       await action()
       if (selectedId) setDetail(await inspect(selectedId))
     } catch (cause) { setActionError(cause instanceof Error ? cause.message : String(cause)) }
+    finally { setActing(false) }
+  }
+
+  async function runOrchestration(input: SkillOrchestrationControl) {
+    setActing(true); setOrchestrationError('')
+    try {
+      await controlOrchestration(input)
+      if (selectedId) setOrchestration(await inspectOrchestration(selectedId))
+    } catch (cause) {
+      setOrchestrationError(cause instanceof Error ? cause.message : String(cause))
+      if (selectedId) inspectOrchestration(selectedId).then(setOrchestration).catch(() => undefined)
+    }
     finally { setActing(false) }
   }
 
@@ -81,6 +111,26 @@ export function SkillsPanel({ theme, workspace, skills, lifecycleSkills, busy, e
             <Button disabled={acting || !latest || latest.id === detail.activation?.active_revision_id || !['testing', 'canary'].includes(latest.state)} onClick={() => latest && void run(() => approve(detail, latest.id))}>Approve latest</Button>
             <Button color="orange" variant="outline" disabled={acting || !detail.activation?.last_known_good_revision_id || detail.activation.last_known_good_revision_id === detail.activation.active_revision_id} onClick={() => void run(() => rollback(detail))}>Rollback to last known good</Button>
           </Group>
+          <Paper withBorder p="md" className="skillOrchestration" aria-label="Automatic revision workflow">
+            <Stack gap="sm">
+              <Group justify="space-between"><div><Title order={4}>Automatic revision workflow</Title><Text size="sm" c="dimmed">Operational controls do not approve a revision or bypass policy gates.</Text></div>{orchestration ? <Badge variant="light">{orchestration.workflow.state}</Badge> : null}</Group>
+              {orchestrationError ? <Alert color="gray" role="status">Workflow state: N/A — {orchestrationError}</Alert> : null}
+              {orchestration ? <>
+                <div className="skillStateGrid">
+                  <State label="Stage" value={orchestration.workflow.current_stage || 'N/A'} />
+                  <State label="Generation" value={String(orchestration.workflow.generation || 'N/A')} />
+                  <State label="Configuration" value={String(orchestration.workflow.configuration_version || 'N/A')} />
+                  <State label="Policy" value={short(orchestration.workflow.policy_digest)} />
+                </div>
+                <Group className="skillLifecycleActions">
+                  <Button size="xs" variant="outline" disabled={acting || !['open', 'paused'].includes(orchestration.workflow.state)} onClick={() => void runOrchestration({ action: orchestration.workflow.state === 'paused' ? 'resume' : 'pause', workflow_id: orchestration.workflow.id, expected_generation: orchestration.workflow.generation })}>{orchestration.workflow.state === 'paused' ? 'Resume workflow' : 'Pause workflow'}</Button>
+                  <Button size="xs" variant="outline" disabled={acting || orchestration.workflow.state !== 'open'} onClick={() => void runOrchestration({ action: 'reconcile', workflow_id: orchestration.workflow.id, expected_generation: orchestration.workflow.generation, limit: 50 })}>Reconcile blocked work</Button>
+                </Group>
+                <Text size="sm" fw={700}>Jobs and safe reasons</Text>
+                {orchestration.jobs.length === 0 ? <Text size="sm" c="dimmed">No jobs recorded.</Text> : <Stack gap="xs">{orchestration.jobs.map((job) => <JobRow key={job.id} job={job} generation={orchestration.workflow.generation} acting={acting} control={(input) => void runOrchestration(input)} />)}</Stack>}
+              </> : !orchestrationError ? <Text role="status">Loading automatic workflow…</Text> : null}
+            </Stack>
+          </Paper>
           <Paper withBorder p="sm" className="skillRevisionTable"><Table.ScrollContainer minWidth={720}><Table striped highlightOnHover>
             <Table.Thead><Table.Tr><Table.Th>Revision</Table.Th><Table.Th>State</Table.Th><Table.Th>Digest</Table.Th><Table.Th>Created by</Table.Th><Table.Th>Provenance</Table.Th><Table.Th>Evaluation</Table.Th></Table.Tr></Table.Thead>
             <Table.Tbody>{detail.revisions.map((revision) => <Table.Tr key={revision.id} data-active={revision.id === detail.activation?.active_revision_id || undefined}>
@@ -92,6 +142,17 @@ export function SkillsPanel({ theme, workspace, skills, lifecycleSkills, busy, e
       </section>
     </div> : null}
   </Stack>
+}
+
+function JobRow({ job, generation, acting, control }: { job: SkillOrchestrationJob; generation: number; acting: boolean; control: (input: SkillOrchestrationControl) => void }) {
+  const canaryDue = job.stage === 'analyze_canary' ? (new Date(job.ready_at).getTime() <= Date.now() ? 'due' : 'waiting') : 'N/A'
+  const reason = job.failure_code || job.blocked_reason || job.failure_class || 'N/A'
+  const retry = () => {
+    if (job.state !== 'dead_lettered') { control({ action: 'retry', job_id: job.id, expected_generation: generation }); return }
+    const reason = window.prompt('Replay reason code:')?.trim()
+    if (reason) control({ action: 'replay', job_id: job.id, reason_code: reason, idempotency_key: crypto.randomUUID() })
+  }
+  return <Paper withBorder p="sm" className="skillJobRow"><Group justify="space-between" align="flex-start"><div><Group gap="xs"><Badge size="sm">{job.state}</Badge><Text fw={700}>{job.stage}</Text></Group><Text size="xs" c="dimmed">Attempt {job.attempt}/{job.max_attempts} · Policy v{job.policy_version} · Canary check: {canaryDue}</Text><Text size="xs">Reason: {reason}</Text></div><Group gap="xs"><Button size="compact-xs" variant="subtle" disabled={acting || !['queued', 'blocked', 'running', 'retry_wait'].includes(job.state)} onClick={() => control({ action: 'cancel', job_id: job.id, expected_generation: generation })}>Cancel</Button><Button size="compact-xs" variant="subtle" disabled={acting || !['retry_wait', 'dead_lettered'].includes(job.state)} onClick={retry}>Retry</Button></Group></Group></Paper>
 }
 
 function State({ label, value }: { label: string; value: string }) {

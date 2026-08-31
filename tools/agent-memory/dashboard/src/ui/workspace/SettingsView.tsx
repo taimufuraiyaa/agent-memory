@@ -88,8 +88,12 @@ function SystemToolPanel({ id, workspaceId, gateway }: { id: string; workspaceId
     const actor = 'dashboard-operator'
     await gateway.operateSkillLifecycle({ workspaceId }, actor, 'rollback', { operation_id: crypto.randomUUID(), idempotency_key: crypto.randomUUID(), environment: activation.environment || 'local', skill_id: detail.skill.id, target_revision_id: activation.last_known_good_revision_id, expected_generation: activation.generation, policy_decision_id: 'manual-rollback', actor, rollback: true, automatic: false, reason_code: reason })
   }, [gateway, workspaceId])
+  const inspectSkillOrchestration = useCallback((skillId: string, signal?: AbortSignal) => gateway.getSkillOrchestration({ workspaceId }, skillId, 'dashboard-operator', signal), [gateway, workspaceId])
+  const controlSkillOrchestration = useCallback(async (input: import('../../lib/api').SkillOrchestrationControl) => {
+    await gateway.controlSkillOrchestration({ workspaceId }, 'dashboard-operator', input)
+  }, [gateway, workspaceId])
 
-  if (id === 'skills') return <SkillsPanel theme="dark" workspace={workspaceId} skills={skills} lifecycleSkills={skillLifecycle} busy={busy} error={error} inspect={inspectSkill} approve={approveSkill} rollback={rollbackSkill} />
+  if (id === 'skills') return <SkillsPanel theme="dark" workspace={workspaceId} skills={skills} lifecycleSkills={skillLifecycle} busy={busy} error={error} inspect={inspectSkill} approve={approveSkill} rollback={rollbackSkill} inspectOrchestration={inspectSkillOrchestration} controlOrchestration={controlSkillOrchestration} />
   if (id === 'infrastructure') return <DeploymentPanel />
   if (id === 'migration') return <MigrationPanel workspace={workspaceId} />
   return null

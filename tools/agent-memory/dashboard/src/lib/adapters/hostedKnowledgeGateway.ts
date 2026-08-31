@@ -21,6 +21,8 @@ import {
   listHostedSkillLifecycle,
   inspectHostedSkillLifecycle,
   operateHostedSkillLifecycle,
+  getHostedSkillOrchestration,
+  controlHostedSkillOrchestration,
   listHostedSources,
   queryHostedSources,
   recallHostedGraph,
@@ -304,6 +306,8 @@ export function createHostedKnowledgeGateway(connection: HostedConnection, optio
     async listSkillLifecycle(scope) { if (!localSystemTools || !isRegisteredProject(scope.workspaceId)) throw new Error('Skill lifecycle is available only for registered projects.'); return (await listHostedSkillLifecycle(connection, scope.workspaceId)).skills || [] },
     async inspectSkillLifecycle(scope, skillId, environment) { if (!localSystemTools || !isRegisteredProject(scope.workspaceId)) throw new Error('Skill lifecycle is available only for registered projects.'); return inspectHostedSkillLifecycle(connection, scope.workspaceId, skillId, environment) },
     async operateSkillLifecycle(scope, _actor, operation, payload) { if (!localSystemTools || !isRegisteredProject(scope.workspaceId)) throw new Error('Skill lifecycle is available only for registered projects.'); return operateHostedSkillLifecycle(connection, scope.workspaceId, operation, payload) },
+    async getSkillOrchestration(scope, skillId, _actor, signal) { if (!localSystemTools || !isRegisteredProject(scope.workspaceId)) throw new Error('Skill orchestration is available only for registered projects.'); return getHostedSkillOrchestration(connection, scope.workspaceId, skillId, signal) },
+    async controlSkillOrchestration(scope, _actor, input) { if (!localSystemTools || !isRegisteredProject(scope.workspaceId)) throw new Error('Skill orchestration is available only for registered projects.'); return controlHostedSkillOrchestration(connection, scope.workspaceId, input) },
     async listClientProfiles() {
       if (!localSystemTools) throw new Error('Client profiles are available only in a private installation.')
       return listHostedClientProfiles(connection)

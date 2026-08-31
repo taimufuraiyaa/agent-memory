@@ -77,11 +77,11 @@ func TestHostedSkillOrchestrationBindsOwnerScopeAndPagination(t *testing.T) {
 	fixture := &hostedSkillOrchestrationFixture{}
 	owner := hostedOwnerFixture{status: control.LocalOwnerStatus{State: "authenticated", Account: control.PersonalAccount{TenantID: "tenant-1", AccountID: "account-1"}}}
 	handler := localProjectOwnerBoundary(owner, "memory:read", localProjectSkillOrchestrationStatus(fixture))
-	request := httptest.NewRequest(http.MethodGet, "/v1/local-project-skills/orchestration/status?workspace=agent-memory&environment=staging&workflow_id=workflow-1&job_cursor=job-8&event_cursor=17&limit=25", nil)
+	request := httptest.NewRequest(http.MethodGet, "/v1/local-project-skills/orchestration/status?workspace=agent-memory&environment=staging&skill_id=skill-1&job_cursor=job-8&event_cursor=17&limit=25", nil)
 	request = request.WithContext(auth.WithRequestContext(request.Context(), hostedSkillCaller("tenant-1", "account-1", "memory:read")))
 	recorder := httptest.NewRecorder()
 	handler.ServeHTTP(recorder, request)
-	if recorder.Code != http.StatusOK || fixture.statusInput.Actor != "subject-1" || fixture.statusInput.TenantID != "tenant-1" || fixture.statusInput.JobCursor != "job-8" || fixture.statusInput.EventCursor != "17" || fixture.statusInput.Limit != 25 {
+	if recorder.Code != http.StatusOK || fixture.statusInput.Actor != "subject-1" || fixture.statusInput.TenantID != "tenant-1" || fixture.statusInput.SkillID != "skill-1" || fixture.statusInput.JobCursor != "job-8" || fixture.statusInput.EventCursor != "17" || fixture.statusInput.Limit != 25 {
 		t.Fatalf("orchestration status scope was not bound: status=%d input=%+v body=%s", recorder.Code, fixture.statusInput, recorder.Body.String())
 	}
 

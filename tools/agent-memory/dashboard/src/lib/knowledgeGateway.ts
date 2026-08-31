@@ -252,6 +252,8 @@ export interface KnowledgeGateway {
   listSkillLifecycle(scope: WorkspaceScope, signal?: AbortSignal): Promise<import('./api').SkillLifecycleSummary[]>
   inspectSkillLifecycle(scope: WorkspaceScope, skillId: string, environment?: string): Promise<import('./api').SkillLifecycleDetail>
   operateSkillLifecycle(scope: WorkspaceScope, actor: string, operation: string, payload: Record<string, unknown>): Promise<unknown>
+  getSkillOrchestration(scope: WorkspaceScope, skillId: string, actor: string, signal?: AbortSignal): Promise<import('./api').SkillOrchestrationStatus>
+  controlSkillOrchestration(scope: WorkspaceScope, actor: string, input: import('./api').SkillOrchestrationControl): Promise<unknown>
   listClientProfiles(signal?: AbortSignal): Promise<{ profiles: ClientProfile[] }>
   createClientProfile(input: { id: string; display_name: string; client_kind: ClientKind; tool_profile: ClientToolProfile }): Promise<{ profile: ClientProfile }>
   updateClientProfile(input: { id: string; display_name: string; client_kind: ClientKind; tool_profile: ClientToolProfile; expected_revision: number }): Promise<{ profile: ClientProfile }>

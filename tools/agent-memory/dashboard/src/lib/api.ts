@@ -1220,6 +1220,11 @@ export type SkillLifecycleActivation = { id: string; environment: string; skill_
 export type SkillLifecycleEvaluation = { id: string; revision_id: string; verdict: 'pass' | 'fail' | 'inconclusive'; evaluator: string; evaluator_version: string; completed_at: string; case_results?: Array<{ case_id: string; passed: boolean; independently_verified: boolean; failure_class?: string }> }
 export type SkillLifecyclePolicyDecision = { id: string; revision_id: string; decision: 'promote' | 'canary' | 'approval_required' | 'pause' | 'reject'; reason_codes: string[]; evaluation_run_ids: string[]; decided_at: string }
 export type SkillLifecycleDetail = { skill: SkillLifecycleSummary; revisions: SkillLifecycleRevision[]; evaluations?: SkillLifecycleEvaluation[]; policy_decisions?: SkillLifecyclePolicyDecision[]; activation?: SkillLifecycleActivation }
+export type SkillOrchestrationWorkflow = { id: string; skill_id?: string; state: 'open' | 'paused' | 'completed' | 'cancelled' | 'rejected' | 'dead_lettered'; current_stage: string; generation: number; configuration_version: number; policy_digest: string; updated_at: string }
+export type SkillOrchestrationJob = { id: string; workflow_id: string; skill_id?: string; stage: string; policy_version: number; state: 'queued' | 'blocked' | 'running' | 'retry_wait' | 'completed' | 'cancelled' | 'dead_lettered'; ready_at: string; dependency_count: number; blocked_reason?: string; attempt: number; max_attempts: number; lease_expires_at?: string; failure_class?: string; failure_code?: string; updated_at: string }
+export type SkillOrchestrationEvent = { id: number; workflow_id: string; job_id?: string; kind: string; from_state?: string; to_state?: string; actor_id: string; reason_code?: string; created_at: string }
+export type SkillOrchestrationStatus = { workflow: SkillOrchestrationWorkflow; jobs: SkillOrchestrationJob[]; events: SkillOrchestrationEvent[]; next_job_cursor?: string; next_event_cursor?: string }
+export type SkillOrchestrationControl = { action: 'pause' | 'resume' | 'cancel' | 'reconcile' | 'retry' | 'replay' | 'drain'; workflow_id?: string; job_id?: string; expected_generation?: number; reason_code?: string; idempotency_key?: string; limit?: number }
 
 export function listSkillLifecycle(input: { workspace: string }): Promise<SkillLifecycleSummary[]> {
   return api<{ skills: SkillLifecycleSummary[] }>(`/api/v1/skills/lifecycle/list?workspace=${encodeURIComponent(input.workspace)}`, { method: 'GET' }).then((res) => res.skills || [])
@@ -1229,6 +1234,13 @@ export function inspectSkillLifecycle(input: { workspace: string; skill_id: stri
 }
 export function operateSkillLifecycle(input: { workspace: string; actor: string; operation: string; payload: Record<string, unknown> }): Promise<{ operation: string; result: unknown }> {
   return api('/api/v1/skills/lifecycle', { method: 'POST', body: JSON.stringify(input) })
+}
+export function getSkillOrchestration(input: { workspace: string; actor: string; skill_id: string; environment?: string }, signal?: AbortSignal): Promise<SkillOrchestrationStatus> {
+  const query = new URLSearchParams({ workspace: input.workspace, actor: input.actor, skill_id: input.skill_id, environment: input.environment || 'local', limit: '50' })
+  return api(`/api/v1/skills/orchestration/status?${query}`, { method: 'GET', signal })
+}
+export function controlSkillOrchestration(input: { workspace: string; environment?: string; actor: string } & SkillOrchestrationControl): Promise<unknown> {
+  return api('/api/v1/skills/orchestration/control', { method: 'POST', body: JSON.stringify(input) })
 }
 
 export function listSkills(input: { workspace: string }): Promise<SkillInfo[]> {

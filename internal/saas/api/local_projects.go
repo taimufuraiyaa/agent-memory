@@ -229,6 +229,7 @@ type LocalProjectSkillOrchestrationStatusInput struct {
 	Workspace   string
 	Environment string
 	WorkflowID  string
+	SkillID     string
 	JobCursor   string
 	EventCursor string
 	Limit       int
@@ -389,11 +390,11 @@ func localProjectSkillOrchestrationStatus(service LocalProjectSkillOrchestration
 		}
 		input := LocalProjectSkillOrchestrationStatusInput{
 			Workspace: strings.TrimSpace(request.URL.Query().Get("workspace")), Environment: strings.TrimSpace(request.URL.Query().Get("environment")),
-			WorkflowID: strings.TrimSpace(request.URL.Query().Get("workflow_id")), JobCursor: request.URL.Query().Get("job_cursor"),
+			WorkflowID: strings.TrimSpace(request.URL.Query().Get("workflow_id")), SkillID: strings.TrimSpace(request.URL.Query().Get("skill_id")), JobCursor: request.URL.Query().Get("job_cursor"),
 			EventCursor: request.URL.Query().Get("event_cursor"), Limit: boundedLocalSkillLimit(request.URL.Query().Get("limit")),
 			TenantID: caller.TenantID, AccountID: caller.AccountID, Actor: caller.SubjectID,
 		}
-		if !validLocalOrchestrationScope(input.Workspace, input.Environment, input.WorkflowID) {
+		if !validLocalOrchestrationScope(input.Workspace, input.Environment, input.WorkflowID, input.SkillID) {
 			writeError(response, http.StatusBadRequest, requestID(request), "invalid_skill_orchestration", "workspace, environment, or workflow is invalid")
 			return
 		}
@@ -438,11 +439,11 @@ func localProjectSkillOrchestrationControl(service LocalProjectSkillOrchestratio
 	}
 }
 
-func validLocalOrchestrationScope(workspaceName, environment, workflowID string) bool {
+func validLocalOrchestrationScope(workspaceName, environment, workflowID, skillID string) bool {
 	if _, valid := validLocalProjectWorkspace(workspaceName); !valid {
 		return false
 	}
-	return validLocalOrchestrationID(environment, true) && validLocalOrchestrationID(workflowID, false)
+	return validLocalOrchestrationID(environment, true) && ((validLocalOrchestrationID(workflowID, false) && skillID == "") || (validLocalOrchestrationID(skillID, false) && workflowID == ""))
 }
 
 func validLocalOrchestrationControl(input LocalProjectSkillOrchestrationControlInput) bool {

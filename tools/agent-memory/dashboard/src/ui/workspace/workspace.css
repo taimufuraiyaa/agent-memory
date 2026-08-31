@@ -191,6 +191,9 @@ body.light .workspaceApp {
 .skillStateGrid > * { min-width: 0; overflow-wrap: anywhere; }
 .skillRevisionTable { max-width: 100%; overflow: hidden; }
 .skillRevisionTable tr[data-active] { outline: 1px solid var(--workspace-accent-border); outline-offset: -1px; }
+.skillOrchestration { background: var(--workspace-panel); }
+.skillJobRow { min-width: 0; background: var(--workspace-card); }
+.skillJobRow > * { min-width: 0; }
 .recordPagination { width: 100%; min-width: 0; padding-block: 8px; flex-wrap: wrap; }
 
 @media (max-width: 760px) {

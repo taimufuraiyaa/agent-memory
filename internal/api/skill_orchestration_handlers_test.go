@@ -26,7 +26,7 @@ func TestSkillOrchestrationStatusPauseResumeRetryCancelReconcileReplayAndDrain(t
 	scope := core.SkillOrchestratorScope{WorkspaceID: "ws", Environment: "local"}
 	now := time.Now().UTC().Add(-time.Minute)
 	digest := "sha256:" + strings.Repeat("a", 64)
-	workflow := core.SkillWorkflow{ID: "workflow-control", Scope: scope, OriginKind: core.SkillWorkflowOriginToolLesson, OriginID: "lesson-control",
+	workflow := core.SkillWorkflow{ID: "workflow-control", Scope: scope, SkillID: "skill-control", OriginKind: core.SkillWorkflowOriginToolLesson, OriginID: "lesson-control",
 		Kind: core.SkillWorkflowAutomaticRevision, ContractVersion: core.SkillOrchestratorContractVersion, InputDigest: digest,
 		State: core.SkillWorkflowOpen, CurrentStage: core.SkillStageDetect, Generation: 1, ConfigurationVersion: 1,
 		PolicyDigest: digest, CreatedAt: now, UpdatedAt: now}
@@ -39,6 +39,10 @@ func TestSkillOrchestrationStatusPauseResumeRetryCancelReconcileReplayAndDrain(t
 	statusURL := server.URL + "/api/v1/skills/orchestration/status?workspace=ws&environment=local&actor=actor&workflow_id=" + url.QueryEscape(workflow.ID) + "&limit=1"
 	if response, body := getSkillOrchestrationResponse(t, statusURL); response != http.StatusOK || body["workflow"].(map[string]any)["id"] != workflow.ID {
 		t.Fatalf("status=%d body=%#v", response, body)
+	}
+	statusBySkillURL := server.URL + "/api/v1/skills/orchestration/status?workspace=ws&environment=local&actor=actor&skill_id=" + workflow.SkillID + "&limit=1"
+	if response, body := getSkillOrchestrationResponse(t, statusBySkillURL); response != http.StatusOK || body["workflow"].(map[string]any)["id"] != workflow.ID {
+		t.Fatalf("skill status=%d body=%#v", response, body)
 	}
 	paused := postSkillOrchestration(t, server.URL, map[string]any{"action": "pause", "workspace": "ws", "environment": "local", "actor": "actor", "workflow_id": workflow.ID, "expected_generation": 1})
 	if paused.status != http.StatusOK || paused.body["result"].(map[string]any)["generation"] != float64(2) {

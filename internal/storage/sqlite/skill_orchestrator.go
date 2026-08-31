@@ -795,6 +795,20 @@ func (s *Store) GetSkillWorkflow(ctx context.Context, scope core.SkillOrchestrat
 	return workflow, err
 }
 
+func (s *Store) GetLatestSkillWorkflow(ctx context.Context, scope core.SkillOrchestratorScope, skillID string) (core.SkillWorkflow, error) {
+	if err := scope.Validate(); err != nil {
+		return core.SkillWorkflow{}, err
+	}
+	if strings.TrimSpace(skillID) == "" {
+		return core.SkillWorkflow{}, errors.New("skill id is required")
+	}
+	workflow, err := scanSkillWorkflow(s.db.QueryRowContext(ctx, `SELECT id,tenant_id,workspace_id,environment,skill_id,origin_kind,origin_id,workflow_kind,contract_version,input_digest,state,current_stage,generation,configuration_version,policy_digest,created_at,updated_at,terminal_at FROM skill_orchestrator_workflows WHERE tenant_id=? AND workspace_id=? AND environment=? AND skill_id=? ORDER BY CASE WHEN state IN ('open','paused') THEN 0 ELSE 1 END, updated_at DESC, id DESC LIMIT 1`, scope.TenantID, scope.WorkspaceID, scope.Environment, skillID))
+	if errors.Is(err, sql.ErrNoRows) {
+		return core.SkillWorkflow{}, ErrSkillOrchestratorNotFound
+	}
+	return workflow, err
+}
+
 func (s *Store) LoadSkillReconciliationCursor(ctx context.Context, scope core.SkillOrchestratorScope, domain core.SkillReconciliationDomain, configurationVersion int64, now time.Time) (core.SkillReconciliationCursor, error) {
 	if err := scope.Validate(); err != nil {
 		return core.SkillReconciliationCursor{}, err

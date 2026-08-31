@@ -37,3 +37,22 @@ test('skills lifecycle remains keyboard and narrow-screen accessible', () => {
   assert.match(css, /@media \(max-width: 760px\)[\s\S]*\.skillStateGrid/)
   assert.match(css, /\.skillLifecycleActions button \{ width: 100%; \}/)
 })
+
+test('skills orchestration shows bounded operational state without implying approval', () => {
+  for (const label of ['Automatic revision workflow', 'Stage', 'Generation', 'Configuration', 'Policy', 'Jobs and safe reasons', 'Canary check:', 'Reason:']) assert.match(panel, new RegExp(label))
+  for (const state of ['queued', 'blocked', 'running', 'retry_wait', 'dead_lettered']) assert.match(panel, new RegExp(state))
+  for (const control of ['Pause workflow', 'Resume workflow', 'Reconcile blocked work', 'Cancel', 'Retry']) assert.match(panel, new RegExp(control))
+  assert.match(panel, /do not approve a revision or bypass policy gates/)
+  assert.match(panel, /AbortController/)
+  assert.match(panel, /clearInterval/)
+  assert.match(panel, /expected_generation: orchestration\.workflow\.generation/)
+  assert.match(panel, /inspectOrchestration\(selectedId\)\.then\(setOrchestration\)/)
+  assert.match(panel, /\|\| 'N\/A'/)
+})
+
+test('standalone and registered-project hosted gateways expose orchestration parity', () => {
+  assert.match(api, /\/api\/v1\/skills\/orchestration\/status/)
+  assert.match(api, /\/api\/v1\/skills\/orchestration\/control/)
+  assert.match(hosted, /\/v1\/local-project-skills\/orchestration\/status/)
+  assert.match(hosted, /\/v1\/local-project-skills\/orchestration\/control/)
+})

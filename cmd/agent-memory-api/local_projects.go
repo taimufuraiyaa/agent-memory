@@ -311,7 +311,7 @@ func (service *localProjectService) StatusSkillOrchestration(ctx context.Context
 	if strings.TrimSpace(input.TenantID) == "" || strings.TrimSpace(input.AccountID) == "" || strings.TrimSpace(input.Actor) == "" {
 		return application.SkillOrchestrationStatus{}, errors.New("authenticated tenant, account, and actor are required")
 	}
-	if strings.TrimSpace(input.WorkflowID) == "" || input.Limit < 1 || input.Limit > 200 {
+	if (strings.TrimSpace(input.WorkflowID) == "") == (strings.TrimSpace(input.SkillID) == "") || input.Limit < 1 || input.Limit > 200 {
 		return application.SkillOrchestrationStatus{}, errors.New("bounded orchestration status scope is required")
 	}
 	store, err := service.openProjectStore(ctx, input.Workspace)
@@ -319,7 +319,16 @@ func (service *localProjectService) StatusSkillOrchestration(ctx context.Context
 		return application.SkillOrchestrationStatus{}, err
 	}
 	defer store.Close()
-	return application.NewSkillOrchestrationControlService(store, nil).Status(ctx, localProjectOrchestrationScope(input.Workspace, input.Environment), input.WorkflowID, input.JobCursor, input.EventCursor, input.Limit)
+	scope := localProjectOrchestrationScope(input.Workspace, input.Environment)
+	workflowID := input.WorkflowID
+	if workflowID == "" {
+		workflow, lookupErr := store.GetLatestSkillWorkflow(ctx, scope, input.SkillID)
+		if lookupErr != nil {
+			return application.SkillOrchestrationStatus{}, lookupErr
+		}
+		workflowID = workflow.ID
+	}
+	return application.NewSkillOrchestrationControlService(store, nil).Status(ctx, scope, workflowID, input.JobCursor, input.EventCursor, input.Limit)
 }
 
 func (service *localProjectService) ControlSkillOrchestration(ctx context.Context, input api.LocalProjectSkillOrchestrationControlInput) (any, error) {

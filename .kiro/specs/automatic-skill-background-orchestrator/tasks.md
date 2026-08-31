@@ -200,7 +200,7 @@
   - Files: MCP schemas/mapping, hosted adapter, contract tests.
   - Estimated scope: Medium.
 
-- [ ] **Task 23: Upgrade Skills dashboard with orchestration state**
+- [x] **Task 23: Upgrade Skills dashboard with orchestration state**
   - Acceptance: Authorized users can see workflow stage, queue/blocked/retry/dead-letter state, safe reasons, canary due state, policy/config version, and control actions without exposing content or implying approval.
   - Verify: every state, N/A evidence, stale action, authorization, keyboard, narrow layout, polling cancellation, standalone/hosted parity, and accessibility tests.
   - Dependencies: Tasks 21 and 22.

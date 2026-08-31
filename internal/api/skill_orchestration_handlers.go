@@ -41,10 +41,27 @@ func skillOrchestrationStatusHandler(svc *Service) http.HandlerFunc {
 			workspaceID = svc.Workspace
 		}
 		workflowID := strings.TrimSpace(r.URL.Query().Get("workflow_id"))
+		skillID := strings.TrimSpace(r.URL.Query().Get("skill_id"))
+		if (workflowID == "") == (skillID == "") {
+			writeErr(w, http.StatusBadRequest, "validation", "exactly one workflow_id or skill_id is required")
+			return
+		}
 		actor := strings.TrimSpace(r.URL.Query().Get("actor"))
-		if err := authorizeSkillMutation(r.Context(), svc, actor, workspaceID, "orchestration_status", workflowID); err != nil {
+		authorizationTarget := workflowID
+		if authorizationTarget == "" {
+			authorizationTarget = skillID
+		}
+		if err := authorizeSkillMutation(r.Context(), svc, actor, workspaceID, "orchestration_status", authorizationTarget); err != nil {
 			writeErr(w, http.StatusForbidden, "forbidden", err.Error())
 			return
+		}
+		if workflowID == "" && skillID != "" {
+			workflow, lookupErr := assets.Store.GetLatestSkillWorkflow(r.Context(), skillOrchestrationScope(workspaceID, r.URL.Query().Get("environment")), skillID)
+			if lookupErr != nil {
+				writeSkillOrchestrationError(w, lookupErr)
+				return
+			}
+			workflowID = workflow.ID
 		}
 		limit := parseSkillLimit(r.URL.Query().Get("limit"))
 		scope := skillOrchestrationScope(workspaceID, r.URL.Query().Get("environment"))
