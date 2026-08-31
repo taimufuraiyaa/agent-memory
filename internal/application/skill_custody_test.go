@@ -40,6 +40,21 @@ func (r *skillCustodyRepositoryFixture) PlaceSkillLegalHold(context.Context, cor
 func (r *skillCustodyRepositoryFixture) ReleaseSkillLegalHold(context.Context, string, string, time.Time) error {
 	return nil
 }
+func (r *skillCustodyRepositoryFixture) DeleteSkillOrchestratorRecord(_ context.Context, scope core.SkillOrchestratorScope, kind, id string, _ time.Time) (core.SkillOrchestratorDeletionResult, error) {
+	return core.SkillOrchestratorDeletionResult{Scope: scope, RecordKind: kind, RecordID: id}, nil
+}
+func (r *skillCustodyRepositoryFixture) PruneSkillOrchestratorAttempts(context.Context, core.SkillOrchestratorScope, time.Time, int) (int64, error) {
+	return 1, nil
+}
+func (r *skillCustodyRepositoryFixture) PlaceSkillOrchestratorLegalHold(context.Context, core.SkillOrchestratorLegalHold) error {
+	return nil
+}
+func (r *skillCustodyRepositoryFixture) ReleaseSkillOrchestratorLegalHold(context.Context, core.SkillOrchestratorScope, string, time.Time) error {
+	return nil
+}
+func (r *skillCustodyRepositoryFixture) RestoreSkillOrchestratorTombstones(context.Context, core.SkillOrchestratorScope, map[string][]map[string]any) (int64, error) {
+	return 1, nil
+}
 
 type skillCustodyAuthorizerFixture struct {
 	action string

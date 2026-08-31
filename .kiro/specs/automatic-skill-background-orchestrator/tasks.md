@@ -209,10 +209,10 @@
 
 ### Checkpoint E — Public Operational Workflow
 
-- [ ] Operators can understand and control work without database access.
-- [ ] Agents can inspect but cannot approve or enable automation.
-- [ ] Legacy clients remain revision- and queue-unaware.
-- [ ] UI, CLI, HTTP, MCP, and hosted state agree.
+- [x] Operators can understand and control work without database access.
+- [x] Agents can inspect but cannot approve or enable automation.
+- [x] Legacy clients remain revision- and queue-unaware.
+- [x] UI, CLI, HTTP, MCP, and hosted state agree.
 
 ## Phase 6 — Governance, Observability, and Data Lifecycle
 
@@ -230,7 +230,7 @@
   - Files: observability package, alert rules, readiness adapters, runbooks.
   - Estimated scope: Medium.
 
-- [ ] **Task 26: Add export, deletion, retention, legal-hold, and tombstone parity**
+- [x] **Task 26: Add export, deletion, retention, legal-hold, and tombstone parity**
   - Acceptance: Orchestration configuration/history/signals follow lifecycle custody; deletion cancels dependent work, legal hold prevents removal, retention bounds attempts, and deleted evidence cannot be resurrected by reconciliation.
   - Verify: export round trip, selective deletion, active workflow deletion, held records, expired attempts, dead letters, tombstoned evidence, restore, and tenant isolation tests.
   - Dependencies: Tasks 2, 4, 10, and 24.

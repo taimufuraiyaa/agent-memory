@@ -212,6 +212,17 @@ type SkillLegalHold struct {
 	ReleasedAt time.Time `json:"released_at,omitempty"`
 }
 
+type SkillOrchestratorLegalHold struct {
+	ID         string                 `json:"id"`
+	Scope      SkillOrchestratorScope `json:"scope"`
+	TargetKind string                 `json:"target_kind"`
+	TargetID   string                 `json:"target_id"`
+	Reason     string                 `json:"reason"`
+	State      string                 `json:"state"`
+	CreatedAt  time.Time              `json:"created_at"`
+	ReleasedAt time.Time              `json:"released_at,omitempty"`
+}
+
 type SkillEvidenceDeletionResult struct {
 	Workspace           string `json:"workspace"`
 	EvidenceKind        string `json:"evidence_kind"`
@@ -220,6 +231,16 @@ type SkillEvidenceDeletionResult struct {
 	RevisionReferences  int64  `json:"revision_references"`
 	ExecutionsDeleted   int64  `json:"executions_deleted"`
 	Replayed            bool   `json:"replayed"`
+}
+
+type SkillOrchestratorDeletionResult struct {
+	Scope           SkillOrchestratorScope `json:"scope"`
+	RecordKind      string                 `json:"record_kind"`
+	RecordID        string                 `json:"record_id"`
+	JobsCancelled   int64                  `json:"jobs_cancelled"`
+	WorkflowsClosed int64                  `json:"workflows_closed"`
+	RecordsDeleted  int64                  `json:"records_deleted"`
+	Replayed        bool                   `json:"replayed"`
 }
 
 func (r SkillRevision) Validate() error {

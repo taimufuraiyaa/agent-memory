@@ -45,6 +45,33 @@ var schemaMigrations = []migrationStep{
 	{25, "skill-lifecycle-custody", migrateSkillLifecycleCustody},
 	{26, "skill-background-orchestrator", migrateSkillBackgroundOrchestrator},
 	{27, "authenticated-skill-safety-signals", migrateAuthenticatedSkillSafetySignals},
+	{28, "scoped-skill-orchestrator-custody", migrateScopedSkillOrchestratorCustody},
+}
+
+func migrateScopedSkillOrchestratorCustody(ctx context.Context, s *Store) error {
+	for _, statement := range []string{
+		`CREATE TABLE IF NOT EXISTS skill_orchestrator_legal_holds (
+			tenant_id TEXT NOT NULL DEFAULT '', workspace_id TEXT NOT NULL, environment TEXT NOT NULL,
+			id TEXT NOT NULL, target_kind TEXT NOT NULL, target_id TEXT NOT NULL, reason TEXT NOT NULL,
+			state TEXT NOT NULL, created_at TEXT NOT NULL, released_at TEXT NOT NULL DEFAULT '',
+			PRIMARY KEY(tenant_id,workspace_id,environment,id),
+			CHECK(target_kind IN ('workspace','workflow','job','configuration','safety_signal')),
+			CHECK(state IN ('active','released'))
+		)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_skill_orchestrator_holds_active
+			ON skill_orchestrator_legal_holds(tenant_id,workspace_id,environment,target_kind,target_id) WHERE state='active'`,
+		`CREATE TABLE IF NOT EXISTS skill_orchestrator_tombstones (
+			tenant_id TEXT NOT NULL DEFAULT '', workspace_id TEXT NOT NULL, environment TEXT NOT NULL,
+			record_kind TEXT NOT NULL, record_id TEXT NOT NULL, deleted_at TEXT NOT NULL,
+			PRIMARY KEY(tenant_id,workspace_id,environment,record_kind,record_id),
+			CHECK(record_kind IN ('workflow','job','configuration','safety_signal'))
+		)`,
+	} {
+		if _, err := s.db.ExecContext(ctx, statement); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func migrateAuthenticatedSkillSafetySignals(ctx context.Context, s *Store) error {

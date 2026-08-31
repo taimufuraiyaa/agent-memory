@@ -198,6 +198,14 @@ func (s *Store) ExportSkillLifecycle(ctx context.Context, workspace string) (map
 		"safety_signals":          `SELECT * FROM skill_safety_signals WHERE workspace=? ORDER BY id`,
 		"legal_holds":             `SELECT * FROM skill_legal_holds WHERE workspace=? ORDER BY id`,
 		"evidence_tombstones":     `SELECT * FROM skill_evidence_tombstones WHERE workspace=? ORDER BY evidence_kind,evidence_id`,
+		"orchestrator_workflows":  `SELECT * FROM skill_orchestrator_workflows WHERE workspace_id=? ORDER BY environment,created_at,id`,
+		"orchestrator_jobs":       `SELECT * FROM skill_orchestrator_jobs WHERE workspace_id=? ORDER BY environment,created_at,id`,
+		"orchestrator_attempts":   `SELECT attempt.* FROM skill_orchestrator_job_attempts attempt JOIN skill_orchestrator_jobs job ON job.id=attempt.job_id WHERE job.workspace_id=? ORDER BY attempt.job_id,attempt.attempt`,
+		"orchestrator_signals":    `SELECT * FROM skill_orchestrator_safety_signals WHERE workspace_id=? ORDER BY environment,created_at,id`,
+		"orchestrator_configs":    `SELECT * FROM skill_orchestrator_configurations WHERE workspace_id=? ORDER BY environment,version`,
+		"orchestrator_events":     `SELECT event.* FROM skill_orchestrator_events event JOIN skill_orchestrator_workflows workflow ON workflow.id=event.workflow_id WHERE workflow.workspace_id=? ORDER BY event.id`,
+		"orchestrator_holds":      `SELECT * FROM skill_orchestrator_legal_holds WHERE workspace_id=? ORDER BY environment,id`,
+		"orchestrator_tombstones": `SELECT * FROM skill_orchestrator_tombstones WHERE workspace_id=? ORDER BY environment,record_kind,record_id`,
 	}
 	archive := make(map[string][]map[string]any, len(queries))
 	for name, query := range queries {

@@ -315,6 +315,44 @@ func TestSkillRuntimeRoleMigrationIsLeastPrivilegeAndReversible(t *testing.T) {
 	}
 }
 
+func TestSkillOrchestratorCustodyMigrationIsScopedAndReversible(t *testing.T) {
+	t.Parallel()
+	migrations := mustMigrations(t)
+	var custody *Migration
+	for index := range migrations {
+		if migrations[index].Version == "0036_skill_orchestrator_custody" {
+			custody = &migrations[index]
+			break
+		}
+	}
+	if custody == nil {
+		t.Fatal("skill orchestrator custody migration is missing")
+	}
+	for _, table := range []string{"saas_skill_orchestrator_legal_holds", "saas_skill_orchestrator_tombstones"} {
+		if !strings.Contains(custody.Up, "CREATE TABLE "+table) {
+			t.Errorf("custody migration missing table %s", table)
+		}
+		if !strings.Contains(custody.Up, "ALTER TABLE "+table+" FORCE ROW LEVEL SECURITY") {
+			t.Errorf("custody migration missing forced RLS for %s", table)
+		}
+		if !strings.Contains(custody.Down, "DROP TABLE IF EXISTS "+table) {
+			t.Errorf("custody rollback missing table %s", table)
+		}
+	}
+	for _, required := range []string{
+		"PRIMARY KEY (tenant_id,workspace_id,environment,record_kind,record_id)",
+		"saas_skill_orchestrator_legal_holds_active",
+		"WHERE state='active'",
+		"current_setting('app.tenant_id',true)::uuid",
+		"current_setting('app.workspace_id',true)::uuid",
+		"GRANT SELECT ON saas_skill_orchestrator_tombstones TO agent_memory_skill_worker,agent_memory_skill_reconciler",
+	} {
+		if !strings.Contains(custody.Up, required) {
+			t.Errorf("custody migration missing %q", required)
+		}
+	}
+}
+
 func TestApplyRollbackAndTenantRLS(t *testing.T) {
 	connectionURL := strings.TrimSpace(os.Getenv("AGENT_MEMORY_TEST_POSTGRES_URL"))
 	if connectionURL == "" {

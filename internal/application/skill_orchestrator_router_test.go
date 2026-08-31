@@ -108,12 +108,25 @@ func TestSkillSignalRouterPropagatesAtomicRollback(t *testing.T) {
 	}
 }
 
+func TestSkillSignalRouterConsultsDurableTombstonesBeforeReconciliationRoute(t *testing.T) {
+	repository := &skillSignalRouteRepository{tombstoned: true}
+	result, err := NewSkillSignalRouter(repository).Route(context.Background(), validSkillLifecycleSignal(time.Now().UTC(), SkillSignalSafety))
+	if err != nil || !result.Ignored || repository.calls != 0 {
+		t.Fatalf("result=%+v calls=%d err=%v", result, repository.calls, err)
+	}
+}
+
 type skillSignalRouteRepository struct {
 	calls, routeCount int
 	err               error
 	committed         bool
 	executed          bool
 	byWorkflow        map[string]SkillSignalRouteResult
+	tombstoned        bool
+}
+
+func (r *skillSignalRouteRepository) IsSkillOrchestratorSignalTombstoned(context.Context, core.SkillOrchestratorScope, string, string) (bool, error) {
+	return r.tombstoned, nil
 }
 
 func (r *skillSignalRouteRepository) RouteSkillSignal(_ context.Context, workflow core.SkillWorkflow, job core.SkillJob, dependencies []core.SkillJobDependency) (SkillSignalRouteResult, error) {

@@ -70,6 +70,10 @@ type SkillSignalRouteRepository interface {
 	RouteSkillSignal(context.Context, core.SkillWorkflow, core.SkillJob, []core.SkillJobDependency) (SkillSignalRouteResult, error)
 }
 
+type skillSignalTombstoneRepository interface {
+	IsSkillOrchestratorSignalTombstoned(context.Context, core.SkillOrchestratorScope, string, string) (bool, error)
+}
+
 type SkillSignalRouter struct{ repository SkillSignalRouteRepository }
 
 func NewSkillSignalRouter(repository SkillSignalRouteRepository) *SkillSignalRouter {
@@ -85,6 +89,15 @@ func (r *SkillSignalRouter) Route(ctx context.Context, signal SkillLifecycleSign
 	}
 	if signal.Tombstoned {
 		return SkillSignalRouteResult{Ignored: true}, nil
+	}
+	if checker, ok := r.repository.(skillSignalTombstoneRepository); ok && signal.Kind == SkillSignalSafety {
+		deleted, err := checker.IsSkillOrchestratorSignalTombstoned(ctx, signal.Scope, "safety_signal", signal.ReferenceID)
+		if err != nil {
+			return SkillSignalRouteResult{}, err
+		}
+		if deleted {
+			return SkillSignalRouteResult{Ignored: true}, nil
+		}
 	}
 	if !signal.Verified || !signal.Authorized {
 		return SkillSignalRouteResult{}, errors.New("skill lifecycle signal must be verified and authorized")
