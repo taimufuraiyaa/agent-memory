@@ -1199,6 +1199,122 @@ func TestWriteCodexConfigUsesPortableHomeRelativeDataPath(t *testing.T) {
 	}
 }
 
+func TestWriteCodexConfigPreservesExplicitPermissionSelection(t *testing.T) {
+	tests := []struct {
+		name              string
+		selection         string
+		wantDefaultCount  int
+		wantSelectionText string
+	}{
+		{
+			name:              "sandbox mode",
+			selection:         "sandbox_mode = \"danger-full-access\"\n",
+			wantDefaultCount:  0,
+			wantSelectionText: "sandbox_mode = \"danger-full-access\"",
+		},
+		{
+			name:              "custom permission profile",
+			selection:         "default_permissions = \"custom-profile\"\n",
+			wantDefaultCount:  1,
+			wantSelectionText: "default_permissions = \"custom-profile\"",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			configPath := filepath.Join(t.TempDir(), "config.toml")
+			dataDir := filepath.Join(t.TempDir(), "agent-memory")
+			seed := codexConfigStart + "\n" +
+				"default_permissions = \"agent-memory-workspace\"\n" +
+				codexConfigEnd + "\n" +
+				tt.selection +
+				"model = \"gpt-test\"\n"
+			if err := os.WriteFile(configPath, []byte(seed), 0o644); err != nil {
+				t.Fatalf("seed config: %v", err)
+			}
+
+			for range 2 {
+				if err := writeCodexConfig(configPath, dataDir); err != nil {
+					t.Fatalf("write Codex config with explicit selection: %v", err)
+				}
+			}
+
+			contents, err := os.ReadFile(configPath)
+			if err != nil {
+				t.Fatalf("read config: %v", err)
+			}
+			got := string(contents)
+			if !strings.Contains(got, tt.wantSelectionText) {
+				t.Errorf("user permission selection was not preserved: %s", got)
+			}
+			if strings.Count(got, "default_permissions") != tt.wantDefaultCount {
+				t.Errorf("managed block competed with the user selection: %s", got)
+			}
+			if !strings.Contains(got, `permissions.agent-memory-workspace.filesystem."`+filepath.ToSlash(dataDir)+`" = "write"`) {
+				t.Errorf("managed Agent Memory profile was not refreshed: %s", got)
+			}
+			if strings.Count(got, codexConfigStart) != 1 || strings.Count(got, codexConfigEnd) != 1 {
+				t.Errorf("managed block is not idempotent: %s", got)
+			}
+		})
+	}
+}
+
+func TestWriteAgentFilesAllContinuesAfterExplicitCodexPermissionSelection(t *testing.T) {
+	root := t.TempDir()
+	dataDir := filepath.Join(t.TempDir(), "agent-memory")
+	if err := os.MkdirAll(filepath.Join(root, ".codex"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	configPath := filepath.Join(root, ".codex", "config.toml")
+	if err := os.WriteFile(configPath, []byte("sandbox_mode = \"workspace-write\"\nmodel = \"gpt-test\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := WriteAgentFiles(WriteAgentFilesOptions{
+		CWD:       root,
+		Workspace: "permission-preserve",
+		DataDir:   dataDir,
+		Force:     true,
+		IDEs:      []string{"all"},
+	})
+	if err != nil {
+		t.Fatalf("write all agent files: %v", err)
+	}
+
+	for _, ide := range []string{"codex", "kiro", "claude", "zcode"} {
+		found := false
+		for _, installed := range result.IDEs {
+			if installed.IDE == ide {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("later --ide all target %q was not processed: %+v", ide, result.IDEs)
+		}
+	}
+
+	config, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(config), "sandbox_mode = \"workspace-write\"") || strings.Contains(string(config), "default_permissions") {
+		t.Errorf("explicit permission selection was not authoritative: %s", config)
+	}
+	for _, generated := range []string{
+		filepath.Join(root, "AGENTS.md"),
+		filepath.Join(root, ".codex", "hooks.json"),
+		filepath.Join(root, ".kiro", "hooks", "memory-recall-gate.json"),
+		filepath.Join(root, "CLAUDE.md"),
+	} {
+		contents, readErr := os.ReadFile(generated)
+		if readErr != nil || !strings.Contains(string(contents), MemoryContractMarker) {
+			t.Errorf("managed contract was not refreshed at %s: %v %s", generated, readErr, contents)
+		}
+	}
+}
+
 func TestWriteCodexGlobalFilesPreservesExistingSettings(t *testing.T) {
 	codexHome := t.TempDir()
 	dataDir := filepath.Join(t.TempDir(), "agent-memory")

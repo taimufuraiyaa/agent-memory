@@ -1200,15 +1200,6 @@ func writeCodexConfig(path, dataDir string) error {
 		}
 	}
 	quoted := strconv.Quote(filepath.ToSlash(permissionPath))
-	managed := codexConfigStart + "\n" +
-		"default_permissions = \"agent-memory-workspace\"\n" +
-		"permissions.agent-memory-workspace.filesystem.\":root\" = \"read\"\n" +
-		"permissions.agent-memory-workspace.filesystem.\":tmpdir\" = \"write\"\n" +
-		"permissions.agent-memory-workspace.filesystem.\":slash_tmp\" = \"write\"\n" +
-		"permissions.agent-memory-workspace.filesystem." + quoted + " = \"write\"\n" +
-		"permissions.agent-memory-workspace.filesystem.\":workspace_roots\" = { \".\" = \"write\", \".git\" = \"read\", \".agents\" = \"read\", \".codex\" = \"read\" }\n" +
-		codexConfigEnd
-
 	existing := ""
 	if b, err := os.ReadFile(path); err == nil {
 		existing = string(b)
@@ -1219,9 +1210,16 @@ func writeCodexConfig(path, dataDir string) error {
 	if err != nil {
 		return fmt.Errorf("inspect Codex config: %w", err)
 	}
-	if regexp.MustCompile(`(?m)^\s*(?:default_permissions|sandbox_mode)\s*=`).MatchString(userConfig) {
-		return errors.New("existing Codex permission selection conflicts with the agent-memory project profile")
+	managed := codexConfigStart + "\n"
+	if !regexp.MustCompile(`(?m)^\s*(?:default_permissions|sandbox_mode)\s*=`).MatchString(userConfig) {
+		managed += "default_permissions = \"agent-memory-workspace\"\n"
 	}
+	managed += "permissions.agent-memory-workspace.filesystem.\":root\" = \"read\"\n" +
+		"permissions.agent-memory-workspace.filesystem.\":tmpdir\" = \"write\"\n" +
+		"permissions.agent-memory-workspace.filesystem.\":slash_tmp\" = \"write\"\n" +
+		"permissions.agent-memory-workspace.filesystem." + quoted + " = \"write\"\n" +
+		"permissions.agent-memory-workspace.filesystem.\":workspace_roots\" = { \".\" = \"write\", \".git\" = \"read\", \".agents\" = \"read\", \".codex\" = \"read\" }\n" +
+		codexConfigEnd
 	updated, err := replaceManagedBlock(existing, codexConfigStart, codexConfigEnd, managed)
 	if err != nil {
 		return fmt.Errorf("update Codex config: %w", err)

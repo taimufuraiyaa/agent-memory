@@ -52,6 +52,8 @@ Generic rule targets receive instruction enforcement only.
 
 `init` and `reinstall` remain the canonical project-wide installers. The `all` target explicitly includes every supported target, including Kiro. Detection includes `.kiro/`.
 
+Codex permission selection is user-authoritative. With no user selection, the managed block selects the generated `agent-memory-workspace` profile. When user-authored configuration already selects `sandbox_mode` or `default_permissions`, regeneration preserves that choice and writes the Agent Memory profile without a managed `default_permissions` selector. Rules and lifecycle hooks still refresh, and `--ide all` continues to subsequent clients. Removing the user selection and reinstalling restores the managed default selector deterministically.
+
 Connection adapters are responsible for a complete usable connection, not just MCP registration. Codex and Claude therefore verify their rules and hooks together. Cursor and Kiro adapters use owned project artifacts and expose the same connect/verify/disconnect lifecycle. Shared files use bounded managed sections; owned files can be removed directly. Disconnect never deletes a parent directory.
 
 ### MCP profiles
@@ -99,6 +101,7 @@ Rejected because Cursor and generic clients expose instruction surfaces, not gua
 - **Agent guesses a repository-relative CLI path:** the always-on contract explicitly rejects `./bin/agent-memory` outside source-repository development and directs the agent to report or repair missing PATH installation.
 - **MCP service unavailable:** tools return transport failure; generated rules direct the agent to report the gap rather than fabricate recall.
 - **Concurrent shared-file update:** existing atomic/managed-section mechanisms are retained; no broad deletion occurs.
+- **Explicit Codex permission selection:** preserve it, omit only Agent Memory's competing default selector, retain the managed permission profile for inspection or later use, and continue the reinstall.
 
 ## Security and privacy
 

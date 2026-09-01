@@ -38,6 +38,7 @@ The contract records safe, concise summaries of decisions and actions. It must n
 4. Existing user-authored rule content and hook entries SHALL be preserved where managed sections are embedded in shared files.
 5. Reinstallation SHALL be idempotent.
 6. `upgrade --hooks-only --all --ide all` SHALL refresh the contract for every supported client in every registered project without replacing the binary.
+7. When a Codex project already has a user-authored `sandbox_mode` or `default_permissions` selection, installation and reinstallation SHALL preserve that selection, SHALL refresh the non-selecting Agent Memory permission profile plus managed rules and hooks, and SHALL continue processing later `--ide all` targets without error.
 
 ### R3 — Executable lifecycle capture
 
@@ -69,4 +70,5 @@ The contract records safe, concise summaries of decisions and actions. It must n
 - Hook-capable clients capture lifecycle events, while Cursor is accurately labeled instruction-enforced.
 - The default MCP tool list includes the complete solution workflow.
 - Tests prove idempotency, preservation of user-owned content, stale-contract detection, and multi-client coverage.
+- Reinstallation remains successful and idempotent when Codex has an explicit user-owned permission selection.
 - Generated rules explicitly distinguish cross-project CLI invocation from source-repository development commands.
