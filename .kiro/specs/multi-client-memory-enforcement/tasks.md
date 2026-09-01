@@ -63,7 +63,7 @@
 - [x] Propagate the updated contract to every registered project.
   - Acceptance: project-owned content is preserved; every applicable generated rule contains the new contract marker and CLI path instruction.
   - Verification: reinstall all registered projects, run doctor/inspection checks, and confirm no installed managed contract retains the prior marker.
-- [ ] Complete regression and session evidence.
+- [x] Complete regression and session evidence.
   - Acceptance: focused tests, full workspace tests, vet, diff checks, and durable Agent Memory records pass.
 
 ## Risks
