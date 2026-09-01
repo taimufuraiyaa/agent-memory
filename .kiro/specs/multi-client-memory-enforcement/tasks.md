@@ -60,7 +60,7 @@
 - [x] Increment the generated operating contract and add an explicit PATH-installed CLI rule.
   - Acceptance: every rule derived from the canonical contract requires `agent-memory` on PATH, forbids `./bin/agent-memory` outside source-repository development, and directs missing-command failures to install/repair guidance.
   - Verification: focused `internal/workspace` regression proves the old contract fails and the new generated surfaces pass.
-- [ ] Propagate the updated contract to every registered project.
+- [x] Propagate the updated contract to every registered project.
   - Acceptance: project-owned content is preserved; every applicable generated rule contains the new contract marker and CLI path instruction.
   - Verification: reinstall all registered projects, run doctor/inspection checks, and confirm no installed managed contract retains the prior marker.
 - [ ] Complete regression and session evidence.

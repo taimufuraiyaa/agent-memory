@@ -1,12 +1,12 @@
 {
   "name": "Memory Recall Gate",
-  "version": "2.2.0",
-  "description": "Hippocampus recall: use staged retrieval before every agent turn. Search first, then escalate to recall only when continuity or weak search results justify the extra context load.",
+  "version": "2.3.0",
+  "description": "agent-memory operating contract: v5. Hippocampus recall and solution capture before every agent turn.",
   "when": {
     "type": "promptSubmit"
   },
   "then": {
     "type": "askAgent",
-    "prompt": "Before responding to the user, do the following first:\n1. Extract 3-5 key terms from the user's message.\n2. Run: agent-memory search --query \"<key terms>\" --top-k 8\n3. Inspect the search result.\n4. Run: agent-memory recall --task \"<user message>\" --budget 800 --format raw --include-observations only if one of these is true:\n   - the user is asking to continue, resume, or recall previous work\n   - search returns no useful results\n   - search returns weak, ambiguous, or insufficiently actionable results\n   - the task needs an assembled task context, not just candidate memories\n5. Use the search hits or recall output as primary context before answering.\n6. If retrieval still finds nothing useful, proceed with general knowledge and note the gap.\nDo not skip memory lookup even for simple questions, but avoid unnecessary recall when search is already enough."
+    "prompt": "CLI rule: invoke agent-memory through PATH in connected projects; never use ./bin/agent-memory. If agent-memory is unavailable on PATH, report the installation problem instead of guessing a project-local path.\nBefore responding to the user, do the following first:\n1. Extract 3-5 key terms and run: agent-memory search --query \"<key terms>\" --top-k 8\n2. Inspect the result and immediately submit: agent-memory feedback --request-id \"<request_id>\" --score <0-5> --reason \"<explanation>\" --useful-count <n> --total-count <n>\n3. Run ordinary recall only if one of these is true: the user asks to continue, resume, or recall previous work; search is weak; or assembled task context is needed; avoid unnecessary recall when search is already enough.\n4. For a how-oriented request run: agent-memory work recall --task \"<user message>\" --principal \"<principal_id>\"\n5. For non-trivial new work run: agent-memory work start --goal \"<goal>\" --session \"<session_id>\" --principal \"<principal_id>\" --client kiro\n6. During work use agent-memory work step after meaningful actions/decisions/results and agent-memory work checkpoint during long work.\n7. Before ending, account for What, Where, and When; use literal N/A with a concise reason for an optional dimension with no applicable stored value.\nUse retrieved context before answering. Do not store private chain-of-thought; store only concise rationale summaries."
   }
 }

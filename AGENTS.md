@@ -20,7 +20,7 @@
 ## agent-memory (MANDATORY)
 
 workspace: agent-memory
-contract: agent-memory operating contract: v4
+contract: agent-memory operating contract: v5
 
 Memory dimensions:
 - **What**: facts, outcomes, and artifacts learned during work.
@@ -32,6 +32,9 @@ Memory dimensions:
 Do not store private chain-of-thought. Store only concise rationale summaries needed to understand or repeat the work.
 
 Always use `agent-memory` as the memory system:
+- Invoke `agent-memory` through `PATH` in every connected project.
+- Never use `./bin/agent-memory`; that repository-relative binary is only valid while developing Agent Memory itself after a local build.
+- If `agent-memory` is unavailable on `PATH`, report the installation problem instead of guessing a project-local path. Use the documented install or repair flow.
 - Run a focused memory search for the key terms and entities you're about to research.
 - Run a recall for the current task only when the task continues previous work or search is weak. Directly escalate for `continue`, `resume`, or `what were we doing`.
 - Before doing any self-research: run memory `search` first. Run task `recall` only when the task is about continuing previous work, or when search returns no useful / weak / insufficient results.
