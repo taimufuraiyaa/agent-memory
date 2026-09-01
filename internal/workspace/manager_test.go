@@ -990,6 +990,9 @@ func TestWriteAgentFilesExplicitTargetDoesNotConfigureDetectedClients(t *testing
 }
 
 func TestGeneratedRulesShareCurrentMemoryOperatingContract(t *testing.T) {
+	if MemoryContractMarker != "agent-memory operating contract: v5" {
+		t.Fatalf("cross-project CLI path policy requires contract v5, got %q", MemoryContractMarker)
+	}
 	contents := map[string]string{
 		"generic": genericRulesSection("demo"),
 		"cursor":  cursorRuleContent("demo"),
@@ -1005,6 +1008,9 @@ func TestGeneratedRulesShareCurrentMemoryOperatingContract(t *testing.T) {
 			"agent-memory work start", "agent-memory work step", "agent-memory work checkpoint",
 			"agent-memory work end", "agent-memory work recall", "agent-memory work promote", "agent-memory session-end",
 			"Do not store private chain-of-thought",
+			"Invoke `agent-memory` through `PATH` in every connected project",
+			"Never use `./bin/agent-memory`",
+			"report the installation problem instead of guessing a project-local path",
 		} {
 			if !strings.Contains(content, required) {
 				t.Errorf("%s rule missing %q", name, required)
@@ -1025,6 +1031,16 @@ func TestKiroHooksCoverSolutionLifecycleWithoutPrivateReasoning(t *testing.T) {
 		var decoded map[string]any
 		if err := json.Unmarshal([]byte(hook.Content), &decoded); err != nil {
 			t.Fatalf("%s is not valid JSON: %v", hook.Name, err)
+		}
+		for _, required := range []string{
+			MemoryContractMarker,
+			"invoke agent-memory through PATH",
+			"never use ./bin/agent-memory",
+			"report the installation problem instead of guessing a project-local path",
+		} {
+			if !strings.Contains(hook.Content, required) {
+				t.Errorf("Kiro hook %s missing CLI resolution rule %q", hook.Name, required)
+			}
 		}
 		joined += hook.Content
 	}
