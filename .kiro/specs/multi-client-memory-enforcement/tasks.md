@@ -71,7 +71,7 @@
 - [x] Preserve explicit Codex permission selection without aborting reinstall.
   - Acceptance: user-authored `sandbox_mode` or `default_permissions` remains unchanged; the managed Agent Memory profile is refreshed without a competing default selector; Codex rules/hooks and later `--ide all` targets are written.
   - Verification: red/green workspace regressions cover direct config regeneration and the complete multi-client write path.
-- [ ] Verify and release the repaired reinstall flow.
+- [x] Verify and release the repaired reinstall flow.
   - Acceptance: focused and full Go tests, vet, a rebuilt global CLI, the original `agent-memory reinstall --ide all` command, doctor, and diff checks pass while unrelated dashboard work remains untouched.
 
 ## Risks
