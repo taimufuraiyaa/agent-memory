@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/taimufuraiyaa/agent-memory/internal/core"
 	"github.com/taimufuraiyaa/agent-memory/internal/saas/auth"
+	"github.com/taimufuraiyaa/agent-memory/internal/saas/outbox"
 )
 
 type PostgresRepository struct {
@@ -96,6 +97,13 @@ func (r *PostgresRepository) WriteMemory(ctx context.Context, write Write) (core
 		(tenant_id,id,event_type,spec_version,aggregate_type,aggregate_id,payload,occurred_at,next_attempt_at)
 		VALUES ($1,$2,'memory.created','1.0','memory',$3,$4,$5,$5)`, write.TenantID, uuid.NewString(), insertedID, payload, write.Memory.CreatedAt); err != nil {
 		return core.MemoryEntry{}, false, fmt.Errorf("append memory outbox event: %w", err)
+	}
+	if err := outbox.AppendGraphChangeEventsTx(ctx, tx, outbox.GraphChangeInput{
+		TenantID: write.TenantID, WorkspaceID: write.Memory.Workspace, SubjectKind: "memory",
+		SubjectID: insertedID, SubjectFingerprint: write.ContentHash, ChangeKind: "create",
+		OccurredAt: write.Memory.CreatedAt,
+	}); err != nil {
+		return core.MemoryEntry{}, false, fmt.Errorf("append graph change event: %w", err)
 	}
 	if _, err := tx.Exec(ctx, `INSERT INTO saas_audit_events
 		(tenant_id,id,actor_type,actor_id,operation,outcome,request_id,correlation_id,target_type,target_id,occurred_at)

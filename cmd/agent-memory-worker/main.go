@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/ed25519"
+	"encoding/base64"
 	"fmt"
 	"log/slog"
 	"os"
@@ -9,12 +11,16 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	baseobservability "github.com/taimufuraiyaa/agent-memory/internal/observability"
 	"github.com/taimufuraiyaa/agent-memory/internal/saas/billing"
 	"github.com/taimufuraiyaa/agent-memory/internal/saas/config"
 	"github.com/taimufuraiyaa/agent-memory/internal/saas/deletion"
 	exportservice "github.com/taimufuraiyaa/agent-memory/internal/saas/export"
+	"github.com/taimufuraiyaa/agent-memory/internal/saas/graphindex"
+	"github.com/taimufuraiyaa/agent-memory/internal/saas/graphworker"
 	"github.com/taimufuraiyaa/agent-memory/internal/saas/modelgateway"
+	"github.com/taimufuraiyaa/agent-memory/internal/saas/objectcustody"
 	"github.com/taimufuraiyaa/agent-memory/internal/saas/outbox"
 	saaspostgres "github.com/taimufuraiyaa/agent-memory/internal/saas/postgres"
 	"github.com/taimufuraiyaa/agent-memory/internal/saas/retention"
@@ -67,6 +73,11 @@ func run(cfg config.Config) error {
 		return fmt.Errorf("open export object store: %w", err)
 	}
 	observer.RecordComponent("object_storage", "connect", "success", 0)
+	if cfg.GraphRAGEnabled {
+		if err := startHostedGraphServices(ctx, cfg, pool, observer, logger); err != nil {
+			return err
+		}
+	}
 	exports, err := exportservice.NewService(exportservice.NewPostgresRepository(pool), objects, cfg.ExportEncryptionKey, nil)
 	if err != nil {
 		return err
@@ -139,6 +150,62 @@ func run(cfg config.Config) error {
 		logger.Error("outbox publication cycle failed", "error_class", telemetry.ErrorClass(err))
 	})
 	logger.Info("outbox publisher stopped")
+	return nil
+}
+
+func startHostedGraphServices(ctx context.Context, cfg config.Config, pool *pgxpool.Pool, observer *telemetry.Observer, logger *slog.Logger) error {
+	privateKey, err := base64.StdEncoding.DecodeString(cfg.GraphBundleSigningKey)
+	if err != nil || len(privateKey) != ed25519.PrivateKeySize {
+		return fmt.Errorf("hosted graph bundle signing key is invalid")
+	}
+	graphObjects, err := objectcustody.NewMinIOGraphObjects(cfg.ObjectEndpoint, cfg.ObjectAccessKey, cfg.ObjectSecretKey)
+	if err != nil {
+		return err
+	}
+	transport, err := graphworker.NewNATSTransport(cfg.QueueURL, "agent-memory-general-worker")
+	if err != nil {
+		return err
+	}
+	publicKey := ed25519.PrivateKey(privateKey).Public().(ed25519.PublicKey)
+	dispatcher, err := graphindex.NewDispatcher(
+		graphindex.NewPostgresProjectionRepository(pool), objectcustody.NewGraphBundleObjectStore(graphObjects, publicKey), transport,
+		"agent-memory-general-worker", 10*time.Minute, ed25519.PrivateKey(privateKey), time.Now,
+	)
+	if err != nil {
+		transport.Close()
+		return err
+	}
+	repository := saaspostgres.NewGraphIndexRepository(pool)
+	loader, err := graphindex.NewObjectArtifactLoader(graphObjects, time.Now)
+	if err != nil {
+		transport.Close()
+		return err
+	}
+	completion, err := graphindex.NewService(repository, loader, repository, "agent-memory-graph-importer", 10*time.Minute, time.Now)
+	if err != nil {
+		transport.Close()
+		return err
+	}
+	go func() {
+		defer transport.Close()
+		if err := transport.RunCompletions(ctx, "agent-memory-graph-importer", completion, componentErrorReporter(observer, logger, "graph", "completion", "graph completion cycle failed")); err != nil && ctx.Err() == nil {
+			logger.Error("graph completion consumer stopped", "error_class", telemetry.ErrorClass(err))
+		}
+	}()
+	go func() {
+		ticker := time.NewTicker(time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				_, err := dispatcher.RunOnce(ctx)
+				componentErrorReporter(observer, logger, "graph", "dispatch", "graph dispatch cycle failed")(err)
+			}
+		}
+	}()
+	logger.Info("hosted graph dispatcher and completion importer started")
 	return nil
 }
 

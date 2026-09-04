@@ -110,6 +110,10 @@ func BuildLocal(ctx context.Context, store *sqlite.Store, selection Selection) (
 		bundle.SourceObjects = append(bundle.SourceObjects, exportservice.SourceObject{SourceID: asset.ID, Filename: filepath.Base(sourcePath), MediaType: mediaType, SizeBytes: int64(len(body)), ChecksumSHA256: checksum, BytesBase64: base64.StdEncoding.EncodeToString(body)})
 	}
 	bundle.SourceBytesIncluded = len(bundle.SourceObjects) > 0
+	bundle.SkillLifecycle, err = store.ExportSkillLifecycle(ctx, selection.Workspace)
+	if err != nil {
+		return exportservice.Bundle{}, err
+	}
 	if err := bundle.SealManifest(); err != nil {
 		return exportservice.Bundle{}, err
 	}

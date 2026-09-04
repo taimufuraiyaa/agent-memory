@@ -9,6 +9,7 @@ import {
   formatUnitPercent,
 } from './dashboardHelpers'
 import { BreakdownCard, DiagnosticRow, MetricCard } from './components'
+import { ListPagination, paginateRecords } from './workspace/ListPagination'
 
 function benchmarkEconomicSummary(run?: BenchmarkRun): Record<string, unknown> | null {
   const manifest = run?.run_manifest
@@ -95,6 +96,10 @@ export function BenchmarkPanel({
   const memoryROI = benchmarkEconomicNumber(latest, 'memory_roi')
 
   const [metricExplanationOpen, setMetricExplanationOpen] = useState(false)
+  const [runPage, setRunPage] = useState(1)
+  const pagedRuns = paginateRecords(runs, runPage)
+
+  useEffect(() => setRunPage(1), [workspace])
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -227,10 +232,11 @@ export function BenchmarkPanel({
               </div>
             </div>
             <div className="benchmarkHistoryList">
-              {runs.map((run, index) => (
-                <BenchmarkHistoryRow key={run.run_id} run={run} index={index} />
+              {pagedRuns.items.map((run, index) => (
+                <BenchmarkHistoryRow key={run.run_id} run={run} index={pagedRuns.start + index} />
               ))}
             </div>
+            <ListPagination page={pagedRuns.page} total={runs.length} onChange={setRunPage} label="Benchmark runs" />
           </section>
         </>
       ) : null}

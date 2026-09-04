@@ -4,11 +4,11 @@ export type WorkspaceDestination = typeof workspaceDestinations[number]
 export type WorkspaceRoute = {
   workspaceId: string
   destination: WorkspaceDestination
-  knowledgeView: 'sources' | 'memories' | 'notes'
+  knowledgeView: 'sources' | 'memories' | 'history' | 'notes'
 }
 
 export function readWorkspaceRoute(pathname = window.location.pathname): Partial<WorkspaceRoute> {
-  const match = pathname.match(/^\/w\/([^/]+)\/(home|ask|knowledge|activity|settings)(?:\/(sources|memories|notes))?\/?$/)
+  const match = pathname.match(/^\/w\/([^/]+)\/(home|ask|knowledge|activity|settings)(?:\/(sources|memories|history|notes))?\/?$/)
   if (!match) return readLegacyWorkspaceRoute(pathname)
   return {
     workspaceId: decodeURIComponent(match[1]),

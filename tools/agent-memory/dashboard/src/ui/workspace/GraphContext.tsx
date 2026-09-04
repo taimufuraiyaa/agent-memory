@@ -1,0 +1,26 @@
+import { Alert, Badge, Button, Card, Group, Stack, Text, Title } from '@mantine/core'
+import { useState } from 'react'
+import type { AskResponse, GraphEvidence, KnowledgeGateway } from '../../lib/knowledgeGateway'
+
+function CanonicalEvidence({ items }: { items: GraphEvidence[] }) {
+  return <Stack gap={2}>{items.map((item) => <Text key={`${item.canonical_kind}:${item.canonical_id}:${item.canonical_fingerprint}`} size="xs" c="dimmed">Canonical citation · {item.canonical_kind} {item.canonical_id}{item.locator ? ` · ${item.locator}` : ''}</Text>)}</Stack>
+}
+
+export function GraphContext({ gateway, workspaceId, response }: { gateway: KnowledgeGateway; workspaceId: string; response: AskResponse }) {
+  const [feedbackState, setFeedbackState] = useState<Record<string, string>>({})
+  const route = response.graphRoute
+  const context = response.graphContext
+  if (!route) return null
+  async function feedback(kind: string, id: string, outcome: 'helpful' | 'rejected') {
+    if (!response.requestId) return
+    const key = `${kind}:${id}`
+    try { await gateway.submitGraphFeedback({ workspaceId }, response.requestId, kind, id, outcome); setFeedbackState((current) => ({ ...current, [key]: 'Recorded' })) } catch (cause) { setFeedbackState((current) => ({ ...current, [key]: cause instanceof Error ? cause.message : 'Feedback failed' })) }
+  }
+  return <Stack className="graphContext" gap="md" aria-label="Graph retrieval context">
+    <Card withBorder><Group justify="space-between" align="flex-start"><div><Text c="memory" size="xs" fw={700} tt="uppercase">Retrieval route</Text><Title order={3}>{route.selected_mode === 'basic' ? 'Basic RAG' : route.selected_mode === 'local_graph' ? 'Local Graph' : 'Global Graph'}</Title><Text size="sm" c="dimmed">Requested {route.requested_mode} · {route.reason_code.replaceAll('_', ' ')}</Text></div><Group><Badge color={route.fresh ? 'green' : 'yellow'}>{route.fresh ? 'Fresh' : 'Not fresh'}</Badge>{route.fallback ? <Badge color="orange">Fell back to Basic</Badge> : null}{route.degraded ? <Badge color="yellow">Degraded</Badge> : null}</Group></Group></Card>
+    {context?.degraded_reason ? <Alert color="yellow" title="Graph context degraded">{context.degraded_reason.replaceAll('_', ' ')}. The grounded Basic result remains available.</Alert> : null}
+    {context?.local?.paths?.length ? <Stack><Title order={3}>Relationship paths</Title>{context.local.paths.map((path, index) => <Card key={`${path.seed.canonical_id}:${index}`} withBorder><Stack gap="xs"><Group justify="space-between"><Text fw={700}>{path.seed.canonical_id}</Text><Group><Badge variant="outline">{path.hops.length} hops</Badge><Badge color={path.can_support ? 'green' : 'gray'}>{path.can_support ? 'Supporting' : 'Association only'}</Badge></Group></Group>{path.hops.map((hop) => <Text key={hop.edge_id} size="sm">{hop.from_entity_id} → {hop.kind} → {hop.to_entity_id} <Text span c="dimmed">({hop.reason_code.replaceAll('_', ' ')}, {hop.trust})</Text></Text>)}<CanonicalEvidence items={path.evidence} /><Group><Button size="compact-xs" variant="subtle" disabled={!response.requestId} onClick={() => void feedback('path', `${path.seed.canonical_id}:${index}`, 'helpful')}>Helpful path</Button><Button size="compact-xs" variant="subtle" color="red" disabled={!response.requestId} onClick={() => void feedback('path', `${path.seed.canonical_id}:${index}`, 'rejected')}>Misleading path</Button><Text size="xs" role="status">{feedbackState[`path:${path.seed.canonical_id}:${index}`]}</Text></Group></Stack></Card>)}</Stack> : null}
+    {context?.local?.conflicts?.length ? <Alert color="red" title="Conflicting relationships"><Stack>{context.local.conflicts.map((conflict) => <Text key={conflict.hop.edge_id} size="sm">{conflict.hop.from_entity_id} {conflict.hop.kind} {conflict.hop.to_entity_id} · {conflict.hop.trust}</Text>)}</Stack></Alert> : null}
+    {context?.global?.communities?.length ? <Stack><Group justify="space-between"><Title order={3}>Community coverage</Title><Badge variant="outline">{context.global.covered_sources} sources · {context.global.unresolved_evidence} unresolved</Badge></Group><Alert color="blue" title="Navigation summaries — not source evidence">Community reports select where to look. Only the canonical citations below may support an answer.</Alert>{context.global.communities.map((community) => <Card key={community.id} withBorder><Stack gap="xs"><Group justify="space-between"><Text fw={700}>{community.title}</Text><Group><Badge>{community.trust}</Badge>{community.unresolved_count ? <Badge color="orange">{community.unresolved_count} unresolved</Badge> : null}</Group></Group><Text size="sm">{community.summary}</Text><CanonicalEvidence items={community.evidence} /><Group><Button size="compact-xs" variant="subtle" disabled={!response.requestId} onClick={() => void feedback('report', community.id, 'helpful')}>Helpful navigation</Button><Button size="compact-xs" variant="subtle" color="red" disabled={!response.requestId} onClick={() => void feedback('report', community.id, 'rejected')}>Misleading navigation</Button><Text size="xs" role="status">{feedbackState[`report:${community.id}`]}</Text></Group></Stack></Card>)}</Stack> : null}
+  </Stack>
+}

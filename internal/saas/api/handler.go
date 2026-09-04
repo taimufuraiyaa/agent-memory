@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/taimufuraiyaa/agent-memory/internal/application"
 	"github.com/taimufuraiyaa/agent-memory/internal/attestation"
 	"github.com/taimufuraiyaa/agent-memory/internal/core"
 	"github.com/taimufuraiyaa/agent-memory/internal/saas/audit"
@@ -91,6 +92,9 @@ type Dependencies struct {
 	LocalOwner        LocalOwnerService
 	LocalSessionToken string
 	LocalProjects     LocalProjectService
+	GraphOperations   application.GraphOperationController
+	GraphAuthorizer   GraphWorkspaceAuthorizer
+	GraphExperience   GraphExperienceStore
 }
 
 func NewHandler(deps Dependencies) (http.Handler, error) {
@@ -105,12 +109,11 @@ func NewHandler(deps Dependencies) (http.Handler, error) {
 		}
 		return deps.Telemetry.Wrap(handler)
 	}
-	features := []string{"sources", "memory", "portable_import", "privacy", "billing"}
+	features := hostedDashboardFeatures(deps)
 	if deps.LocalOwner != nil {
 		if strings.TrimSpace(deps.LocalSessionToken) == "" {
 			return nil, errors.New("local onboarding session token is required")
 		}
-		features = append(features, "local_onboarding")
 		root.Handle("GET /v1/local-session", observe(localSessionStatus(deps.LocalOwner, deps.LocalSessionToken)))
 		root.Handle("POST /v1/local-session/signup", observe(localOwnerSignup(deps.LocalOwner, deps.LocalSessionToken)))
 		root.HandleFunc("DELETE /v1/local-session", localSessionLogout)
@@ -142,6 +145,21 @@ func NewHandler(deps Dependencies) (http.Handler, error) {
 	protected.HandleFunc("GET /v1/sources", listSources(deps.SourceCatalog))
 	protected.HandleFunc("GET /v1/source-statuses", listSourceStatuses(deps.SourceCatalog))
 	protected.HandleFunc("GET /v1/processing-tasks", listProcessingTasks(deps.SourceCatalog))
+	if deps.GraphOperations != nil && deps.GraphAuthorizer != nil {
+		protected.HandleFunc("GET /v1/graph-index/readiness", hostedGraphReadiness(deps.GraphOperations, deps.GraphAuthorizer))
+		protected.HandleFunc("GET /v1/graph-index/status", hostedGraphStatus(deps.GraphOperations, deps.GraphAuthorizer))
+		protected.HandleFunc("POST /v1/graph-index/operations", hostedGraphOperation(deps.GraphOperations, deps.GraphAuthorizer))
+	}
+	if deps.GraphExperience != nil && deps.GraphAuthorizer != nil {
+		var graphObserver GraphObserver
+		if observer, ok := deps.Telemetry.(GraphObserver); ok {
+			graphObserver = observer
+		}
+		protected.HandleFunc("GET /v1/graph-index/explorer", hostedGraphExplorer(deps.GraphExperience, deps.GraphAuthorizer))
+		protected.HandleFunc("POST /v1/graph-index/recall", hostedGraphRecall(deps.GraphExperience, deps.MemorySearch, deps.GraphAuthorizer, deps.Audit, graphObserver))
+		protected.HandleFunc("POST /v1/graph-index/review", hostedGraphReview(deps.GraphExperience, deps.GraphAuthorizer))
+		protected.HandleFunc("POST /v1/graph-index/feedback", hostedGraphFeedback(deps.GraphExperience, deps.GraphAuthorizer))
+	}
 	if deps.LocalOwner != nil && deps.LocalProjects != nil {
 		protected.Handle("GET /v1/local-projects", localProjectBoundary("memory:read", listLocalProjects(deps.LocalProjects)))
 		protected.Handle("POST /v1/local-projects/study", localProjectBoundary("memory:write", studyLocalProject(deps.LocalProjects)))
@@ -150,6 +168,31 @@ func NewHandler(deps Dependencies) (http.Handler, error) {
 		protected.Handle("GET /v1/local-projects/memories/{memory_id}", localProjectBoundary("memory:read", getLocalProjectMemory(deps.LocalProjects)))
 		protected.Handle("GET /v1/local-project-feedback", localProjectBoundary("memory:read", listLocalProjectFeedback(deps.LocalProjects)))
 		protected.Handle("POST /v1/local-project-feedback", localProjectBoundary("memory:write", recordLocalProjectFeedback(deps.LocalProjects)))
+		protected.Handle("GET /v1/local-project-solutions", localProjectBoundary("memory:read", listLocalProjectSolutions(deps.LocalProjects)))
+		protected.Handle("POST /v1/local-project-solutions/review", localProjectBoundary("memory:write", reviewLocalProjectSolution(deps.LocalProjects)))
+		protected.Handle("POST /v1/local-project-solutions/start", localProjectBoundary("memory:write", startLocalProjectSolution(deps.LocalProjects)))
+		protected.Handle("POST /v1/local-project-solutions/steps", localProjectBoundary("memory:write", appendLocalProjectSolutionStep(deps.LocalProjects)))
+		protected.Handle("POST /v1/local-project-solutions/checkpoint", localProjectBoundary("memory:write", checkpointLocalProjectSolution(deps.LocalProjects)))
+		protected.Handle("POST /v1/local-project-solutions/transition", localProjectBoundary("memory:write", transitionLocalProjectSolution(deps.LocalProjects)))
+		protected.Handle("POST /v1/local-project-solutions/handoff", localProjectBoundary("memory:write", handoffLocalProjectSolution(deps.LocalProjects)))
+		protected.Handle("POST /v1/local-project-solutions/finalize", localProjectBoundary("memory:write", finalizeLocalProjectSolution(deps.LocalProjects)))
+		protected.Handle("POST /v1/local-project-solutions/recall", localProjectBoundary("memory:read", recallLocalProjectSolutions(deps.LocalProjects)))
+		protected.Handle("POST /v1/local-project-solutions/promote", localProjectBoundary("memory:write", promoteLocalProjectSolution(deps.LocalProjects)))
+		protected.Handle("GET /v1/local-project-solutions/export", localProjectBoundary("memory:read", exportLocalProjectSolution(deps.LocalProjects)))
+		if system, ok := deps.LocalProjects.(LocalProjectSystemService); ok {
+			protected.Handle("GET /v1/local-projects/lifecycle", localProjectBoundary("memory:read", listLocalProjectLifecycle(system)))
+			protected.Handle("GET /v1/local-projects/skills", localProjectBoundary("memory:read", listLocalProjectSkills(system)))
+		}
+		if skills, ok := deps.LocalProjects.(LocalProjectSkillLifecycleService); ok {
+			protected.Handle("GET /v1/local-project-skills/lifecycle", localProjectOwnerBoundary(deps.LocalOwner, "memory:read", localProjectSkillLifecycle(skills)))
+			protected.Handle("POST /v1/local-project-skills/lifecycle", localProjectOwnerBoundary(deps.LocalOwner, "memory:write", localProjectSkillLifecycle(skills)))
+		}
+		if clients, ok := deps.LocalProjects.(LocalClientProfileService); ok {
+			protected.Handle("GET /v1/local-client-profiles", localProjectBoundary("memory:read", localClientProfiles(clients)))
+			protected.Handle("POST /v1/local-client-profiles", localProjectBoundary("memory:write", localClientProfiles(clients)))
+			protected.Handle("PUT /v1/local-client-profiles/{client_id}", localProjectBoundary("memory:write", localClientProfile(clients)))
+			protected.Handle("DELETE /v1/local-client-profiles/{client_id}", localProjectBoundary("memory:write", localClientProfile(clients)))
+		}
 	}
 	protected.HandleFunc("GET /v1/sources/{source_id}", getSource(deps.SourceCatalog))
 	protected.HandleFunc("POST /v1/sources/{source_id}/retry", retrySource(deps.SourceCatalog))
@@ -173,6 +216,27 @@ func NewHandler(deps Dependencies) (http.Handler, error) {
 	}
 	root.Handle("/v1/", protectedMiddleware(observe(protected)))
 	return root, nil
+}
+
+func localSystemToolsAvailable(projects LocalProjectService) bool {
+	if projects == nil {
+		return false
+	}
+	_, hasSystemTools := projects.(LocalProjectSystemService)
+	_, hasClientProfiles := projects.(LocalClientProfileService)
+	return hasSystemTools && hasClientProfiles
+}
+
+func hostedDashboardFeatures(deps Dependencies) []string {
+	features := []string{"sources", "memory", "portable_import", "privacy", "billing"}
+	if deps.LocalOwner == nil {
+		return features
+	}
+	features = append(features, "local_onboarding")
+	if localSystemToolsAvailable(deps.LocalProjects) {
+		features = append(features, "local_system_tools")
+	}
+	return features
 }
 
 func registerOperationalRoutes(root *http.ServeMux, readiness func(context.Context) error, telemetry HTTPObserver) {

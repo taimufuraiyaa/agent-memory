@@ -63,9 +63,9 @@ func portableMigrationExportHandler(svc *Service) http.HandlerFunc {
 		}
 		_, err = assets.Store.AppendAuditEvent(r.Context(), sqlite.AuditEventInput{
 			Workspace: workspace, Operation: "portable_export", Outcome: "success", Actor: "http", Source: "dashboard",
-			TargetType: "migration_bundle", TargetCount: len(bundle.Memories) + len(bundle.Notes),
+			TargetType: "migration_bundle", TargetCount: len(bundle.Memories) + len(bundle.Notes) + bundle.Manifest.Counts["skill_lifecycle_records"],
 			Reason:   "copy-first browser migration export",
-			Metadata: map[string]any{"memory_count": len(bundle.Memories), "note_count": len(bundle.Notes), "source_originals_included": false},
+			Metadata: map[string]any{"memory_count": len(bundle.Memories), "note_count": len(bundle.Notes), "skill_lifecycle_record_count": bundle.Manifest.Counts["skill_lifecycle_records"], "source_originals_included": false},
 		})
 		if err != nil {
 			writeErr(w, http.StatusInternalServerError, "portable_export_failed", "could not record portable export")
@@ -77,6 +77,7 @@ func portableMigrationExportHandler(svc *Service) http.HandlerFunc {
 		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="agent-memory-%s.ampb2"`, portableFilenamePart(workspace)))
 		w.Header().Set("X-Agent-Memory-Memories", fmt.Sprint(len(bundle.Memories)))
 		w.Header().Set("X-Agent-Memory-Notes", fmt.Sprint(len(bundle.Notes)))
+		w.Header().Set("X-Agent-Memory-Skill-Lifecycle-Records", fmt.Sprint(bundle.Manifest.Counts["skill_lifecycle_records"]))
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write(encrypted)
 	}

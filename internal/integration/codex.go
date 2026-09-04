@@ -61,6 +61,8 @@ func verifyCodex(root string, connected bool) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	hasManaged := strings.Contains(string(config), "agent-memory managed") || strings.Contains(string(hooks), "agent-memory managed")
-	return hasManaged == connected, nil
+	rules, rulesErr := os.ReadFile(filepath.Join(root, "AGENTS.md"))
+	hasManaged := strings.Contains(string(config), "agent-memory managed") && strings.Contains(string(hooks), "agent-memory managed")
+	hasContract := rulesErr == nil && strings.Contains(string(rules), workspace.MemoryContractMarker)
+	return hasManaged == connected && hasContract == connected, nil
 }

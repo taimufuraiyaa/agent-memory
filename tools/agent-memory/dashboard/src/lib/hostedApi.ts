@@ -67,6 +67,7 @@ export type HostedMemory = {
   type: string
   content: string
   source_kind?: string
+  workspace_id?: string
   updated_at?: string
   workspace?: string
   confidence?: number
@@ -74,6 +75,14 @@ export type HostedMemory = {
   score?: number
   match_reason?: string
   source?: { file_path?: string; note_path?: string; type?: string }
+}
+
+export type HostedGraphRecallResponse = {
+  request_id: string
+  graph_route: GraphRouteDecision
+  graph_context?: GraphRecallContext
+  basic_memories: HostedMemory[]
+  canonical_memories?: HostedMemory[]
 }
 
 export type HostedProjectMemoryResult = { memory: HostedMemory; score: number; explanation?: string }
@@ -201,6 +210,35 @@ export function listHostedProjects(connection: HostedConnection): Promise<{ proj
   return hostedRequest(connection, '/v1/local-projects')
 }
 
+export function getHostedProjectLifecycle(connection: HostedConnection, workspace: string): Promise<{ scheduler?: import('./api').SchedulerSummary; history: import('./api').SchedulerRunHistory[] }> {
+  return hostedRequest(connection, `/v1/local-projects/lifecycle?workspace=${encodeURIComponent(workspace)}&limit=100`)
+}
+
+export function listHostedProjectSkills(connection: HostedConnection, workspace: string): Promise<{ skills: import('./api').SkillInfo[] }> {
+  return hostedRequest(connection, `/v1/local-projects/skills?workspace=${encodeURIComponent(workspace)}`)
+}
+export function listHostedSkillLifecycle(connection: HostedConnection, workspace: string): Promise<{ skills: import('./api').SkillLifecycleSummary[] }> { return hostedRequest(connection, `/v1/local-project-skills/lifecycle?workspace=${encodeURIComponent(workspace)}`) }
+export function inspectHostedSkillLifecycle(connection: HostedConnection, workspace: string, skillId: string, environment = 'local'): Promise<import('./api').SkillLifecycleDetail> { return hostedRequest(connection, `/v1/local-project-skills/lifecycle?workspace=${encodeURIComponent(workspace)}&skill_id=${encodeURIComponent(skillId)}&environment=${encodeURIComponent(environment)}`) }
+export function operateHostedSkillLifecycle(connection: HostedConnection, workspace: string, operation: string, payload: Record<string, unknown>): Promise<unknown> { return hostedRequest(connection, '/v1/local-project-skills/lifecycle', { method: 'POST', body: JSON.stringify({ workspace, operation, payload }) }) }
+
+export function listHostedClientProfiles(connection: HostedConnection): Promise<{ profiles: import('./api').ClientProfile[] }> {
+  return hostedRequest(connection, '/v1/local-client-profiles')
+}
+
+export function createHostedClientProfile(connection: HostedConnection, input: { id: string; display_name: string; client_kind: import('./api').ClientKind; tool_profile: import('./api').ClientToolProfile }): Promise<{ profile: import('./api').ClientProfile }> {
+  return hostedRequest(connection, '/v1/local-client-profiles', { method: 'POST', body: JSON.stringify(input) })
+}
+
+export function updateHostedClientProfile(connection: HostedConnection, input: { id: string; display_name: string; client_kind: import('./api').ClientKind; tool_profile: import('./api').ClientToolProfile; expected_revision: number }): Promise<{ profile: import('./api').ClientProfile }> {
+  const { id, ...body } = input
+  return hostedRequest(connection, `/v1/local-client-profiles/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(body) })
+}
+
+export function deleteHostedClientProfile(connection: HostedConnection, input: { id: string; expected_revision: number }): Promise<{ deleted: boolean; id: string }> {
+  const query = new URLSearchParams({ expected_revision: String(input.expected_revision) })
+  return hostedRequest(connection, `/v1/local-client-profiles/${encodeURIComponent(input.id)}?${query.toString()}`, { method: 'DELETE' })
+}
+
 export function studyHostedProject(connection: HostedConnection, input: { workspace: string; depth: 'shallow' | 'medium' | 'deep'; dry_run: boolean; max_files: number; offset: number }): Promise<HostedProjectStudyResult> {
   return hostedRequest(connection, '/v1/local-projects/study', { method: 'POST', body: JSON.stringify(input) })
 }
@@ -209,7 +247,7 @@ export function searchHostedProjectMemories(connection: HostedConnection, input:
   return hostedRequest(connection, '/v1/local-projects/search', { method: 'POST', body: JSON.stringify(input) })
 }
 
-export function browseHostedProjectMemories(connection: HostedConnection, input: { workspace: string; mode: 'recent' | 'pinned' | 'type'; limit: number; cursor?: string }): Promise<{ items: HostedMemory[]; next_cursor?: string }> {
+export function browseHostedProjectMemories(connection: HostedConnection, input: { workspace: string; mode: 'recent' | 'pinned' | 'type' | 'ungrouped'; limit: number; cursor?: string }): Promise<{ items: HostedMemory[]; next_cursor?: string }> {
   const query = new URLSearchParams({ workspace: input.workspace, mode: input.mode, limit: String(input.limit) })
   if (input.cursor) query.set('cursor', input.cursor)
   return hostedRequest(connection, `/v1/local-projects/memories?${query.toString()}`)
@@ -219,12 +257,35 @@ export function getHostedProjectMemory(connection: HostedConnection, workspace: 
   return hostedRequest(connection, `/v1/local-projects/memories/${encodeURIComponent(memoryID)}?workspace=${encodeURIComponent(workspace)}`)
 }
 
-export function listHostedRetrievalFeedback(connection: HostedConnection, workspace: string): Promise<{ feedback: HostedRetrievalRequest[] }> {
+export function listHostedRetrievalFeedback(connection: HostedConnection, workspace: string): Promise<{ feedback: HostedRetrievalRequest[] | null }> {
   return hostedRequest(connection, `/v1/local-project-feedback?workspace=${encodeURIComponent(workspace)}`)
 }
 
 export function submitHostedRetrievalFeedback(connection: HostedConnection, input: { workspace: string; request_id: string; score: number; reason: string; useful_count?: number; total_count?: number }): Promise<unknown> {
   return hostedRequest(connection, '/v1/local-project-feedback', { method: 'POST', body: JSON.stringify(input) })
+}
+
+export function listHostedProjectSolutions(connection: HostedConnection, workspace: string): Promise<{ episodes: import('./api').SolutionEpisodeRecord[] }> {
+  return hostedRequest(connection, `/v1/local-project-solutions?workspace=${encodeURIComponent(workspace)}&limit=100`)
+}
+
+export function getHostedProjectSolution(connection: HostedConnection, workspace: string, episodeID: string): Promise<{ detail: import('./api').SolutionEpisodeDetailRecord }> {
+  return hostedRequest(connection, `/v1/local-project-solutions?workspace=${encodeURIComponent(workspace)}&episode_id=${encodeURIComponent(episodeID)}`)
+}
+
+export function reviewHostedProjectSolution(connection: HostedConnection, input: {
+  workspace: string
+  episode_id: string
+  action: 'pin' | 'misleading' | 'redact' | 'correct' | 'supersede' | 'delete'
+  step_id?: string
+  reason?: string
+  reason_class?: string
+  summary?: string
+  successor_episode_id?: string
+  idempotency_key?: string
+  pinned?: boolean
+}): Promise<unknown> {
+  return hostedRequest(connection, '/v1/local-project-solutions/review', { method: 'POST', body: JSON.stringify(input) })
 }
 
 export function getHostedRightsAttestationStatus(connection: HostedConnection): Promise<HostedRightsAttestationStatus> {
@@ -372,3 +433,50 @@ export function importHostedBundle(connection: HostedConnection, file: File, pas
 export function getHostedImport(connection: HostedConnection, importID: string): Promise<HostedImportResult> {
   return hostedRequest(connection, `/v1/imports/${encodeURIComponent(importID)}`)
 }
+
+function hostedGraphQuery(connection: HostedConnection, configurationId?: string): string {
+  const query = new URLSearchParams({ workspace_id: connection.workspace })
+  if (configurationId) query.set('configuration_id', configurationId)
+  return query.toString()
+}
+
+export function getHostedGraphReadiness(connection: HostedConnection, signal?: AbortSignal): Promise<GraphReadiness> {
+  return hostedRequest(connection, `/v1/graph-index/readiness?${hostedGraphQuery(connection)}`, { signal })
+}
+
+export function getHostedGraphStatus(connection: HostedConnection, signal?: AbortSignal): Promise<GraphStatus> {
+  return hostedRequest(connection, `/v1/graph-index/status?${hostedGraphQuery(connection)}`, { signal })
+}
+
+export function getHostedGraphSnapshot(connection: HostedConnection, signal?: AbortSignal): Promise<GraphSnapshot> {
+  return hostedRequest(connection, `/v1/graph-index/explorer?${hostedGraphQuery(connection)}`, { signal })
+}
+
+export function recallHostedGraph(connection: HostedConnection, query: string, options: GraphAskOptions, signal?: AbortSignal): Promise<HostedGraphRecallResponse> {
+  return hostedRequest(connection, '/v1/graph-index/recall', {
+    method: 'POST',
+    signal,
+    body: JSON.stringify({
+      workspace_id: connection.workspace,
+      query,
+      mode: options.mode,
+      required: Boolean(options.required),
+      allow_stale: Boolean(options.allowStale),
+      limit: 50,
+    }),
+  })
+}
+
+export async function operateHostedGraph(connection: HostedConnection, configurationId: string, action: GraphOperationAction, expectedRevision?: string, jobId?: string): Promise<GraphStatus> {
+  const result = await hostedRequest<{ status: GraphStatus }>(connection, '/v1/graph-index/operations', { method: 'POST', body: JSON.stringify({ workspace_id: connection.workspace, configuration_id: configurationId, action, expected_revision: expectedRevision || '', job_id: jobId || '', idempotency_key: crypto.randomUUID() }) })
+  return result.status
+}
+
+export async function reviewHostedGraph(connection: HostedConnection, input: GraphReviewInput): Promise<void> {
+  await hostedRequest(connection, '/v1/graph-index/review', { method: 'POST', body: JSON.stringify({ scope: { workspace_id: connection.workspace }, action: input.action, target_kind: input.targetKind, target_id: input.targetId, from: input.from, to: input.to, expected_version: input.expectedVersion, reason: input.reason || '' }) })
+}
+
+export async function submitHostedGraphFeedback(connection: HostedConnection, requestId: string, targetKind: string, targetId: string, outcome: string, reason?: string): Promise<void> {
+  await hostedRequest(connection, '/v1/graph-index/feedback', { method: 'POST', body: JSON.stringify({ scope: { workspace_id: connection.workspace }, request_id: requestId, target_kind: targetKind, target_id: targetId, outcome, reason: reason || '', created_at: new Date().toISOString() }) })
+}
+import type { GraphAskOptions, GraphOperationAction, GraphReadiness, GraphRecallContext, GraphReviewInput, GraphRouteDecision, GraphSnapshot, GraphStatus } from './knowledgeGateway'

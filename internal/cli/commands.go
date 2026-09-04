@@ -16,6 +16,7 @@ import (
 	"github.com/taimufuraiyaa/agent-memory/internal/core"
 	"github.com/taimufuraiyaa/agent-memory/internal/embeddings"
 	"github.com/taimufuraiyaa/agent-memory/internal/engine"
+	graphretrieval "github.com/taimufuraiyaa/agent-memory/internal/retrieval"
 	"github.com/taimufuraiyaa/agent-memory/internal/storage/sqlite"
 )
 
@@ -34,6 +35,15 @@ func addCommonFlags(cmd *cobra.Command, f *commonFlags) {
 	cmd.Flags().StringVar(&f.modelDir, "model-dir", embeddings.DefaultModelDir(home), "Path to local embedding model directory")
 	cmd.Flags().StringVarP(&f.format, "format", "f", formatJSON, "Output format: json|raw")
 	cmd.Flags().StringVar(&f.apiURL, "api", "", "HTTP API base URL (overrides in-process mode)")
+}
+
+func addCommonPersistentFlags(cmd *cobra.Command, f *commonFlags) {
+	cmd.PersistentFlags().StringVar(&f.dbPath, "db", "", "Path to SQLite database file")
+	cmd.PersistentFlags().StringVarP(&f.workspace, "workspace", "w", "", "Workspace name")
+	home, _ := os.UserHomeDir()
+	cmd.PersistentFlags().StringVar(&f.modelDir, "model-dir", embeddings.DefaultModelDir(home), "Path to local embedding model directory")
+	cmd.PersistentFlags().StringVarP(&f.format, "format", "f", formatJSON, "Output format: json|raw")
+	cmd.PersistentFlags().StringVar(&f.apiURL, "api", "", "HTTP API base URL (overrides in-process mode)")
 }
 
 func newWriteCommand() *cobra.Command {
@@ -440,6 +450,8 @@ func newRecallCommand() *cobra.Command {
 	var observationSessionID string
 	var useAdaptiveBudget bool
 	var budgetPercentage float64
+	var graphMode string
+	var graphRequired, graphAllowStale bool
 
 	cmd := &cobra.Command{
 		Use:   "recall",
@@ -493,6 +505,10 @@ Budget Configuration:
 			if err := validateOutputFormat(flags.format, true); err != nil {
 				return err
 			}
+			normalizedGraphMode := graphretrieval.GraphQueryMode(strings.ToLower(strings.TrimSpace(graphMode)))
+			if normalizedGraphMode != "" && normalizedGraphMode != graphretrieval.GraphQueryBasic && normalizedGraphMode != graphretrieval.GraphQueryAuto && normalizedGraphMode != graphretrieval.GraphQueryLocal && normalizedGraphMode != graphretrieval.GraphQueryGlobal {
+				return fmt.Errorf("invalid graph mode: %s", graphMode)
+			}
 
 			// Handle adaptive budget sizing
 			if useAdaptiveBudget {
@@ -544,6 +560,9 @@ Budget Configuration:
 					"include_observations":   includeObservations,
 					"observation_limit":      observationLimit,
 					"observation_session_id": strings.TrimSpace(observationSessionID),
+					"graph_mode":             normalizedGraphMode,
+					"graph_required":         graphRequired,
+					"graph_allow_stale":      graphAllowStale,
 				}, &out)
 				if err != nil {
 					return err
@@ -571,6 +590,9 @@ Budget Configuration:
 				IncludeObservations:  includeObservations,
 				ObservationLimit:     observationLimit,
 				ObservationSessionID: observationSessionID,
+				GraphMode:            normalizedGraphMode,
+				GraphRequired:        graphRequired,
+				GraphAllowStale:      graphAllowStale,
 			}
 			memoryEnabled := engine.MemoryEnabled()
 			var store *sqlite.Store
@@ -613,6 +635,9 @@ Budget Configuration:
 	cmd.Flags().BoolVar(&includeObservations, "include-observations", false, "Include recent observation summaries (if available)")
 	cmd.Flags().IntVar(&observationLimit, "observation-limit", 10, "Recent observation count to include (max 50)")
 	cmd.Flags().StringVar(&observationSessionID, "observation-session-id", "", "Session ID for observations (default: most recent)")
+	cmd.Flags().StringVar(&graphMode, "graph-mode", "", "Graph enrichment: basic|auto|local_graph|global")
+	cmd.Flags().BoolVar(&graphRequired, "graph-required", false, "Fail if the selected graph route is unavailable")
+	cmd.Flags().BoolVar(&graphAllowStale, "graph-allow-stale", false, "Allow a stale active graph revision with degraded status")
 	_ = cmd.MarkFlagRequired("task")
 	return cmd
 }
@@ -793,7 +818,7 @@ func floatPtrIfChanged(cmd *cobra.Command, name string, v float64) *float64 {
 
 func newSessionEndCommand() *cobra.Command {
 	var flags commonFlags
-	var transcript string
+	var transcript, sessionID, principalID, terminalStatus, idempotencyKey string
 	cmd := &cobra.Command{
 		Use:   "session-end",
 		Short: "Extract and store memories from a session transcript",
@@ -819,7 +844,7 @@ func newSessionEndCommand() *cobra.Command {
 				}
 			}
 
-			if strings.TrimSpace(transcript) == "" {
+			if strings.TrimSpace(transcript) == "" && (strings.TrimSpace(sessionID) == "" || strings.TrimSpace(principalID) == "") {
 				return errors.New("transcript is required (use --transcript or pipe via stdin)")
 			}
 
@@ -832,12 +857,36 @@ func newSessionEndCommand() *cobra.Command {
 			if cfg.apiURL != "" {
 				var out any
 				err := postAPI(ctx, cfg.apiURL, "/api/v1/memories/session-end", map[string]any{
-					"transcript": transcript,
+					"transcript": transcript, "session_id": sessionID, "principal_id": principalID,
+					"terminal_status": terminalStatus, "idempotency_key": idempotencyKey,
 				}, &out)
 				if err != nil {
 					return err
 				}
 				return writeSuccessEnvelope(cmd.OutOrStdout(), "session-end", out)
+			}
+			if strings.TrimSpace(sessionID) != "" && strings.TrimSpace(principalID) != "" {
+				store, err := openStore(ctx, cfg)
+				if err != nil {
+					return err
+				}
+				out, structuredErr := application.RunSessionEnd(ctx, application.SessionEndInput{
+					Workspace: cfg.workspace, SessionID: sessionID, PrincipalID: principalID, Transcript: transcript,
+					TerminalStatus: core.SolutionEpisodeStatus(terminalStatus), IdempotencyKey: idempotencyKey,
+				}, store, nil)
+				closeErr := store.Close()
+				if !errors.Is(structuredErr, application.ErrSessionEndFallbackPipelineRequired) {
+					if structuredErr != nil {
+						return structuredErr
+					}
+					if closeErr != nil {
+						return closeErr
+					}
+					return writeSuccessEnvelope(cmd.OutOrStdout(), "session-end", out)
+				}
+				if closeErr != nil {
+					return closeErr
+				}
 			}
 			store, provider, err := openDeps(ctx, cfg)
 			if err != nil {
@@ -845,7 +894,10 @@ func newSessionEndCommand() *cobra.Command {
 			}
 			defer func() { _ = store.Close() }()
 			pipeline := engine.NewWritePipelineWithEmbedder(store, provider)
-			out, err := engine.RunSessionEndLifecycle(ctx, cfg.workspace, transcript, store, pipeline)
+			out, err := application.RunSessionEnd(ctx, application.SessionEndInput{
+				Workspace: cfg.workspace, SessionID: sessionID, PrincipalID: principalID, Transcript: transcript,
+				TerminalStatus: core.SolutionEpisodeStatus(terminalStatus), IdempotencyKey: idempotencyKey,
+			}, store, pipeline)
 			if err != nil {
 				return err
 			}
@@ -854,5 +906,9 @@ func newSessionEndCommand() *cobra.Command {
 	}
 	addCommonFlags(cmd, &flags)
 	cmd.Flags().StringVar(&transcript, "transcript", "", "Transcript text (or omit to read from stdin)")
+	cmd.Flags().StringVar(&sessionID, "session", "", "Structured episode session identifier")
+	cmd.Flags().StringVar(&principalID, "principal", "", "Structured episode principal identifier")
+	cmd.Flags().StringVar(&terminalStatus, "terminal-status", string(core.SolutionEpisodePartial), "Structured episode terminal status")
+	cmd.Flags().StringVar(&idempotencyKey, "idempotency-key", "", "Stable structured finalization retry key")
 	return cmd
 }

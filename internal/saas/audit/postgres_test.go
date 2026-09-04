@@ -1,4 +1,4 @@
-package audit
+package audit_test
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/taimufuraiyaa/agent-memory/internal/saas/audit"
 	saaspostgres "github.com/taimufuraiyaa/agent-memory/internal/saas/postgres"
 )
 
@@ -33,7 +34,7 @@ func TestPostgresAuditContractImmutabilitySearchAndArchiveReplay(t *testing.T) {
 
 	now := time.Date(2026, 8, 5, 2, 0, 0, 0, time.UTC)
 	tenantID := seedAuditTenant(t, ctx, pool, now)
-	repository := NewPostgresRepository(pool)
+	repository := audit.NewPostgresRepository(pool)
 	for index := 0; index < 2; index++ {
 		tx, err := pool.Begin(ctx)
 		if err != nil {
@@ -43,7 +44,7 @@ func TestPostgresAuditContractImmutabilitySearchAndArchiveReplay(t *testing.T) {
 			_ = tx.Rollback(ctx)
 			t.Fatal(err)
 		}
-		err = Append(ctx, tx, Event{TenantID: tenantID, ID: uuid.NewString(), OccurredAt: now.Add(time.Duration(index) * time.Second),
+		err = audit.Append(ctx, tx, audit.Event{TenantID: tenantID, ID: uuid.NewString(), OccurredAt: now.Add(time.Duration(index) * time.Second),
 			ActorType: "member", ActorID: "account", Service: "source", Operation: "source.read",
 			Outcome: "success", RequestID: "request", TraceID: "trace", TargetType: "source",
 			TargetID: "opaque-source", PolicyVersion: "policy-v1", ReasonCode: "authorized",
@@ -56,7 +57,7 @@ func TestPostgresAuditContractImmutabilitySearchAndArchiveReplay(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	events, err := repository.Search(ctx, tenantID, Filter{Operation: "source.read", Limit: 10})
+	events, err := repository.Search(ctx, tenantID, audit.Filter{Operation: "source.read", Limit: 10})
 	if err != nil || len(events) != 2 {
 		t.Fatalf("Search count=%d err=%v", len(events), err)
 	}
@@ -78,7 +79,7 @@ func TestPostgresAuditContractImmutabilitySearchAndArchiveReplay(t *testing.T) {
 	}
 	for _, record := range records {
 		value, _ := record.Event.JSON()
-		if err := repository.MarkArchived(ctx, record, ArchiveKey(record.Event), SHA256(value), archiveNow); err != nil {
+		if err := repository.MarkArchived(ctx, record, audit.ArchiveKey(record.Event), audit.SHA256(value), archiveNow); err != nil {
 			t.Fatal(err)
 		}
 	}

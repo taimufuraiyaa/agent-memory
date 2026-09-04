@@ -19,6 +19,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	baseobservability "github.com/taimufuraiyaa/agent-memory/internal/observability"
 	"github.com/taimufuraiyaa/agent-memory/internal/saas/auth"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -45,6 +46,7 @@ type Observer struct {
 	componentOps      *prometheus.CounterVec
 	componentDuration *prometheus.HistogramVec
 	costMicroUSD      *prometheus.CounterVec
+	graph             *baseobservability.GraphMetrics
 	evidenceMu        sync.Mutex
 	evidence          map[string]EvidenceObservation
 	now               func() time.Time
@@ -87,6 +89,7 @@ func newWithClock(service string, logger *slog.Logger, now func() time.Time) *Ob
 		now:               now,
 	}
 	registry.MustRegister(o.requests, o.duration, o.inFlight, o.componentOps, o.componentDuration, o.costMicroUSD)
+	o.graph = baseobservability.NewGraphMetrics(registry)
 	return o
 }
 

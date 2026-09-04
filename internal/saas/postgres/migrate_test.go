@@ -146,6 +146,55 @@ func TestLaunchPolicyMigrationsDefaultInternalAlphaSignupClosed(t *testing.T) {
 	}
 }
 
+func TestGraphIndexMigrationIsTenantScopedAndRollbackPreservesCanonicalData(t *testing.T) {
+	t.Parallel()
+	migrations := mustMigrations(t)
+	var graph *Migration
+	for index := range migrations {
+		if migrations[index].Version == "0029_graph_index" {
+			graph = &migrations[index]
+			break
+		}
+	}
+	if graph == nil {
+		t.Fatal("graph index migration is missing")
+	}
+
+	tables := []string{
+		"saas_graph_configurations", "saas_graph_revisions", "saas_graph_jobs",
+		"saas_graph_entities", "saas_graph_entity_versions", "saas_graph_entity_evidence",
+		"saas_graph_edges", "saas_graph_edge_versions", "saas_graph_edge_evidence",
+		"saas_graph_communities", "saas_graph_community_members", "saas_graph_reports",
+		"saas_graph_reviews", "saas_graph_feedback",
+	}
+	for _, table := range tables {
+		if !strings.Contains(graph.Up, "CREATE TABLE "+table) {
+			t.Errorf("graph migration missing table %s", table)
+		}
+		if !strings.Contains(graph.Up, "ALTER TABLE "+table+" FORCE ROW LEVEL SECURITY") {
+			t.Errorf("graph migration missing forced RLS for %s", table)
+		}
+		if !strings.Contains(graph.Down, "DROP TABLE IF EXISTS "+table) {
+			t.Errorf("graph rollback missing table %s", table)
+		}
+	}
+	for _, required := range []string{
+		"FOREIGN KEY (tenant_id, workspace_id)",
+		"current_setting('app.tenant_id', true)::uuid",
+		"UNIQUE (tenant_id, workspace_id, configuration_id, idempotency_key)",
+		"CHECK (trust IN ('proposed', 'reviewed', 'approved', 'rejected', 'superseded', 'quarantined', 'stale', 'deleted'))",
+	} {
+		if !strings.Contains(graph.Up, required) {
+			t.Errorf("graph migration missing %q", required)
+		}
+	}
+	for _, canonical := range []string{"saas_memories", "saas_sources", "saas_workspaces"} {
+		if strings.Contains(graph.Down, "DROP TABLE IF EXISTS "+canonical) {
+			t.Errorf("graph rollback must preserve canonical table %s", canonical)
+		}
+	}
+}
+
 func TestApplyRollbackAndTenantRLS(t *testing.T) {
 	connectionURL := strings.TrimSpace(os.Getenv("AGENT_MEMORY_TEST_POSTGRES_URL"))
 	if connectionURL == "" {

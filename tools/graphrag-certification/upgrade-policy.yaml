@@ -1,0 +1,20 @@
+schema: agent-memory-graphrag-upgrade-policy/v1
+dependency: graphrag
+current_version: 3.1.2
+adapter_version: 0.1.0
+adapter_contract: graph-adapter/v1
+artifact_schema: graph-artifact/v1
+automatic_version_updates: forbidden
+required_reviewers: [graph-index-owner, security, privacy, operations]
+required_checks:
+  - exact-pypi-pin-and-frozen-lock
+  - offline-wheelhouse-hashes
+  - sbom-license-and-no-high-vulnerabilities
+  - adapter-schema-golden-and-determinism
+  - full-and-incremental-canary
+  - normalized-artifact-diff
+  - shadow-quality-latency-and-cost
+  - signed-immutable-image
+  - staged-deployment-canary
+  - prior-image-and-active-revision-rollback
+configuration_rebuild_triggers: [adapter_version, graph_version, artifact_schema, prompt_fingerprint, model_route]

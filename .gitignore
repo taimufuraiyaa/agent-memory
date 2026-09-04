@@ -17,6 +17,10 @@ build/
 __pycache__/
 *.pyc
 *.pyo
+tools/graphrag-adapter/wheelhouse/
+tools/graphrag-adapter/sbom.cdx.json
+tools/graphrag-adapter/licenses.txt
+tools/graphrag-adapter/vulnerabilities.json
 
 # Dashboard source build (not embedded)
 tools/agent-memory/dashboard/dist/

@@ -1,28 +1,52 @@
 import {
+  createClientProfile,
   createNote as createStandaloneNote,
+  deleteClientProfile,
   deleteNotePermanently,
   deleteMemories as deleteStandaloneMemories,
   getStats,
+  getSolutionEpisode as getStandaloneSolutionEpisode,
   getNote as getStandaloneNote,
   importLibraryBook,
   listFeedback,
+  listClientProfiles,
   listNotes,
   listProjects,
   listRecentMemories,
+  listSchedulerHistory,
   listSessions,
+  listSolutionEpisodes,
+  listSkills,
+  listSkillLifecycle,
+  inspectSkillLifecycle,
+  operateSkillLifecycle,
+  getLibraryLocalLLMStatus,
+  getGraphReadiness,
+  getGraphSnapshot,
+  getGraphStatus,
   recallPreview,
+  operateGraph,
+  reviewGraph,
   restoreNote as restoreStandaloneNote,
+  reviewSolutionEpisode as reviewStandaloneSolutionEpisode,
   retryNoteIndex as retryStandaloneNoteIndex,
   searchMemories,
   setMemoryPinned,
   studyProject,
   submitRequestFeedback,
+  submitGraphFeedback,
+  saveLibraryLocalLLM,
+  testLibraryLocalLLM,
+  translateLibraryAnswer,
   trashNote as trashStandaloneNote,
   updateNote as updateStandaloneNote,
+  updateClientProfile,
   type MemoryEntry,
   type RightsBasis,
 } from '../api'
 import {
+  ACTIVITY_PAGE_SIZE,
+  type ActivityFilter,
   type ActivityItem,
   type AskResponse,
   type CursorPage,
@@ -34,6 +58,7 @@ import {
   type WorkspaceSummary,
   type WorkspaceNote,
 } from '../knowledgeGateway'
+import { solutionActivityItem, solutionDetail } from './solutionEpisodeAdapter'
 
 function memoryResult(memory: MemoryEntry, score?: number, explanation?: string): KnowledgeResult {
   return {
@@ -78,10 +103,12 @@ function workspaceNote(note: import('../api').NoteDocument): WorkspaceNote {
 
 export function createStandaloneKnowledgeGateway(): KnowledgeGateway {
   const runtimeActivity: ActivityItem[] = []
+  const capabilities = new Set<import('../knowledgeGateway').KnowledgeCapability>(['workspace', 'ask', 'search', 'browse', 'source', 'study', 'note', 'activity', 'settings', 'lifecycle', 'clients', 'skills', 'translation', 'graph'])
   const recordActivity = (item: Omit<ActivityItem, 'updatedAt'>) => runtimeActivity.unshift({ ...item, updatedAt: new Date().toISOString() })
   return {
     runtime: 'standalone',
-    capabilities: new Set(['workspace', 'ask', 'search', 'browse', 'source', 'study', 'note', 'activity', 'settings']),
+    capabilities,
+    supports(capability) { return capabilities.has(capability) },
     async listWorkspaces() {
       const response = await listProjects()
       return response.projects.map<WorkspaceSummary>((project) => ({
@@ -96,20 +123,30 @@ export function createStandaloneKnowledgeGateway(): KnowledgeGateway {
         capabilities: ['workspace', 'ask', 'search', 'browse', 'source', 'study', 'note', 'activity', 'settings'],
       }))
     },
-    async ask(scope, question) {
-      const response = await recallPreview({ workspace: scope.workspaceId, task_description: question, top_k: 50, token_budget: 4000, explain: true, include_memories: true })
+    async ask(scope, question, options = { mode: 'basic' }, signal) {
+      const response = await recallPreview({ workspace: scope.workspaceId, task_description: question, top_k: 50, token_budget: 4000, explain: true, include_memories: true, graph_mode: options.mode, graph_required: options.required, graph_allow_stale: options.allowStale }, signal)
       const inSource = (memory: MemoryEntry) => !scope.sourceId || (scope.sourceId.startsWith('codebase:') ? !memory.source?.note_id : memory.source?.note_id === scope.sourceId)
       const durableMemory = (response.memories_included_full || []).filter(inSource).map((memory) => memoryResult(memory))
       const weakContext = (response.weak_memories || []).filter(inSource).map((memory) => memoryResult(memory))
       return {
+        requestId: response.graph_request_id,
         answerable: durableMemory.length > 0,
         answer: durableMemory.length ? (scope.sourceId ? durableMemory.map((memory) => memory.content).join('\n\n') : response.context_block) : undefined,
         sourceEvidence: [],
         durableMemory,
         weakContext,
+        graphRoute: response.graph_route,
+        graphContext: response.graph_context,
         unavailableReason: durableMemory.length ? undefined : 'No grounded durable memory was found in this workspace.',
       } satisfies AskResponse
     },
+    async translateAnswer(scope, text, targetLanguage, signal) {
+      const result = await translateLibraryAnswer({ workspace: scope.workspaceId, text, target_language: targetLanguage }, signal)
+      return { text: result.text, targetLanguage: result.target_language, provider: result.provider, model: result.model }
+    },
+    async getTranslationStatus() { return getLibraryLocalLLMStatus() },
+    async testTranslationSettings(input) { return testLibraryLocalLLM(input) },
+    async saveTranslationSettings(input) { return saveLibraryLocalLLM(input) },
     async search(scope, query, cursor) {
       const offset = numericCursor(cursor)
       const limit = 20
@@ -120,7 +157,7 @@ export function createStandaloneKnowledgeGateway(): KnowledgeGateway {
     async browse(scope, mode, cursor) {
       const offset = numericCursor(cursor)
       const limit = 20
-      const response = await listRecentMemories({ workspace: scope.workspaceId, limit: Math.min(200, offset + limit + 1) })
+      const response = await listRecentMemories({ workspace: scope.workspaceId, limit: mode === 'ungrouped' ? 200 : Math.min(200, offset + limit + 1), ungrouped: mode === 'ungrouped' })
       const filtered = mode === 'pinned' ? response.results.filter((memory) => memory.pinned) : response.results
       const page = filtered.slice(offset, offset + limit)
       return { items: page.map((memory) => memoryResult(memory)), nextCursor: filtered.length > offset + limit ? String(offset + limit) : undefined }
@@ -226,10 +263,11 @@ export function createStandaloneKnowledgeGateway(): KnowledgeGateway {
     async retryNoteIndex(scope, noteId) {
       await retryStandaloneNoteIndex({ workspace: scope.workspaceId, note_id: noteId })
     },
-    async listActivity(scope, cursor) {
-      const [sessionsResponse, feedback] = await Promise.all([listSessions({ workspace: scope.workspaceId, limit: 100 }), listFeedback({ workspace: scope.workspaceId })])
+    async listActivity(scope, cursor, filter: ActivityFilter = 'all') {
+    const [sessionsResponse, feedback, solutions] = await Promise.all([listSessions({ workspace: scope.workspaceId, limit: 100 }), listFeedback({ workspace: scope.workspaceId }), listSolutionEpisodes({ workspace: scope.workspaceId, limit: 100 })])
       const items: ActivityItem[] = [
         ...runtimeActivity.filter((item) => item.workspaceId === scope.workspaceId),
+    ...solutions.episodes.map(solutionActivityItem),
         ...sessionsResponse.sessions.map((session) => ({ id: `session:${session.session_id}`, workspaceId: scope.workspaceId, kind: 'session' as const, title: `Agent session ${session.session_id}`, state: session.ended_at ? 'completed' as const : 'running' as const, updatedAt: session.last_seen_at })),
         ...feedback.map((request) => ({
           id: `retrieval:${request.id}`,
@@ -249,19 +287,52 @@ export function createStandaloneKnowledgeGateway(): KnowledgeGateway {
           },
         })),
       ].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+      const filteredItems = filter === 'all' ? items : items.filter((item) => item.kind === filter)
       const offset = numericCursor(cursor)
-      const page = items.slice(offset, offset + 20)
-      return { items: page, nextCursor: items.length > offset + 20 ? String(offset + 20) : undefined }
+      const page = filteredItems.slice(offset, offset + ACTIVITY_PAGE_SIZE)
+      return { items: page, nextCursor: filteredItems.length > offset + ACTIVITY_PAGE_SIZE ? String(offset + ACTIVITY_PAGE_SIZE) : undefined }
     },
     async retryActivity() {
       throw new Error('This activity cannot be retried from the unified timeline.')
     },
+    async listHowHistory(scope) {
+      const response = await listSolutionEpisodes({ workspace: scope.workspaceId, limit: 100 })
+      return response.episodes.map((record) => solutionActivityItem(record).episode!)
+    },
+    async getSolutionEpisode(scope, episodeId) {
+      return solutionDetail((await getStandaloneSolutionEpisode({ workspace: scope.workspaceId, episode_id: episodeId })).detail)
+    },
+    async reviewSolutionEpisode(scope, input) {
+      await reviewStandaloneSolutionEpisode({ workspace: scope.workspaceId, principal_id: input.principalId, episode_id: input.episodeId, action: input.action,
+        step_id: input.stepId, reason: input.reason, reason_class: input.reasonClass, summary: input.summary,
+        successor_episode_id: input.successorEpisodeId, idempotency_key: input.idempotencyKey, pinned: input.pinned })
+    },
     async submitFeedback(scope, requestId, score, reason) {
       await submitRequestFeedback({ workspace: scope.workspaceId, request_id: requestId, score, reason })
     },
+    async listLifecycle(scope) {
+      const [stats, response] = await Promise.all([getStats(scope.workspaceId), listSchedulerHistory({ workspace: scope.workspaceId, limit: 100 })])
+      return { scheduler: stats.scheduler, history: response.history || [] }
+    },
+    async listSkills(scope) {
+      return listSkills({ workspace: scope.workspaceId })
+    },
+    async listSkillLifecycle(scope) { return listSkillLifecycle({ workspace: scope.workspaceId }) },
+    async inspectSkillLifecycle(scope, skillId, environment) { return inspectSkillLifecycle({ workspace: scope.workspaceId, skill_id: skillId, environment }) },
+    async operateSkillLifecycle(scope, actor, operation, payload) { return operateSkillLifecycle({ workspace: scope.workspaceId, actor, operation, payload }) },
+    async listClientProfiles() { return listClientProfiles() },
+    async createClientProfile(input) { return createClientProfile(input) },
+    async updateClientProfile(input) { return updateClientProfile(input) },
+    async deleteClientProfile(input) { return deleteClientProfile(input) },
     async getSettings(scope) {
       return getStats(scope.workspaceId)
     },
+    async getGraphReadiness(scope, signal) { return getGraphReadiness(scope, signal) },
+    async getGraphStatus(scope, signal) { return getGraphStatus(scope, signal) },
+    async getGraphSnapshot(scope, signal) { return getGraphSnapshot(scope, signal) },
+    async operateGraph(scope, configurationId, action, expectedRevision, jobId) { return operateGraph(scope, configurationId, action, expectedRevision, jobId) },
+    async reviewGraph(scope, input) { return reviewGraph(scope, input) },
+    async submitGraphFeedback(scope, requestId, targetKind, targetId, outcome, reason) { return submitGraphFeedback(scope, requestId, targetKind, targetId, outcome, reason) },
     async importMigration() {
       throw new Error('Standalone workspaces export migration copies from System > Migration.')
     },

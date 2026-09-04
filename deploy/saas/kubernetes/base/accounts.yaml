@@ -21,3 +21,9 @@ kind: ServiceAccount
 metadata:
   name: agent-memory-migration
 automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: agent-memory-graph-worker
+automountServiceAccountToken: false

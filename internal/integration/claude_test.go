@@ -33,11 +33,15 @@ func TestClaudeAdapterPreservesOtherMCPServersAndHooks(t *testing.T) {
 	}
 	mcp, _ := os.ReadFile(filepath.Join(root, ".mcp.json"))
 	settings, _ := os.ReadFile(filepath.Join(settingsDir, "settings.json"))
+	rules, _ := os.ReadFile(filepath.Join(root, "CLAUDE.md"))
 	if !strings.Contains(string(mcp), "custom-mcp") || strings.Count(string(mcp), `"agent-memory"`) != 1 {
 		t.Fatalf("unexpected mcp config: %s", mcp)
 	}
 	if !strings.Contains(string(settings), "custom-hook") {
 		t.Fatalf("custom hook was not preserved: %s", settings)
+	}
+	if !strings.Contains(string(rules), "agent-memory operating contract:") {
+		t.Fatalf("Claude connection did not install the memory contract: %s", rules)
 	}
 	for _, event := range []string{"SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PreCompact", "Stop"} {
 		if !strings.Contains(string(settings), `--event `+event) {
@@ -54,7 +58,11 @@ func TestClaudeAdapterPreservesOtherMCPServersAndHooks(t *testing.T) {
 	}
 	mcp, _ = os.ReadFile(filepath.Join(root, ".mcp.json"))
 	settings, _ = os.ReadFile(filepath.Join(settingsDir, "settings.json"))
+	rules, _ = os.ReadFile(filepath.Join(root, "CLAUDE.md"))
 	if strings.Contains(string(mcp), `"agent-memory"`) || strings.Contains(string(settings), "agent-memory managed hook") || !strings.Contains(string(mcp), "custom-mcp") || !strings.Contains(string(settings), "custom-hook") {
 		t.Fatalf("disconnect damaged user config: mcp=%s settings=%s", mcp, settings)
+	}
+	if strings.Contains(string(rules), "## agent-memory (MANDATORY)") {
+		t.Fatalf("disconnect left managed Claude rules: %s", rules)
 	}
 }

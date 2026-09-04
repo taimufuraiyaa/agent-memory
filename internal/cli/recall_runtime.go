@@ -12,16 +12,20 @@ import (
 	"github.com/taimufuraiyaa/agent-memory/internal/application"
 	"github.com/taimufuraiyaa/agent-memory/internal/embeddings"
 	"github.com/taimufuraiyaa/agent-memory/internal/engine"
+	graphretrieval "github.com/taimufuraiyaa/agent-memory/internal/retrieval"
 	"github.com/taimufuraiyaa/agent-memory/internal/storage/sqlite"
 )
 
 type recallRequest struct {
-	Task                 string `json:"task"`
-	TopK                 int    `json:"top_k"`
-	Budget               int    `json:"budget"`
-	IncludeObservations  bool   `json:"include_observations,omitempty"`
-	ObservationLimit     int    `json:"observation_limit,omitempty"`
-	ObservationSessionID string `json:"observation_session_id,omitempty"`
+	Task                 string                        `json:"task"`
+	TopK                 int                           `json:"top_k"`
+	Budget               int                           `json:"budget"`
+	IncludeObservations  bool                          `json:"include_observations,omitempty"`
+	ObservationLimit     int                           `json:"observation_limit,omitempty"`
+	ObservationSessionID string                        `json:"observation_session_id,omitempty"`
+	GraphMode            graphretrieval.GraphQueryMode `json:"graph_mode,omitempty"`
+	GraphRequired        bool                          `json:"graph_required,omitempty"`
+	GraphAllowStale      bool                          `json:"graph_allow_stale,omitempty"`
 }
 
 func openStore(ctx context.Context, cfg runtimeConfig) (*sqlite.Store, error) {
@@ -175,9 +179,27 @@ func executeRecall(
 		IncludeObservations: req.IncludeObservations,
 		ObservationSession:  req.ObservationSessionID,
 		ObservationLimit:    req.ObservationLimit,
+		GraphMode:           req.GraphMode,
+		GraphRequired:       req.GraphRequired,
+		GraphPolicy: graphretrieval.GraphRoutePolicy{
+			GraphEnabled: req.GraphMode != "" && req.GraphMode != graphretrieval.GraphQueryBasic,
+			AllowLocal:   true, AllowGlobal: true, AllowStale: req.GraphAllowStale,
+		},
 	})
 	if err != nil {
 		return nil, "", err
+	}
+	var howResult *engine.HowRecallResult
+	if engine.IsHowOrientedTask(task) {
+		how, howErr := engine.NewHowRecallService(store).Recall(ctx, engine.HowRecallInput{
+			Workspace: cfg.workspace, Task: task, TokenBudget: req.Budget,
+			SessionID: req.ObservationSessionID,
+		})
+		if howErr != nil {
+			return nil, "", howErr
+		}
+		result.ContextBlock = engine.AppendHowRecallContext(result.ContextBlock, how)
+		howResult = &how
 	}
 	// Flush benchmark instrumentation metrics after each recall.
 	_ = engine.FlushBenchmarkMetrics()
@@ -206,7 +228,13 @@ func executeRecall(
 		"search_probe":           result.Decision.Probe,
 		"deep_recall_used":       result.Decision.Strategy != engine.RecallStrategySearchSatisfied,
 		"reconstruction":         result.Reconstruction,
+		"graph_route":            result.GraphRoute,
+		"graph_context":          result.GraphContext,
 		"benchmark_metrics":      engine.SnapshotBenchmarkMetrics(),
+	}
+	if howResult != nil {
+		payload["how_recall"] = howResult
+		payload["how_request_id"] = howResult.RequestID
 	}
 	return payload, result.ContextBlock, nil
 }

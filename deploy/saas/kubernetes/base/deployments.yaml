@@ -232,3 +232,80 @@ spec:
         - name: tmp
           emptyDir:
             sizeLimit: 256Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agent-memory-graph-worker
+spec:
+  # Enabled by the graph worker rollout only after its queue and credentials are configured.
+  replicas: 0
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: graph-worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: graph-worker
+        agent-memory.io/network-tier: graph-worker
+    spec:
+      serviceAccountName: agent-memory-graph-worker
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: graph-worker
+          image: agent-memory-graph-worker@sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: AGENT_MEMORY_SAAS_SERVICE
+              value: graph-worker
+            - name: AGENT_MEMORY_GRAPHRAG_ENABLED
+              value: "false"
+          envFrom:
+            - configMapRef:
+                name: agent-memory-runtime
+            - secretRef:
+                name: agent-memory-graph-worker-secrets
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: metrics
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: metrics
+            periodSeconds: 20
+            timeoutSeconds: 2
+            failureThreshold: 3
+          ports:
+            - name: metrics
+              containerPort: 9090
+          resources:
+            requests:
+              cpu: "1"
+              memory: 2Gi
+            limits:
+              cpu: "4"
+              memory: 8Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: graph-job
+              mountPath: /graph-job
+      volumes:
+        - name: graph-job
+          emptyDir:
+            sizeLimit: 20Gi

@@ -21,6 +21,11 @@ test('workspace shell has explicit desktop, tablet, and mobile layouts', () => {
   assert.match(cssSource, /min-width:\s*0/)
 })
 
+test('wide workspace canvas uses the available main-column width', () => {
+  assert.match(cssSource, /\.workspaceCanvas\s*\{[^}]*width:\s*100%[^}]*max-width:\s*none/s)
+  assert.doesNotMatch(cssSource, /\.workspaceCanvas\s*\{[^}]*min\(1500px,\s*100%\)/s)
+})
+
 test('direct workspace routes wait for discovery before mounting scoped views', () => {
   assert.match(workspaceAppSource, /const workspaceReady = Boolean\(workspace\)/)
   for (const view of ['AskView', 'MemoryExplorer', 'SourcesView', 'NotesView', 'ActivityView', 'SettingsView', 'SourceImportDialog']) {

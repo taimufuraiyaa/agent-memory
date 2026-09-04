@@ -1,0 +1,39 @@
+groups:
+  - name: agent-memory-graphrag-derived-index
+    interval: 30s
+    rules:
+      - alert: AgentMemoryGraphRevisionStale
+        expr: max(agent_memory_graph_revision_age_seconds{freshness=~"stale|degraded"}) > 7200
+        for: 15m
+        labels: {severity: ticket, owner: graph-index-oncall}
+        annotations: {summary: Graph derived index is outside the approved freshness window, runbook: docs/operations/graphrag-incident.md}
+      - alert: AgentMemoryGraphQueueAgeHigh
+        expr: histogram_quantile(0.95, sum by (le) (rate(agent_memory_graph_queue_age_seconds_bucket[15m]))) > 1800
+        for: 15m
+        labels: {severity: ticket, owner: graph-index-oncall}
+        annotations: {summary: Graph indexing queue age is above the freshness budget, runbook: docs/operations/graphrag-incident.md}
+      - alert: AgentMemoryGraphJobFailures
+        expr: sum(increase(agent_memory_graph_operations_total{stage="index",outcome="failed"}[15m])) > 2
+        for: 5m
+        labels: {severity: page, owner: graph-index-oncall}
+        annotations: {summary: Graph indexing jobs are repeatedly failing, runbook: docs/operations/graphrag-incident.md}
+      - alert: AgentMemoryGraphDeadLetter
+        expr: increase(agent_memory_graph_dead_letters_total[10m]) > 0
+        for: 1m
+        labels: {severity: page, owner: graph-index-oncall}
+        annotations: {summary: A GraphRAG indexing job entered dead letter state, runbook: docs/operations/graphrag-incident.md}
+      - alert: AgentMemoryGraphHourlyCostHigh
+        expr: sum(increase(agent_memory_graph_cost_microusd_total[1h])) > 50000000
+        for: 15m
+        labels: {severity: ticket, owner: product-finance}
+        annotations: {summary: Graph indexing exceeded the approved provisional hourly cost budget, runbook: docs/operations/graphrag.md}
+      - alert: AgentMemoryGraphStorageCapacityHigh
+        expr: sum(agent_memory_graph_storage_bytes) > 21474836480
+        for: 30m
+        labels: {severity: ticket, owner: graph-index-oncall}
+        annotations: {summary: Graph derived-index storage exceeds the provisional workspace capacity budget, runbook: docs/operations/graphrag.md}
+      - alert: AgentMemoryGraphArtifactRejected
+        expr: sum(increase(agent_memory_graph_records_total{kind="rejected"}[10m])) > 0
+        for: 1m
+        labels: {severity: page, owner: security-oncall}
+        annotations: {summary: A GraphRAG artifact failed the normalized admission boundary, runbook: docs/operations/graphrag-incident.md}

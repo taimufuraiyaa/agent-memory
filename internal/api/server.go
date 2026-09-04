@@ -29,8 +29,12 @@ import (
 )
 
 type Service struct {
-	Workspace              string
-	BaseDir                string
+	Workspace   string
+	BaseDir     string
+	ProjectRoot string
+	// DBPath binds a fixed standalone workspace to an exact database file.
+	// It is ignored for daemon and alternate-workspace resolution.
+	DBPath                 string
 	EmbeddingProvider      embeddings.Provider
 	Scheduler              Scheduler
 	LibraryRoleRunner      readingroom.RoleRunner
@@ -41,6 +45,13 @@ type Service struct {
 	DeploymentProfile      *deploymentprofile.Store
 	LocalLLMStore          *localllm.Store
 	LocalLLMChecker        *localllm.Checker
+	// GraphOperations is optional and primarily supports embedding/tests. When
+	// nil, handlers bind a controller to the resolved workspace store.
+	GraphOperations           application.GraphOperationController
+	SkillEvaluationRunner     application.RestrictedSkillEvaluationRunner
+	SkillApprovalAuthorizer   application.SkillApprovalAuthorizer
+	SkillResolutionAuthorizer application.SkillResolutionAuthorizer
+	SkillMutationAuthorizer   SkillMutationAuthorizer
 
 	mu             sync.RWMutex
 	stores         map[string]*workspaceAssets
@@ -58,6 +69,7 @@ type workspaceAssets struct {
 	Retrieval   *engine.RetrievalEngine
 	Application *application.MemoryService
 	Notes       *application.NoteService
+	Solutions   *application.SolutionService
 	Clipper     *engine.TokenClipper
 }
 
@@ -69,6 +81,9 @@ func (s *Service) resolve(ctx context.Context, ws string) (*workspaceAssets, err
 		return nil, errors.New("workspace is required")
 	}
 	dbPath := filepath.Join(s.BaseDir, ws+".db")
+	if ws == strings.TrimSpace(s.Workspace) && strings.TrimSpace(s.DBPath) != "" {
+		dbPath = filepath.Clean(s.DBPath)
+	}
 	// A daemon has no fixed workspace and routes exclusively through the
 	// registry. A fixed-workspace embedded service preserves its legacy path.
 	if strings.TrimSpace(s.Workspace) == "" || ws != s.Workspace {
@@ -118,6 +133,7 @@ func (s *Service) resolve(ctx context.Context, ws string) (*workspaceAssets, err
 		Retrieval:   retrieval,
 		Application: application.NewMemoryService(store, writer, retrieval),
 		Notes:       application.NewNoteService(store, writer),
+		Solutions:   application.NewSolutionService(store, engine.NewSolutionAdmissionPolicy(), application.WithSolutionWriter(writer)),
 		Clipper:     engine.NewTokenClipper(nil),
 	}
 	if s.stores == nil {
@@ -279,6 +295,22 @@ func NewMux(svc *Service) *http.ServeMux {
 	sessionEnd := sessionEndHandler(svc)
 	mux.HandleFunc("/api/v1/memories/session-end", sessionEnd)
 	mux.HandleFunc("/api/v1/sessions/end", sessionEnd)
+	mux.HandleFunc("/api/v1/solutions/start", solutionStartHandler(svc))
+	mux.HandleFunc("/api/v1/solutions/recall", solutionRecallHandler(svc))
+	mux.HandleFunc("/api/v1/solutions/promote", solutionPromoteHandler(svc))
+	mux.HandleFunc("/api/v1/solutions/tool-events", solutionToolEventHandler(svc))
+	mux.HandleFunc("/api/v1/solutions/tool-lessons/derive", solutionToolLessonDeriveHandler(svc))
+	mux.HandleFunc("/api/v1/solutions/tool-lessons/promote", solutionToolLessonPromoteHandler(svc))
+	mux.HandleFunc("/api/v1/solutions/steps", solutionStepHandler(svc))
+	mux.HandleFunc("/api/v1/solutions/checkpoint", solutionCheckpointHandler(svc))
+	mux.HandleFunc("/api/v1/solutions/state", solutionStateHandler(svc))
+	mux.HandleFunc("/api/v1/solutions/transition", solutionTransitionHandler(svc))
+	mux.HandleFunc("/api/v1/solutions/handoff", solutionHandoffHandler(svc))
+	mux.HandleFunc("/api/v1/solutions/activity", solutionActivityHandler(svc))
+	mux.HandleFunc("/api/v1/solutions/review", solutionReviewHandler(svc))
+	mux.HandleFunc("/api/v1/skills/lifecycle/list", skillListHandler(svc))
+	mux.HandleFunc("/api/v1/skills/inspect", skillInspectHandler(svc))
+	mux.HandleFunc("/api/v1/skills/lifecycle", skillLifecycleHandler(svc))
 	mux.HandleFunc("/api/v1/projects/init", projectsInitHandler(svc))
 	mux.HandleFunc("/api/v1/projects/rename", projectsRenameHandler(svc))
 	mux.HandleFunc("/api/v1/projects/list", projectsListHandler(svc))
@@ -305,6 +337,12 @@ func NewMux(svc *Service) *http.ServeMux {
 
 	mux.HandleFunc("/api/v1/dashboard", workspaceDashboardHandler(svc))
 	mux.HandleFunc("/api/v1/graph", workspaceGraphHandler(svc))
+	mux.HandleFunc("/api/v1/graph-index/readiness", graphIndexReadinessHandler(svc))
+	mux.HandleFunc("/api/v1/graph-index/status", graphIndexStatusHandler(svc))
+	mux.HandleFunc("/api/v1/graph-index/operations", graphIndexOperationHandler(svc))
+	mux.HandleFunc("/api/v1/graph-index/explorer", graphExplorerHandler(svc))
+	mux.HandleFunc("/api/v1/graph-index/review", graphReviewHandler(svc))
+	mux.HandleFunc("/api/v1/graph-index/feedback", graphFeedbackHandler(svc))
 	mux.HandleFunc("/api/v1/stats", workspaceStatsHandler(svc))
 	mux.HandleFunc("/api/v1/advisor", advisorHandler(svc))
 	mux.HandleFunc("/api/v1/requests/feedback", requestsFeedbackHandler(svc))
@@ -321,6 +359,7 @@ func NewMux(svc *Service) *http.ServeMux {
 	mux.HandleFunc("/api/v1/library/imports", libraryImportHandler(svc))
 	mux.HandleFunc("/api/v1/library/local-llm", libraryLocalLLMHandler(svc))
 	mux.HandleFunc("/api/v1/library/local-llm/test", libraryLocalLLMTestHandler(svc))
+	mux.HandleFunc("/api/v1/library/local-llm/translate", libraryLocalLLMTranslateHandler(svc))
 	mux.HandleFunc("/api/v1/library/jobs", libraryJobHandler(svc))
 	mux.HandleFunc("/api/v1/library/structure", libraryStructureHandler(svc))
 	mux.HandleFunc("/api/v1/library/query", libraryQueryHandler(svc))
@@ -337,6 +376,7 @@ func NewMux(svc *Service) *http.ServeMux {
 
 	// Serve embedded dashboard assets
 	mux.Handle("/dashboard/", serveDashboard())
+	mux.Handle("/w/", serveWorkspaceDashboard())
 
 	return mux
 }
@@ -421,4 +461,19 @@ func serveDashboard() http.Handler {
 		}))
 	}
 	return http.StripPrefix("/dashboard/", dashboard.GetEmbeddedHandler())
+}
+
+func serveWorkspaceDashboard() http.Handler {
+	assets := dashboard.GetEmbeddedHandler()
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			writeErr(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+			return
+		}
+		clone := r.Clone(r.Context())
+		urlCopy := *r.URL
+		urlCopy.Path = "/"
+		clone.URL = &urlCopy
+		assets.ServeHTTP(w, clone)
+	})
 }

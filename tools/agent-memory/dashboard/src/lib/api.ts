@@ -3,7 +3,7 @@ export type MemoryType = 'episodic' | 'semantic' | 'procedural' | 'outcome'
 export type StorageTier = 'markdown' | 'vector' | 'vector+graph' | 'document' | 'cold'
 export type NoteIndexState = 'pending' | 'indexing' | 'ready' | 'failed' | 'retired' | 'paused'
 
-export type ClientKind = 'codex' | 'claude' | 'cursor' | 'other'
+export type ClientKind = 'codex' | 'claude' | 'cursor' | 'kiro' | 'other'
 export type ClientToolProfile = 'default' | 'expanded'
 
 export type ClientProfile = {
@@ -144,6 +144,13 @@ export type LocalLLMStatus = {
   text_model_available: boolean
   vision_model_available?: boolean
   error?: string
+}
+
+export type LocalTranslationResult = {
+  text: string
+  target_language: string
+  provider: string
+  model: string
 }
 
 export type LibraryStructuralNode = {
@@ -568,6 +575,9 @@ export type RecallPreviewResponse = {
   requested_top_k: number
   requested_budget: number
   retrieval_policy?: RetrievalPolicy
+  graph_route?: GraphRouteDecision
+  graph_context?: GraphRecallContext
+  graph_request_id?: string
 }
 
 export type BenchmarkClusterSummary = {
@@ -894,6 +904,10 @@ export function saveLibraryLocalLLM(input: LocalLLMConfig): Promise<LocalLLMStat
   return api('/api/v1/library/local-llm', { method: 'PUT', body: JSON.stringify(input) })
 }
 
+export function translateLibraryAnswer(input: { workspace: string; text: string; target_language: string }, signal?: AbortSignal): Promise<LocalTranslationResult> {
+  return api('/api/v1/library/local-llm/translate', { method: 'POST', body: JSON.stringify(input), signal })
+}
+
 export function getLibraryStructure(input: { workspace: string; principal_id?: string; edition_id: string }): Promise<{ edition_id: string; nodes: LibraryStructuralNode[] }> {
   const qs = new URLSearchParams({ workspace: input.workspace, edition_id: input.edition_id })
   if (input.principal_id) qs.set('principal_id', input.principal_id)
@@ -982,10 +996,11 @@ export type RecentMemoriesResponse = {
   limit: number
 }
 
-export function listRecentMemories(input: { workspace: string; limit?: number }): Promise<RecentMemoriesResponse> {
+export function listRecentMemories(input: { workspace: string; limit?: number; ungrouped?: boolean }): Promise<RecentMemoriesResponse> {
   const qs = new URLSearchParams()
   qs.set('workspace', input.workspace)
   if (typeof input.limit === 'number') qs.set('limit', String(input.limit))
+  if (input.ungrouped) qs.set('ungrouped', 'true')
   return api(`/api/v1/memories/recent?${qs.toString()}`, { method: 'GET' })
 }
 
@@ -1042,11 +1057,46 @@ export function recallPreview(input: {
   token_budget: number
   explain: boolean
   include_memories: boolean
-}): Promise<RecallPreviewResponse> {
+  graph_mode?: 'basic' | 'auto' | 'local_graph' | 'global'
+  graph_required?: boolean
+  graph_allow_stale?: boolean
+}, signal?: AbortSignal): Promise<RecallPreviewResponse> {
   return api('/api/v1/memories/recall/preview', {
     method: 'POST',
     body: JSON.stringify(input),
+    signal,
   })
+}
+
+function graphQuery(scope: { workspaceId: string }, configurationId?: string): string {
+  const query = new URLSearchParams({ workspace: scope.workspaceId })
+  if (configurationId) query.set('configuration_id', configurationId)
+  return query.toString()
+}
+
+export function getGraphReadiness(scope: { workspaceId: string }, signal?: AbortSignal): Promise<GraphReadiness> {
+  return api(`/api/v1/graph-index/readiness?${graphQuery(scope)}`, { signal })
+}
+
+export function getGraphStatus(scope: { workspaceId: string }, signal?: AbortSignal): Promise<GraphStatus> {
+  return api(`/api/v1/graph-index/status?${graphQuery(scope)}`, { signal })
+}
+
+export function getGraphSnapshot(scope: { workspaceId: string }, signal?: AbortSignal): Promise<GraphSnapshot> {
+  return api(`/api/v1/graph-index/explorer?${graphQuery(scope)}`, { signal })
+}
+
+export async function operateGraph(scope: { workspaceId: string }, configurationId: string, action: GraphOperationAction, expectedRevision?: string, jobId?: string): Promise<GraphStatus> {
+  const result = await api<{ status: GraphStatus }>('/api/v1/graph-index/operations', { method: 'POST', body: JSON.stringify({ scope: { workspace_id: scope.workspaceId }, configuration_id: configurationId, action, expected_revision: expectedRevision || '', job_id: jobId || '', idempotency_key: crypto.randomUUID() }) })
+  return result.status
+}
+
+export async function reviewGraph(scope: { workspaceId: string }, input: GraphReviewInput): Promise<void> {
+  await api('/api/v1/graph-index/review', { method: 'POST', body: JSON.stringify({ scope: { workspace_id: scope.workspaceId }, action: input.action, target_kind: input.targetKind, target_id: input.targetId, from: input.from, to: input.to, expected_version: input.expectedVersion, reason: input.reason || '' }) })
+}
+
+export async function submitGraphFeedback(scope: { workspaceId: string }, requestId: string, targetKind: string, targetId: string, outcome: string, reason?: string): Promise<void> {
+  await api('/api/v1/graph-index/feedback', { method: 'POST', body: JSON.stringify({ scope: { workspace_id: scope.workspaceId }, request_id: requestId, target_kind: targetKind, target_id: targetId, outcome, reason: reason || '', created_at: new Date().toISOString() }) })
 }
 
 export type RetrievalRequestLog = {
@@ -1059,6 +1109,81 @@ export type RetrievalRequestLog = {
   useful_count?: number
   total_count?: number
   created_at: string
+}
+
+export type SolutionEpisodeRecord = {
+  episode: {
+    id: string
+    workspace: string
+    session_id: string
+    principal_id: string
+    client_id: string
+    goal_summary: string
+    status: 'active' | 'paused' | 'completed' | 'partial' | 'abandoned' | 'cancelled'
+    retention_class: 'transient' | 'standard' | 'pinned'
+    version: number
+    superseded_by?: string
+    created_at: string
+    updated_at: string
+  }
+  summary?: {
+    id: string
+    outcome: 'success' | 'failure' | 'partial'
+    summary: string
+    evidence: Array<{ kind: string; target_id: string; locator?: string; resolution?: string }>
+    risks?: string[]
+    next_guidance?: string
+    validation: 'proposed' | 'verified' | 'rejected'
+    created_at: string
+  }
+  pinned: boolean
+  step_count: number
+}
+
+export type SolutionEpisodeDetailRecord = SolutionEpisodeRecord & {
+  steps: Array<{
+    id: string
+    ordinal: number
+    kind: string
+    status: string
+    summary: string
+    rationale_summary?: string
+    confidence: number
+    references?: Array<{ kind: string; target_id: string; locator?: string; resolution?: string }>
+    created_at: string
+  }>
+  promotions: Array<{ id: string; kind: string; memory_type?: string; target_id?: string; state: string; created_at: string }>
+  promotion_targets: Array<{
+    promotion: { id: string; kind: string; memory_type?: string; target_id?: string; state: string; created_at: string }
+    memory?: MemoryEntry
+    availability: string
+  }>
+  step_reviews: Array<{ step_id: string; misleading: boolean; redacted: boolean; reason?: string; reason_class?: string; updated_at: string }>
+  path_feedback: Array<{ id: string; target_kind: string; target_id: string; outcome: 'helpful' | 'ignored' | 'rejected' | 'harmful'; created_at: string }>
+}
+
+export function listSolutionEpisodes(input: { workspace: string; limit?: number }): Promise<{ episodes: SolutionEpisodeRecord[] }> {
+  return api(`/api/v1/solutions/activity?workspace=${encodeURIComponent(input.workspace)}&limit=${input.limit || 100}`, { method: 'GET' })
+}
+
+export function getSolutionEpisode(input: { workspace: string; episode_id: string }): Promise<{ detail: SolutionEpisodeDetailRecord }> {
+  return api(`/api/v1/solutions/activity?workspace=${encodeURIComponent(input.workspace)}&episode_id=${encodeURIComponent(input.episode_id)}`, { method: 'GET' })
+}
+
+export function reviewSolutionEpisode(input: {
+  workspace: string
+  principal_id: string
+  episode_id: string
+  action: 'pin' | 'misleading' | 'redact' | 'correct' | 'supersede' | 'delete'
+  step_id?: string
+  reason?: string
+  reason_class?: string
+  summary?: string
+  successor_episode_id?: string
+  idempotency_key?: string
+  pinned?: boolean
+}): Promise<{ reviewed: boolean; result?: unknown }> {
+  return api('/api/v1/solutions/review', { method: 'POST', body: JSON.stringify(input) })
 }
 
 export function listFeedback(input: { workspace: string }): Promise<RetrievalRequestLog[]> {
@@ -1089,8 +1214,26 @@ export type SkillInfo = {
   path: string
 }
 
+export type SkillLifecycleSummary = { id: string; workspace: string; name: string; description: string; risk_tier: 'low' | 'medium' | 'high'; owner_group: string; status: 'active' | 'archived'; generation: number }
+export type SkillLifecycleRevision = { id: string; workspace: string; skill_id: string; number: number; state: 'draft' | 'testing' | 'canary' | 'active' | 'previous' | 'disabled' | 'rejected'; bundle_digest: string; risk_tier: string; candidate_id?: string; parent_revision_ids?: string[]; source_memory_ids?: string[]; source_tool_lesson_ids?: string[]; source_episode_ids?: string[]; created_by: string; created_at: string }
+export type SkillLifecycleActivation = { id: string; environment: string; skill_id: string; active_revision_id: string; active_digest: string; last_known_good_revision_id?: string; canary_revision_id?: string; generation: number; policy_decision_id: string; materialization: string }
+export type SkillLifecycleEvaluation = { id: string; revision_id: string; verdict: 'pass' | 'fail' | 'inconclusive'; evaluator: string; evaluator_version: string; completed_at: string; case_results?: Array<{ case_id: string; passed: boolean; independently_verified: boolean; failure_class?: string }> }
+export type SkillLifecyclePolicyDecision = { id: string; revision_id: string; decision: 'promote' | 'canary' | 'approval_required' | 'pause' | 'reject'; reason_codes: string[]; evaluation_run_ids: string[]; decided_at: string }
+export type SkillLifecycleDetail = { skill: SkillLifecycleSummary; revisions: SkillLifecycleRevision[]; evaluations?: SkillLifecycleEvaluation[]; policy_decisions?: SkillLifecyclePolicyDecision[]; activation?: SkillLifecycleActivation }
+
+export function listSkillLifecycle(input: { workspace: string }): Promise<SkillLifecycleSummary[]> {
+  return api<{ skills: SkillLifecycleSummary[] }>(`/api/v1/skills/lifecycle/list?workspace=${encodeURIComponent(input.workspace)}`, { method: 'GET' }).then((res) => res.skills || [])
+}
+export function inspectSkillLifecycle(input: { workspace: string; skill_id: string; environment?: string }): Promise<SkillLifecycleDetail> {
+  return api(`/api/v1/skills/inspect?workspace=${encodeURIComponent(input.workspace)}&skill_id=${encodeURIComponent(input.skill_id)}&environment=${encodeURIComponent(input.environment || 'local')}`, { method: 'GET' })
+}
+export function operateSkillLifecycle(input: { workspace: string; actor: string; operation: string; payload: Record<string, unknown> }): Promise<{ operation: string; result: unknown }> {
+  return api('/api/v1/skills/lifecycle', { method: 'POST', body: JSON.stringify(input) })
+}
+
 export function listSkills(input: { workspace: string }): Promise<SkillInfo[]> {
   return api<{ skills: SkillInfo[] }>(`/api/v1/skills?workspace=${encodeURIComponent(input.workspace)}`, {
     method: 'GET',
   }).then((res) => res.skills || [])
 }
+import type { GraphOperationAction, GraphReadiness, GraphReviewInput, GraphRouteDecision, GraphRecallContext, GraphSnapshot, GraphStatus } from './knowledgeGateway'

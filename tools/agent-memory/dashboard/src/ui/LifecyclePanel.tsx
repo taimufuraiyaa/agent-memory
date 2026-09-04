@@ -1,5 +1,7 @@
+import { useEffect, useState } from 'react'
 import type { SchedulerRunHistory, SchedulerSummary } from '../lib/api'
 import { formatDuration, formatNumber, formatTS } from './dashboardHelpers'
+import { ListPagination, paginateRecords } from './workspace/ListPagination'
 
 export function LifecyclePanel({
   workspace,
@@ -14,6 +16,11 @@ export function LifecyclePanel({
   busy: boolean
   error: string
 }) {
+  const [historyPage, setHistoryPage] = useState(1)
+  const pagedHistory = paginateRecords(history, historyPage)
+
+  useEffect(() => setHistoryPage(1), [workspace])
+
   if (!workspace) {
     return (
       <div className="surfacePanel">
@@ -59,10 +66,16 @@ export function LifecyclePanel({
             </div>
           </div>
         </div>
-      ) : (
+      ) : scheduler ? (
         <div className="panelSection">
           <div className="emptyState">
             <div className="emptyBody">Scheduler is disabled. Enable it from the agent-memory menubar.</div>
+          </div>
+        </div>
+      ) : (
+        <div className="panelSection">
+          <div className="emptyState">
+            <div className="emptyBody">Live scheduler state is not exposed by this runtime. Recorded lifecycle runs remain available below.</div>
           </div>
         </div>
       )}
@@ -92,7 +105,7 @@ export function LifecyclePanel({
               </tr>
             </thead>
             <tbody>
-              {history.map((run) => (
+              {pagedHistory.items.map((run) => (
                 <tr key={run.id}>
                   <td>{formatTS(run.started_at)}</td>
                   <td>
@@ -114,6 +127,7 @@ export function LifecyclePanel({
               ))}
             </tbody>
           </table>
+          <ListPagination page={pagedHistory.page} total={history.length} onChange={setHistoryPage} label="Lifecycle runs" />
         </div>
       )}
     </div>

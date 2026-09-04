@@ -1,0 +1,41 @@
+name: graphrag reviewed upgrade certification
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_image:
+        description: Digest-pinned signed candidate image
+        required: true
+        type: string
+      report_artifact:
+        description: Name of the externally signed canary and rollback report artifact
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: read
+
+jobs:
+  reviewed-certification:
+    environment: graphrag-upgrade-approval
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: astral-sh/setup-uv@e92bafb6253dcd438e0484186d7669ea7a8ca1cc # v7
+        with:
+          version: "0.12.1"
+          enable-cache: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ${{ inputs.report_artifact }}
+          path: .upgrade-evidence
+      - uses: sigstore/cosign-installer@d58896d6a1865668819e1d91763c7751a165e159 # v3
+      - name: Certify reviewed candidate and rollback proof
+        env:
+          GRAPHRAG_CANDIDATE_IMAGE: ${{ inputs.candidate_image }}
+          GRAPHRAG_UPGRADE_REPORT: .upgrade-evidence/report.json
+          GRAPHRAG_UPGRADE_REPORT_SIGNATURE: .upgrade-evidence/report.sig
+          GRAPHRAG_UPGRADE_PUBLIC_KEY: .upgrade-evidence/report.pub
+          COSIGN_PUBLIC_KEY: .upgrade-evidence/image.pub
+        run: make graphrag-upgrade-certify

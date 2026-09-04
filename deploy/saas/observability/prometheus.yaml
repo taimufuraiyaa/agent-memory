@@ -4,6 +4,8 @@ global:
 
 rule_files:
   - /etc/prometheus/prometheus-rules.yaml
+  - /etc/prometheus/graph-alerts.yaml
+  - /etc/prometheus/skill-lifecycle-alerts.yaml
 
 scrape_configs:
   - job_name: agent-memory-api
@@ -15,4 +17,6 @@ scrape_configs:
   - job_name: agent-memory-reconciler
     static_configs:
       - targets: ["reconciler:9090"]
-
+  - job_name: agent-memory-graph-worker
+    static_configs:
+      - targets: ["graph-worker:9090"]

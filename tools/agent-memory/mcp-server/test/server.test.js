@@ -40,7 +40,7 @@ test("initializes over stdio without protocol noise", async (t) => {
   assert.deepEqual(response.result.capabilities, { tools: {} });
 });
 
-test("lists only the compact core tools by default", async (t) => {
+test("lists memory and complete solution workflow tools by default", async (t) => {
   const child = startServer();
   t.after(() => child.kill());
   child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} })}\n`);
@@ -53,6 +53,14 @@ test("lists only the compact core tools by default", async (t) => {
     "memory_recall",
     "memory_feedback",
     "memory_session_end",
+	"solution_start",
+	"solution_step",
+	"solution_checkpoint",
+	"solution_state",
+	"solution_transition",
+	"solution_handoff",
+	"solution_recall",
+	"solution_promote",
   ]);
 });
 
@@ -71,7 +79,126 @@ test("lists operational tools only in the expanded profile", async (t) => {
     "memory_feedback",
     "memory_sessions",
     "memory_session_end",
+    "solution_start",
+    "solution_step",
+    "solution_checkpoint",
+    "solution_state",
+    "solution_transition",
+    "solution_handoff",
+    "solution_recall",
+    "solution_promote",
+	"solution_tool_event",
+	"solution_tool_lesson_derive",
+	"solution_tool_lesson_promote",
+	"skill_list",
+	"skill_inspect",
+	"skill_propose",
+	"skill_resolve",
+	"skill_acknowledge",
+	"skill_complete",
+	"skill_review",
   ]);
+});
+
+test("proxies default solution continuation tools", async (t) => {
+  const requests = [];
+  const server = http.createServer((request, response) => {
+    let body = "";
+    request.on("data", (chunk) => { body += chunk; });
+    request.on("end", () => {
+      requests.push({ method: request.method, url: request.url, body: body ? JSON.parse(body) : null });
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({ ok: true, version: "v1", data: { episode: { id: "ep-1", status: "active" } } }));
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => server.close());
+  const child = startServer({ AGENT_MEMORY_URL: `http://127.0.0.1:${server.address().port}` });
+  t.after(() => child.kill());
+
+  child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 22, method: "tools/call", params: { name: "solution_start", arguments: {
+    workspace: "ws", session_id: "s1", principal_id: "p1", client_id: "codex", goal_summary: "Continue safely", idempotency_key: "start-1",
+  } } })}\n`);
+  const response = await readMessage(child);
+
+  assert.equal(response.result.structuredContent.episode.id, "ep-1");
+  assert.deepEqual(requests[0], {
+    method: "POST", url: "/api/v1/solutions/start",
+    body: { workspace: "ws", session_id: "s1", principal_id: "p1", client_id: "codex", goal_summary: "Continue safely", idempotency_key: "start-1", capture_policy: "structured", retention_class: "standard" },
+  });
+
+  child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 23, method: "tools/call", params: { name: "solution_recall", arguments: {
+    workspace: "ws", task: "How did we continue safely?",
+  } } })}\n`);
+  await readMessage(child);
+  child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 24, method: "tools/call", params: { name: "solution_promote", arguments: {
+    workspace: "ws", principal_id: "p1", episode_id: "ep-1", summary_id: "sum-1", targets: [{ memory_type: "procedural" }], idempotency_key: "promote-1",
+  } } })}\n`);
+  await readMessage(child);
+  assert.deepEqual(requests.slice(1), [
+    { method: "POST", url: "/api/v1/solutions/recall", body: { workspace: "ws", task: "How did we continue safely?", token_budget: 800, max_candidates: 50 } },
+    { method: "POST", url: "/api/v1/solutions/promote", body: { workspace: "ws", principal_id: "p1", episode_id: "ep-1", summary_id: "sum-1", targets: [{ memory_type: "procedural" }], idempotency_key: "promote-1" } },
+  ]);
+});
+
+test("proxies tool lesson capture only in the expanded profile", async (t) => {
+  const requests = [];
+  const server = http.createServer((request, response) => {
+    let body = "";
+    request.on("data", (chunk) => { body += chunk; });
+    request.on("end", () => {
+      requests.push({ url: request.url, body: JSON.parse(body) });
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({ ok: true, data: {} }));
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => server.close());
+  const child = startServer({ AGENT_MEMORY_MCP_PROFILE: "expanded", AGENT_MEMORY_URL: `http://127.0.0.1:${server.address().port}` });
+  t.after(() => child.kill());
+
+  for (const [id, name, args] of [
+    [51, "solution_tool_event", { principal_id: "p1", episode_id: "ep1", step_id: "st1", tool_name: "safe-tool", operation: "verify", capability: "verify artifact" }],
+    [52, "solution_tool_lesson_derive", { principal_id: "p1", event_ids: ["ev1", "ev2"] }],
+    [53, "solution_tool_lesson_promote", { principal_id: "p1", lesson_id: "lesson1", idempotency_key: "promote1" }],
+  ]) {
+    child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id, method: "tools/call", params: { name, arguments: args } })}\n`);
+    await readMessage(child);
+  }
+
+  assert.deepEqual(requests.map((request) => request.url), [
+    "/api/v1/solutions/tool-events", "/api/v1/solutions/tool-lessons/derive", "/api/v1/solutions/tool-lessons/promote",
+  ]);
+  assert.equal(requests[0].body.kind, "result");
+  assert.equal(requests[0].body.result_class, "unknown");
+  assert.equal(requests[2].body.idempotency_key, "promote1");
+});
+
+test("proxies expanded skill lifecycle through the standalone contract", async (t) => {
+  const requests = [];
+  const server = http.createServer((request, response) => {
+    let body = ""; request.on("data", (chunk) => { body += chunk; }); request.on("end", () => {
+      requests.push({ method: request.method, url: request.url, body: body ? JSON.parse(body) : null });
+      response.writeHead(200, { "content-type": "application/json" }); response.end(JSON.stringify({ ok: true, data: {} }));
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve)); t.after(() => server.close());
+  const child = startServer({ AGENT_MEMORY_MCP_PROFILE: "expanded", AGENT_MEMORY_URL: `http://127.0.0.1:${server.address().port}` }); t.after(() => child.kill());
+  const calls = [
+    [61, "skill_list", { workspace: "ws", limit: 10 }],
+    [62, "skill_inspect", { workspace: "ws", skill_id: "skill-1" }],
+    [63, "skill_propose", { workspace: "ws", actor: "agent", candidate_id: "candidate-1", skill_name: "safe-skill", files: { "SKILL.md": "safe" } }],
+    [64, "skill_resolve", { workspace: "ws", actor: "agent", principal_id: "agent", task_id: "task-1", skill_id: "skill-1", platform: "darwin", architecture: "arm64", runtime_version: "1.0.0" }],
+    [65, "skill_acknowledge", { workspace: "ws", actor: "agent", resolution_id: "resolution-1", principal_id: "agent", task_id: "task-1", revision_id: "revision-1", digest: "sha256:x", token: "token" }],
+    [66, "skill_complete", { workspace: "ws", actor: "agent", id: "execution-1", resolution_id: "resolution-1", episode_id: "task-1", outcome: "success", started_at: "2026-01-01T00:00:00Z", completed_at: "2026-01-01T00:00:01Z" }],
+    [67, "skill_review", { workspace: "ws", actor: "reviewer", operation: "approve", payload: { id: "approval-1" } }],
+  ];
+  for (const [id, name, args] of calls) { child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id, method: "tools/call", params: { name, arguments: args } })}\n`); await readMessage(child); }
+  assert.equal(requests[0].url, "/api/v1/skills/lifecycle/list?workspace=ws&limit=10");
+  assert.equal(requests[1].url, "/api/v1/skills/inspect?skill_id=skill-1&environment=local&workspace=ws");
+  assert.deepEqual(requests.slice(2).map((request) => request.body.operation), ["propose", "resolve", "acknowledge", "complete", "approve"]);
+  assert.equal(requests[3].body.payload.acknowledgement_supported, true);
+  assert.deepEqual(requests[6].body.payload, { id: "approval-1" });
 });
 
 test("rejects calls to tools hidden from the default profile", async (t) => {
@@ -118,9 +245,10 @@ test("resolves distinct persisted profiles by client id before listing tools", a
   claude.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 41, method: "tools/list", params: {} })}\n`);
 
   const [codexResponse, claudeResponse] = await Promise.all([readMessage(codex), readMessage(claude)]);
-  assert.equal(codexResponse.result.tools.length, 5);
-  assert.equal(claudeResponse.result.tools.length, 7);
+	assert.equal(codexResponse.result.tools.length, 13);
+	assert.equal(claudeResponse.result.tools.length, 25);
   assert.ok(claudeResponse.result.tools.some((tool) => tool.name === "memory_sessions"));
+  assert.ok(claudeResponse.result.tools.some((tool) => tool.name === "solution_checkpoint"));
 });
 
 test("persisted client profile is authoritative over the legacy profile variable", async (t) => {
@@ -138,7 +266,7 @@ test("persisted client profile is authoritative over the legacy profile variable
   t.after(() => child.kill());
   child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 42, method: "tools/list", params: {} })}\n`);
 
-  assert.equal((await readMessage(child)).result.tools.length, 5);
+	assert.equal((await readMessage(child)).result.tools.length, 13);
 });
 
 test("fails closed when an explicit client id cannot be resolved", async (t) => {
@@ -262,6 +390,36 @@ test("proxies recall, feedback, sessions, and session end", async (t) => {
     "/api/v1/sessions?workspace=ws&limit=5",
     "/api/v1/memories/session-end",
   ]);
+});
+
+test("session end forwards structured episode identity without requiring a transcript", async (t) => {
+  const requests = [];
+  const server = http.createServer((request, response) => {
+    let body = "";
+    request.on("data", (chunk) => { body += chunk; });
+    request.on("end", () => {
+      requests.push({ url: request.url, body: JSON.parse(body) });
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({ ok: true, version: "v1", data: { mode: "structured_episode", partial: false } }));
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => server.close());
+  const child = startServer({
+    AGENT_MEMORY_MCP_PROFILE: "expanded",
+    AGENT_MEMORY_URL: `http://127.0.0.1:${server.address().port}`,
+  });
+  t.after(() => child.kill());
+
+  child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 91, method: "tools/call", params: { name: "memory_session_end", arguments: {
+    workspace: "ws", session_id: "session-1", principal_id: "principal-1", terminal_status: "completed", idempotency_key: "finish-1",
+  } } })}\n`);
+  const response = await readMessage(child);
+  assert.equal(response.result.structuredContent.mode, "structured_episode");
+  assert.deepEqual(requests, [{
+    url: "/api/v1/memories/session-end",
+    body: { workspace: "ws", session_id: "session-1", principal_id: "principal-1", terminal_status: "completed", idempotency_key: "finish-1" },
+  }]);
 });
 
 test("reports HTTP transport degradation without silently changing backends", async (t) => {

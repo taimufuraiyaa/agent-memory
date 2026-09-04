@@ -3,6 +3,7 @@ package portable
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/taimufuraiyaa/agent-memory/internal/core"
 	"github.com/taimufuraiyaa/agent-memory/internal/library"
+	exportservice "github.com/taimufuraiyaa/agent-memory/internal/saas/export"
 	"github.com/taimufuraiyaa/agent-memory/internal/storage/sqlite"
 )
 
@@ -71,6 +73,36 @@ func TestBuildLocalIncludesOnlySelectedCatalogSourceWithMatchingFingerprint(t *t
 	}
 	if _, err := BuildLocal(ctx, store, Selection{Workspace: "ws", SourceFiles: map[string]string{"asset-b": sourcePath}}); err == nil {
 		t.Fatal("expected changed source fingerprint to be rejected")
+	}
+}
+
+func TestBuildLocalRoundTripsSkillRevisionLineageAndTelemetryManifest(t *testing.T) {
+	ctx := context.Background()
+	store := openTestStore(t, ctx)
+	now := time.Date(2026, 8, 29, 12, 0, 0, 0, time.UTC)
+	digest := "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	skill := core.LogicalSkill{ID: "skill-1", Workspace: "ws", Name: "portable-skill", Description: "portable lifecycle", RiskTier: core.SkillRiskLow, OwnerGroup: "ops", Status: core.SkillStatusActive, Generation: 1, CreatedAt: now, UpdatedAt: now}
+	if err := store.CreateLogicalSkill(ctx, skill); err != nil {
+		t.Fatal(err)
+	}
+	revision := core.SkillRevision{ID: "revision-1", Workspace: "ws", SkillID: skill.ID, Number: 1, State: core.SkillRevisionActive, BundleDigest: digest, ManifestVersion: 1, Files: []core.SkillBundleFile{{Path: "SKILL.md", Digest: digest, SizeBytes: 10}}, RiskTier: core.SkillRiskLow, SourceMemoryIDs: []string{"memory-1"}, CreatedBy: "agent", CreatedAt: now}
+	if err := store.CreateSkillRevision(ctx, revision); err != nil {
+		t.Fatal(err)
+	}
+	bundle, err := BuildLocal(ctx, store, Selection{Workspace: "ws", ExportedAt: now})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(bundle.SkillLifecycle["skills"]) != 1 || len(bundle.SkillLifecycle["revisions"]) != 1 || bundle.Manifest.Counts["skill_lifecycle_records"] < 2 {
+		t.Fatalf("skill lifecycle export = %+v", bundle.SkillLifecycle)
+	}
+	encoded, _ := json.Marshal(bundle)
+	var roundTrip exportservice.Bundle
+	if err := json.Unmarshal(encoded, &roundTrip); err != nil {
+		t.Fatal(err)
+	}
+	if err := roundTrip.VerifyManifest(); err != nil {
+		t.Fatalf("round-trip manifest: %v", err)
 	}
 }
 

@@ -29,11 +29,14 @@ const (
 type RetrievalOptions struct {
 	Workspace string
 	Query     string
-	TopK      int
-	Mode      RetrievalMode
-	Depth     int // graph expansion traversal depth limit
-	Filters   RetrievalFilters
-	Policy    RetrievalPolicy
+	// GraphCacheIdentity is an opaque epoch over graph configuration, active
+	// revision, reviews, and deletions. It never contains source content.
+	GraphCacheIdentity string
+	TopK               int
+	Mode               RetrievalMode
+	Depth              int // graph expansion traversal depth limit
+	Filters            RetrievalFilters
+	Policy             RetrievalPolicy
 }
 
 type RetrievalFilters struct {

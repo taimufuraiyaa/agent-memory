@@ -18,6 +18,7 @@ import (
 	"github.com/taimufuraiyaa/agent-memory/internal/config"
 	"github.com/taimufuraiyaa/agent-memory/internal/connectors"
 	"github.com/taimufuraiyaa/agent-memory/internal/storage/sqlite"
+	"github.com/taimufuraiyaa/agent-memory/internal/workspace"
 )
 
 type Options struct {
@@ -150,13 +151,7 @@ func DefaultChecks(options Options) []Check {
 			return passed(options.DataDir)
 		}},
 		namedCheck{"hooks", func(context.Context) Result {
-			paths := []string{filepath.Join(options.Root, ".codex", "hooks.json"), filepath.Join(options.Root, ".claude", "settings.json")}
-			for _, path := range paths {
-				if _, err := os.Stat(path); err == nil {
-					return passed(path)
-				}
-			}
-			return warning("no supported hook artifact found", "run agent-memory connect <agent>")
+			return memoryContractCheck(options.Root)
 		}},
 		namedCheck{"mcp", func(context.Context) Result {
 			path, err := exec.LookPath("agent-memory-mcp")
@@ -196,6 +191,48 @@ func DefaultChecks(options Options) []Check {
 			return passed(fmt.Sprintf("%d configured connector(s) healthy", len(options.Connectors)))
 		}},
 	}
+}
+
+func memoryContractCheck(root string) Result {
+	type clientContract struct {
+		name        string
+		signal      string
+		artifacts   []string
+		enforcement string
+	}
+	clients := []clientContract{
+		{name: "kiro", signal: ".kiro", artifacts: []string{filepath.Join(".kiro", "hooks", "memory-recall-gate.json"), filepath.Join(".kiro", "hooks", "memory-consolidation-gate.json")}, enforcement: "host-enforced"},
+		{name: "cursor", signal: ".cursor", artifacts: []string{filepath.Join(".cursor", "rules", "agent-memory.mdc")}, enforcement: "instruction-enforced"},
+		{name: "codex", signal: ".codex", artifacts: []string{"AGENTS.md", filepath.Join(".codex", "hooks.json")}, enforcement: "host-enforced"},
+		{name: "claude", signal: ".claude", artifacts: []string{"CLAUDE.md", filepath.Join(".claude", "settings.json")}, enforcement: "host-enforced"},
+	}
+	detected := []string{}
+	for _, client := range clients {
+		if _, err := os.Stat(filepath.Join(root, client.signal)); err != nil {
+			continue
+		}
+		detected = append(detected, client.enforcement+"="+client.name)
+		for _, relative := range client.artifacts {
+			content, err := os.ReadFile(filepath.Join(root, relative))
+			if err != nil || !strings.Contains(string(content), workspace.MemoryContractMarker) {
+				return failed(fmt.Errorf("%s has a missing or stale memory contract at %s", client.name, relative), "run agent-memory reinstall --ide "+client.name)
+			}
+		}
+	}
+	claudeRules := filepath.Join(root, "CLAUDE.md")
+	claudeHooks := filepath.Join(root, ".claude")
+	if _, hooksErr := os.Stat(claudeHooks); hooksErr != nil {
+		if content, rulesErr := os.ReadFile(claudeRules); rulesErr == nil {
+			if !strings.Contains(string(content), workspace.MemoryContractMarker) {
+				return failed(fmt.Errorf("claude has a stale memory contract at CLAUDE.md"), "run agent-memory reinstall --ide claude")
+			}
+			detected = append(detected, "instruction-enforced=claude")
+		}
+	}
+	if len(detected) == 0 {
+		return warning("no supported client installation detected", "run agent-memory reinstall --ide all")
+	}
+	return passed(strings.Join(detected, ", "))
 }
 
 type registryFile struct {

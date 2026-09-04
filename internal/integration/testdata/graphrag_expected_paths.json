@@ -1,0 +1,1 @@
+{"paths":[{"from":"memory-day-10","relationship":"membership","to":"Book A","forbidden_relationships":["authored_by","contained_in_source_text"]}]}

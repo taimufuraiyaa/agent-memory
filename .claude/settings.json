@@ -1,0 +1,70 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "agent-memory hook --event PostToolUse --agent claude-code --workspace agent-memory # agent-memory managed hook | agent-memory operating contract: v4",
+            "timeout": 2,
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "command": "agent-memory hook --event PreCompact --agent claude-code --workspace agent-memory # agent-memory managed hook | agent-memory operating contract: v4",
+            "timeout": 2,
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "agent-memory hook --event PreToolUse --agent claude-code --workspace agent-memory # agent-memory managed hook | agent-memory operating contract: v4",
+            "timeout": 2,
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "command": "agent-memory hook --event SessionStart --agent claude-code --workspace agent-memory # agent-memory managed hook | agent-memory operating contract: v4",
+            "timeout": 2,
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "command": "agent-memory hook --event Stop --agent claude-code --workspace agent-memory # agent-memory managed hook | agent-memory operating contract: v4",
+            "timeout": 2,
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "command": "agent-memory hook --event UserPromptSubmit --agent claude-code --workspace agent-memory # agent-memory managed hook | agent-memory operating contract: v4",
+            "timeout": 2,
+            "type": "command"
+          }
+        ]
+      }
+    ]
+  }
+}

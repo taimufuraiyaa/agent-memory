@@ -69,13 +69,14 @@ func TestStoreSortsAndRejectsConflicts(t *testing.T) {
 	for _, input := range []Input{
 		{ID: "cursor", DisplayName: "Cursor", ClientKind: KindCursor, ToolProfile: ProfileExpanded},
 		{ID: "claude", DisplayName: "Claude", ClientKind: KindClaude, ToolProfile: ProfileDefault},
+		{ID: "kiro", DisplayName: "Kiro", ClientKind: KindKiro, ToolProfile: ProfileDefault},
 	} {
 		if _, err := store.Create(input); err != nil {
 			t.Fatalf("create %#v: %v", input, err)
 		}
 	}
 	profiles := store.List()
-	if len(profiles) != 2 || profiles[0].ID != "claude" || profiles[1].ID != "cursor" {
+	if len(profiles) != 3 || profiles[0].ID != "claude" || profiles[1].ID != "cursor" || profiles[2].ID != "kiro" {
 		t.Fatalf("unexpected order: %#v", profiles)
 	}
 	if _, err := store.Create(Input{ID: "cursor", DisplayName: "Duplicate", ClientKind: KindOther, ToolProfile: ProfileDefault}); !errors.Is(err, ErrConflict) {

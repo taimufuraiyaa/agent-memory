@@ -935,6 +935,109 @@ func TestNormalizeRuleTargetsIncludesCodex(t *testing.T) {
 	}
 }
 
+func TestAllRuleTargetsIncludePrimaryClients(t *testing.T) {
+	targets, err := normalizeRuleTargets(t.TempDir(), []string{"all"})
+	if err != nil {
+		t.Fatalf("normalize all: %v", err)
+	}
+	for _, target := range []string{"kiro", "cursor", "codex", "claude"} {
+		if !contains(targets, target) {
+			t.Errorf("all target missing %q: %+v", target, targets)
+		}
+	}
+
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, ".kiro"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if got := detectDefaultRuleTargets(root); !contains(got, "kiro") {
+		t.Fatalf(".kiro directory was not auto-detected: %+v", got)
+	}
+}
+
+func TestManagerInitAllWritesKiroHooks(t *testing.T) {
+	root := t.TempDir()
+	manager, err := NewManager(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.Init(context.Background(), InitOptions{CWD: root, ProjectName: "all-clients", IDEs: []string{"all"}}); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"memory-recall-gate.json", "memory-consolidation-gate.json"} {
+		content, err := os.ReadFile(filepath.Join(root, ".kiro", "hooks", name))
+		if err != nil || !strings.Contains(string(content), MemoryContractMarker) {
+			t.Fatalf("Kiro hook %s missing after init --ide all: %v %s", name, err, content)
+		}
+	}
+}
+
+func TestWriteAgentFilesExplicitTargetDoesNotConfigureDetectedClients(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, ".codex"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	result, err := WriteAgentFiles(WriteAgentFilesOptions{CWD: root, Workspace: "exact", IDEs: []string{"cursor"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.IDEs) != 1 || result.IDEs[0].IDE != "cursor" {
+		t.Fatalf("explicit target configured detected clients too: %+v", result.IDEs)
+	}
+	if _, err := os.Stat(filepath.Join(root, ".codex", "hooks.json")); !os.IsNotExist(err) {
+		t.Fatalf("explicit Cursor install unexpectedly wrote Codex hooks: %v", err)
+	}
+}
+
+func TestGeneratedRulesShareCurrentMemoryOperatingContract(t *testing.T) {
+	contents := map[string]string{
+		"generic": genericRulesSection("demo"),
+		"cursor":  cursorRuleContent("demo"),
+	}
+	for name, content := range contents {
+		if strings.HasSuffix(content, "\n\n") {
+			t.Errorf("%s rule has a redundant blank line at EOF", name)
+		}
+		for _, required := range []string{
+			MemoryContractMarker,
+			"What", "Where", "When", "How", "Feedback",
+			"literal `N/A`",
+			"agent-memory work start", "agent-memory work step", "agent-memory work checkpoint",
+			"agent-memory work end", "agent-memory work recall", "agent-memory work promote", "agent-memory session-end",
+			"Do not store private chain-of-thought",
+		} {
+			if !strings.Contains(content, required) {
+				t.Errorf("%s rule missing %q", name, required)
+			}
+		}
+		for _, obsolete := range []string{"--episode-id", "--principal-id", "--session-id", "--client-id", "--summary-id", "--targets-json"} {
+			if strings.Contains(content, obsolete) {
+				t.Errorf("%s rule contains non-CLI flag %q", name, obsolete)
+			}
+		}
+	}
+}
+
+func TestKiroHooksCoverSolutionLifecycleWithoutPrivateReasoning(t *testing.T) {
+	hooks := HippocampusHooks()
+	joined := ""
+	for _, hook := range hooks {
+		var decoded map[string]any
+		if err := json.Unmarshal([]byte(hook.Content), &decoded); err != nil {
+			t.Fatalf("%s is not valid JSON: %v", hook.Name, err)
+		}
+		joined += hook.Content
+	}
+	for _, required := range []string{"agent-memory work start", "agent-memory work step", "agent-memory work checkpoint", "agent-memory work recall", "agent-memory work promote", "agent-memory session-end"} {
+		if !strings.Contains(joined, required) {
+			t.Errorf("Kiro hooks missing %q", required)
+		}
+	}
+	if !strings.Contains(joined, "Do not store private chain-of-thought") {
+		t.Error("Kiro hooks must prohibit private chain-of-thought capture")
+	}
+}
+
 func TestManagerInitWritesCodexArtifacts(t *testing.T) {
 	base := filepath.Join(t.TempDir(), "agent memory data")
 	cwd := t.TempDir()

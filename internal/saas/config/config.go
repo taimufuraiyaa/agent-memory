@@ -71,6 +71,8 @@ type Config struct {
 	RerankerTimeout           time.Duration
 	RerankerMinRelevance      float64
 	QueueURL                  string
+	GraphRAGEnabled           bool
+	GraphBundleSigningKey     string
 	SecretRef                 string
 	DevAuthToken              string
 	DevSubject                string
@@ -130,6 +132,8 @@ func Load() (Config, error) {
 		RerankerTimeout:           8 * time.Second,
 		RerankerMinRelevance:      0.5,
 		QueueURL:                  strings.TrimSpace(os.Getenv("AGENT_MEMORY_QUEUE_URL")),
+		GraphRAGEnabled:           strings.EqualFold(strings.TrimSpace(os.Getenv("AGENT_MEMORY_GRAPHRAG_ENABLED")), "true"),
+		GraphBundleSigningKey:     strings.TrimSpace(os.Getenv("AGENT_MEMORY_GRAPH_BUNDLE_SIGNING_KEY")),
 		SecretRef:                 strings.TrimSpace(os.Getenv("AGENT_MEMORY_SECRET_REF")),
 		DevAuthToken:              strings.TrimSpace(os.Getenv("AGENT_MEMORY_DEV_AUTH_TOKEN")),
 		DevSubject:                strings.TrimSpace(os.Getenv("AGENT_MEMORY_DEV_SUBJECT")),
@@ -277,6 +281,9 @@ func (c Config) Validate() error {
 	}
 	if c.Service == Worker && c.QueueURL == "" {
 		return fmt.Errorf("AGENT_MEMORY_QUEUE_URL is required for the worker")
+	}
+	if c.Service == Worker && c.GraphRAGEnabled && c.GraphBundleSigningKey == "" {
+		return fmt.Errorf("AGENT_MEMORY_GRAPH_BUNDLE_SIGNING_KEY is required when hosted GraphRAG is enabled")
 	}
 	if c.Service == API {
 		switch c.IdentityMode {
