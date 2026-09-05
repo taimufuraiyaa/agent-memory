@@ -33,7 +33,9 @@ flowchart TD
 
 `internal/workspace` owns a public contract-version marker and a single generated policy body. Client-specific wrappers may add front matter, but they do not independently restate the workflow. This prevents Cursor and generic rules from drifting.
 
-The canonical body also owns CLI resolution policy. Connected projects invoke `agent-memory` through `PATH`; they never infer `./bin/agent-memory`, because that relative artifact exists only after building the Agent Memory source repository. A missing PATH command is an installation/connection failure to report and repair, not a reason to probe or invent project-local binary paths. Changing this policy increments the operating-contract marker so diagnostics can identify and refresh stale projects.
+The canonical body also owns CLI resolution and workspace-selection policy. Connected projects invoke `agent-memory` through `PATH`; they never infer `./bin/agent-memory`, because that relative artifact exists only after building the Agent Memory source repository. Every copyable memory command embeds the exact registered workspace supplied to the installer, so command execution is stable even when an agent changes directories or invokes the CLI from a nested checkout. A missing PATH command is an installation/connection failure to report and repair, not a reason to probe or invent project-local binary paths. Changing either policy increments the operating-contract marker so diagnostics can identify and refresh stale projects.
+
+The CLI independently enforces this rule at the workspace-bound agent-contract boundary. `write`, `search`, `recall`, `feedback`, `session-end`, and all solution `work` operations carry an internal workspace-required classification. Root command validation walks the invoked command hierarchy, verifies that the workspace flag was explicitly supplied, and rejects the call before storage, embedding, or network work begins. A non-empty environment value or directory-derived name remains available to legacy and administrative flows but cannot satisfy these classified agent operations. Install, upgrade, doctor, version, daemon, dashboard, and multi-workspace administration retain their existing selection models.
 
 The contract separates trivial durable memory from non-trivial solution episodes. It directs agents to store concise rationale summaries, never hidden reasoning. A non-trivial episode begins before substantial work, appends only meaningful steps, checkpoints during long work, transitions to a terminal status, and is compacted by session-end. How-oriented retrieval uses solution recall before ordinary research when appropriate; promotion occurs only for verified reusable knowledge.
 
@@ -99,6 +101,10 @@ Rejected because Cursor and generic clients expose instruction surfaces, not gua
 - **Partial multi-client installation:** each written artifact is reported; rerunning reinstall is idempotent and completes missing targets.
 - **Hook command unavailable:** host hook fails visibly and doctor reports configuration; agent instructions still explain the manual CLI workflow.
 - **Agent guesses a repository-relative CLI path:** the always-on contract explicitly rejects `./bin/agent-memory` outside source-repository development and directs the agent to report or repair missing PATH installation.
+- **Agent omits workspace selection:** generated rules and lifecycle prompts show only commands with the installed workspace bound through `--workspace`; contract tests reject examples that depend on current-directory inference.
+- **Environment masks an omitted argument:** command-boundary validation checks flag provenance rather than the resolved workspace value, so `MEMORY_WORKSPACE` and current-directory inference cannot bypass the requirement.
+- **Global administration is accidentally blocked:** only explicitly classified agent-contract commands inherit the requirement; unclassified setup, diagnostics, daemon, dashboard, and multi-workspace commands remain available.
+- **Workspace renamed after installation:** rename rewrites both `workspace:` metadata and `--workspace` arguments in all generated rule and lifecycle-hook files; missing optional client files remain non-fatal as before.
 - **MCP service unavailable:** tools return transport failure; generated rules direct the agent to report the gap rather than fabricate recall.
 - **Concurrent shared-file update:** existing atomic/managed-section mechanisms are retained; no broad deletion occurs.
 - **Explicit Codex permission selection:** preserve it, omit only Agent Memory's competing default selector, retain the managed permission profile for inspection or later use, and continue the reinstall.
@@ -121,6 +127,7 @@ Generated rules are small static files. Hook overhead remains one bounded local 
 3. Expand the default MCP workflow surface and client kinds.
 4. Update diagnostics, dashboard copy, and documentation.
 5. Run isolated natural verification, regressions, and builds.
-6. Reinstall the incremented contract across every registered project and verify the managed rule surfaces contain the PATH-only instruction.
+6. Reinstall the incremented contract across every registered project and verify the managed rule surfaces contain the PATH-only instruction and explicit registered workspace commands.
+7. Enforce explicit workspace provenance in workspace-bound agent commands, release the incremented contract, and verify both rejection and successful explicit invocation paths.
 
 Rollback restores the prior generated contract and MCP default set; stored solution episodes remain compatible and are not deleted.

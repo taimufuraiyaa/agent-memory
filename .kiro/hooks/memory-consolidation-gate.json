@@ -1,12 +1,12 @@
 {
   "name": "Memory Consolidation Gate",
-  "version": "2.2.0",
-  "description": "agent-memory operating contract: v5. Consolidate durable knowledge and solution progress after every agent turn.",
+  "version": "2.4.0",
+  "description": "agent-memory operating contract: v7. The --workspace argument is mandatory. Consolidate durable knowledge and solution progress after every agent turn.",
   "when": {
     "type": "agentStop"
   },
   "then": {
     "type": "askAgent",
-    "prompt": "CLI rule: invoke agent-memory through PATH in connected projects; never use ./bin/agent-memory. If agent-memory is unavailable on PATH, report the installation problem instead of guessing a project-local path.\nReview what happened in this session. Store durable What and Where facts with agent-memory write. Account for What, Where, and When; use literal N/A with a concise reason for an optional dimension with no applicable stored value. If a solution episode is active, append a final agent-memory work step, checkpoint if continuation is needed, and transition it to the truthful terminal status. If the result is verified and reusable, run agent-memory work promote. Always run agent-memory session-end --transcript \"<one paragraph summary>\" --format json. Do not store private chain-of-thought; store only concise rationale summaries."
+    "prompt": "CLI rule: invoke agent-memory through PATH in connected projects; never use ./bin/agent-memory. If agent-memory is unavailable on PATH, report the installation problem instead of guessing a project-local path. Use --workspace agent-memory on every memory command; never rely on current-directory workspace inference.\nReview what happened in this session. Store durable What and Where facts with agent-memory write --workspace agent-memory. Account for What, Where, and When; use literal N/A with a concise reason for an optional dimension with no applicable stored value. If a solution episode is active, append a final agent-memory work step --workspace agent-memory, run agent-memory work checkpoint --workspace agent-memory if continuation is needed, and transition it with agent-memory work end --workspace agent-memory to the truthful terminal status. If the result is verified and reusable, run agent-memory work promote --workspace agent-memory. Always run agent-memory session-end --workspace agent-memory --transcript \"<one paragraph summary>\" --format json. Do not store private chain-of-thought; store only concise rationale summaries."
   }
 }

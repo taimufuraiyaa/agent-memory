@@ -41,6 +41,66 @@ body.light .workspaceApp {
   --workspace-accent-border: rgba(47, 130, 80, .4);
 }
 
+.workspaceApp[data-visual-theme="atlas"] {
+  --workspace-border: rgba(121, 205, 224, .17);
+  --workspace-panel: #0e161a;
+  --workspace-panel-strong: #142027;
+  --workspace-canvas:
+    linear-gradient(rgba(105, 205, 224, .025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(105, 205, 224, .025) 1px, transparent 1px),
+    radial-gradient(circle at 78% 0%, rgba(35, 199, 165, .1), transparent 30%),
+    radial-gradient(circle at 14% 100%, rgba(61, 169, 204, .08), transparent 34%),
+    #080e12;
+  --workspace-card: rgba(14, 23, 28, .9);
+  --workspace-card-strong: linear-gradient(145deg, rgba(20, 33, 40, .98), rgba(10, 18, 23, .98));
+  --workspace-header: rgba(8, 14, 18, .94);
+  --workspace-rail: #0a1115;
+  --workspace-text: #edf7f6;
+  --workspace-muted: #96aaa9;
+  --workspace-subtle: #657b7d;
+  --workspace-active-muted: #b3c8c7;
+  --workspace-accent: #67d9ea;
+  --workspace-accent-soft: rgba(103, 217, 234, .075);
+  --workspace-accent-active: rgba(103, 217, 234, .13);
+  --workspace-accent-border: rgba(103, 217, 234, .38);
+  --atlas-temporal: #67d9ea;
+  --atlas-verified: #5ee6a8;
+  --atlas-review: #f4bd62;
+  --atlas-danger: #ff747f;
+  --atlas-dormant: #738589;
+  background-size: 32px 32px, 32px 32px, auto, auto, auto;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+body.light .workspaceApp[data-visual-theme="atlas"] {
+  --workspace-border: rgba(34, 91, 105, .16);
+  --workspace-panel: #f3f8f8;
+  --workspace-panel-strong: #eaf3f3;
+  --workspace-canvas:
+    linear-gradient(rgba(34, 91, 105, .035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(34, 91, 105, .035) 1px, transparent 1px),
+    radial-gradient(circle at 78% 0%, rgba(22, 163, 132, .09), transparent 30%),
+    radial-gradient(circle at 14% 100%, rgba(35, 133, 168, .075), transparent 34%),
+    #f6fafa;
+  --workspace-card: rgba(255, 255, 255, .92);
+  --workspace-card-strong: linear-gradient(145deg, rgba(255, 255, 255, .99), rgba(238, 247, 247, .99));
+  --workspace-header: rgba(248, 252, 252, .95);
+  --workspace-rail: #f0f6f6;
+  --workspace-text: #10262a;
+  --workspace-muted: #526c70;
+  --workspace-subtle: #71878a;
+  --workspace-active-muted: #34585f;
+  --workspace-accent: #177f94;
+  --workspace-accent-soft: rgba(23, 127, 148, .07);
+  --workspace-accent-active: rgba(23, 127, 148, .12);
+  --workspace-accent-border: rgba(23, 127, 148, .34);
+  --atlas-temporal: #177f94;
+  --atlas-verified: #16835f;
+  --atlas-review: #a5650a;
+  --atlas-danger: #c23e4a;
+  --atlas-dormant: #718286;
+}
+
 .workspaceApp :focus-visible {
   outline: 3px solid var(--workspace-accent);
   outline-offset: 2px;
@@ -60,6 +120,7 @@ body.light .workspaceApp {
 }
 
 .workspaceBrand { flex: 0 0 auto; }
+.workspaceThemePicker { flex: 0 1 220px; min-width: 174px; max-width: 220px; }
 .workspacePicker { flex: 0 1 320px; min-width: 210px; }
 .workspaceGlobalSearch { flex: 1 1 360px; min-width: 180px; max-width: 720px; }
 .workspaceAddSource,
@@ -73,6 +134,41 @@ body.light .workspaceApp {
 .workspaceNavigation .mantine-NavLink-description { color: var(--workspace-subtle); }
 .workspaceNavigation .mantine-NavLink-root[data-active] .mantine-NavLink-description { color: var(--workspace-active-muted); }
 
+.workspaceApp[data-visual-theme="atlas"] .workspaceHeader {
+  border-bottom-color: var(--workspace-border);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, .18);
+}
+.workspaceApp[data-visual-theme="atlas"] .workspaceBrand .mantine-ThemeIcon-root {
+  box-shadow: 0 0 0 1px rgba(94, 230, 168, .2), 0 10px 28px rgba(44, 201, 174, .15);
+}
+.workspaceApp[data-visual-theme="atlas"] :is(.workspaceThemePicker, .workspacePicker, .workspaceGlobalSearch) .mantine-Input-input {
+  border-color: var(--workspace-border);
+  background: rgba(255, 255, 255, .025);
+  color: var(--workspace-text);
+}
+body.light .workspaceApp[data-visual-theme="atlas"] :is(.workspaceThemePicker, .workspacePicker, .workspaceGlobalSearch) .mantine-Input-input {
+  background: rgba(255, 255, 255, .78);
+}
+.workspaceApp[data-visual-theme="atlas"] .workspaceNavigation .mantine-NavLink-root {
+  position: relative;
+  border: 1px solid transparent;
+}
+.workspaceApp[data-visual-theme="atlas"] .workspaceNavigation .mantine-NavLink-root[data-active] {
+  border-color: rgba(103, 217, 234, .12);
+  box-shadow: inset 0 0 24px rgba(103, 217, 234, .035);
+}
+.workspaceApp[data-visual-theme="atlas"] .workspaceNavigation .mantine-NavLink-root[data-active]::before {
+  position: absolute;
+  top: 9px;
+  bottom: 9px;
+  left: -1px;
+  width: 2px;
+  border-radius: 999px;
+  background: var(--atlas-temporal);
+  box-shadow: 0 0 12px rgba(103, 217, 234, .5);
+  content: '';
+}
+
 .workspaceMain {
   min-width: 0;
   height: 100vh;
@@ -85,6 +181,26 @@ body.light .workspaceApp {
 .workspacePageHeader h1 { margin: 2px 0 6px; font-size: clamp(28px, 3vw, 40px); letter-spacing: -.035em; }
 .workspaceEyebrow { color: var(--workspace-accent); }
 .workspacePlaceholder { min-height: 360px; display: grid; place-items: center; color: var(--workspace-muted); text-align: center; }
+
+.workspaceApp[data-visual-theme="atlas"] .workspacePageHeader h1 {
+  font-weight: 620;
+  letter-spacing: -.045em;
+}
+.workspaceApp[data-visual-theme="atlas"] .workspaceEyebrow {
+  color: var(--atlas-temporal);
+  letter-spacing: .09em;
+}
+.workspaceApp[data-visual-theme="atlas"] .workspaceCanvas :is(.mantine-Paper-root, .mantine-Card-root) {
+  border-color: var(--workspace-border);
+  box-shadow: 0 16px 42px rgba(0, 0, 0, .09);
+}
+body.light .workspaceApp[data-visual-theme="atlas"] .workspaceCanvas :is(.mantine-Paper-root, .mantine-Card-root) {
+  box-shadow: 0 16px 38px rgba(35, 74, 80, .065);
+}
+.workspaceApp[data-visual-theme="atlas"] .workspaceCanvas :is(.mantine-SegmentedControl-root, .mantine-Tabs-list) {
+  border-color: var(--workspace-border);
+  background: var(--workspace-panel);
+}
 
 .askWorkspace {
   display: grid;
@@ -118,6 +234,20 @@ body.light .workspaceApp {
 .memorySelectControl { position: absolute; z-index: 2; top: 4px; right: 4px; }
 .memoryGroup + .memoryGroup { margin-top: 20px; }
 
+.workspaceApp[data-visual-theme="atlas"] .knowledgeResult {
+  border-color: rgba(103, 217, 234, .13);
+  background: linear-gradient(135deg, rgba(16, 27, 33, .96), rgba(10, 18, 23, .92));
+  box-shadow: inset 0 1px rgba(255, 255, 255, .018);
+}
+body.light .workspaceApp[data-visual-theme="atlas"] .knowledgeResult {
+  background: linear-gradient(135deg, rgba(255, 255, 255, .98), rgba(239, 247, 247, .94));
+}
+.workspaceApp[data-visual-theme="atlas"] .knowledgeResult:hover,
+.workspaceApp[data-visual-theme="atlas"] .knowledgeResult.isSelected {
+  border-color: var(--atlas-temporal);
+  box-shadow: 0 12px 30px rgba(42, 171, 193, .09);
+}
+
 .sourceListItem,
 .noteListItem { display: block; width: 100%; padding: 12px; border-radius: var(--mantine-radius-md); transition: background-color 140ms ease; }
 .sourceListItem:hover,
@@ -145,6 +275,39 @@ body.light .workspaceApp {
 .howTreeChevron[data-expanded] { transform: rotate(90deg); }
 .howTreeBranches { padding: 0 18px 18px 48px; }
 .howTreeBranch { background: var(--workspace-panel); }
+.workspaceApp[data-visual-theme="atlas"] .howTreeRoot {
+  border-color: rgba(103, 217, 234, .16);
+  background: linear-gradient(135deg, rgba(15, 25, 31, .97), rgba(9, 17, 22, .95));
+}
+body.light .workspaceApp[data-visual-theme="atlas"] .howTreeRoot {
+  background: linear-gradient(135deg, rgba(255, 255, 255, .98), rgba(237, 246, 246, .96));
+}
+.workspaceApp[data-visual-theme="atlas"] .howTreeBranches {
+  position: relative;
+}
+.workspaceApp[data-visual-theme="atlas"] .howTreeBranches::before {
+  position: absolute;
+  top: 0;
+  bottom: 22px;
+  left: 25px;
+  width: 1px;
+  background: linear-gradient(var(--atlas-temporal), rgba(103, 217, 234, .06));
+  content: '';
+}
+.workspaceApp[data-visual-theme="atlas"] .howTreeBranch {
+  position: relative;
+  border-color: rgba(103, 217, 234, .12);
+  background: rgba(103, 217, 234, .025);
+}
+.workspaceApp[data-visual-theme="atlas"] .howTreeBranch::before {
+  position: absolute;
+  top: 24px;
+  left: -24px;
+  width: 22px;
+  height: 1px;
+  background: rgba(103, 217, 234, .32);
+  content: '';
+}
 .settingsView pre { max-width: 100%; max-height: 480px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
 .settingsSystemGrid > .mantine-Grid-inner > .mantine-Grid-col,
 .settingsSystemContent { min-width: 0; }
@@ -215,6 +378,10 @@ body.light .workspaceApp {
   .askWorkspace[data-has-evidence] { grid-template-columns: minmax(0, 1fr); }
 }
 
+@media (max-width: 1120px) {
+  .workspaceGlobalSearch { display: none; }
+}
+
 @media (max-width: 900px) {
   .workspaceCanvas { padding: 24px 18px 32px; }
   .workspacePageHeader { align-items: stretch; }
@@ -222,12 +389,22 @@ body.light .workspaceApp {
 }
 
 @media (max-width: 520px) {
-  .workspaceHeaderRow { height: 80px; padding: 0 12px; gap: 8px; }
-  .workspacePicker { min-width: 0; flex: 1 1 auto; }
+  .workspaceHeaderRow {
+    display: grid;
+    height: 80px;
+    padding: 4px 12px;
+    gap: 4px 8px;
+    grid-template-columns: auto auto minmax(0, 1fr) auto auto;
+    grid-template-rows: 34px 34px;
+  }
+  .workspaceBrand { grid-column: 2 / span 2; grid-row: 1; }
+  .workspaceThemePicker { min-width: 0; max-width: none; width: 100%; grid-column: 1 / span 3; grid-row: 2; }
+  .workspacePicker { min-width: 0; width: 100%; grid-column: 4 / -1; grid-row: 2; }
   .workspaceGlobalSearch,
   .workspaceAccount { display: none; }
-  .workspaceAddSource { padding-inline: 10px; }
+  .workspaceAddSource { padding-inline: 10px; grid-column: 4; grid-row: 1; }
   .workspaceAddSource .mantine-Button-label { display: none; }
+  .workspaceThemeToggle { grid-column: 5; grid-row: 1; }
   .workspaceCanvas { padding: 18px 12px 28px; }
   .workspacePageHeader { display: grid; margin-bottom: 20px; }
   .workspacePageHeader > :last-child { width: 100%; }

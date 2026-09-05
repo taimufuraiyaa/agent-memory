@@ -518,7 +518,7 @@ func TestManagerInitAndReinstallWriteStagedRetrievalPolicyAcrossFiles(t *testing
 }
 
 func TestHippocampusRecallHookUsesStagedRetrieval(t *testing.T) {
-	hooks := HippocampusHooks()
+	hooks := HippocampusHooks("demo")
 	found := false
 	for _, hook := range hooks {
 		if hook.Name != "memory-recall-gate.json" {
@@ -990,8 +990,8 @@ func TestWriteAgentFilesExplicitTargetDoesNotConfigureDetectedClients(t *testing
 }
 
 func TestGeneratedRulesShareCurrentMemoryOperatingContract(t *testing.T) {
-	if MemoryContractMarker != "agent-memory operating contract: v5" {
-		t.Fatalf("cross-project CLI path policy requires contract v5, got %q", MemoryContractMarker)
+	if MemoryContractMarker != "agent-memory operating contract: v7" {
+		t.Fatalf("mandatory workspace argument policy requires contract v7, got %q", MemoryContractMarker)
 	}
 	contents := map[string]string{
 		"generic": genericRulesSection("demo"),
@@ -1011,6 +1011,20 @@ func TestGeneratedRulesShareCurrentMemoryOperatingContract(t *testing.T) {
 			"Invoke `agent-memory` through `PATH` in every connected project",
 			"Never use `./bin/agent-memory`",
 			"report the installation problem instead of guessing a project-local path",
+			"`--workspace` argument is mandatory",
+			"omission is a CLI error",
+			"environment inference does not satisfy this requirement",
+			"agent-memory search --workspace demo --query",
+			"agent-memory recall --workspace demo --task",
+			"agent-memory feedback --workspace demo --request-id",
+			"agent-memory write --workspace demo --type",
+			"agent-memory work start --workspace demo --goal",
+			"agent-memory work step --workspace demo --episode",
+			"agent-memory work checkpoint --workspace demo --episode",
+			"agent-memory work end --workspace demo --episode",
+			"agent-memory work recall --workspace demo --task",
+			"agent-memory work promote --workspace demo --episode",
+			"agent-memory session-end --workspace demo --transcript",
 		} {
 			if !strings.Contains(content, required) {
 				t.Errorf("%s rule missing %q", name, required)
@@ -1025,7 +1039,7 @@ func TestGeneratedRulesShareCurrentMemoryOperatingContract(t *testing.T) {
 }
 
 func TestKiroHooksCoverSolutionLifecycleWithoutPrivateReasoning(t *testing.T) {
-	hooks := HippocampusHooks()
+	hooks := HippocampusHooks("demo")
 	joined := ""
 	for _, hook := range hooks {
 		var decoded map[string]any
@@ -1037,6 +1051,8 @@ func TestKiroHooksCoverSolutionLifecycleWithoutPrivateReasoning(t *testing.T) {
 			"invoke agent-memory through PATH",
 			"never use ./bin/agent-memory",
 			"report the installation problem instead of guessing a project-local path",
+			"--workspace demo",
+			"--workspace argument is mandatory",
 		} {
 			if !strings.Contains(hook.Content, required) {
 				t.Errorf("Kiro hook %s missing CLI resolution rule %q", hook.Name, required)
@@ -1430,6 +1446,11 @@ func TestRenameUpdatesAllRuleFiles(t *testing.T) {
 		filepath.Join(cwd, "AGENTS.md"),
 		filepath.Join(cwd, "CLAUDE.md"),
 	}
+	commandFiles := append(append([]string{}, ruleFiles...),
+		filepath.Join(cwd, ".codex", "hooks.json"),
+		filepath.Join(cwd, ".kiro", "hooks", "memory-recall-gate.json"),
+		filepath.Join(cwd, ".kiro", "hooks", "memory-consolidation-gate.json"),
+	)
 	for _, rp := range ruleFiles {
 		b, readErr := os.ReadFile(rp)
 		if readErr != nil {
@@ -1437,6 +1458,15 @@ func TestRenameUpdatesAllRuleFiles(t *testing.T) {
 		}
 		if !strings.Contains(string(b), "workspace: old-name") {
 			t.Fatalf("expected 'workspace: old-name' in %s, got: %s", rp, string(b))
+		}
+	}
+	for _, rp := range commandFiles {
+		b, readErr := os.ReadFile(rp)
+		if readErr != nil {
+			t.Fatalf("read command file %s: %v", rp, readErr)
+		}
+		if !strings.Contains(string(b), "--workspace old-name") {
+			t.Fatalf("expected explicit old workspace command in %s, got: %s", rp, string(b))
 		}
 	}
 
@@ -1464,6 +1494,18 @@ func TestRenameUpdatesAllRuleFiles(t *testing.T) {
 		}
 		if !strings.Contains(string(b), "workspace: new-name") {
 			t.Fatalf("%s does not reference new workspace name: %s", rp, string(b))
+		}
+	}
+	for _, rp := range commandFiles {
+		b, readErr := os.ReadFile(rp)
+		if readErr != nil {
+			t.Fatalf("read command file %s after rename: %v", rp, readErr)
+		}
+		if strings.Contains(string(b), "--workspace old-name") {
+			t.Fatalf("%s still contains the old explicit workspace command", rp)
+		}
+		if !strings.Contains(string(b), "--workspace new-name") {
+			t.Fatalf("%s does not contain the new explicit workspace command: %s", rp, string(b))
 		}
 	}
 

@@ -7,7 +7,7 @@ workspace: agent-memory
 ## agent-memory (MANDATORY)
 
 workspace: agent-memory
-contract: agent-memory operating contract: v5
+contract: agent-memory operating contract: v7
 
 Memory dimensions:
 - **What**: facts, outcomes, and artifacts learned during work.
@@ -22,15 +22,16 @@ Always use `agent-memory` as the memory system:
 - Invoke `agent-memory` through `PATH` in every connected project.
 - Never use `./bin/agent-memory`; that repository-relative binary is only valid while developing Agent Memory itself after a local build.
 - If `agent-memory` is unavailable on `PATH`, report the installation problem instead of guessing a project-local path. Use the documented install or repair flow.
+- The `--workspace` argument is mandatory for workspace-bound agent operations. Use the exact registered workspace `agent-memory` in every command via `--workspace agent-memory`; omission is a CLI error, and current-directory or environment inference does not satisfy this requirement.
 - Run a focused memory search for the key terms and entities you're about to research.
 - Run a recall for the current task only when the task continues previous work or search is weak. Directly escalate for `continue`, `resume`, or `what were we doing`.
 - Before doing any self-research: run memory `search` first. Run task `recall` only when the task is about continuing previous work, or when search returns no useful / weak / insufficient results.
-- After running search or recall: you MUST immediately submit a feedback score from 0 (useless) to 5 (extremely helpful) using command `agent-memory feedback --request-id <request_id> --score <0-5> --reason "<explanation>" --useful-count <useful_memories_count> --total-count <total_memories_retrieved>`. You MUST score honestly and objectively. If the score is below 4, you MUST provide a detailed explanation.
+- After running search or recall: you MUST immediately submit a feedback score from 0 (useless) to 5 (extremely helpful) using command `agent-memory feedback --workspace agent-memory --request-id <request_id> --score <0-5> --reason "<explanation>" --useful-count <useful_memories_count> --total-count <total_memories_retrieved>`. You MUST score honestly and objectively. If the score is below 4, you MUST provide a detailed explanation.
 - If a query receives a low score (0 to 3), proceed to investigate. After finding the correct information:
-  - If information was **missing**: Use `agent-memory write` to write the correct fact.
+  - If information was **missing**: Use `agent-memory write --workspace agent-memory` to write the correct fact.
   - If a retrieved memory was **incorrect or out-of-date**:
-    1. Write the new corrected memory first using `agent-memory write` and copy the new memory ID.
-    2. Link the old incorrect memory to the new one by running `agent-memory feedback --memory-id <old_id> --outcome rejected --reconsolidation-action superseded --successor-memory-id <new_id> --reason "<explanation>"`.
+    1. Write the new corrected memory first using `agent-memory write --workspace agent-memory` and copy the new memory ID.
+    2. Link the old incorrect memory to the new one by running `agent-memory feedback --workspace agent-memory --memory-id <old_id> --outcome rejected --reconsolidation-action superseded --successor-memory-id <new_id> --reason "<explanation>"`.
 - After learning durable new knowledge: write it to memory immediately.
 - For non-trivial work: start a solution episode before substantial investigation or implementation. Append a step after each meaningful action, decision, or result; checkpoint during long work; transition the episode to a terminal status; then run session-end.
 - Before ending an episode, account for What, Where, and When. When an optional dimension has no applicable stored value, surface the literal `N/A` with a concise reason instead of silently omitting it.
@@ -44,18 +45,18 @@ Always use `agent-memory` as the memory system:
 
 Commands:
 - `agent-memory init`
-- `agent-memory search --query "<keywords/entities>" --top-k 8`
-- `agent-memory recall --task "<one-line task>" --budget 800 --format raw --include-observations`
-- `agent-memory feedback --request-id "<id>" --score <0-5> --reason "<explanation>" --useful-count <useful_memories_count> --total-count <total_memories_retrieved>`
-- `agent-memory feedback --memory-id "<old_id>" --outcome rejected --reconsolidation-action superseded --successor-memory-id "<new_id>" --reason "<explanation>"`
-- `agent-memory write --type semantic --content "<durable fact + source>"`
-- `agent-memory write --type procedural --content "<repeatable steps/checklist>"`
-- `agent-memory write --type outcome --content "<what you tried> (result: success|failure|partial, approach: <how>, reason: <why>)"`
-- `agent-memory session-end --transcript "<session summary or transcript>" --format json`
-- `agent-memory work start --goal "<goal>" --session "<session_id>" --principal "<principal_id>" --client "<client_id>"`
-- `agent-memory work step --episode "<episode_id>" --principal "<principal_id>" --kind <action|observation|decision|result> --status <running|completed|failed> --summary "<safe summary>"`
-- `agent-memory work checkpoint --episode "<episode_id>" --principal "<principal_id>" --goal "<goal>" --next-action "<next action>"`
-- `agent-memory work end --episode "<episode_id>" --principal "<principal_id>" --status <completed|partial|abandoned|cancelled>`
-- `agent-memory work recall --task "<how-oriented task>" --principal "<principal_id>"`
-- `agent-memory work promote --episode "<episode_id>" --summary "<summary_id>" --principal "<principal_id>" --memory-type procedural`
+- `agent-memory search --workspace agent-memory --query "<keywords/entities>" --top-k 8`
+- `agent-memory recall --workspace agent-memory --task "<one-line task>" --budget 800 --format raw --include-observations`
+- `agent-memory feedback --workspace agent-memory --request-id "<id>" --score <0-5> --reason "<explanation>" --useful-count <useful_memories_count> --total-count <total_memories_retrieved>`
+- `agent-memory feedback --workspace agent-memory --memory-id "<old_id>" --outcome rejected --reconsolidation-action superseded --successor-memory-id "<new_id>" --reason "<explanation>"`
+- `agent-memory write --workspace agent-memory --type semantic --content "<durable fact + source>"`
+- `agent-memory write --workspace agent-memory --type procedural --content "<repeatable steps/checklist>"`
+- `agent-memory write --workspace agent-memory --type outcome --content "<what you tried> (result: success|failure|partial, approach: <how>, reason: <why>)"`
+- `agent-memory session-end --workspace agent-memory --transcript "<session summary or transcript>" --format json`
+- `agent-memory work start --workspace agent-memory --goal "<goal>" --session "<session_id>" --principal "<principal_id>" --client "<client_id>"`
+- `agent-memory work step --workspace agent-memory --episode "<episode_id>" --principal "<principal_id>" --kind <action|observation|decision|result> --status <running|completed|failed> --summary "<safe summary>"`
+- `agent-memory work checkpoint --workspace agent-memory --episode "<episode_id>" --principal "<principal_id>" --goal "<goal>" --next-action "<next action>"`
+- `agent-memory work end --workspace agent-memory --episode "<episode_id>" --principal "<principal_id>" --status <completed|partial|abandoned|cancelled>`
+- `agent-memory work recall --workspace agent-memory --task "<how-oriented task>" --principal "<principal_id>"`
+- `agent-memory work promote --workspace agent-memory --episode "<episode_id>" --summary "<summary_id>" --principal "<principal_id>" --memory-type procedural`
 

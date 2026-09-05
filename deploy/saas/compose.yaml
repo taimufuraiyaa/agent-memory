@@ -212,7 +212,8 @@ services:
     read_only: true
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
-    tmpfs: [/tmp:size=512m,mode=1777]
+    tmpfs:
+      - /tmp:size=512m,mode=1777
     stop_grace_period: 40s
 
   skill-worker:
@@ -234,7 +235,8 @@ services:
     read_only: true
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
-    tmpfs: [/tmp:size=512m,mode=1777]
+    tmpfs:
+      - /tmp:size=512m,mode=1777
     stop_grace_period: 40s
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:9090/health/live"]
@@ -266,7 +268,8 @@ services:
     read_only: true
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
-    tmpfs: [/tmp:size=256m,mode=1777]
+    tmpfs:
+      - /tmp:size=256m,mode=1777
     stop_grace_period: 40s
 
   graph-worker:

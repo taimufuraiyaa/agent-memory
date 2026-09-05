@@ -44,7 +44,7 @@ func (a projectRulesAdapter) Connect(_ context.Context, options Options) (Result
 	if a.name == "cursor" {
 		paths, err = workspace.WriteCursorProjectFile(options.Root, options.Workspace)
 	} else {
-		paths, err = workspace.WriteKiroProjectFiles(options.Root)
+		paths, err = workspace.WriteKiroProjectFiles(options.Root, options.Workspace)
 	}
 	if err != nil {
 		return Result{}, err

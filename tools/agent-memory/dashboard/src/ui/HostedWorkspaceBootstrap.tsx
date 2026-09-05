@@ -9,11 +9,11 @@ import {
 import { createHostedKnowledgeGateway } from '../lib/adapters/hostedKnowledgeGateway'
 import type { DashboardRuntime } from '../lib/runtime'
 import { RightsAttestationGate } from './RightsAttestationGate'
-import { WorkspaceApp, type DashboardColorScheme } from './WorkspaceApp'
+import { WorkspaceApp, type DashboardColorScheme, type DashboardVisualTheme } from './WorkspaceApp'
 
 const emptyConnection: HostedConnection = { token: '', tenant: '', workspace: '' }
 
-export function HostedWorkspaceBootstrap({ runtime, colorScheme, onColorSchemeChange }: { runtime: DashboardRuntime; colorScheme: DashboardColorScheme; onColorSchemeChange: (value: DashboardColorScheme) => void }) {
+export function HostedWorkspaceBootstrap({ runtime, colorScheme, onColorSchemeChange, visualTheme, onVisualThemeChange }: { runtime: DashboardRuntime; colorScheme: DashboardColorScheme; onColorSchemeChange: (value: DashboardColorScheme) => void; visualTheme: DashboardVisualTheme; onVisualThemeChange: (value: DashboardVisualTheme) => void }) {
   const localOnboarding = runtime.features.includes('local_onboarding')
   const localSystemTools = runtime.features.includes('local_system_tools')
   const [connection, setConnection] = useState<HostedConnection>(emptyConnection)
@@ -73,6 +73,6 @@ export function HostedWorkspaceBootstrap({ runtime, colorScheme, onColorSchemeCh
   </div>
 
   return <RightsAttestationGate getStatus={() => getHostedRightsAttestationStatus(connection)} accept={(input) => acceptHostedRightsAttestation(connection, input)}>
-    <WorkspaceApp runtime={runtime} gateway={gateway} colorScheme={colorScheme} onColorSchemeChange={onColorSchemeChange} />
+    <WorkspaceApp runtime={runtime} gateway={gateway} colorScheme={colorScheme} onColorSchemeChange={onColorSchemeChange} visualTheme={visualTheme} onVisualThemeChange={onVisualThemeChange} />
   </RightsAttestationGate>
 }

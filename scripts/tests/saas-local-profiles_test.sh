@@ -68,4 +68,9 @@ if grep -q 'variable is not set' "$render_log"; then
   echo 'Compose must not interpolate Floci initializer shell variables' >&2
   exit 1
 fi
+if grep -Eq '^[[:space:]]*- mode=1777$' "$render_log"; then
+  cat "$render_log" >&2
+  echo 'tmpfs mode must remain attached to an absolute container mount path' >&2
+  exit 1
+fi
 echo 'local Compose and Floci deployment contracts verified'

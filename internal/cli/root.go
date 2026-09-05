@@ -8,7 +8,10 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
+
+const explicitWorkspaceRequiredAnnotation = "agent-memory.io/explicit-workspace-required"
 
 // NewRootCommand returns the base CLI command for agent-memory.
 func NewRootCommand() *cobra.Command {
@@ -20,6 +23,9 @@ func NewRootCommand() *cobra.Command {
 		Short: "Persistent memory layer for AI coding agents",
 		Long:  "agent-memory is a local-first memory system for coding agents with CLI-first integration.",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			if commandRequiresExplicitWorkspace(cmd) && !workspaceFlagWasExplicitlySet(cmd) {
+				return fmt.Errorf("explicit --workspace is required for %s", cmd.CommandPath())
+			}
 			// Load ~/.agent-memory/agent-memory.env into the process environment
 			// before any engine configuration is resolved, so persisted toggles
 			// (--toggle-on/off, --run-label) take effect on later invocations.
@@ -88,15 +94,15 @@ func NewRootCommand() *cobra.Command {
 	cmd.PersistentFlags().BoolVar(&toggleOn, "toggle-on", false, "Enable agent-memory globally (writes ~/.agent-memory/agent-memory.env)")
 	cmd.PersistentFlags().BoolVar(&toggleOff, "toggle-off", false, "Disable agent-memory globally (writes ~/.agent-memory/agent-memory.env)")
 	cmd.PersistentFlags().StringVar(&runLabel, "run-label", "", "Set AGENT_MEMORY_RUN_LABEL for token-metric grouping (writes env file)")
-	cmd.AddCommand(newWriteCommand())
-	cmd.AddCommand(newSearchCommand())
-	cmd.AddCommand(newRecallCommand())
+	cmd.AddCommand(requireExplicitWorkspace(newWriteCommand()))
+	cmd.AddCommand(requireExplicitWorkspace(newSearchCommand()))
+	cmd.AddCommand(requireExplicitWorkspace(newRecallCommand()))
 	cmd.AddCommand(newBenchmarkWorkerCommand())
 	cmd.AddCommand(newReembedCommand())
 	cmd.AddCommand(newReindexTermsCommand())
-	cmd.AddCommand(newFeedbackCommand())
-	cmd.AddCommand(newSessionEndCommand())
-	cmd.AddCommand(newWorkCommand())
+	cmd.AddCommand(requireExplicitWorkspace(newFeedbackCommand()))
+	cmd.AddCommand(requireExplicitWorkspace(newSessionEndCommand()))
+	cmd.AddCommand(requireExplicitWorkspace(newWorkCommand()))
 	cmd.AddCommand(newSkillCommand())
 	cmd.AddCommand(newConsolidateCommand())
 	cmd.AddCommand(newStudyCommand())
@@ -133,6 +139,34 @@ func NewRootCommand() *cobra.Command {
 	cmd.AddCommand(newDevelopmentCommand("restart"))
 	cmd.AddCommand(newDevelopmentCommand("build"))
 	return cmd
+}
+
+func requireExplicitWorkspace(cmd *cobra.Command) *cobra.Command {
+	if cmd.Annotations == nil {
+		cmd.Annotations = make(map[string]string)
+	}
+	cmd.Annotations[explicitWorkspaceRequiredAnnotation] = "true"
+	return cmd
+}
+
+func commandRequiresExplicitWorkspace(cmd *cobra.Command) bool {
+	for current := cmd; current != nil; current = current.Parent() {
+		if current.Annotations[explicitWorkspaceRequiredAnnotation] == "true" {
+			return true
+		}
+	}
+	return false
+}
+
+func workspaceFlagWasExplicitlySet(cmd *cobra.Command) bool {
+	for current := cmd; current != nil; current = current.Parent() {
+		for _, flags := range []*pflag.FlagSet{current.Flags(), current.PersistentFlags()} {
+			if flag := flags.Lookup("workspace"); flag != nil && flag.Changed && strings.TrimSpace(flag.Value.String()) != "" {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // loadEnvFile reads KEY=VALUE assignments from ~/.agent-memory/agent-memory.env

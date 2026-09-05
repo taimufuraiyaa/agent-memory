@@ -168,36 +168,36 @@ projects from upgrading in `--all` mode. `upgrade --dry-run` and
 
 ```bash
 # Write a fact with up to three explicit search locators
-agent-memory write --type semantic \
+agent-memory write --workspace my-project --type semantic \
   --content "Authentication service handles JWT validation" \
   --keyword authentication --keyword jwt
 
 # Store an outcome memory (with approach and reasoning details)
-agent-memory write --type outcome \
+agent-memory write --workspace my-project --type outcome \
   --content "Upgraded Node.js client package" \
   --outcome-result success \
   --outcome-approach "Updated package.json and ran npm install"
 
 # Search memories
-agent-memory search --query "auth validation" --top-k 5
+agent-memory search --workspace my-project --query "auth validation" --top-k 5
 
 # Exact project term search: AND requires every term; OR requires at least one
-agent-memory search --mode terms --query "authentication jwt" --operator and
-agent-memory search --mode terms --query "authentication oauth" --operator or
+agent-memory search --workspace my-project --mode terms --query "authentication jwt" --operator and
+agent-memory search --workspace my-project --mode terms --query "authentication oauth" --operator or
 
 # Backfill/rebuild and safely inspect Bloom health (no raw terms or bitmap)
 agent-memory reindex-terms --target-fpp 0.01
 agent-memory reindex-terms --status
 
 # Recall context for a task (within a 4000-token budget)
-agent-memory recall --task "debug JWT token validation failure" --budget 4000 --format raw
+agent-memory recall --workspace my-project --task "debug JWT token validation failure" --budget 4000 --format raw
 
 # Review workspace memory quality, context efficiency, hygiene, coverage, and trust
 agent-memory advisor
 agent-memory advisor --format json
 
 # Extract learnings at the end of a session
-cat session_transcript.txt | agent-memory session-end --format json
+cat session_transcript.txt | agent-memory session-end --workspace my-project --format json
 ```
 
 ### Exact-term Bloom rollout

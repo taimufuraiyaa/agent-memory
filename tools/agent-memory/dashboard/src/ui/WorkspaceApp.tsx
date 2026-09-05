@@ -64,8 +64,9 @@ const primaryDestinations: Array<{ id: WorkspaceDestination; label: string; desc
 ]
 
 export type DashboardColorScheme = 'dark' | 'light'
+export type DashboardVisualTheme = 'atlas' | 'classic'
 
-export function WorkspaceApp({ runtime, gateway, colorScheme, onColorSchemeChange }: { runtime: DashboardRuntime; gateway: KnowledgeGateway; colorScheme: DashboardColorScheme; onColorSchemeChange: (value: DashboardColorScheme) => void }) {
+export function WorkspaceApp({ runtime, gateway, colorScheme, onColorSchemeChange, visualTheme, onVisualThemeChange }: { runtime: DashboardRuntime; gateway: KnowledgeGateway; colorScheme: DashboardColorScheme; onColorSchemeChange: (value: DashboardColorScheme) => void; visualTheme: DashboardVisualTheme; onVisualThemeChange: (value: DashboardVisualTheme) => void }) {
   const initial = useMemo(() => readWorkspaceRoute(), [])
   const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([])
   const [workspaceId, setWorkspaceId] = useState(initial.workspaceId || '')
@@ -138,6 +139,7 @@ export function WorkspaceApp({ runtime, gateway, colorScheme, onColorSchemeChang
   return <AppShell
     className="workspaceApp"
     data-runtime={runtime.mode}
+    data-visual-theme={visualTheme}
     header={{ height: { base: 132, sm: 72 } }}
     navbar={{ width: 248, breakpoint: 'sm', collapsed: { mobile: true } }}
     padding={0}
@@ -152,6 +154,16 @@ export function WorkspaceApp({ runtime, gateway, colorScheme, onColorSchemeChang
           </ThemeIcon>
           <Box visibleFrom="md"><Text fw={750} lh={1.1}>Agent Memory</Text><Text size="xs" c="dimmed">Trusted knowledge</Text></Box>
         </Group>
+        <Select
+          className="workspaceThemePicker"
+          aria-label="Visual theme"
+          value={visualTheme}
+          data={[
+            { value: 'atlas', label: 'Living Memory Atlas' },
+            { value: 'classic', label: 'Classic Workspace' },
+          ]}
+          onChange={(value) => { if (value === 'atlas' || value === 'classic') onVisualThemeChange(value) }}
+        />
         <Select
           className="workspacePicker"
           data-workspace-picker

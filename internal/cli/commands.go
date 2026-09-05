@@ -79,8 +79,8 @@ The memory will be automatically:
   agent-memory write --workspace my-project --type outcome \
     --content "Database migration failed due to lock timeout"
 
-  # Write to default workspace (from current directory)
-  agent-memory write --type semantic \
+  # The workspace argument is mandatory
+  agent-memory write --workspace my-project --type semantic \
     --content "Redis is used for session caching"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()

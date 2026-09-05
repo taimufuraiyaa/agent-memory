@@ -29,6 +29,9 @@ The contract records safe, concise summaries of decisions and actions. It must n
 6. Every managed rule SHALL contain a stable contract-version marker so diagnostics can distinguish current from stale installations.
 7. Every managed rule SHALL require agents in connected projects to invoke the PATH-installed `agent-memory` executable and SHALL explicitly prohibit guessing or using the source-repository-relative `./bin/agent-memory` path.
 8. If `agent-memory` is unavailable on `PATH`, the contract SHALL require the agent to report the installation problem and use the documented install or repair flow instead of inventing a project-local executable path.
+9. Every generated copyable memory command SHALL include `--workspace <registered-name>` using the exact workspace selected during installation; connected agents SHALL NOT rely on current-directory inference for search, recall, feedback, writes, solution lifecycle, or session finalization.
+10. Renaming a registered workspace SHALL atomically rewrite both workspace metadata and explicit workspace command arguments across all managed rule and lifecycle-hook surfaces.
+11. Workspace-bound agent-contract CLI operations (`write`, `search`, `recall`, `feedback`, `session-end`, and every `work` operation) SHALL reject execution unless the caller explicitly supplies `--workspace`; environment and current-directory inference SHALL NOT satisfy this command-boundary requirement.
 
 ### R2 — Complete supported-client installation
 
@@ -72,3 +75,5 @@ The contract records safe, concise summaries of decisions and actions. It must n
 - Tests prove idempotency, preservation of user-owned content, stale-contract detection, and multi-client coverage.
 - Reinstallation remains successful and idempotent when Codex has an explicit user-owned permission selection.
 - Generated rules explicitly distinguish cross-project CLI invocation from source-repository development commands.
+- Generated rules and Kiro lifecycle prompts embed the exact registered workspace in every memory command.
+- Workspace-bound agent-contract commands fail before storage or network access when `--workspace` is absent, including when `MEMORY_WORKSPACE` or project markers could otherwise infer a workspace.

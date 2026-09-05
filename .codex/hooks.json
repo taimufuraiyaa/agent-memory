@@ -4,7 +4,7 @@
       {
         "hooks": [
           {
-            "command": "agent-memory hook --event PostToolUse --agent codex --workspace agent-memory # agent-memory managed lifecycle | agent-memory operating contract: v5",
+            "command": "agent-memory hook --event PostToolUse --agent codex --workspace agent-memory # agent-memory managed lifecycle | agent-memory operating contract: v7",
             "timeout": 2,
             "type": "command"
           }
@@ -15,7 +15,7 @@
       {
         "hooks": [
           {
-            "command": "agent-memory hook --event PreCompact --agent codex --workspace agent-memory # agent-memory managed lifecycle | agent-memory operating contract: v5",
+            "command": "agent-memory hook --event PreCompact --agent codex --workspace agent-memory # agent-memory managed lifecycle | agent-memory operating contract: v7",
             "timeout": 2,
             "type": "command"
           }
@@ -26,7 +26,7 @@
       {
         "hooks": [
           {
-            "command": "agent-memory hook --event PreToolUse --agent codex --workspace agent-memory # agent-memory managed lifecycle | agent-memory operating contract: v5",
+            "command": "agent-memory hook --event PreToolUse --agent codex --workspace agent-memory # agent-memory managed lifecycle | agent-memory operating contract: v7",
             "timeout": 2,
             "type": "command"
           }
@@ -37,7 +37,7 @@
       {
         "hooks": [
           {
-            "command": "agent-memory hook --event SessionStart --agent codex --workspace agent-memory # agent-memory managed lifecycle | agent-memory operating contract: v5",
+            "command": "agent-memory hook --event SessionStart --agent codex --workspace agent-memory # agent-memory managed lifecycle | agent-memory operating contract: v7",
             "timeout": 2,
             "type": "command"
           }
@@ -48,7 +48,7 @@
       {
         "hooks": [
           {
-            "command": "agent-memory hook --event Stop --agent codex --workspace agent-memory # agent-memory managed lifecycle | agent-memory operating contract: v5",
+            "command": "agent-memory hook --event Stop --agent codex --workspace agent-memory # agent-memory managed lifecycle | agent-memory operating contract: v7",
             "timeout": 2,
             "type": "command"
           }
@@ -59,7 +59,7 @@
       {
         "hooks": [
           {
-            "command": "agent-memory hook --event UserPromptSubmit --agent codex --workspace agent-memory # agent-memory managed lifecycle | agent-memory operating contract: v5",
+            "command": "agent-memory hook --event UserPromptSubmit --agent codex --workspace agent-memory # agent-memory managed lifecycle | agent-memory operating contract: v7",
             "timeout": 2,
             "type": "command"
           }

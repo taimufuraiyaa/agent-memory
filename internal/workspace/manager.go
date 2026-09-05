@@ -316,7 +316,7 @@ func (m *Manager) Init(ctx context.Context, opt InitOptions) (*InitResult, error
 					if err := os.MkdirAll(hooksDir, 0o755); err != nil {
 						return nil, err
 					}
-					for _, hook := range HippocampusHooks() {
+					for _, hook := range HippocampusHooks(name) {
 						path := filepath.Join(hooksDir, hook.Name)
 						if err := writeRuleFile(path, hook.Content); err != nil {
 							return nil, err
@@ -652,6 +652,9 @@ func (m *Manager) Rename(_ context.Context, opt RenameOptions) (*RenameResult, e
 		ruleFiles := []string{
 			filepath.Join(opt.CWD, ".cursor", "rules", "agent-memory.mdc"),
 			filepath.Join(opt.CWD, ".agents", "rules", "agent-memory.md"),
+			filepath.Join(opt.CWD, ".codex", "hooks.json"),
+			filepath.Join(opt.CWD, ".kiro", "hooks", "memory-recall-gate.json"),
+			filepath.Join(opt.CWD, ".kiro", "hooks", "memory-consolidation-gate.json"),
 			filepath.Join(opt.CWD, ".aierules"),
 			filepath.Join(opt.CWD, ".cursorrules"),
 			filepath.Join(opt.CWD, ".windsurfrules"),
@@ -1076,9 +1079,10 @@ func WriteCursorProjectFile(cwd, workspace string) ([]string, error) {
 }
 
 // WriteKiroProjectFiles writes only Kiro's two owned lifecycle hooks.
-func WriteKiroProjectFiles(cwd string) ([]string, error) {
-	paths := make([]string, 0, len(HippocampusHooks()))
-	for _, hook := range HippocampusHooks() {
+func WriteKiroProjectFiles(cwd, workspace string) ([]string, error) {
+	hooks := HippocampusHooks(workspace)
+	paths := make([]string, 0, len(hooks))
+	for _, hook := range hooks {
 		path := filepath.Join(cwd, ".kiro", "hooks", hook.Name)
 		if err := writeRuleFile(path, hook.Content); err != nil {
 			return nil, err
@@ -1369,13 +1373,13 @@ func antigravityRuleContent(workspace string) string {
 
 // MemoryContractMarker identifies the current generated project policy. Doctor
 // and connection adapters use it to reject stale, partially upgraded clients.
-const MemoryContractMarker = "agent-memory operating contract: v5"
+const MemoryContractMarker = "agent-memory operating contract: v7"
 
 func genericRulesSection(workspace string) string {
 	return fmt.Sprintf(`## agent-memory (MANDATORY)
 
-workspace: %s
-contract: agent-memory operating contract: v5
+workspace: %[1]s
+contract: agent-memory operating contract: v7
 
 Memory dimensions:
 - **What**: facts, outcomes, and artifacts learned during work.
@@ -1390,15 +1394,16 @@ Always use `+"`"+`agent-memory`+"`"+` as the memory system:
 - Invoke `+"`"+`agent-memory`+"`"+` through `+"`"+`PATH`+"`"+` in every connected project.
 - Never use `+"`"+`./bin/agent-memory`+"`"+`; that repository-relative binary is only valid while developing Agent Memory itself after a local build.
 - If `+"`"+`agent-memory`+"`"+` is unavailable on `+"`"+`PATH`+"`"+`, report the installation problem instead of guessing a project-local path. Use the documented install or repair flow.
+- The `+"`"+`--workspace`+"`"+` argument is mandatory for workspace-bound agent operations. Use the exact registered workspace `+"`"+`%[1]s`+"`"+` in every command via `+"`"+`--workspace %[1]s`+"`"+`; omission is a CLI error, and current-directory or environment inference does not satisfy this requirement.
 - Run a focused memory search for the key terms and entities you're about to research.
 - Run a recall for the current task only when the task continues previous work or search is weak. Directly escalate for `+"`"+`continue`+"`"+`, `+"`"+`resume`+"`"+`, or `+"`"+`what were we doing`+"`"+`.
 - Before doing any self-research: run memory `+"`"+`search`+"`"+` first. Run task `+"`"+`recall`+"`"+` only when the task is about continuing previous work, or when search returns no useful / weak / insufficient results.
-- After running search or recall: you MUST immediately submit a feedback score from 0 (useless) to 5 (extremely helpful) using command `+"`"+`agent-memory feedback --request-id <request_id> --score <0-5> --reason "<explanation>" --useful-count <useful_memories_count> --total-count <total_memories_retrieved>`+"`"+`. You MUST score honestly and objectively. If the score is below 4, you MUST provide a detailed explanation.
+- After running search or recall: you MUST immediately submit a feedback score from 0 (useless) to 5 (extremely helpful) using command `+"`"+`agent-memory feedback --workspace %[1]s --request-id <request_id> --score <0-5> --reason "<explanation>" --useful-count <useful_memories_count> --total-count <total_memories_retrieved>`+"`"+`. You MUST score honestly and objectively. If the score is below 4, you MUST provide a detailed explanation.
 - If a query receives a low score (0 to 3), proceed to investigate. After finding the correct information:
-  - If information was **missing**: Use `+"`"+`agent-memory write`+"`"+` to write the correct fact.
+  - If information was **missing**: Use `+"`"+`agent-memory write --workspace %[1]s`+"`"+` to write the correct fact.
   - If a retrieved memory was **incorrect or out-of-date**:
-    1. Write the new corrected memory first using `+"`"+`agent-memory write`+"`"+` and copy the new memory ID.
-    2. Link the old incorrect memory to the new one by running `+"`"+`agent-memory feedback --memory-id <old_id> --outcome rejected --reconsolidation-action superseded --successor-memory-id <new_id> --reason "<explanation>"`+"`"+`.
+    1. Write the new corrected memory first using `+"`"+`agent-memory write --workspace %[1]s`+"`"+` and copy the new memory ID.
+    2. Link the old incorrect memory to the new one by running `+"`"+`agent-memory feedback --workspace %[1]s --memory-id <old_id> --outcome rejected --reconsolidation-action superseded --successor-memory-id <new_id> --reason "<explanation>"`+"`"+`.
 - After learning durable new knowledge: write it to memory immediately.
 - For non-trivial work: start a solution episode before substantial investigation or implementation. Append a step after each meaningful action, decision, or result; checkpoint during long work; transition the episode to a terminal status; then run session-end.
 - Before ending an episode, account for What, Where, and When. When an optional dimension has no applicable stored value, surface the literal `+"`"+`N/A`+"`"+` with a concise reason instead of silently omitting it.
@@ -1412,20 +1417,20 @@ Always use `+"`"+`agent-memory`+"`"+` as the memory system:
 
 Commands:
 - `+"`"+`agent-memory init`+"`"+`
-- `+"`"+`agent-memory search --query "<keywords/entities>" --top-k 8`+"`"+`
-- `+"`"+`agent-memory recall --task "<one-line task>" --budget 800 --format raw --include-observations`+"`"+`
-- `+"`"+`agent-memory feedback --request-id "<id>" --score <0-5> --reason "<explanation>" --useful-count <useful_memories_count> --total-count <total_memories_retrieved>`+"`"+`
-- `+"`"+`agent-memory feedback --memory-id "<old_id>" --outcome rejected --reconsolidation-action superseded --successor-memory-id "<new_id>" --reason "<explanation>"`+"`"+`
-- `+"`"+`agent-memory write --type semantic --content "<durable fact + source>"`+"`"+`
-- `+"`"+`agent-memory write --type procedural --content "<repeatable steps/checklist>"`+"`"+`
-- `+"`"+`agent-memory write --type outcome --content "<what you tried> (result: success|failure|partial, approach: <how>, reason: <why>)"`+"`"+`
-- `+"`"+`agent-memory session-end --transcript "<session summary or transcript>" --format json`+"`"+`
-- `+"`"+`agent-memory work start --goal "<goal>" --session "<session_id>" --principal "<principal_id>" --client "<client_id>"`+"`"+`
-- `+"`"+`agent-memory work step --episode "<episode_id>" --principal "<principal_id>" --kind <action|observation|decision|result> --status <running|completed|failed> --summary "<safe summary>"`+"`"+`
-- `+"`"+`agent-memory work checkpoint --episode "<episode_id>" --principal "<principal_id>" --goal "<goal>" --next-action "<next action>"`+"`"+`
-- `+"`"+`agent-memory work end --episode "<episode_id>" --principal "<principal_id>" --status <completed|partial|abandoned|cancelled>`+"`"+`
-- `+"`"+`agent-memory work recall --task "<how-oriented task>" --principal "<principal_id>"`+"`"+`
-- `+"`"+`agent-memory work promote --episode "<episode_id>" --summary "<summary_id>" --principal "<principal_id>" --memory-type procedural`+"`"+`
+- `+"`"+`agent-memory search --workspace %[1]s --query "<keywords/entities>" --top-k 8`+"`"+`
+- `+"`"+`agent-memory recall --workspace %[1]s --task "<one-line task>" --budget 800 --format raw --include-observations`+"`"+`
+- `+"`"+`agent-memory feedback --workspace %[1]s --request-id "<id>" --score <0-5> --reason "<explanation>" --useful-count <useful_memories_count> --total-count <total_memories_retrieved>`+"`"+`
+- `+"`"+`agent-memory feedback --workspace %[1]s --memory-id "<old_id>" --outcome rejected --reconsolidation-action superseded --successor-memory-id "<new_id>" --reason "<explanation>"`+"`"+`
+- `+"`"+`agent-memory write --workspace %[1]s --type semantic --content "<durable fact + source>"`+"`"+`
+- `+"`"+`agent-memory write --workspace %[1]s --type procedural --content "<repeatable steps/checklist>"`+"`"+`
+- `+"`"+`agent-memory write --workspace %[1]s --type outcome --content "<what you tried> (result: success|failure|partial, approach: <how>, reason: <why>)"`+"`"+`
+- `+"`"+`agent-memory session-end --workspace %[1]s --transcript "<session summary or transcript>" --format json`+"`"+`
+- `+"`"+`agent-memory work start --workspace %[1]s --goal "<goal>" --session "<session_id>" --principal "<principal_id>" --client "<client_id>"`+"`"+`
+- `+"`"+`agent-memory work step --workspace %[1]s --episode "<episode_id>" --principal "<principal_id>" --kind <action|observation|decision|result> --status <running|completed|failed> --summary "<safe summary>"`+"`"+`
+- `+"`"+`agent-memory work checkpoint --workspace %[1]s --episode "<episode_id>" --principal "<principal_id>" --goal "<goal>" --next-action "<next action>"`+"`"+`
+- `+"`"+`agent-memory work end --workspace %[1]s --episode "<episode_id>" --principal "<principal_id>" --status <completed|partial|abandoned|cancelled>`+"`"+`
+- `+"`"+`agent-memory work recall --workspace %[1]s --task "<how-oriented task>" --principal "<principal_id>"`+"`"+`
+- `+"`"+`agent-memory work promote --workspace %[1]s --episode "<episode_id>" --summary "<summary_id>" --principal "<principal_id>" --memory-type procedural`+"`"+`
 `, workspace)
 }
 
@@ -1449,6 +1454,7 @@ func rewriteRuleWorkspace(path, from, to string) error {
 		return err
 	}
 	cur := strings.ReplaceAll(string(b), "workspace: "+from, "workspace: "+to)
+	cur = strings.ReplaceAll(cur, "--workspace "+from, "--workspace "+to)
 	return os.WriteFile(path, []byte(cur), 0o644)
 }
 
@@ -1522,39 +1528,39 @@ type HookFile struct {
 // HippocampusHooks returns the canonical hippocampus hook files (recall + consolidation).
 // These are the V2 gates that enforce memory recall before every agent turn and
 // consolidation after every agent turn.
-func HippocampusHooks() []HookFile {
+func HippocampusHooks(workspace string) []HookFile {
 	return []HookFile{
 		{
 			Name: "memory-recall-gate.json",
-			Content: `{
+			Content: fmt.Sprintf(`{
   "name": "Memory Recall Gate",
-  "version": "2.3.0",
-  "description": "agent-memory operating contract: v5. Hippocampus recall and solution capture before every agent turn.",
+  "version": "2.5.0",
+  "description": "agent-memory operating contract: v7. The --workspace argument is mandatory. Hippocampus recall and solution capture before every agent turn.",
   "when": {
     "type": "promptSubmit"
   },
   "then": {
     "type": "askAgent",
-    "prompt": "CLI rule: invoke agent-memory through PATH in connected projects; never use ./bin/agent-memory. If agent-memory is unavailable on PATH, report the installation problem instead of guessing a project-local path.\nBefore responding to the user, do the following first:\n1. Extract 3-5 key terms and run: agent-memory search --query \"<key terms>\" --top-k 8\n2. Inspect the result and immediately submit: agent-memory feedback --request-id \"<request_id>\" --score <0-5> --reason \"<explanation>\" --useful-count <n> --total-count <n>\n3. Run ordinary recall only if one of these is true: the user asks to continue, resume, or recall previous work; search is weak; or assembled task context is needed; avoid unnecessary recall when search is already enough.\n4. For a how-oriented request run: agent-memory work recall --task \"<user message>\" --principal \"<principal_id>\"\n5. For non-trivial new work run: agent-memory work start --goal \"<goal>\" --session \"<session_id>\" --principal \"<principal_id>\" --client kiro\n6. During work use agent-memory work step after meaningful actions/decisions/results and agent-memory work checkpoint during long work.\n7. Before ending, account for What, Where, and When; use literal N/A with a concise reason for an optional dimension with no applicable stored value.\nUse retrieved context before answering. Do not store private chain-of-thought; store only concise rationale summaries."
+    "prompt": "CLI rule: invoke agent-memory through PATH in connected projects; never use ./bin/agent-memory. If agent-memory is unavailable on PATH, report the installation problem instead of guessing a project-local path. Use --workspace %[1]s on every memory command; never rely on current-directory workspace inference.\nBefore responding to the user, do the following first:\n1. Extract 3-5 key terms and run: agent-memory search --workspace %[1]s --query \"<key terms>\" --top-k 8\n2. Inspect the result and immediately submit: agent-memory feedback --workspace %[1]s --request-id \"<request_id>\" --score <0-5> --reason \"<explanation>\" --useful-count <n> --total-count <n>\n3. Run ordinary recall only if one of these is true: the user asks to continue, resume, or recall previous work; search is weak; or assembled task context is needed; avoid unnecessary recall when search is already enough.\n4. For a how-oriented request run: agent-memory work recall --workspace %[1]s --task \"<user message>\" --principal \"<principal_id>\"\n5. For non-trivial new work run: agent-memory work start --workspace %[1]s --goal \"<goal>\" --session \"<session_id>\" --principal \"<principal_id>\" --client kiro\n6. During work use agent-memory work step --workspace %[1]s after meaningful actions/decisions/results and agent-memory work checkpoint --workspace %[1]s during long work.\n7. Before ending, account for What, Where, and When; use literal N/A with a concise reason for an optional dimension with no applicable stored value.\nUse retrieved context before answering. Do not store private chain-of-thought; store only concise rationale summaries."
   }
 }
-`,
+`, workspace),
 		},
 		{
 			Name: "memory-consolidation-gate.json",
-			Content: `{
+			Content: fmt.Sprintf(`{
   "name": "Memory Consolidation Gate",
-  "version": "2.2.0",
-  "description": "agent-memory operating contract: v5. Consolidate durable knowledge and solution progress after every agent turn.",
+  "version": "2.4.0",
+  "description": "agent-memory operating contract: v7. The --workspace argument is mandatory. Consolidate durable knowledge and solution progress after every agent turn.",
   "when": {
     "type": "agentStop"
   },
   "then": {
     "type": "askAgent",
-    "prompt": "CLI rule: invoke agent-memory through PATH in connected projects; never use ./bin/agent-memory. If agent-memory is unavailable on PATH, report the installation problem instead of guessing a project-local path.\nReview what happened in this session. Store durable What and Where facts with agent-memory write. Account for What, Where, and When; use literal N/A with a concise reason for an optional dimension with no applicable stored value. If a solution episode is active, append a final agent-memory work step, checkpoint if continuation is needed, and transition it to the truthful terminal status. If the result is verified and reusable, run agent-memory work promote. Always run agent-memory session-end --transcript \"<one paragraph summary>\" --format json. Do not store private chain-of-thought; store only concise rationale summaries."
+    "prompt": "CLI rule: invoke agent-memory through PATH in connected projects; never use ./bin/agent-memory. If agent-memory is unavailable on PATH, report the installation problem instead of guessing a project-local path. Use --workspace %[1]s on every memory command; never rely on current-directory workspace inference.\nReview what happened in this session. Store durable What and Where facts with agent-memory write --workspace %[1]s. Account for What, Where, and When; use literal N/A with a concise reason for an optional dimension with no applicable stored value. If a solution episode is active, append a final agent-memory work step --workspace %[1]s, run agent-memory work checkpoint --workspace %[1]s if continuation is needed, and transition it with agent-memory work end --workspace %[1]s to the truthful terminal status. If the result is verified and reusable, run agent-memory work promote --workspace %[1]s. Always run agent-memory session-end --workspace %[1]s --transcript \"<one paragraph summary>\" --format json. Do not store private chain-of-thought; store only concise rationale summaries."
   }
 }
-`,
+`, workspace),
 		},
 	}
 }
@@ -1732,7 +1738,7 @@ func WriteAgentFiles(opt WriteAgentFilesOptions) (*WriteAgentFilesResult, error)
 		if err := os.MkdirAll(hooksDir, 0o755); err != nil {
 			return nil, fmt.Errorf("kiro: create hooks dir: %w", err)
 		}
-		for _, hf := range HippocampusHooks() {
+		for _, hf := range HippocampusHooks(ws) {
 			dst := filepath.Join(hooksDir, hf.Name)
 			if !opt.Force {
 				if existing, err := os.ReadFile(dst); err == nil &&

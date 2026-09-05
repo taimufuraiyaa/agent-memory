@@ -74,8 +74,30 @@
 - [x] Verify and release the repaired reinstall flow.
   - Acceptance: focused and full Go tests, vet, a rebuilt global CLI, the original `agent-memory reinstall --ide all` command, doctor, and diff checks pass while unrelated dashboard work remains untouched.
 
+## Phase 7 — Explicit cross-project workspace binding
+
+- [x] Increment the operating contract and bind every generated memory command to the installed workspace.
+  - Acceptance: canonical rules and Kiro prompts include the exact `--workspace <registered-name>` value for retrieval, feedback, persistence, solution lifecycle, and session finalization; rename rewrites explicit workspace arguments across managed rule and hook surfaces; no copyable command relies on current-directory inference.
+  - Verification: red-to-green focused `internal/workspace` and `internal/integration` tests.
+- [x] Propagate and verify contract v6 across registered projects.
+  - Acceptance: all managed project rules preserve user content, report the v6 marker, and contain their own registered workspace in command examples.
+  - Verification: rebuild/install CLI, refresh all registered projects, run doctor and artifact inspection, then complete full regression and session evidence.
+
+## Phase 8 — Mandatory workspace argument enforcement
+
+- [x] Add command-boundary tests for explicit workspace provenance.
+  - Acceptance: all workspace-bound agent-contract commands reject a missing `--workspace` before side effects; environment and current-directory inference do not bypass the rejection; global commands remain usable.
+  - Verification: focused `internal/cli` red-to-green regression tests.
+- [x] Enforce the mandatory flag and increment the generated operating contract.
+  - Acceptance: `write`, `search`, `recall`, `feedback`, `session-end`, and every `work` leaf require an explicitly supplied workspace; generated rules state that omission is a CLI error.
+  - Verification: focused CLI, workspace, and integration tests.
+- [x] Release and propagate the enforcement.
+  - Acceptance: rebuilt PATH binaries enforce the boundary, registered projects receive the current contract, and full tests plus vet pass without modifying unrelated work.
+  - Verification: installed-binary negative/positive checks, all-project refresh and inspection, full serial Go tests, and `go vet`.
+
 ## Risks
 
 - Shared rule-file preservation is high impact; cover it before adapter changes.
 - Default MCP schema growth can expose stale dashboard assumptions; derive assertions from exact tool names.
 - Host hook formats can evolve; verify generated JSON and avoid claims beyond tested host surfaces.
+- A renamed or removed registered workspace can leave stale embedded command arguments; the existing rename and reinstall paths must rewrite every managed surface before agents resume work.

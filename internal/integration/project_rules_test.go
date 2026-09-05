@@ -44,7 +44,7 @@ func TestKiroAdapterWritesCurrentContractToBothHooks(t *testing.T) {
 	}
 	for _, name := range []string{"memory-recall-gate.json", "memory-consolidation-gate.json"} {
 		content, err := os.ReadFile(filepath.Join(root, ".kiro", "hooks", name))
-		if err != nil || !strings.Contains(string(content), workspace.MemoryContractMarker) {
+		if err != nil || !strings.Contains(string(content), workspace.MemoryContractMarker) || !strings.Contains(string(content), "--workspace demo") {
 			t.Fatalf("%s missing current contract: %v %s", name, err, content)
 		}
 	}
