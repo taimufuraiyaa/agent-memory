@@ -25,6 +25,24 @@ func TestDevelopmentCommandsAreRegistered(t *testing.T) {
 			t.Fatalf("expected %q command to be registered", name)
 		}
 	}
+	for _, name := range []string{"start", "restart"} {
+		command, _, err := root.Find([]string{name})
+		if err != nil {
+			t.Fatalf("find %q command: %v", name, err)
+		}
+		if command.Flags().Lookup("enable-saas") == nil {
+			t.Fatalf("expected %q command to expose --enable-saas", name)
+		}
+	}
+	for _, name := range []string{"stop", "build"} {
+		command, _, err := root.Find([]string{name})
+		if err != nil {
+			t.Fatalf("find %q command: %v", name, err)
+		}
+		if command.Flags().Lookup("enable-saas") != nil {
+			t.Fatalf("did not expect %q command to expose --enable-saas", name)
+		}
+	}
 }
 
 func TestDevelopmentRootWalksUpFromNestedDirectory(t *testing.T) {
@@ -47,16 +65,13 @@ func TestDevelopmentRootWalksUpFromNestedDirectory(t *testing.T) {
 func TestDevelopmentLifecycleCommandSequences(t *testing.T) {
 	want := map[string][][]string{
 		"start": {
-			{"compose", "-f", "BASE", "-f", "DEV", "up", "-d", "--build", "--wait", "--remove-orphans"},
+			{"compose", "-f", "BASE", "-f", "DEV", "up", "-d", "--build", "--wait", "--remove-orphans", "api"},
 		},
 		"stop": {
 			{"compose", "-f", "BASE", "-f", "DEV", "down"},
 		},
 		"restart": {
 			{"compose", "-f", "BASE", "-f", "DEV", "restart", "api"},
-			{"compose", "-f", "BASE", "-f", "DEV", "restart", "postgres", "minio", "nats"},
-			{"compose", "-f", "BASE", "-f", "DEV", "up", "-d", "--wait", "postgres", "minio", "nats"},
-			{"compose", "-f", "BASE", "-f", "DEV", "up", "-d", "--force-recreate", "--wait", "worker", "reconciler", "edge", "frontend"},
 		},
 		"build": {
 			{"compose", "-f", "BASE", "-f", "DEV", "build", "api"},
@@ -83,7 +98,7 @@ func TestDevelopmentLifecycleCommandSequences(t *testing.T) {
 			command.SetErr(&bytes.Buffer{})
 			command.SetContext(context.Background())
 			command.SetArgs(nil)
-			if err := executeDevelopmentLifecycle(command, root, operation); err != nil {
+			if err := executeDevelopmentLifecycle(command, root, operation, false); err != nil {
 				t.Fatalf("execute %s: %v", operation, err)
 			}
 			if len(recorded) != len(expected) {
@@ -99,6 +114,72 @@ func TestDevelopmentLifecycleCommandSequences(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestDevelopmentLifecycleSaaSCommandSequences(t *testing.T) {
+	want := map[string][][]string{
+		"start": {
+			{"compose", "-f", "BASE", "-f", "DEV", "up", "-d", "--build", "--wait", "--remove-orphans"},
+		},
+		"restart": {
+			{"compose", "-f", "BASE", "-f", "DEV", "restart", "api"},
+			{"compose", "-f", "BASE", "-f", "DEV", "restart", "postgres", "minio", "nats"},
+			{"compose", "-f", "BASE", "-f", "DEV", "up", "-d", "--wait", "postgres", "minio", "nats"},
+			{"compose", "-f", "BASE", "-f", "DEV", "up", "-d", "--force-recreate", "--wait", "worker", "reconciler", "edge", "frontend"},
+		},
+	}
+	for operation, expected := range want {
+		t.Run(operation, func(t *testing.T) {
+			root := newDevelopmentFixture(t)
+			var recorded []recordedDevelopmentCommand
+			previous := runDevelopmentCommand
+			runDevelopmentCommand = func(_ context.Context, dir, name string, args []string, _, _ io.Writer) error {
+				recorded = append(recorded, recordedDevelopmentCommand{dir: dir, name: name, args: append([]string(nil), args...)})
+				return nil
+			}
+			t.Cleanup(func() { runDevelopmentCommand = previous })
+
+			command := newDevelopmentCommand(operation)
+			command.SetOut(&bytes.Buffer{})
+			command.SetErr(&bytes.Buffer{})
+			if err := executeDevelopmentLifecycle(command, root, operation, true); err != nil {
+				t.Fatalf("execute %s --enable-saas: %v", operation, err)
+			}
+			if len(recorded) != len(expected) {
+				t.Fatalf("recorded %d commands, want %d: %#v", len(recorded), len(expected), recorded)
+			}
+			for i, call := range recorded {
+				args := normalizeDevelopmentComposePaths(root, call.args)
+				if call.dir != root || call.name != "docker" || !reflect.DeepEqual(args, expected[i]) {
+					t.Fatalf("call %d = %#v (%#v), want %#v", i, call, args, expected[i])
+				}
+			}
+		})
+	}
+}
+
+func TestDevelopmentCommandEnableSaaSSelectsFullTopology(t *testing.T) {
+	previous := runDevelopmentCommand
+	var recorded []string
+	runDevelopmentCommand = func(_ context.Context, _ string, _ string, args []string, _, _ io.Writer) error {
+		recorded = append([]string(nil), args...)
+		return nil
+	}
+	t.Cleanup(func() { runDevelopmentCommand = previous })
+
+	command := newDevelopmentCommand("start")
+	command.SetOut(&bytes.Buffer{})
+	command.SetErr(&bytes.Buffer{})
+	command.SetArgs([]string{"--enable-saas"})
+	if err := command.Execute(); err != nil {
+		t.Fatalf("execute start --enable-saas: %v", err)
+	}
+	if len(recorded) == 0 {
+		t.Fatal("start --enable-saas did not invoke Compose")
+	}
+	if recorded[len(recorded)-1] == "api" {
+		t.Fatalf("start --enable-saas unexpectedly targeted only api: %#v", recorded)
 	}
 }
 
@@ -118,7 +199,7 @@ func TestDevelopmentLifecycleStopsAfterFailure(t *testing.T) {
 	command := newDevelopmentCommand("build")
 	command.SetOut(&bytes.Buffer{})
 	command.SetErr(&bytes.Buffer{})
-	err := executeDevelopmentLifecycle(command, root, "build")
+	err := executeDevelopmentLifecycle(command, root, "build", false)
 	if err == nil || !strings.Contains(err.Error(), "recreate api") || !strings.Contains(err.Error(), "compose failed") {
 		t.Fatalf("expected compose failure, got %v", err)
 	}
@@ -132,9 +213,9 @@ func TestDevelopmentLifecycleStopsAfterFailure(t *testing.T) {
 
 func TestDevelopmentLifecyclePrintsFinalStatus(t *testing.T) {
 	want := map[string]string{
-		"start":   "Agent Memory started.\nFrontend: http://localhost:3100\n",
+		"start":   "Agent Memory started.\n",
 		"stop":    "Agent Memory stopped.\n",
-		"restart": "Agent Memory restarted.\nFrontend: http://localhost:3100\n",
+		"restart": "Agent Memory restarted.\n",
 		"build":   "Agent Memory build complete.\nFrontend: http://localhost:3100\n",
 	}
 	for operation, expected := range want {
@@ -150,11 +231,33 @@ func TestDevelopmentLifecyclePrintsFinalStatus(t *testing.T) {
 			command := newDevelopmentCommand(operation)
 			command.SetOut(&stdout)
 			command.SetErr(&bytes.Buffer{})
-			if err := executeDevelopmentLifecycle(command, root, operation); err != nil {
+			if err := executeDevelopmentLifecycle(command, root, operation, false); err != nil {
 				t.Fatalf("execute %s: %v", operation, err)
 			}
 			if stdout.String() != expected {
 				t.Fatalf("status output %q, want %q", stdout.String(), expected)
+			}
+		})
+	}
+}
+
+func TestDevelopmentLifecyclePrintsFrontendForSaaS(t *testing.T) {
+	for _, operation := range []string{"start", "restart"} {
+		t.Run(operation, func(t *testing.T) {
+			root := newDevelopmentFixture(t)
+			previous := runDevelopmentCommand
+			runDevelopmentCommand = func(context.Context, string, string, []string, io.Writer, io.Writer) error { return nil }
+			t.Cleanup(func() { runDevelopmentCommand = previous })
+
+			var stdout bytes.Buffer
+			command := newDevelopmentCommand(operation)
+			command.SetOut(&stdout)
+			command.SetErr(&bytes.Buffer{})
+			if err := executeDevelopmentLifecycle(command, root, operation, true); err != nil {
+				t.Fatalf("execute %s --enable-saas: %v", operation, err)
+			}
+			if !strings.Contains(stdout.String(), "Frontend: http://localhost:3100") {
+				t.Fatalf("status output %q does not report frontend", stdout.String())
 			}
 		})
 	}

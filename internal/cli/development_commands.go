@@ -61,7 +61,8 @@ func newDevelopmentCommand(operation string) *cobra.Command {
 		"restart": "Restart the backend first, then other containers",
 		"build":   "Build and recreate the backend, then restart other containers",
 	}
-	return &cobra.Command{
+	var enableSaaS bool
+	command := &cobra.Command{
 		Use:   operation,
 		Short: descriptions[operation],
 		Args:  cobra.NoArgs,
@@ -74,9 +75,13 @@ func newDevelopmentCommand(operation string) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return executeDevelopmentLifecycle(cmd, root, operation)
+			return executeDevelopmentLifecycle(cmd, root, operation, enableSaaS)
 		},
 	}
+	if operation == "start" || operation == "restart" {
+		command.Flags().BoolVar(&enableSaaS, "enable-saas", false, "Start the complete SaaS development topology and hot-reload frontend")
+	}
+	return command
 }
 
 func findDevelopmentRoot(start string) (string, error) {
@@ -104,9 +109,9 @@ func regularFile(path string) bool {
 	return err == nil && info.Mode().IsRegular()
 }
 
-func executeDevelopmentLifecycle(cmd *cobra.Command, root, operation string) error {
+func executeDevelopmentLifecycle(cmd *cobra.Command, root, operation string, enableSaaS bool) error {
 	base := developmentComposeBaseArgs(root)
-	steps, err := developmentLifecycleSteps(operation)
+	steps, err := developmentLifecycleSteps(operation, enableSaaS)
 	if err != nil {
 		return err
 	}
@@ -126,7 +131,7 @@ func executeDevelopmentLifecycle(cmd *cobra.Command, root, operation string) err
 		"build":   {message: "Agent Memory build complete.", running: true},
 	}[operation]
 	_, _ = fmt.Fprintln(cmd.OutOrStdout(), status.message)
-	if status.running {
+	if status.running && (enableSaaS || operation == "build") {
 		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Frontend: http://localhost:3100")
 	}
 	return nil
@@ -165,22 +170,29 @@ func upgradeDevelopmentServices(cmd *cobra.Command, sourceRoot string, disabled 
 	if !apiRunning {
 		return upgradeDevelopmentServicesResult{Status: "not_running", Reason: "local API service is not running"}, nil
 	}
-	if err := executeDevelopmentLifecycle(cmd, sourceRoot, "build"); err != nil {
+	if err := executeDevelopmentLifecycle(cmd, sourceRoot, "build", false); err != nil {
 		return upgradeDevelopmentServicesResult{Status: "failed", Reason: err.Error()}, err
 	}
 	return upgradeDevelopmentServicesResult{Status: "rebuilt"}, nil
 }
 
-func developmentLifecycleSteps(operation string) ([]developmentLifecycleStep, error) {
+func developmentLifecycleSteps(operation string, enableSaaS bool) ([]developmentLifecycleStep, error) {
 	restartInfrastructure := append([]string{"restart"}, developmentInfrastructureServices...)
 	waitForInfrastructure := append([]string{"up", "-d", "--wait"}, developmentInfrastructureServices...)
 	recreateDependents := append([]string{"up", "-d", "--force-recreate", "--wait"}, developmentDependentServices...)
 	switch operation {
 	case "start":
-		return []developmentLifecycleStep{{name: "start stack", args: []string{"up", "-d", "--build", "--wait", "--remove-orphans"}}}, nil
+		args := []string{"up", "-d", "--build", "--wait", "--remove-orphans"}
+		if !enableSaaS {
+			args = append(args, "api")
+		}
+		return []developmentLifecycleStep{{name: "start stack", args: args}}, nil
 	case "stop":
 		return []developmentLifecycleStep{{name: "stop stack", args: []string{"down"}}}, nil
 	case "restart":
+		if !enableSaaS {
+			return []developmentLifecycleStep{{name: "restart api", args: []string{"restart", "api"}}}, nil
+		}
 		return []developmentLifecycleStep{
 			{name: "restart api", args: []string{"restart", "api"}},
 			{name: "restart infrastructure", args: restartInfrastructure},
