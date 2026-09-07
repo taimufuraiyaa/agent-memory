@@ -5,10 +5,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"unicode/utf8"
 
 	"github.com/taimufuraiyaa/agent-memory/internal/core"
 )
@@ -20,9 +22,13 @@ var DefaultMaxFiles = 200
 // MaxStudyOffset bounds synchronous offset traversal for paged study requests.
 const MaxStudyOffset = 1_000_000
 
-// DefaultMaxFileSize is the maximum file size (in bytes) study will read.
-// Larger files are skipped and reported as errors.
+// DefaultMaxFileSize is the maximum source chunk size (in bytes) study reads.
+// Larger supported text files are split into bounded chunks.
 var DefaultMaxFileSize int64 = 256 * 1024 // 256 KB
+
+// maxStudyChunksPerFile bounds synchronous reads and writes from one source.
+// With the default chunk size, one file contributes at most 4 MiB per run.
+const maxStudyChunksPerFile = 16
 
 // StudyError records a per-file error encountered during study ingestion.
 type StudyError struct {
@@ -31,17 +37,20 @@ type StudyError struct {
 }
 
 type StudyResult struct {
-	SourcesScanned int          `json:"sources_scanned"`
-	ScannedFiles   int          `json:"scanned_files"`
-	Skipped        int          `json:"skipped"`
-	Extracted      int          `json:"extracted"`
-	WrittenIDs     []string     `json:"written_ids,omitempty"`
-	Errors         []StudyError `json:"errors,omitempty"`
-	DryRun         bool         `json:"dry_run"`
-	Offset         int          `json:"offset"`
-	PageFiles      int          `json:"page_files"`
-	NextOffset     int          `json:"next_offset"`
-	HasMore        bool         `json:"has_more"`
+	SourcesScanned  int          `json:"sources_scanned"`
+	ScannedFiles    int          `json:"scanned_files"`
+	Skipped         int          `json:"skipped"`
+	Extracted       int          `json:"extracted"`
+	ChunkedFiles    int          `json:"chunked_files"`
+	ExtractedChunks int          `json:"extracted_chunks"`
+	TruncatedFiles  int          `json:"truncated_files"`
+	WrittenIDs      []string     `json:"written_ids,omitempty"`
+	Errors          []StudyError `json:"errors,omitempty"`
+	DryRun          bool         `json:"dry_run"`
+	Offset          int          `json:"offset"`
+	PageFiles       int          `json:"page_files"`
+	NextOffset      int          `json:"next_offset"`
+	HasMore         bool         `json:"has_more"`
 }
 
 type StudyOptions struct {
@@ -454,19 +463,13 @@ func (s *StudyEngine) processFile(ctx context.Context, opts StudyOptions, cache 
 		return err
 	}
 
-	// Check file size before reading.
+	// Stat before bounded reading so the result can distinguish complete
+	// chunking from a deliberately truncated prefix.
 	fi, err := os.Stat(path)
 	if err != nil {
 		res.Errors = append(res.Errors, StudyError{Path: path, Reason: fmt.Sprintf("stat: %v", err)})
 		return nil
 	}
-	if fi.Size() > opts.MaxFileSize {
-		res.Skipped++
-		res.Errors = append(res.Errors, StudyError{Path: path, Reason: fmt.Sprintf("file too large (%d bytes > %d max)", fi.Size(), opts.MaxFileSize)})
-		return nil
-	}
-
-	res.ScannedFiles++
 
 	// Binary check.
 	binary, err := isBinarySniff(path)
@@ -475,41 +478,140 @@ func (s *StudyEngine) processFile(ctx context.Context, opts StudyOptions, cache 
 		return nil
 	}
 	if binary {
-		res.ScannedFiles-- // undo increment; this file failed to scan
 		res.Skipped++
 		res.Errors = append(res.Errors, StudyError{Path: path, Reason: "binary file skipped"})
 		return nil
 	}
 
-	content, err := os.ReadFile(path)
+	chunks, truncated, err := readStudyTextChunks(path, opts.MaxFileSize)
 	if err != nil {
-		res.Errors = append(res.Errors, StudyError{Path: path, Reason: fmt.Sprintf("read: %v", err)})
+		res.Skipped++
+		res.Errors = append(res.Errors, StudyError{Path: path, Reason: err.Error()})
+		return nil
+	}
+	res.ScannedFiles++
+	if fi.Size() > opts.MaxFileSize || len(chunks) > 1 {
+		res.ChunkedFiles++
+	}
+	if truncated {
+		res.TruncatedFiles++
+		res.Errors = append(res.Errors, StudyError{
+			Path:   path,
+			Reason: fmt.Sprintf("bounded chunk limit reached; processed first %d chunks (%d bytes each maximum)", maxStudyChunksPerFile, opts.MaxFileSize),
+		})
+	}
+
+	extractedFile := false
+	for index, chunk := range chunks {
+		text := summarizeForStudy(chunk.text, opts.Depth)
+		if strings.TrimSpace(text) == "" {
+			continue
+		}
+		extractedFile = true
+		res.ExtractedChunks++
+		if opts.DryRun {
+			continue
+		}
+		out, writeErr := s.pipeline.Write(ctx, WriteInput{
+			Workspace: opts.Workspace,
+			Type:      core.SemanticMemory,
+			Content:   text,
+			Source: core.MemorySource{
+				Type:      core.SourceCodeAnalysis,
+				FilePath:  path,
+				LineRange: []int{chunk.startLine, chunk.endLine},
+			},
+			Mode:            ExtractFast,
+			ContentHashSalt: fmt.Sprintf("study:%s:chunk:%d", filepath.Clean(path), index+1),
+		})
+		if writeErr != nil {
+			res.Errors = append(res.Errors, StudyError{Path: fmt.Sprintf("%s#chunk-%d", path, index+1), Reason: fmt.Sprintf("write: %v", writeErr)})
+			continue
+		}
+		if !out.Rejected {
+			res.WrittenIDs = append(res.WrittenIDs, out.ID)
+		}
+	}
+	if extractedFile {
+		res.Extracted++
+	}
+	return nil
+}
+
+type studyTextChunk struct {
+	text      string
+	startLine int
+	endLine   int
+}
+
+func readStudyTextChunks(path string, maxChunkBytes int64) ([]studyTextChunk, bool, error) {
+	if maxChunkBytes <= 0 || maxChunkBytes > (int64(^uint(0)>>1)-1)/maxStudyChunksPerFile {
+		return nil, false, fmt.Errorf("read: invalid chunk size %d", maxChunkBytes)
+	}
+
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, false, fmt.Errorf("read: %v", err)
+	}
+	defer file.Close()
+
+	maxRead := maxChunkBytes * maxStudyChunksPerFile
+	content, err := io.ReadAll(io.LimitReader(file, maxRead+1))
+	if err != nil {
+		return nil, false, fmt.Errorf("read: %v", err)
+	}
+	truncated := int64(len(content)) > maxRead
+	if truncated {
+		content = content[:int(maxRead)]
+	}
+	if !utf8.Valid(content) && truncated {
+		for trim := 1; trim < utf8.UTFMax && trim <= len(content); trim++ {
+			if utf8.Valid(content[:len(content)-trim]) {
+				content = content[:len(content)-trim]
+				break
+			}
+		}
+	}
+	if !utf8.Valid(content) {
+		return nil, false, errors.New("read: invalid UTF-8 text skipped")
+	}
+	return chunkStudyText(string(content), int(maxChunkBytes)), truncated, nil
+}
+
+func chunkStudyText(text string, maxBytes int) []studyTextChunk {
+	if text == "" || maxBytes <= 0 {
 		return nil
 	}
 
-	text := summarizeForStudy(string(content), opts.Depth)
-	if strings.TrimSpace(text) == "" {
-		return nil
+	chunks := make([]studyTextChunk, 0, (len(text)+maxBytes-1)/maxBytes)
+	line := 1
+	for start := 0; start < len(text); {
+		window := core.TruncateUTF8(text[start:], maxBytes)
+		if window == "" {
+			break
+		}
+		end := start + len(window)
+		if end < len(text) {
+			if newline := strings.LastIndex(window, "\n"); newline >= len(window)/2 {
+				end = start + newline + 1
+				window = text[start:end]
+			}
+		}
+
+		startLine := line
+		newlines := strings.Count(window, "\n")
+		endLine := startLine + newlines
+		if strings.HasSuffix(window, "\n") {
+			endLine--
+		}
+		if endLine < startLine {
+			endLine = startLine
+		}
+		chunks = append(chunks, studyTextChunk{text: window, startLine: startLine, endLine: endLine})
+		line += newlines
+		start = end
 	}
-	res.Extracted++
-	if opts.DryRun {
-		return nil
-	}
-	out, err := s.pipeline.Write(ctx, WriteInput{
-		Workspace: opts.Workspace,
-		Type:      core.SemanticMemory,
-		Content:   text,
-		Source:    core.MemorySource{Type: core.SourceCodeAnalysis, FilePath: path},
-		Mode:      ExtractFast,
-	})
-	if err != nil {
-		res.Errors = append(res.Errors, StudyError{Path: path, Reason: fmt.Sprintf("write: %v", err)})
-		return nil
-	}
-	if !out.Rejected {
-		res.WrittenIDs = append(res.WrittenIDs, out.ID)
-	}
-	return nil
+	return chunks
 }
 
 func isStudyFile(path string) bool {
@@ -528,7 +630,7 @@ func summarizeForStudy(s, depth string) string {
 	const (
 		shallowBudget = 600
 		mediumBudget  = 1500
-		deepBudget    = 4000
+		deepBudget    = 2000
 	)
 
 	var budget int

@@ -306,6 +306,9 @@ export type ProjectStudyResult = {
   scanned_files: number
   skipped: number
   extracted: number
+  chunked_files?: number
+  extracted_chunks?: number
+  truncated_files?: number
   written_ids?: string[]
   errors?: ProjectStudyError[]
   dry_run: boolean

@@ -41,13 +41,16 @@ export type HostedProjectStudyResult = {
   scanned_files: number
   skipped: number
   extracted: number
+  chunked_files?: number
+  extracted_chunks?: number
+  truncated_files?: number
   written_ids?: string[]
   errors?: Array<{ path: string; reason: string }>
   dry_run: boolean
-	offset: number
-	page_files: number
-	next_offset: number
-	has_more: boolean
+  offset: number
+  page_files: number
+  next_offset: number
+  has_more: boolean
 }
 
 export type HostedRetrievalRequest = {

@@ -236,7 +236,7 @@ export function createHostedKnowledgeGateway(connection: HostedConnection, optio
     async study(input) {
       if (!isRegisteredProject(input.workspaceId)) throw new Error('Study is available only for registered project workspaces.')
       const response = await studyHostedProject(connection, { workspace: input.workspaceId, depth: input.depth, dry_run: input.preview, max_files: input.maxFiles, offset: input.offset })
-      return { preview: response.dry_run, scannedFiles: response.scanned_files, extracted: response.extracted, skipped: response.skipped, writtenIds: response.written_ids || [], errors: response.errors || [], offset: response.offset, pageFiles: response.page_files, nextOffset: response.next_offset, hasMore: response.has_more }
+      return { preview: response.dry_run, scannedFiles: response.scanned_files, extracted: response.extracted, chunkedFiles: response.chunked_files || 0, extractedChunks: response.extracted_chunks ?? response.extracted, truncatedFiles: response.truncated_files || 0, skipped: response.skipped, writtenIds: response.written_ids || [], errors: response.errors || [], offset: response.offset, pageFiles: response.page_files, nextOffset: response.next_offset, hasMore: response.has_more }
     },
     async listNotes() { return [] },
     async getNote() { throw new Error('Notes are unavailable in this runtime.') },

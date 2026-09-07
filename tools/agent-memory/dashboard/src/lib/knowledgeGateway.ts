@@ -120,6 +120,9 @@ export type StudyResult = {
   preview: boolean
   scannedFiles: number
   extracted: number
+  chunkedFiles: number
+  extractedChunks: number
+  truncatedFiles: number
   skipped: number
   writtenIds: string[]
   errors: Array<{ path: string; reason: string }>

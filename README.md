@@ -143,6 +143,13 @@ accepted for compatibility. One damaged project does not prevent healthy
 projects from upgrading in `--all` mode. `upgrade --dry-run` and
 `upgrade --hooks-only` do not touch project databases.
 
+When `am upgrade --all` builds from the configured Agent Memory source checkout
+and detects its local Docker API running, it also runs the safe `am build`
+lifecycle so service binaries cannot lag behind database migrations. Named
+volumes are preserved. A stopped or unavailable Docker stack is skipped with a
+reason. Use `--no-services-build` when container recreation is scheduled
+separately; `--hooks-only` and `--dry-run` never inspect or rebuild services.
+
 ---
 
 ## Command Catalog

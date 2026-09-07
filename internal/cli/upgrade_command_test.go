@@ -1,7 +1,10 @@
 package cli
 
 import (
+	"bytes"
 	"context"
+	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -14,6 +17,106 @@ import (
 	"github.com/taimufuraiyaa/agent-memory/internal/storage/sqlite"
 	"github.com/taimufuraiyaa/agent-memory/internal/workspace"
 )
+
+func TestUpgradeCommandExposesServicesBuildOptOut(t *testing.T) {
+	command := newUpgradeCommand()
+	if command.Flags().Lookup("no-services-build") == nil {
+		t.Fatal("upgrade command is missing --no-services-build")
+	}
+}
+
+func TestUpgradeDevelopmentServicesBuildsDetectedRunningStack(t *testing.T) {
+	root := newDevelopmentFixture(t)
+	previousProbe := probeDevelopmentServices
+	previousRun := runDevelopmentCommand
+	probeDevelopmentServices = func(context.Context, string) ([]string, error) {
+		return []string{"api", "frontend"}, nil
+	}
+	var calls int
+	runDevelopmentCommand = func(context.Context, string, string, []string, io.Writer, io.Writer) error {
+		calls++
+		return nil
+	}
+	t.Cleanup(func() {
+		probeDevelopmentServices = previousProbe
+		runDevelopmentCommand = previousRun
+	})
+
+	command := newDevelopmentCommand("build")
+	command.SetOut(&bytes.Buffer{})
+	command.SetErr(&bytes.Buffer{})
+	result, err := upgradeDevelopmentServices(command, root, false)
+	if err != nil {
+		t.Fatalf("upgrade development services: %v", err)
+	}
+	if result.Status != "rebuilt" || result.Reason != "" {
+		t.Fatalf("result = %+v, want rebuilt", result)
+	}
+	if calls != 5 {
+		t.Fatalf("development lifecycle calls = %d, want 5", calls)
+	}
+}
+
+func TestUpgradeDevelopmentServicesSkipsSafely(t *testing.T) {
+	tests := []struct {
+		name       string
+		sourceRoot string
+		disabled   bool
+		services   []string
+		probeErr   error
+		wantStatus string
+	}{
+		{name: "disabled", sourceRoot: newDevelopmentFixture(t), disabled: true, wantStatus: "disabled"},
+		{name: "source unavailable", wantStatus: "unavailable"},
+		{name: "stack stopped", sourceRoot: newDevelopmentFixture(t), wantStatus: "not_running"},
+		{name: "docker unavailable", sourceRoot: newDevelopmentFixture(t), probeErr: errors.New("docker unavailable"), wantStatus: "unavailable"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			previousProbe := probeDevelopmentServices
+			previousRun := runDevelopmentCommand
+			probeDevelopmentServices = func(context.Context, string) ([]string, error) {
+				return test.services, test.probeErr
+			}
+			runDevelopmentCommand = func(context.Context, string, string, []string, io.Writer, io.Writer) error {
+				t.Fatal("skipped service upgrade invoked build lifecycle")
+				return nil
+			}
+			t.Cleanup(func() {
+				probeDevelopmentServices = previousProbe
+				runDevelopmentCommand = previousRun
+			})
+
+			result, err := upgradeDevelopmentServices(newDevelopmentCommand("build"), test.sourceRoot, test.disabled)
+			if err != nil {
+				t.Fatalf("upgrade development services: %v", err)
+			}
+			if result.Status != test.wantStatus || strings.TrimSpace(result.Reason) == "" {
+				t.Fatalf("result = %+v, want status %q with reason", result, test.wantStatus)
+			}
+		})
+	}
+}
+
+func TestUpgradeDevelopmentServicesPropagatesBuildFailure(t *testing.T) {
+	root := newDevelopmentFixture(t)
+	previousProbe := probeDevelopmentServices
+	previousRun := runDevelopmentCommand
+	probeDevelopmentServices = func(context.Context, string) ([]string, error) { return []string{"api"}, nil }
+	runDevelopmentCommand = func(context.Context, string, string, []string, io.Writer, io.Writer) error {
+		return errors.New("build failed")
+	}
+	t.Cleanup(func() {
+		probeDevelopmentServices = previousProbe
+		runDevelopmentCommand = previousRun
+	})
+
+	_, err := upgradeDevelopmentServices(newDevelopmentCommand("build"), root, false)
+	if err == nil || !strings.Contains(err.Error(), "build failed") {
+		t.Fatalf("error = %v, want build failure", err)
+	}
+}
 
 func TestReplaceFileAtomicKeepsDestinationContinuouslyAvailable(t *testing.T) {
 	dir := t.TempDir()

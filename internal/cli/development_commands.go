@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -25,12 +26,32 @@ type developmentLifecycleStep struct {
 	args []string
 }
 
+type upgradeDevelopmentServicesResult struct {
+	Status string `json:"status"`
+	Reason string `json:"reason,omitempty"`
+}
+
 var runDevelopmentCommand = func(ctx context.Context, dir, name string, args []string, stdout, stderr io.Writer) error {
 	child := exec.CommandContext(ctx, name, args...)
 	child.Dir = dir
 	child.Stdout = stdout
 	child.Stderr = stderr
 	return child.Run()
+}
+
+var probeDevelopmentServices = func(ctx context.Context, root string) ([]string, error) {
+	args := append(developmentComposeBaseArgs(root), "ps", "--status", "running", "--services")
+	command := exec.CommandContext(ctx, "docker", args...)
+	command.Dir = root
+	output, err := command.CombinedOutput()
+	if err != nil {
+		message := strings.TrimSpace(string(output))
+		if message == "" {
+			message = err.Error()
+		}
+		return nil, errors.New(message)
+	}
+	return strings.Fields(string(output)), nil
 }
 
 func newDevelopmentCommand(operation string) *cobra.Command {
@@ -84,11 +105,7 @@ func regularFile(path string) bool {
 }
 
 func executeDevelopmentLifecycle(cmd *cobra.Command, root, operation string) error {
-	base := []string{
-		"compose",
-		"-f", filepath.Join(root, developmentBaseComposePath),
-		"-f", filepath.Join(root, developmentOverrideComposePath),
-	}
+	base := developmentComposeBaseArgs(root)
 	steps, err := developmentLifecycleSteps(operation)
 	if err != nil {
 		return err
@@ -113,6 +130,45 @@ func executeDevelopmentLifecycle(cmd *cobra.Command, root, operation string) err
 		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Frontend: http://localhost:3100")
 	}
 	return nil
+}
+
+func developmentComposeBaseArgs(root string) []string {
+	return []string{
+		"compose",
+		"-f", filepath.Join(root, developmentBaseComposePath),
+		"-f", filepath.Join(root, developmentOverrideComposePath),
+	}
+}
+
+func upgradeDevelopmentServices(cmd *cobra.Command, sourceRoot string, disabled bool) (upgradeDevelopmentServicesResult, error) {
+	if disabled {
+		return upgradeDevelopmentServicesResult{Status: "disabled", Reason: "disabled by --no-services-build"}, nil
+	}
+	sourceRoot = strings.TrimSpace(sourceRoot)
+	if sourceRoot == "" {
+		return upgradeDevelopmentServicesResult{Status: "unavailable", Reason: "source checkout unavailable; service images were not rebuilt"}, nil
+	}
+	if !regularFile(filepath.Join(sourceRoot, developmentBaseComposePath)) || !regularFile(filepath.Join(sourceRoot, developmentOverrideComposePath)) {
+		return upgradeDevelopmentServicesResult{Status: "unavailable", Reason: "source checkout does not contain the development Compose stack"}, nil
+	}
+	services, err := probeDevelopmentServices(cmd.Context(), sourceRoot)
+	if err != nil {
+		return upgradeDevelopmentServicesResult{Status: "unavailable", Reason: "Docker stack inspection unavailable: " + err.Error()}, nil
+	}
+	apiRunning := false
+	for _, service := range services {
+		if service == "api" {
+			apiRunning = true
+			break
+		}
+	}
+	if !apiRunning {
+		return upgradeDevelopmentServicesResult{Status: "not_running", Reason: "local API service is not running"}, nil
+	}
+	if err := executeDevelopmentLifecycle(cmd, sourceRoot, "build"); err != nil {
+		return upgradeDevelopmentServicesResult{Status: "failed", Reason: err.Error()}, err
+	}
+	return upgradeDevelopmentServicesResult{Status: "rebuilt"}, nil
 }
 
 func developmentLifecycleSteps(operation string) ([]developmentLifecycleStep, error) {
