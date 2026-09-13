@@ -225,16 +225,16 @@ From anywhere inside an Agent Memory source checkout, use the concise lifecycle
 commands to run the hosted backend stack and the Vite frontend in containers:
 
 ```bash
-# Start only the API and its mandatory dependencies.
+# Start the API, its mandatory dependencies, and the frontend.
 am start
 
-# Start the complete SaaS topology and frontend with hot reload.
+# Also start the hosted worker, reconciler, and edge services.
 am start --enable-saas
 
 # Stop and remove all related containers. Named data volumes are preserved.
 am stop
 
-# Restart only the API.
+# Restart the API and recreate the frontend.
 am restart
 
 # Restart the complete SaaS topology in dependency order.
@@ -244,11 +244,12 @@ am restart --enable-saas
 am build
 ```
 
-The default `start` and `restart` operations leave optional workers, edge, and
-frontend services out of the requested lifecycle. Compose still starts the
-API's declared PostgreSQL, migration, MinIO, object-initialization, and NATS
-dependencies when needed. With `--enable-saas`, the hot-reload frontend is
-available at `http://localhost:3100`. These commands use
+The default `start` and `restart` operations include the API and hot-reload
+frontend while leaving worker, reconciler, and edge services out of the
+requested lifecycle. Compose still starts the API's declared PostgreSQL,
+migration, MinIO, object-initialization, and NATS dependencies when needed.
+Use `--enable-saas` to add the hosted services. The frontend is available at
+`http://localhost:3100`. These commands use
 `deploy/saas/compose.yaml` together with
 `deploy/saas/compose.dev.yaml`; they are development-source commands and must be
 run inside this repository. Production binaries continue serving the embedded

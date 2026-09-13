@@ -1193,9 +1193,16 @@ func WriteCodexGlobalFiles(codexHome, dataDir string) ([]string, error) {
 }
 
 func writeCodexConfig(path, dataDir string) error {
+	return writeCodexPermissionConfig(path, dataDir)
+}
+
+func writeCodexPermissionConfig(path, dataDir string) error {
 	absDataDir, err := filepath.Abs(dataDir)
 	if err != nil {
 		return fmt.Errorf("resolve Codex writable root: %w", err)
+	}
+	if home, homeErr := os.UserHomeDir(); homeErr == nil && filepath.Clean(absDataDir) == filepath.Clean(home) {
+		return errors.New("refusing to grant Agent Memory write access to the entire home directory")
 	}
 	permissionPath := absDataDir
 	if home, homeErr := os.UserHomeDir(); homeErr == nil {
@@ -1214,8 +1221,12 @@ func writeCodexConfig(path, dataDir string) error {
 	if err != nil {
 		return fmt.Errorf("inspect Codex config: %w", err)
 	}
+	hasDefault, err := validateCodexPermissionSelection(userConfig)
+	if err != nil {
+		return err
+	}
 	managed := codexConfigStart + "\n"
-	if !regexp.MustCompile(`(?m)^\s*(?:default_permissions|sandbox_mode)\s*=`).MatchString(userConfig) {
+	if !hasDefault {
 		managed += "default_permissions = \"agent-memory-workspace\"\n"
 	}
 	managed += "permissions.agent-memory-workspace.filesystem.\":root\" = \"read\"\n" +
@@ -1231,44 +1242,26 @@ func writeCodexConfig(path, dataDir string) error {
 	return writeRuleFile(path, strings.TrimSpace(updated)+"\n")
 }
 
-func writeCodexGlobalConfig(path, dataDir string) error {
-	absDataDir, err := filepath.Abs(dataDir)
-	if err != nil {
-		return fmt.Errorf("resolve Codex writable root: %w", err)
+func validateCodexPermissionSelection(userConfig string) (bool, error) {
+	legacySandbox := regexp.MustCompile(`(?m)^\s*(?:sandbox_mode\s*=|sandbox_workspace_write\.|\[\s*sandbox_workspace_write\s*\])`)
+	if legacySandbox.MatchString(userConfig) {
+		return false, errors.New("Codex permission conflict: sandbox_mode or sandbox_workspace_write cannot be combined with the Agent Memory default_permissions profile; remove the legacy sandbox setting and rerun agent-memory reinstall or upgrade")
 	}
-	quoted := strconv.Quote(filepath.ToSlash(absDataDir))
-	managed := codexConfigStart + "\n" +
-		"sandbox_workspace_write.writable_roots = [" + quoted + "]\n" +
-		codexConfigEnd
 
-	existing := ""
-	if b, err := os.ReadFile(path); err == nil {
-		existing = string(b)
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("read Codex config: %w", err)
+	defaultSelection := regexp.MustCompile(`(?m)^\s*default_permissions\s*=\s*([^\r\n#]+)`)
+	match := defaultSelection.FindStringSubmatch(userConfig)
+	if match == nil {
+		return false, nil
 	}
-	if !strings.Contains(existing, codexConfigStart) {
-		writableRoots := regexp.MustCompile(`(?m)^(\s*(?:sandbox_workspace_write\.)?writable_roots\s*=\s*)\[([^\n]*)\](\s*)$`)
-		if match := writableRoots.FindStringSubmatchIndex(existing); match != nil {
-			line := existing[match[0]:match[1]]
-			if !strings.Contains(line, quoted) {
-				closeAt := strings.LastIndex(line, "]")
-				before := strings.TrimSpace(line[:closeAt])
-				separator := ""
-				if !strings.HasSuffix(before, "[") {
-					separator = ", "
-				}
-				line = line[:closeAt] + separator + quoted + line[closeAt:]
-				existing = existing[:match[0]] + line + existing[match[1]:]
-			}
-			return writeRuleFile(path, strings.TrimSpace(existing)+"\n")
-		}
+	value := strings.TrimSpace(match[1])
+	if value != `"agent-memory-workspace"` && value != `'agent-memory-workspace'` {
+		return false, fmt.Errorf("Codex permission conflict: default_permissions selects %s instead of the Agent Memory profile; select \"agent-memory-workspace\" or remove the setting, then rerun agent-memory reinstall or upgrade", value)
 	}
-	updated, err := replaceManagedBlock(existing, codexConfigStart, codexConfigEnd, managed)
-	if err != nil {
-		return fmt.Errorf("update Codex config: %w", err)
-	}
-	return writeRuleFile(path, strings.TrimSpace(updated)+"\n")
+	return true, nil
+}
+
+func writeCodexGlobalConfig(path, dataDir string) error {
+	return writeCodexPermissionConfig(path, dataDir)
 }
 
 func replaceManagedBlock(existing, start, end, managed string) (string, error) {

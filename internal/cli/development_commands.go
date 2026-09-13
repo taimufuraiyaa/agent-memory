@@ -19,7 +19,8 @@ const (
 )
 
 var developmentInfrastructureServices = []string{"postgres", "minio", "nats"}
-var developmentDependentServices = []string{"worker", "reconciler", "edge", "frontend"}
+var developmentHostedServices = []string{"worker", "reconciler", "edge"}
+var developmentFrontendServices = []string{"frontend"}
 
 type developmentLifecycleStep struct {
 	name string
@@ -79,7 +80,7 @@ func newDevelopmentCommand(operation string) *cobra.Command {
 		},
 	}
 	if operation == "start" || operation == "restart" {
-		command.Flags().BoolVar(&enableSaaS, "enable-saas", false, "Start the complete SaaS development topology and hot-reload frontend")
+		command.Flags().BoolVar(&enableSaaS, "enable-saas", false, "Also start the hosted worker, reconciler, and edge services")
 	}
 	return command
 }
@@ -131,7 +132,7 @@ func executeDevelopmentLifecycle(cmd *cobra.Command, root, operation string, ena
 		"build":   {message: "Agent Memory build complete.", running: true},
 	}[operation]
 	_, _ = fmt.Fprintln(cmd.OutOrStdout(), status.message)
-	if status.running && (enableSaaS || operation == "build") {
+	if status.running {
 		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Frontend: http://localhost:3100")
 	}
 	return nil
@@ -179,19 +180,24 @@ func upgradeDevelopmentServices(cmd *cobra.Command, sourceRoot string, disabled 
 func developmentLifecycleSteps(operation string, enableSaaS bool) ([]developmentLifecycleStep, error) {
 	restartInfrastructure := append([]string{"restart"}, developmentInfrastructureServices...)
 	waitForInfrastructure := append([]string{"up", "-d", "--wait"}, developmentInfrastructureServices...)
-	recreateDependents := append([]string{"up", "-d", "--force-recreate", "--wait"}, developmentDependentServices...)
+	recreateFrontend := append([]string{"up", "-d", "--force-recreate", "--wait"}, developmentFrontendServices...)
+	allDependents := append(append([]string(nil), developmentHostedServices...), developmentFrontendServices...)
+	recreateDependents := append([]string{"up", "-d", "--force-recreate", "--wait"}, allDependents...)
 	switch operation {
 	case "start":
 		args := []string{"up", "-d", "--build", "--wait", "--remove-orphans"}
 		if !enableSaaS {
-			args = append(args, "api")
+			args = append(args, "api", "frontend")
 		}
 		return []developmentLifecycleStep{{name: "start stack", args: args}}, nil
 	case "stop":
 		return []developmentLifecycleStep{{name: "stop stack", args: []string{"down"}}}, nil
 	case "restart":
 		if !enableSaaS {
-			return []developmentLifecycleStep{{name: "restart api", args: []string{"restart", "api"}}}, nil
+			return []developmentLifecycleStep{
+				{name: "restart api", args: []string{"restart", "api"}},
+				{name: "recreate frontend", args: recreateFrontend},
+			}, nil
 		}
 		return []developmentLifecycleStep{
 			{name: "restart api", args: []string{"restart", "api"}},

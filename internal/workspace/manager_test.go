@@ -1215,24 +1215,101 @@ func TestWriteCodexConfigUsesPortableHomeRelativeDataPath(t *testing.T) {
 	}
 }
 
-func TestWriteCodexConfigPreservesExplicitPermissionSelection(t *testing.T) {
+func TestWriteCodexConfigReusesMatchingPermissionSelection(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	dataDir := filepath.Join(t.TempDir(), "agent-memory")
+	seed := "default_permissions = \"agent-memory-workspace\"\nmodel = \"gpt-test\"\n"
+	if err := os.WriteFile(configPath, []byte(seed), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	for range 2 {
+		if err := writeCodexConfig(configPath, dataDir); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	contents, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(contents)
+	if strings.Count(got, "default_permissions") != 1 || !strings.Contains(got, `default_permissions = "agent-memory-workspace"`) {
+		t.Fatalf("matching permission selection was not reused: %s", got)
+	}
+	if strings.Count(got, filepath.ToSlash(dataDir)) != 1 {
+		t.Fatalf("expected one data-directory permission: %s", got)
+	}
+}
+
+func TestWriteCodexConfigRejectsHomeDirectoryWriteScope(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	seed := "model = \"gpt-test\"\n"
+	if err := os.WriteFile(configPath, []byte(seed), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	err = writeCodexConfig(configPath, home)
+	if err == nil || !strings.Contains(err.Error(), "entire home directory") {
+		t.Fatalf("expected broad home-directory scope rejection, got %v", err)
+	}
+	contents, readErr := os.ReadFile(configPath)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if string(contents) != seed {
+		t.Fatalf("config was modified after broad-scope rejection: %s", contents)
+	}
+}
+
+func TestWriteCodexConfigRejectsLegacySandboxWithoutModifyingFile(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	dataDir := filepath.Join(t.TempDir(), "agent-memory")
+	seed := codexConfigStart + "\n" +
+		"default_permissions = \"agent-memory-workspace\"\n" +
+		codexConfigEnd + "\n" +
+		"sandbox_mode = \"workspace-write\"\n" +
+		"model = \"gpt-test\"\n"
+	if err := os.WriteFile(configPath, []byte(seed), 0o644); err != nil {
+		t.Fatalf("seed config: %v", err)
+	}
+
+	err := writeCodexConfig(configPath, dataDir)
+	if err == nil {
+		t.Fatal("expected legacy sandbox conflict")
+	}
+	if !strings.Contains(err.Error(), "sandbox_mode") || !strings.Contains(err.Error(), "default_permissions") {
+		t.Fatalf("expected actionable permission conflict, got %v", err)
+	}
+
+	contents, readErr := os.ReadFile(configPath)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if string(contents) != seed {
+		t.Fatalf("conflicting config was modified:\n%s", contents)
+	}
+}
+
+func TestWriteCodexConfigRejectsConflictingPermissionSelection(t *testing.T) {
 	tests := []struct {
-		name              string
-		selection         string
-		wantDefaultCount  int
-		wantSelectionText string
+		name      string
+		selection string
+		wantError string
 	}{
 		{
-			name:              "sandbox mode",
-			selection:         "sandbox_mode = \"danger-full-access\"\n",
-			wantDefaultCount:  0,
-			wantSelectionText: "sandbox_mode = \"danger-full-access\"",
+			name:      "sandbox mode",
+			selection: "sandbox_mode = \"danger-full-access\"\n",
+			wantError: "sandbox_mode",
 		},
 		{
-			name:              "custom permission profile",
-			selection:         "default_permissions = \"custom-profile\"\n",
-			wantDefaultCount:  1,
-			wantSelectionText: "default_permissions = \"custom-profile\"",
+			name:      "custom permission profile",
+			selection: "default_permissions = \"custom-profile\"\n",
+			wantError: "custom-profile",
 		},
 	}
 
@@ -1249,34 +1326,23 @@ func TestWriteCodexConfigPreservesExplicitPermissionSelection(t *testing.T) {
 				t.Fatalf("seed config: %v", err)
 			}
 
-			for range 2 {
-				if err := writeCodexConfig(configPath, dataDir); err != nil {
-					t.Fatalf("write Codex config with explicit selection: %v", err)
-				}
+			err := writeCodexConfig(configPath, dataDir)
+			if err == nil || !strings.Contains(err.Error(), tt.wantError) {
+				t.Fatalf("expected conflict containing %q, got %v", tt.wantError, err)
 			}
 
 			contents, err := os.ReadFile(configPath)
 			if err != nil {
 				t.Fatalf("read config: %v", err)
 			}
-			got := string(contents)
-			if !strings.Contains(got, tt.wantSelectionText) {
-				t.Errorf("user permission selection was not preserved: %s", got)
-			}
-			if strings.Count(got, "default_permissions") != tt.wantDefaultCount {
-				t.Errorf("managed block competed with the user selection: %s", got)
-			}
-			if !strings.Contains(got, `permissions.agent-memory-workspace.filesystem."`+filepath.ToSlash(dataDir)+`" = "write"`) {
-				t.Errorf("managed Agent Memory profile was not refreshed: %s", got)
-			}
-			if strings.Count(got, codexConfigStart) != 1 || strings.Count(got, codexConfigEnd) != 1 {
-				t.Errorf("managed block is not idempotent: %s", got)
+			if string(contents) != seed {
+				t.Errorf("conflicting user permission selection was modified: %s", contents)
 			}
 		})
 	}
 }
 
-func TestWriteAgentFilesAllContinuesAfterExplicitCodexPermissionSelection(t *testing.T) {
+func TestWriteAgentFilesAllPropagatesExplicitCodexPermissionConflict(t *testing.T) {
 	root := t.TempDir()
 	dataDir := filepath.Join(t.TempDir(), "agent-memory")
 	if err := os.MkdirAll(filepath.Join(root, ".codex"), 0o755); err != nil {
@@ -1287,47 +1353,23 @@ func TestWriteAgentFilesAllContinuesAfterExplicitCodexPermissionSelection(t *tes
 		t.Fatal(err)
 	}
 
-	result, err := WriteAgentFiles(WriteAgentFilesOptions{
+	_, err := WriteAgentFiles(WriteAgentFilesOptions{
 		CWD:       root,
 		Workspace: "permission-preserve",
 		DataDir:   dataDir,
 		Force:     true,
 		IDEs:      []string{"all"},
 	})
-	if err != nil {
-		t.Fatalf("write all agent files: %v", err)
-	}
-
-	for _, ide := range []string{"codex", "kiro", "claude", "zcode"} {
-		found := false
-		for _, installed := range result.IDEs {
-			if installed.IDE == ide {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Errorf("later --ide all target %q was not processed: %+v", ide, result.IDEs)
-		}
+	if err == nil || !strings.Contains(err.Error(), "sandbox_mode") {
+		t.Fatalf("expected Codex permission conflict, got %v", err)
 	}
 
 	config, err := os.ReadFile(configPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(config), "sandbox_mode = \"workspace-write\"") || strings.Contains(string(config), "default_permissions") {
-		t.Errorf("explicit permission selection was not authoritative: %s", config)
-	}
-	for _, generated := range []string{
-		filepath.Join(root, "AGENTS.md"),
-		filepath.Join(root, ".codex", "hooks.json"),
-		filepath.Join(root, ".kiro", "hooks", "memory-recall-gate.json"),
-		filepath.Join(root, "CLAUDE.md"),
-	} {
-		contents, readErr := os.ReadFile(generated)
-		if readErr != nil || !strings.Contains(string(contents), MemoryContractMarker) {
-			t.Errorf("managed contract was not refreshed at %s: %v %s", generated, readErr, contents)
-		}
+	if string(config) != "sandbox_mode = \"workspace-write\"\nmodel = \"gpt-test\"\n" {
+		t.Errorf("conflicting config was modified: %s", config)
 	}
 }
 
@@ -1347,7 +1389,10 @@ func TestWriteCodexGlobalFilesPreservesExistingSettings(t *testing.T) {
 		}
 	}
 	config, _ := os.ReadFile(filepath.Join(codexHome, "config.toml"))
-	if !strings.Contains(string(config), `model = "gpt-test"`) || strings.Count(string(config), dataDir) != 1 {
+	if !strings.Contains(string(config), `model = "gpt-test"`) ||
+		strings.Count(string(config), dataDir) != 1 ||
+		strings.Count(string(config), "default_permissions") != 1 ||
+		strings.Contains(string(config), "sandbox_workspace_write") {
 		t.Fatalf("expected preserved config and one data root, got %s", config)
 	}
 	hooks, _ := os.ReadFile(filepath.Join(codexHome, "hooks.json"))
@@ -1356,7 +1401,7 @@ func TestWriteCodexGlobalFilesPreservesExistingSettings(t *testing.T) {
 	}
 }
 
-func TestWriteCodexGlobalFilesPreservesExistingWritableRoots(t *testing.T) {
+func TestWriteCodexGlobalFilesRejectsLegacyWritableRoots(t *testing.T) {
 	codexHome := t.TempDir()
 	dataDir := filepath.Join(t.TempDir(), "agent-memory")
 	existingRoot := "/existing/writable/root"
@@ -1364,14 +1409,13 @@ func TestWriteCodexGlobalFilesPreservesExistingWritableRoots(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(codexHome, "config.toml"), []byte(seed), 0o644); err != nil {
 		t.Fatalf("seed config: %v", err)
 	}
-	for range 2 {
-		if _, err := WriteCodexGlobalFiles(codexHome, dataDir); err != nil {
-			t.Fatalf("write global Codex files: %v", err)
-		}
+	_, err := WriteCodexGlobalFiles(codexHome, dataDir)
+	if err == nil || !strings.Contains(err.Error(), "sandbox_workspace_write") {
+		t.Fatalf("expected legacy writable-root conflict, got %v", err)
 	}
 	config, _ := os.ReadFile(filepath.Join(codexHome, "config.toml"))
-	if strings.Count(string(config), existingRoot) != 1 || strings.Count(string(config), dataDir) != 1 {
-		t.Fatalf("expected both writable roots exactly once, got %s", config)
+	if string(config) != seed {
+		t.Fatalf("legacy global config was modified, got %s", config)
 	}
 }
 

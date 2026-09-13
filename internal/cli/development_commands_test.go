@@ -65,13 +65,14 @@ func TestDevelopmentRootWalksUpFromNestedDirectory(t *testing.T) {
 func TestDevelopmentLifecycleCommandSequences(t *testing.T) {
 	want := map[string][][]string{
 		"start": {
-			{"compose", "-f", "BASE", "-f", "DEV", "up", "-d", "--build", "--wait", "--remove-orphans", "api"},
+			{"compose", "-f", "BASE", "-f", "DEV", "up", "-d", "--build", "--wait", "--remove-orphans", "api", "frontend"},
 		},
 		"stop": {
 			{"compose", "-f", "BASE", "-f", "DEV", "down"},
 		},
 		"restart": {
 			{"compose", "-f", "BASE", "-f", "DEV", "restart", "api"},
+			{"compose", "-f", "BASE", "-f", "DEV", "up", "-d", "--force-recreate", "--wait", "frontend"},
 		},
 		"build": {
 			{"compose", "-f", "BASE", "-f", "DEV", "build", "api"},
@@ -213,9 +214,9 @@ func TestDevelopmentLifecycleStopsAfterFailure(t *testing.T) {
 
 func TestDevelopmentLifecyclePrintsFinalStatus(t *testing.T) {
 	want := map[string]string{
-		"start":   "Agent Memory started.\n",
+		"start":   "Agent Memory started.\nFrontend: http://localhost:3100\n",
 		"stop":    "Agent Memory stopped.\n",
-		"restart": "Agent Memory restarted.\n",
+		"restart": "Agent Memory restarted.\nFrontend: http://localhost:3100\n",
 		"build":   "Agent Memory build complete.\nFrontend: http://localhost:3100\n",
 	}
 	for operation, expected := range want {
