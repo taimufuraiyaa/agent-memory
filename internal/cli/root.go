@@ -121,6 +121,7 @@ func NewRootCommand() *cobra.Command {
 	cmd.AddCommand(newArchiveCommand())
 	cmd.AddCommand(newServeCommand())
 	cmd.AddCommand(newDashboardCommand())
+	cmd.AddCommand(requireExplicitWorkspace(newTUICommand()))
 	cmd.AddCommand(newVersionCommand())
 	cmd.AddCommand(newUpgradeCommand())
 	cmd.AddCommand(newInstallCommand())

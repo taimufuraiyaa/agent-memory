@@ -190,6 +190,9 @@ func TestCheckModelVersion_MismatchedVectors(t *testing.T) {
 	if check.CurrentModelVersion != provider.ModelVersion() {
 		t.Errorf("expected CurrentModelVersion=%s, got %s", provider.ModelVersion(), check.CurrentModelVersion)
 	}
+	if check.RecommendedAction != "Run: agent-memory re-embed --workspace test-workspace" {
+		t.Errorf("recommended action must use the valid re-embed command, got %q", check.RecommendedAction)
+	}
 }
 
 func TestCheckModelVersion_SmallMismatch_NoReembedRequired(t *testing.T) {
@@ -242,6 +245,9 @@ func TestCheckModelVersion_SmallMismatch_NoReembedRequired(t *testing.T) {
 	}
 	if check.MismatchedVectors != 1 {
 		t.Errorf("expected MismatchedVectors=1, got %d", check.MismatchedVectors)
+	}
+	if check.RecommendedAction != "Optional: 1/20 vectors use outdated provider/version. Run agent-memory re-embed --workspace test-workspace to update." {
+		t.Errorf("optional action must use the valid re-embed command, got %q", check.RecommendedAction)
 	}
 }
 
@@ -346,7 +352,7 @@ func TestFormatWarningMessage(t *testing.T) {
 		ProviderDistribution: map[string]int{"onnx-minilm-l6-v2": 70, "local-hash": 30},
 		VersionDistribution:  map[string]int{"onnx-minilm-l6-v2@minilm-l6-v2-fp32": 70, "local-hash@local-hash-v1": 30},
 		ReembedRequired:      true,
-		RecommendedAction:    "Run: agent-memory reembed --workspace test",
+		RecommendedAction:    "Run: agent-memory re-embed --workspace test",
 	}
 
 	msg := check.FormatWarningMessage()
@@ -364,8 +370,11 @@ func TestFormatWarningMessage(t *testing.T) {
 	if !contains(msg, "30") {
 		t.Errorf("message should contain mismatched count")
 	}
-	if !contains(msg, "reembed") {
-		t.Errorf("message should contain reembed recommendation")
+	if !contains(msg, "agent-memory re-embed --workspace test") {
+		t.Errorf("message should contain the valid re-embed command")
+	}
+	if contains(msg, "agent-memory reembed") {
+		t.Errorf("message should not contain the invalid reembed command")
 	}
 
 	// Nil check should return empty message

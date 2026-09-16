@@ -168,6 +168,7 @@ separately; `--hooks-only` and `--dry-run` never inspect or rebuild services.
 | `agent-memory session-end` | Parse a session transcript to extract clean learnings |
 | `agent-memory study` | Bootstrap/learn from project documents and code files |
 | `agent-memory dashboard` (`ui`) | Start and open the local web-based dashboard |
+| `agent-memory tui --workspace <name>` | Open the local keyboard-driven terminal workspace |
 
 ---
 
@@ -206,6 +207,30 @@ agent-memory advisor --format json
 # Extract learnings at the end of a session
 cat session_transcript.txt | agent-memory session-end --workspace my-project --format json
 ```
+
+## Terminal UI
+
+Open one explicitly selected local workspace without starting the HTTP server or browser dashboard:
+
+```bash
+agent-memory tui --workspace my-project
+```
+
+The initial terminal UI provides a workspace overview, recent-memory browsing, semantic search, memory details, loading and error states, and an in-app help screen. It is intentionally read-only except for normal retrieval telemetry recorded by semantic search. The existing React dashboard remains the interface for source ingestion, notes, graph exploration, settings, hosted mode, and other mutations.
+
+| Key | Action |
+| --- | --- |
+| `Tab` / `Shift-Tab`, `1` / `2` / `3` | Switch between Home, Search, and Browse |
+| `/` | Focus search input |
+| `Enter` | Run a search or open the selected memory |
+| Arrow keys or `j` / `k` | Move through results and detail content |
+| `g` / `G` | Jump to the start or end |
+| `r` | Refresh the current view |
+| `Esc` | Leave search input, detail, or help |
+| `?` | Toggle help |
+| `q` or `Ctrl-C` | Quit |
+
+The command requires an interactive terminal and does not support `--api` mode.
 
 ### Exact-term Bloom rollout
 
