@@ -14,6 +14,7 @@ import (
 	"github.com/taimufuraiyaa/agent-memory/internal/core"
 	"github.com/taimufuraiyaa/agent-memory/internal/engine"
 	"github.com/taimufuraiyaa/agent-memory/internal/observability"
+	graphretrieval "github.com/taimufuraiyaa/agent-memory/internal/retrieval"
 	"github.com/taimufuraiyaa/agent-memory/internal/saas/auth"
 	"github.com/taimufuraiyaa/agent-memory/internal/workspace"
 )
@@ -40,6 +41,14 @@ type LocalProjectSearchInput struct {
 	Query     string
 	Limit     int
 	Offset    int
+}
+
+type LocalProjectAskInput struct {
+	Workspace     string
+	Query         string
+	GraphMode     graphretrieval.GraphQueryMode
+	GraphRequired bool
+	AllowStale    bool
 }
 
 type LocalProjectBrowseInput struct {
@@ -267,6 +276,7 @@ type LocalClientProfileService interface {
 
 type LocalProjectService interface {
 	List(context.Context) ([]workspace.ListItem, error)
+	Ask(context.Context, LocalProjectAskInput) (*application.RecallResult, error)
 	Study(context.Context, LocalProjectStudyInput) (*engine.StudyResult, error)
 	ListFeedback(context.Context, string) ([]core.RetrievalRequestLog, error)
 	RecordFeedback(context.Context, LocalProjectFeedbackInput) error
@@ -285,6 +295,45 @@ type LocalProjectService interface {
 	RecallSolutionPaths(context.Context, LocalProjectSolutionRecallInput) (engine.HowRecallResult, error)
 	PromoteSolutionEpisode(context.Context, LocalProjectSolutionPromoteInput) (application.SolutionPromotionResult, error)
 	ExportSolutionEpisode(context.Context, LocalProjectSolutionExportInput) (LocalProjectSolutionExport, error)
+}
+
+// LocalProjectGraphService is deliberately separate from LocalProjectService so
+// projects without a graph control plane do not acquire one by accident.
+// Implementations must resolve the selected registered project through its
+// local registry before opening its SQLite database.
+type LocalProjectGraphService interface {
+	GraphReadiness(context.Context, string, string) (application.GraphIndexReadiness, error)
+	GraphStatus(context.Context, string, string) (application.GraphIndexStatus, error)
+	GraphQueue(context.Context) (LocalProjectGraphQueue, error)
+	OperateGraph(context.Context, LocalProjectGraphOperationInput) (application.GraphOperationResult, error)
+}
+
+type LocalProjectGraphQueue struct {
+	ProjectsScanned         int                         `json:"projects_scanned"`
+	ProjectsUnavailable     int                         `json:"projects_unavailable"`
+	UnavailableProjectNames []string                    `json:"unavailable_project_names,omitempty"`
+	Jobs                    []LocalProjectGraphQueueJob `json:"jobs"`
+}
+
+type LocalProjectGraphQueueJob struct {
+	Workspace      string    `json:"workspace"`
+	JobID          string    `json:"job_id"`
+	State          string    `json:"state"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
+	AgeSeconds     int64     `json:"age_seconds"`
+	PendingRecords int64     `json:"pending_records"`
+}
+
+type LocalProjectGraphOperationInput struct {
+	Workspace        string                           `json:"workspace"`
+	ConfigurationID  string                           `json:"configuration_id"`
+	Action           application.GraphOperationAction `json:"action"`
+	ExpectedRevision string                           `json:"expected_revision,omitempty"`
+	IdempotencyKey   string                           `json:"idempotency_key,omitempty"`
+	TenantID         string                           `json:"-"`
+	AccountID        string                           `json:"-"`
+	Actor            string                           `json:"-"`
 }
 
 func localProjectBoundary(capability string, next http.Handler) http.Handler {
@@ -585,6 +634,147 @@ func searchLocalProject(service LocalProjectService) http.HandlerFunc {
 			nextCursor = strconv.Itoa(offset + len(items))
 		}
 		writeSuccess(response, http.StatusOK, requestID(request), map[string]any{"items": items, "next_cursor": nextCursor})
+	}
+}
+
+func askLocalProject(service LocalProjectService) http.HandlerFunc {
+	return func(response http.ResponseWriter, request *http.Request) {
+		var body struct {
+			Workspace  string `json:"workspace"`
+			Query      string `json:"query"`
+			GraphMode  string `json:"graph_mode"`
+			Required   bool   `json:"graph_required"`
+			AllowStale bool   `json:"graph_allow_stale"`
+		}
+		if err := decodeJSON(request, &body); err != nil {
+			writeError(response, http.StatusBadRequest, requestID(request), "invalid_request", "request body is invalid")
+			return
+		}
+		workspaceName, valid := validLocalProjectWorkspace(body.Workspace)
+		query := strings.TrimSpace(body.Query)
+		mode := graphretrieval.GraphQueryMode(strings.ToLower(strings.TrimSpace(body.GraphMode)))
+		if mode == "" {
+			mode = graphretrieval.GraphQueryAuto
+		}
+		validMode := mode == graphretrieval.GraphQueryBasic || mode == graphretrieval.GraphQueryAuto || mode == graphretrieval.GraphQueryLocal || mode == graphretrieval.GraphQueryGlobal
+		requiredMode := mode == graphretrieval.GraphQueryLocal || mode == graphretrieval.GraphQueryGlobal
+		if !valid || query == "" || len(query) > 2000 || !validMode || (body.Required && !requiredMode) {
+			writeError(response, http.StatusBadRequest, requestID(request), "invalid_project_ask", "a registered workspace name, bounded query, and supported graph mode are required")
+			return
+		}
+		result, err := service.Ask(request.Context(), LocalProjectAskInput{
+			Workspace: workspaceName, Query: query, GraphMode: mode,
+			GraphRequired: body.Required, AllowStale: body.AllowStale,
+		})
+		if err != nil {
+			writeError(response, http.StatusBadRequest, requestID(request), "project_ask_failed", err.Error())
+			return
+		}
+		if result == nil {
+			writeError(response, http.StatusInternalServerError, requestID(request), "project_ask_failed", "project recall returned no result")
+			return
+		}
+		included := make([]core.MemoryEntry, 0, len(result.Included))
+		for _, hit := range result.Included {
+			included = append(included, hit.Memory)
+		}
+		weak := []core.MemoryEntry{}
+		if result.Retrieved != nil {
+			weak = make([]core.MemoryEntry, 0, len(result.Retrieved.WeakHits))
+			for _, hit := range result.Retrieved.WeakHits {
+				weak = append(weak, hit.Memory)
+			}
+		}
+		writeSuccess(response, http.StatusOK, requestID(request), map[string]any{
+			"graph_request_id":       result.RequestID,
+			"context_block":          result.ContextBlock,
+			"memories_included_full": included,
+			"weak_memories":          weak,
+			"graph_route":            result.GraphRoute,
+			"graph_context":          result.GraphContext,
+		})
+	}
+}
+
+func localProjectGraphReadiness(service LocalProjectGraphService) http.HandlerFunc {
+	return func(response http.ResponseWriter, request *http.Request) {
+		workspaceName, valid := validLocalProjectWorkspace(request.URL.Query().Get("workspace"))
+		configurationID := strings.TrimSpace(request.URL.Query().Get("configuration_id"))
+		if configurationID == "" {
+			configurationID = "default"
+		}
+		if !valid || len(configurationID) > 128 || strings.ContainsAny(configurationID, "/\\") {
+			writeError(response, http.StatusBadRequest, requestID(request), "invalid_graph_scope", "A registered workspace and valid graph configuration are required.")
+			return
+		}
+		readiness, err := service.GraphReadiness(request.Context(), workspaceName, configurationID)
+		if err != nil {
+			writeError(response, http.StatusServiceUnavailable, requestID(request), "project_graph_unavailable", "Graph readiness is unavailable for this workspace.")
+			return
+		}
+		writeSuccess(response, http.StatusOK, requestID(request), readiness)
+	}
+}
+
+func localProjectGraphStatus(service LocalProjectGraphService) http.HandlerFunc {
+	return func(response http.ResponseWriter, request *http.Request) {
+		workspaceName, valid := validLocalProjectWorkspace(request.URL.Query().Get("workspace"))
+		configurationID := strings.TrimSpace(request.URL.Query().Get("configuration_id"))
+		if configurationID == "" {
+			configurationID = "default"
+		}
+		if !valid || len(configurationID) > 128 || strings.ContainsAny(configurationID, "/\\") {
+			writeError(response, http.StatusBadRequest, requestID(request), "invalid_graph_scope", "A registered workspace and valid graph configuration are required.")
+			return
+		}
+		status, err := service.GraphStatus(request.Context(), workspaceName, configurationID)
+		if err != nil {
+			writeError(response, http.StatusServiceUnavailable, requestID(request), "project_graph_unavailable", "Graph status is unavailable for this workspace.")
+			return
+		}
+		writeSuccess(response, http.StatusOK, requestID(request), status)
+	}
+}
+
+func localProjectGraphQueue(service LocalProjectGraphService) http.HandlerFunc {
+	return func(response http.ResponseWriter, request *http.Request) {
+		queue, err := service.GraphQueue(request.Context())
+		if err != nil {
+			writeError(response, http.StatusServiceUnavailable, requestID(request), "project_graph_queue_unavailable", "Graph queue status is unavailable for registered projects.")
+			return
+		}
+		writeSuccess(response, http.StatusOK, requestID(request), queue)
+	}
+}
+
+func localProjectGraphOperation(service LocalProjectGraphService) http.HandlerFunc {
+	return func(response http.ResponseWriter, request *http.Request) {
+		caller, ok := auth.FromContext(request.Context())
+		if !ok {
+			writeError(response, http.StatusForbidden, requestID(request), "browser_owner_required", "A browser owner session is required.")
+			return
+		}
+		var input LocalProjectGraphOperationInput
+		if err := decodeJSON(request, &input); err != nil {
+			writeError(response, http.StatusBadRequest, requestID(request), "invalid_request", "The graph operation request is invalid.")
+			return
+		}
+		input.Workspace, ok = validLocalProjectWorkspace(input.Workspace)
+		input.ConfigurationID = strings.TrimSpace(input.ConfigurationID)
+		input.ExpectedRevision = strings.TrimSpace(input.ExpectedRevision)
+		input.IdempotencyKey = strings.TrimSpace(input.IdempotencyKey)
+		if !ok || input.ConfigurationID == "" || len(input.ConfigurationID) > 128 || strings.ContainsAny(input.ConfigurationID, "/\\") ||
+			input.Action != application.GraphOperationRebuild || input.IdempotencyKey == "" || len(input.IdempotencyKey) > 200 {
+			writeError(response, http.StatusBadRequest, requestID(request), "invalid_graph_operation", "A full graph reindex with a bounded idempotency key is required.")
+			return
+		}
+		input.TenantID, input.AccountID, input.Actor = caller.TenantID, caller.AccountID, caller.SubjectID
+		result, err := service.OperateGraph(request.Context(), input)
+		if err != nil {
+			writeError(response, http.StatusConflict, requestID(request), "graph_operation_unavailable", "The graph reindex could not be queued.")
+			return
+		}
+		writeSuccess(response, http.StatusAccepted, requestID(request), result)
 	}
 }
 

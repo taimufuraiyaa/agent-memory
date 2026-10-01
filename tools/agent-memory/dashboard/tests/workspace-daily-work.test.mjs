@@ -41,7 +41,7 @@ test('Ask evidence has a five-line preview, one detail modal, and a separate cop
 })
 
 test('memory search explains ranking and pages with an opaque cursor', () => {
-  assert.match(memorySource, /gateway\.search\(scope, query, pageCursor/)
+  assert.match(memorySource, /gateway\.search\(scope, searchQuery, pageCursor/)
   assert.match(memorySource, /cursorHistory/)
   assert.match(memorySource, /<CursorPagination/)
   assert.doesNotMatch(memorySource, />Load more</)

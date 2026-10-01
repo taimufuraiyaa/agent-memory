@@ -13,6 +13,8 @@ from agent_memory_graphrag.settings import SettingsRequest, generate_settings
 
 
 def _settings(root: Path):
+    root.mkdir(parents=True, exist_ok=True, mode=0o700)
+    root.chmod(0o700)
     return generate_settings(SettingsRequest(completion_provider="openai", completion_model="c", embedding_provider="openai", embedding_model="e", job_root=str(root))).settings
 
 

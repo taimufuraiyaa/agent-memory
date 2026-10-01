@@ -79,6 +79,17 @@ func TestLocalProjectSystemReadsRegisteredLifecycleAndRegularSkillsOnly(t *testi
 	}
 }
 
+func TestLocalProjectAskResolvesOnlyRegisteredWorkspaceIdentity(t *testing.T) {
+	manager, err := workspace.NewManager(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := &localProjectService{manager: manager, modelDir: t.TempDir()}
+	if _, err := service.Ask(context.Background(), api.LocalProjectAskInput{Workspace: "../other", Query: "question", GraphMode: "auto"}); err == nil {
+		t.Fatal("path-shaped unregistered workspace was accepted")
+	}
+}
+
 func TestLocalProjectOrchestrationStatusStaysInsideRegisteredWorkspace(t *testing.T) {
 	ctx := context.Background()
 	baseDir := t.TempDir()

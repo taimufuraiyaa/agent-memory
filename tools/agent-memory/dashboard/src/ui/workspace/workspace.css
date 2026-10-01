@@ -171,9 +171,24 @@ body.light .workspaceApp[data-visual-theme="atlas"] :is(.workspaceThemePicker, .
 
 .workspaceMain {
   min-width: 0;
-  height: 100vh;
+  height: calc(100vh - 68px);
   overflow-y: auto;
   background: var(--workspace-canvas);
+}
+.workspaceMain--chat {
+  display: flex;
+  min-height: 0;
+  height: calc(100vh - 68px);
+  height: calc(100dvh - 68px);
+  overflow: hidden;
+}
+.workspaceMain--chat > .workspaceCanvas {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  flex-direction: column;
+  padding-bottom: clamp(12px, 1.5vw, 22px);
 }
 
 .workspaceCanvas { width: 100%; max-width: none; min-width: 0; margin: 0; padding: clamp(20px, 2vw, 40px); }
@@ -429,4 +444,149 @@ body.light .workspaceApp[data-visual-theme="atlas"] .howTreeRoot {
     animation-duration: .01ms !important;
     animation-iteration-count: 1 !important;
   }
+}
+
+/* VS Code style workspace explorer and chat canvas */
+.workspaceApp .workspaceHeaderRow {
+  height: 68px;
+  padding-inline: 16px;
+}
+.workspaceHeaderContext { min-width: 0; max-width: min(42vw, 520px); }
+.workspaceRail { padding: 10px !important; }
+.workspaceExplorer { width: 100%; min-width: 0; height: 100%; overflow: hidden; }
+.workspaceExplorerHeading { min-height: 34px; }
+.workspaceExplorerScroll { flex: 1; min-height: 0; }
+.workspaceExplorerFooter { min-height: 32px; border-top: 1px solid var(--workspace-border); }
+.workspaceTreeWorkspace { min-width: 0; padding: 2px 4px 5px; border-radius: 9px; }
+.workspaceTreeWorkspace:hover,
+.workspaceTreeWorkspace.isActive { background: var(--workspace-accent-soft); }
+.workspaceTreeRootRow { min-width: 0; min-height: 34px; }
+.workspaceTreeWorkspaceButton,
+.workspaceTreeItemButton {
+  display: flex;
+  min-width: 0;
+  min-height: 32px;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 7px;
+  border-radius: 6px;
+  color: var(--workspace-text);
+  text-align: left;
+}
+.workspaceTreeWorkspaceButton { flex: 1; font-weight: 650; }
+.workspaceTreeWorkspaceButton:hover,
+.workspaceTreeItemButton:hover { background: var(--workspace-accent-active); }
+.workspaceTreeWorkspaceName,
+.workspaceTreeItemButton span { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.workspaceTreeCount { flex: 0 0 auto; }
+.workspaceTreeMore { flex: 0 0 auto; opacity: .68; }
+.workspaceTreeWorkspace:hover .workspaceTreeMore,
+.workspaceTreeMore:focus-visible { opacity: 1; }
+.workspaceTreeChildren { padding: 3px 0 4px 29px; }
+.workspaceTreeSectionLabel { padding: 6px 8px 2px; letter-spacing: .09em; }
+.workspaceTreeItem { min-width: 0; border-radius: 6px; }
+.workspaceTreeItem.isSelected { background: var(--workspace-accent-active); box-shadow: inset 2px 0 var(--workspace-accent); }
+.workspaceTreeItemButton { flex: 1; color: var(--workspace-muted); font-size: var(--mantine-font-size-sm); }
+.workspaceTreeItem.isSelected .workspaceTreeItemButton { color: var(--workspace-text); }
+.workspaceTreeStatus { padding: 2px 0 0 39px; text-transform: capitalize; }
+.workspaceTreeEmpty { min-height: 30px; padding-block: 4px; }
+.workspaceApp[data-visual-theme="atlas"] .workspaceTreeWorkspace.isActive { box-shadow: inset 0 0 22px rgba(103, 217, 234, .035); }
+
+.workspaceChatPage { display: flex; flex: 1; min-width: 0; min-height: 0; flex-direction: column; overflow: hidden; }
+.workspaceChatPageHeader { gap: 16px; min-width: 0; }
+.workspaceChatPageHeader h1 { margin: 3px 0 0; font-size: clamp(22px, 2.4vw, 32px); letter-spacing: -.035em; overflow-wrap: anywhere; }
+.workspaceChatPanelPicker { flex: 0 0 auto; max-width: 100%; }
+.workspaceChatPanelOption { white-space: nowrap; }
+.workspaceChatLayout { display: flex; flex: 1; min-width: 0; min-height: 0; flex-direction: column; }
+.workspaceChatView { display: flex; flex: 1; min-width: 0; min-height: 0; flex-direction: column; gap: 12px; overflow: hidden; }
+.workspaceChatTranscript { flex: 1; min-width: 0; min-height: 0; padding: 4px 2px 14px; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+.workspaceChatTurn { width: 100%; min-width: 0; scroll-margin-block: 20px; }
+.workspaceChatQuestionRow { margin-left: auto; max-width: min(88%, 760px); }
+.workspaceChatQuestion { min-width: 0; border: 1px solid var(--workspace-accent-border); background: var(--workspace-accent-soft); }
+.workspaceChatAnswer { width: min(100%, 960px); margin-top: 12px; }
+.workspaceChatAnswerBody { background: var(--workspace-card-strong); }
+.workspaceChatEvidenceSection { min-width: 0; }
+.workspaceChatEvidenceSection .knowledgeResult { background: var(--workspace-card); }
+.workspaceChatFailure { max-width: 900px; margin-top: 10px; }
+.workspaceChatPending { min-height: 28px; padding: 12px 4px; }
+.workspaceChatTyping { width: 8px; height: 8px; border-radius: 50%; background: var(--workspace-accent); box-shadow: 12px 0 color-mix(in srgb, var(--workspace-accent) 58%, transparent), 24px 0 color-mix(in srgb, var(--workspace-accent) 28%, transparent); margin-right: 22px; }
+.workspaceChatWelcome { width: min(100%, 700px); min-height: 150px; margin: auto; display: grid; place-items: center; background: var(--workspace-card-strong); }
+.workspaceChatComposer { position: sticky; z-index: 2; bottom: 0; flex: 0 0 auto; width: min(100%, 1120px); margin: 0 auto; background: color-mix(in srgb, var(--workspace-panel) 96%, transparent); backdrop-filter: blur(14px); }
+.workspaceChatComposer .mantine-Textarea-input { overflow-wrap: anywhere; }
+.workspaceChatCopyStatus:empty { display: none; }
+.workspaceOverviewPanel,
+.workspaceRecentsPanel,
+.workspaceSkillsView { min-width: 0; }
+.workspaceSkillsView .skillsBrowser { grid-template-columns: minmax(0, 1fr); }
+.workspaceSkillsView .skillsDirectory { max-height: 260px; padding: 0 0 12px; border-right: 0; border-bottom: 1px dashed var(--workspace-border); }
+.workspaceSkillsView .skillsDetail { max-height: 56vh; }
+.workspaceContextDrawer .mantine-Drawer-content { max-width: calc(100vw - 12px); }
+.workspaceContextDrawer .mantine-Drawer-body { min-width: 0; overflow-x: hidden; }
+
+.workspaceApp[data-shell="vscode"] {
+  --workspace-border: #3b3b3b;
+  --workspace-panel: #252526;
+  --workspace-panel-strong: #2d2d30;
+  --workspace-canvas: #1e1e1e;
+  --workspace-card: #252526;
+  --workspace-card-strong: #252526;
+  --workspace-header: #333333;
+  --workspace-rail: #252526;
+  --workspace-text: #cccccc;
+  --workspace-muted: #b8b8b8;
+  --workspace-subtle: #858585;
+  --workspace-active-muted: #e1e1e1;
+  --workspace-accent: #3794ff;
+  --workspace-accent-soft: rgba(55, 148, 255, .09);
+  --workspace-accent-active: rgba(55, 148, 255, .17);
+  --workspace-accent-border: rgba(55, 148, 255, .58);
+  background: var(--workspace-canvas);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+.workspaceApp[data-shell="vscode"] .workspaceHeader { border-bottom: 1px solid var(--workspace-border); box-shadow: none; backdrop-filter: none; }
+.workspaceApp[data-shell="vscode"] .workspaceBrand .mantine-ThemeIcon-root { box-shadow: none; }
+.workspaceApp[data-shell="vscode"] .workspaceCanvas :is(.mantine-Paper-root, .mantine-Card-root) { box-shadow: none; }
+.workspaceApp[data-shell="vscode"] .workspaceTreeWorkspace.isActive { box-shadow: inset 0 0 0 1px rgba(55, 148, 255, .22); }
+.workspaceApp[data-shell="vscode"] .knowledgeResult { border-color: #3b3b3b; background: #252526; box-shadow: none; }
+.workspaceApp[data-shell="vscode"] .knowledgeResult:hover,
+.workspaceApp[data-shell="vscode"] .knowledgeResult.isSelected { border-color: var(--workspace-accent); box-shadow: none; }
+body.light .workspaceApp[data-shell="vscode"] {
+  --workspace-border: #d4d4d4;
+  --workspace-panel: #f3f3f3;
+  --workspace-panel-strong: #e8e8e8;
+  --workspace-canvas: #ffffff;
+  --workspace-card: #ffffff;
+  --workspace-card-strong: #ffffff;
+  --workspace-header: #f3f3f3;
+  --workspace-rail: #f3f3f3;
+  --workspace-text: #333333;
+  --workspace-muted: #4f4f4f;
+  --workspace-subtle: #717171;
+  --workspace-active-muted: #2f2f2f;
+  --workspace-accent: #005fb8;
+  --workspace-accent-soft: rgba(0, 95, 184, .06);
+  --workspace-accent-active: rgba(0, 95, 184, .12);
+  --workspace-accent-border: rgba(0, 95, 184, .48);
+}
+body.light .workspaceApp[data-shell="vscode"] .knowledgeResult { border-color: #dedede; background: #ffffff; }
+
+@media (max-width: 980px) {
+  .workspaceMain--chat { height: calc(100vh - 68px); height: calc(100dvh - 68px); }
+}
+
+@media (max-width: 600px) {
+  .workspaceApp .workspaceHeaderRow { display: flex; height: 64px; min-width: 0; padding-inline: 10px; gap: 8px; }
+  .workspaceHeaderContext { flex: 1; max-width: none; }
+  .workspaceCanvas { padding: 16px 12px 24px; }
+  .workspaceChatPageHeader { align-items: stretch; flex-direction: column; }
+  .workspaceChatPanelPicker { width: 100%; flex-wrap: wrap; }
+  .workspaceChatPanelOption { flex: 1; padding-inline: 6px; }
+  .workspaceChatQuestionRow { max-width: 100%; }
+  .workspaceChatQuestion { padding: 10px; }
+  .workspaceChatPageHeader { gap: 10px; }
+  .workspaceChatComposer { width: 100%; padding-bottom: env(safe-area-inset-bottom); }
+  .workspaceExplorerFooter { align-items: flex-start; flex-direction: column; padding-block: 6px; }
+}
+.graphContext[data-feedback-enabled='false'] .graphContextFeedback {
+  display: none;
 }

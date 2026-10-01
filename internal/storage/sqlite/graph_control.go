@@ -77,6 +77,49 @@ func (s *Store) CreateGraphRevision(ctx context.Context, revision core.GraphRevi
 	return err
 }
 
+func (s *Store) GetGraphRevision(ctx context.Context, scope core.GraphScope, configurationID, revisionID string) (core.GraphRevision, error) {
+	if err := scope.Validate(); err != nil {
+		return core.GraphRevision{}, err
+	}
+	var revision core.GraphRevision
+	var state, cutoffTime, createdAt, updatedAt string
+	err := s.db.QueryRowContext(ctx, `SELECT id,tenant_id,workspace,configuration_id,base_revision_id,state,
+		cutoff_sequence,cutoff_event_time,cutoff_digest,projection_hash,artifact_hash,previous_revision_id,created_at,updated_at
+		FROM graph_revisions WHERE tenant_id=? AND workspace=? AND configuration_id=? AND id=?`,
+		scope.TenantID, scope.WorkspaceID, configurationID, revisionID).Scan(&revision.ID, &revision.Scope.TenantID,
+		&revision.Scope.WorkspaceID, &revision.ConfigurationID, &revision.BaseRevisionID, &state, &revision.Cutoff.Sequence,
+		&cutoffTime, &revision.Cutoff.Digest, &revision.ProjectionHash, &revision.ArtifactHash, &revision.PreviousRevisionID, &createdAt, &updatedAt)
+	if err != nil {
+		return core.GraphRevision{}, err
+	}
+	revision.State = core.GraphRevisionState(state)
+	if cutoffTime != "" {
+		revision.Cutoff.EventTime, err = parseGraphTime(cutoffTime)
+		if err != nil {
+			return core.GraphRevision{}, err
+		}
+	}
+	if revision.CreatedAt, err = parseGraphTime(createdAt); err != nil {
+		return core.GraphRevision{}, err
+	}
+	if revision.UpdatedAt, err = parseGraphTime(updatedAt); err != nil {
+		return core.GraphRevision{}, err
+	}
+	return revision, nil
+}
+
+func (s *Store) SetGraphRevisionArtifactHash(ctx context.Context, scope core.GraphScope, configurationID, revisionID, artifactHash string, now time.Time) error {
+	if err := scope.Validate(); err != nil || strings.TrimSpace(configurationID) == "" || strings.TrimSpace(revisionID) == "" || strings.TrimSpace(artifactHash) == "" {
+		return fmt.Errorf("invalid graph revision artifact metadata")
+	}
+	result, err := s.db.ExecContext(ctx, `UPDATE graph_revisions SET artifact_hash=?,updated_at=?
+		WHERE tenant_id=? AND workspace=? AND configuration_id=? AND id=? AND state=?`, artifactHash, formatGraphTime(now.UTC()), scope.TenantID, scope.WorkspaceID, configurationID, revisionID, core.GraphRevisionReady)
+	if err != nil {
+		return err
+	}
+	return requireScopedGraphUpsert(result)
+}
+
 func (s *Store) EnqueueGraphJob(ctx context.Context, job core.GraphJob) (core.GraphJob, bool, error) {
 	if err := validateGraphJob(job); err != nil {
 		return core.GraphJob{}, false, err
@@ -182,6 +225,54 @@ func (s *Store) CancelGraphJob(ctx context.Context, scope core.GraphScope, jobID
 		return fmt.Errorf("graph job cannot be cancelled")
 	}
 	return nil
+}
+
+func (s *Store) SetGraphRevisionCutoff(ctx context.Context, scope core.GraphScope, configurationID, revisionID string, cutoff core.GraphWatermark, projectionHash string, now time.Time) error {
+	if err := scope.Validate(); err != nil || strings.TrimSpace(configurationID) == "" || strings.TrimSpace(revisionID) == "" || cutoff.EventTime.IsZero() || strings.TrimSpace(cutoff.Digest) == "" || strings.TrimSpace(projectionHash) == "" {
+		return fmt.Errorf("invalid graph revision projection metadata")
+	}
+	result, err := s.db.ExecContext(ctx, `UPDATE graph_revisions SET cutoff_sequence=?,cutoff_event_time=?,cutoff_digest=?,projection_hash=?,updated_at=?
+		WHERE tenant_id=? AND workspace=? AND configuration_id=? AND id=? AND state=?`, cutoff.Sequence, formatGraphTime(cutoff.EventTime), cutoff.Digest, projectionHash, formatGraphTime(now.UTC()), scope.TenantID, scope.WorkspaceID, configurationID, revisionID, core.GraphRevisionQueued)
+	if err != nil {
+		return err
+	}
+	return requireScopedGraphUpsert(result)
+}
+
+func (s *Store) TransitionGraphRevision(ctx context.Context, scope core.GraphScope, configurationID, revisionID string, expected, next core.GraphRevisionState, now time.Time) error {
+	if err := scope.Validate(); err != nil || strings.TrimSpace(configurationID) == "" || strings.TrimSpace(revisionID) == "" || core.ValidateGraphRevisionTransition(expected, next) != nil {
+		return fmt.Errorf("invalid graph revision transition")
+	}
+	result, err := s.db.ExecContext(ctx, `UPDATE graph_revisions SET state=?,updated_at=?
+		WHERE tenant_id=? AND workspace=? AND configuration_id=? AND id=? AND state=?`, next, formatGraphTime(now.UTC()), scope.TenantID, scope.WorkspaceID, configurationID, revisionID, expected)
+	if err != nil {
+		return err
+	}
+	return requireScopedGraphUpsert(result)
+}
+
+func (s *Store) CompleteGraphJob(ctx context.Context, scope core.GraphScope, jobID, owner string, now time.Time) error {
+	if err := scope.Validate(); err != nil || strings.TrimSpace(jobID) == "" || strings.TrimSpace(owner) == "" {
+		return fmt.Errorf("invalid graph job completion")
+	}
+	result, err := s.db.ExecContext(ctx, `UPDATE graph_jobs SET state=?,lease_owner='',lease_expires_at='',updated_at=?
+		WHERE tenant_id=? AND workspace=? AND id=? AND state=? AND lease_owner=?`, core.GraphJobCompleted, formatGraphTime(now.UTC()), scope.TenantID, scope.WorkspaceID, jobID, core.GraphJobRunning, owner)
+	if err != nil {
+		return err
+	}
+	return requireScopedGraphUpsert(result)
+}
+
+func (s *Store) FailGraphJob(ctx context.Context, scope core.GraphScope, jobID, owner string, now time.Time) error {
+	if err := scope.Validate(); err != nil || strings.TrimSpace(jobID) == "" || strings.TrimSpace(owner) == "" {
+		return fmt.Errorf("invalid graph job failure")
+	}
+	result, err := s.db.ExecContext(ctx, `UPDATE graph_jobs SET state=?,lease_owner='',lease_expires_at='',updated_at=?
+		WHERE tenant_id=? AND workspace=? AND id=? AND state=? AND lease_owner=?`, core.GraphJobFailed, formatGraphTime(now.UTC()), scope.TenantID, scope.WorkspaceID, jobID, core.GraphJobRunning, owner)
+	if err != nil {
+		return err
+	}
+	return requireScopedGraphUpsert(result)
 }
 
 func (s *Store) DeleteGraphWorkspace(ctx context.Context, scope core.GraphScope) error {

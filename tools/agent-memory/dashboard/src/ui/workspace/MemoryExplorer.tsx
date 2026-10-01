@@ -7,10 +7,10 @@ import { CursorPagination } from './ListPagination'
 
 type MemoryMode = 'recent' | 'pinned' | 'type'
 
-export function MemoryExplorer({ gateway, workspaceId, initialView = 'search' }: { gateway: KnowledgeGateway; workspaceId: string; initialView?: 'search' | 'browse' }) {
+export function MemoryExplorer({ gateway, workspaceId, initialView = 'search', initialQuery = '', onQuerySubmitted }: { gateway: KnowledgeGateway; workspaceId: string; initialView?: 'search' | 'browse'; initialQuery?: string; onQuerySubmitted?: (query: string) => void }) {
   const [view, setView] = useState<'search' | 'browse'>(initialView)
   const [mode, setMode] = useState<MemoryMode>('recent')
-  const [query, setQuery] = useState('')
+  const [query, setQuery] = useState(initialQuery)
   const [items, setItems] = useState<KnowledgeResult[]>([])
   const [nextCursor, setNextCursor] = useState<string | undefined>()
   const [cursorHistory, setCursorHistory] = useState<Array<string | undefined>>([undefined])
@@ -36,9 +36,17 @@ export function MemoryExplorer({ gateway, workspaceId, initialView = 'search' }:
   }, [workspaceId])
 
   useEffect(() => { setView(initialView) }, [initialView])
+  useEffect(() => {
+    setQuery(initialQuery)
+    if (initialView === 'search' && initialQuery.trim()) {
+      setView('search')
+      setCursorHistory([undefined])
+      void load(undefined, 0, initialQuery)
+    }
+  }, [initialQuery, initialView])
   useEffect(() => { if (view === 'browse') { setCursorHistory([undefined]); setPageIndex(0); void load(undefined, 0) } }, [view, mode, workspaceId])
 
-  async function load(pageCursor?: string, targetPage = 0) {
+  async function load(pageCursor?: string, targetPage = 0, searchQuery = query) {
     if (busy) return
     controllerRef.current?.abort()
     const controller = new AbortController()
@@ -46,7 +54,7 @@ export function MemoryExplorer({ gateway, workspaceId, initialView = 'search' }:
     setBusy(true)
     setError('')
     try {
-      const page = view === 'search' ? await gateway.search(scope, query, pageCursor, controller.signal) : await gateway.browse(scope, mode, pageCursor, controller.signal)
+      const page = view === 'search' ? await gateway.search(scope, searchQuery, pageCursor, controller.signal) : await gateway.browse(scope, mode, pageCursor, controller.signal)
       if (!controller.signal.aborted) {
         setItems(page.items)
         setNextCursor(page.nextCursor)
@@ -100,7 +108,7 @@ export function MemoryExplorer({ gateway, workspaceId, initialView = 'search' }:
 
   return <Stack className="memoryExplorer" gap="md">
     <SegmentedControl value={view} onChange={(value) => { const next = value as 'search' | 'browse'; setView(next); setCursorHistory([undefined]); setPageIndex(0); if (next === 'search') { setItems([]); setNextCursor(undefined) } }} aria-label="Memory discovery mode" data={[{ value: 'search', label: 'Search' }, { value: 'browse', label: 'Browse' }]} />
-    {view === 'search' ? <Paper component="form" withBorder p="md" radius="lg" onSubmit={(event) => { event.preventDefault(); setCursorHistory([undefined]); void load(undefined, 0) }}><Group align="flex-end"><TextInput style={{ flex: 1 }} label="Search memories" type="search" value={query} onChange={(event) => setQuery(event.currentTarget.value)} placeholder="Search durable memories…" leftSection={<IconSearch size={17} />} /><Button type="submit" loading={busy} disabled={!query.trim()}>Search</Button></Group></Paper> : <SegmentedControl value={mode} onChange={(value) => { setMode(value as MemoryMode); setCursorHistory([undefined]); setPageIndex(0) }} aria-label="Browse memories" data={[{ value: 'recent', label: 'Recent' }, { value: 'pinned', label: 'Pinned' }, { value: 'type', label: 'By type' }]} />}
+    {view === 'search' ? <Paper component="form" withBorder p="md" radius="lg" onSubmit={(event) => { event.preventDefault(); setCursorHistory([undefined]); setPageIndex(0); onQuerySubmitted?.(query.trim()); void load(undefined, 0) }}><Group align="flex-end"><TextInput style={{ flex: 1 }} label="Search memories" type="search" value={query} onChange={(event) => setQuery(event.currentTarget.value)} placeholder="Search durable memories…" leftSection={<IconSearch size={17} />} /><Button type="submit" loading={busy} disabled={!query.trim()}>Search</Button></Group></Paper> : <SegmentedControl value={mode} onChange={(value) => { setMode(value as MemoryMode); setCursorHistory([undefined]); setPageIndex(0) }} aria-label="Browse memories" data={[{ value: 'recent', label: 'Recent' }, { value: 'pinned', label: 'Pinned' }, { value: 'type', label: 'By type' }]} />}
     {error ? <Alert color="red" title="Memories unavailable" role="alert">{error}</Alert> : null}
     {selectedIds.size ? <Paper withBorder p="sm" radius="md" role="toolbar" aria-label="Selected memory actions"><Group><Badge variant="light">{selectedIds.size} selected</Badge><Button size="xs" variant="light" leftSection={<IconDownload size={15} />} onClick={exportSelected}>Export JSON</Button><Button size="xs" variant="light" onClick={printSelected}>Print selected</Button><Button size="xs" color="red" variant="light" leftSection={<IconTrash size={15} />} onClick={() => void removeSelected()}>Delete selected</Button><Button size="xs" variant="subtle" leftSection={<IconX size={15} />} onClick={() => setSelectedIds(new Set())}>Clear</Button></Group></Paper> : null}
     <Stack gap="md">

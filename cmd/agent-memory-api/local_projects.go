@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,19 +14,25 @@ import (
 
 	"github.com/taimufuraiyaa/agent-memory/internal/application"
 	"github.com/taimufuraiyaa/agent-memory/internal/clientprofile"
+	"github.com/taimufuraiyaa/agent-memory/internal/config"
 	"github.com/taimufuraiyaa/agent-memory/internal/core"
 	"github.com/taimufuraiyaa/agent-memory/internal/embeddings"
 	"github.com/taimufuraiyaa/agent-memory/internal/engine"
 	"github.com/taimufuraiyaa/agent-memory/internal/observability"
+	graphretrieval "github.com/taimufuraiyaa/agent-memory/internal/retrieval"
 	api "github.com/taimufuraiyaa/agent-memory/internal/saas/api"
 	"github.com/taimufuraiyaa/agent-memory/internal/storage/sqlite"
 	"github.com/taimufuraiyaa/agent-memory/internal/workspace"
 )
 
 type localProjectService struct {
-	manager  *workspace.Manager
-	modelDir string
-	clients  *clientprofile.Store
+	manager           *workspace.Manager
+	modelDir          string
+	clients           *clientprofile.Store
+	graphConfig       config.GraphConfig
+	graphConfigReason string
+	graphDataDir      string
+	graphSigner       ed25519.PrivateKey
 }
 
 func newLocalProjectService() (*localProjectService, error) {
@@ -51,7 +59,30 @@ func newLocalProjectService() (*localProjectService, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &localProjectService{manager: manager, modelDir: modelDir, clients: clients}, nil
+	localConfig, err := config.Load("")
+	if err != nil {
+		return nil, fmt.Errorf("load local GraphRAG configuration: %w", err)
+	}
+	graphConfigReason := ""
+	if graphConfigFile := strings.TrimSpace(os.Getenv("AGENT_MEMORY_GRAPH_CONFIG_FILE")); graphConfigFile != "" {
+		localConfig.Graph, err = loadLocalGraphConfigFile(graphConfigFile, localConfig.Graph)
+		if err != nil {
+			localConfig.Graph.Enabled = false
+			localConfig.Graph.CompletionProvider, localConfig.Graph.CompletionModel = "", ""
+			localConfig.Graph.EmbeddingProvider, localConfig.Graph.EmbeddingModel = "", ""
+			graphConfigReason = "The local GraphRAG settings file is invalid or unavailable."
+		}
+	}
+	graphDataDir := localConfig.DataDir
+	if filepath.Clean(localConfig.Graph.JobRoot) == filepath.Clean(filepath.Join(localConfig.DataDir, "graphrag-jobs")) && filepath.Clean(baseDir) != filepath.Clean(localConfig.DataDir) {
+		localConfig.Graph.JobRoot = filepath.Join(baseDir, "graphrag-jobs")
+		graphDataDir = baseDir
+	}
+	_, graphSigner, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		return nil, fmt.Errorf("initialize local graph signer: %w", err)
+	}
+	return &localProjectService{manager: manager, modelDir: modelDir, clients: clients, graphConfig: localConfig.Graph, graphConfigReason: graphConfigReason, graphDataDir: graphDataDir, graphSigner: graphSigner}, nil
 }
 
 func (service *localProjectService) Lifecycle(ctx context.Context, workspaceName string, limit int) (api.LocalProjectLifecycle, error) {
@@ -530,6 +561,35 @@ func (service *localProjectService) Search(ctx context.Context, input api.LocalP
 		results = append(results, api.LocalProjectMemoryResult{Memory: hit.Memory, Score: hit.Score, Explanation: "semantic similarity"})
 	}
 	return results, nil
+}
+
+func (service *localProjectService) Ask(ctx context.Context, input api.LocalProjectAskInput) (*application.RecallResult, error) {
+	store, err := service.openProjectStore(ctx, input.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	defer store.Close()
+	provider, err := embeddings.NewLocalProvider(service.modelDir)
+	if err != nil {
+		return nil, err
+	}
+	cache := engine.NewQueryCache(engine.DefaultQueryCacheConfig())
+	searcher := engine.NewVectorSearcher(store, provider)
+	retrieval := engine.NewRetrievalEngineWithSharedCache(searcher, cache)
+	pipeline := engine.NewWritePipelineWithOptions(store, engine.WritePipelineOptions{Embedder: provider, Cache: cache})
+	app := application.NewMemoryService(store, pipeline, retrieval)
+	return app.Recall(ctx, application.RecallOptions{
+		Workspace:     input.Workspace,
+		Task:          input.Query,
+		TopK:          50,
+		Budget:        4000,
+		GraphMode:     input.GraphMode,
+		GraphRequired: input.GraphRequired,
+		GraphPolicy: graphretrieval.GraphRoutePolicy{
+			GraphEnabled: input.GraphMode != "" && input.GraphMode != graphretrieval.GraphQueryBasic,
+			AllowLocal:   true, AllowGlobal: true, AllowStale: input.AllowStale,
+		},
+	})
 }
 
 func (service *localProjectService) Browse(ctx context.Context, input api.LocalProjectBrowseInput) ([]core.MemoryEntry, error) {

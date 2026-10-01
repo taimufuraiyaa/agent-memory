@@ -1,4 +1,5 @@
 import {
+  askHostedProject,
   browseHostedProjectMemories,
   createHostedClientProfile,
   deleteHostedSource,
@@ -9,6 +10,9 @@ import {
   getHostedGraphReadiness,
   getHostedGraphSnapshot,
   getHostedGraphStatus,
+  getHostedLocalProjectGraphReadiness,
+  getHostedLocalProjectGraphStatus,
+  getHostedLocalProjectGraphQueue,
   getHostedProjectMemory,
   getHostedProjectSolution,
   importHostedBundle,
@@ -30,6 +34,7 @@ import {
   retryHostedSource,
   reviewHostedProjectSolution,
   reviewHostedGraph,
+  reindexHostedLocalProjectGraph,
   searchHostedMemories,
   searchHostedProjectMemories,
   studyHostedProject,
@@ -131,7 +136,7 @@ export function createHostedKnowledgeGateway(connection: HostedConnection, optio
       if (!capabilities.has(capability)) return false
       if (capability === 'clients') return localSystemTools
       if (capability === 'lifecycle' || capability === 'skills') return localSystemTools && isRegisteredProject(scope.workspaceId)
-      if (capability === 'graph') return !isRegisteredProject(scope.workspaceId)
+      if (capability === 'graph') return isRegisteredProject(scope.workspaceId) ? localSystemTools : true
       return true
     },
     async listWorkspaces() {
@@ -146,14 +151,34 @@ export function createHostedKnowledgeGateway(connection: HostedConnection, optio
         noteCount: 0,
         latestActivity: project.last_activity,
         connectionState: 'connected',
-        capabilities: ['workspace', 'ask', 'search', 'browse', 'source', 'study', 'activity', 'settings'],
+        capabilities: ['workspace', 'ask', 'search', 'browse', 'source', 'study', 'activity', 'settings', ...(localSystemTools ? ['graph' as const] : [])],
       }))
-      if (registeredProjects.has(connection.workspace)) return projectWorkspaces
-      return [{ id: connection.workspace, name: 'Hosted workspace', kind: 'hosted', memoryCount: 0, sourceCount: 0, noteCount: 0, connectionState: 'connected', capabilities: ['workspace', 'ask', 'search', 'source', 'activity', 'settings'] }, ...projectWorkspaces]
+      return projectWorkspaces
     },
     async ask(scope, question, options = { mode: 'basic' }, signal) {
       if (isRegisteredProject(scope.workspaceId)) {
-        if (options.mode !== 'basic') throw new Error('Graph Ask is available for hosted workspaces; this registered project uses its Basic memory index.')
+        if (options.mode !== 'basic') {
+          const response = await askHostedProject(connection, {
+            workspace: scope.workspaceId,
+            query: question,
+            mode: options.mode,
+            required: options.required,
+            allowStale: options.allowStale,
+          }, signal)
+          const durableMemory = response.memories_included_full.map((memory) => hostedMemoryResult(memory, scope.workspaceId))
+          const weakContext = (response.weak_memories || []).map((memory) => hostedMemoryResult(memory, scope.workspaceId))
+          return {
+            requestId: response.graph_request_id,
+            answerable: durableMemory.length > 0,
+            answer: durableMemory.length ? response.context_block : undefined,
+            sourceEvidence: [],
+            durableMemory,
+            weakContext,
+            unavailableReason: durableMemory.length ? undefined : 'No grounded durable memory was found in this project.',
+            graphRoute: response.graph_route,
+            graphContext: response.graph_context,
+          } satisfies AskResponse
+        }
         const response = await searchHostedProjectMemories(connection, { workspace: scope.workspaceId, query: question, limit: 12 })
         const durableMemory = response.items.map((item) => hostedMemoryResult(item.memory, scope.workspaceId, item.score, item.explanation))
         return { answerable: durableMemory.length > 0, answer: durableMemory.length ? durableMemory.map((item) => item.content).join('\n\n') : undefined, sourceEvidence: [], durableMemory, weakContext: [], unavailableReason: durableMemory.length ? undefined : 'No grounded durable memory was found in this project.' } satisfies AskResponse
@@ -330,10 +355,32 @@ export function createHostedKnowledgeGateway(connection: HostedConnection, optio
       const [privacy, billing] = await Promise.all([getHostedPrivacy(scoped), getHostedBilling(scoped)])
       return { privacy, billing }
     },
-    async getGraphReadiness(scope, signal) { return getHostedGraphReadiness({ ...connection, workspace: scope.workspaceId }, signal) },
-    async getGraphStatus(scope, signal) { return getHostedGraphStatus({ ...connection, workspace: scope.workspaceId }, signal) },
+    async getGraphReadiness(scope, signal) {
+      if (isRegisteredProject(scope.workspaceId)) {
+        if (!localSystemTools) throw new Error('Local project graph controls are unavailable in this session.')
+        return getHostedLocalProjectGraphReadiness(connection, scope.workspaceId, signal)
+      }
+      return getHostedGraphReadiness({ ...connection, workspace: scope.workspaceId }, signal)
+    },
+    async getGraphStatus(scope, signal) {
+      if (isRegisteredProject(scope.workspaceId)) {
+        if (!localSystemTools) throw new Error('Local project graph controls are unavailable in this session.')
+        return getHostedLocalProjectGraphStatus(connection, scope.workspaceId, signal)
+      }
+      return getHostedGraphStatus({ ...connection, workspace: scope.workspaceId }, signal)
+    },
+    async getLocalProjectGraphQueue(signal) {
+      if (!localSystemTools) throw new Error('Local project graph controls are unavailable in this session.')
+      return getHostedLocalProjectGraphQueue(connection, signal)
+    },
     async getGraphSnapshot(scope, signal) { return getHostedGraphSnapshot({ ...connection, workspace: scope.workspaceId }, signal) },
-    async operateGraph(scope, configurationId, action, expectedRevision, jobId) { return operateHostedGraph({ ...connection, workspace: scope.workspaceId }, configurationId, action, expectedRevision, jobId) },
+    async operateGraph(scope, configurationId, action, expectedRevision, jobId) {
+      if (isRegisteredProject(scope.workspaceId)) {
+        if (!localSystemTools || action !== 'rebuild') throw new Error('Only owner-authorized full project reindex is available here.')
+        return reindexHostedLocalProjectGraph(connection, { workspace: scope.workspaceId, configurationId, expectedRevision })
+      }
+      return operateHostedGraph({ ...connection, workspace: scope.workspaceId }, configurationId, action, expectedRevision, jobId)
+    },
     async reviewGraph(scope, input) { return reviewHostedGraph({ ...connection, workspace: scope.workspaceId }, input) },
     async submitGraphFeedback(scope, requestId, targetKind, targetId, outcome, reason) { return submitHostedGraphFeedback({ ...connection, workspace: scope.workspaceId }, requestId, targetKind, targetId, outcome, reason) },
     async importMigration(scope, file, passphrase, idempotencyKey) {

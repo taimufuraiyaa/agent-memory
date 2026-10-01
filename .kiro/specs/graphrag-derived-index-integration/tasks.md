@@ -161,6 +161,7 @@ Demonstrate immediate basic retrieval after a write while graph services are abs
   - **Scope:** Build from the frozen lock/wheelhouse, run non-root, remove package managers and build credentials, generate SBOM/license/vulnerability reports, sign by digest, and prohibit runtime network dependency acquisition.
   - **Acceptance:** CI fails on lock drift, prohibited license, unresolved release-blocking vulnerability, unsigned image, or runtime package download; deployment references an immutable digest.
   - **Current evidence gap:** The frozen local image passed the non-root, no-network, read-only, package-manager-removal, readiness, and worker-presence container gate on 2026-08-27. The build/sign/scan workflow and digest-bound evidence publisher are implemented, but no registry image signed under a trusted release identity and no retained SBOM/license/vulnerability/signature bundle for that immutable release digest is present in the workspace. Do not check this task from local-image or static workflow validation alone.
+  - **2026-09-25 environment check:** Docker CLI is present but cannot reach the OrbStack socket; `syft`, `grype`, `cosign`, and `uv` are absent from PATH; GitHub CLI is unauthenticated and its API is unreachable. The tag-triggered Actions workflow remains the trusted release route, but no tag was pushed and no release was published.
   - **Verification:** `make graphrag-adapter-supply-chain && make graphrag-adapter-container-test`
   - **Dependencies:** Tasks 3 and 12–15.
   - **Expected touchpoints:** `tools/graphrag-adapter/Dockerfile`, `tools/graphrag-adapter/Makefile`, `.github/workflows/graphrag-adapter.yml`, `deploy/saas/kubernetes/base/deployments.yaml`, `deploy/saas/kubernetes/base/kustomization.yaml`.
@@ -368,6 +369,7 @@ Complete desktop/mobile/accessibility walkthroughs for status, Ask, evidence pat
   - **Verification:** `make graphrag-chaos-test graphrag-security-test graphrag-recovery-test graphrag-capacity-test`
   - **Dependencies:** Tasks 25, 28–29, 38–39.
   - **Expected touchpoints:** `tools/graphrag-certification/Makefile`, `tools/graphrag-certification/chaos.sh`, `tools/graphrag-certification/security.sh`, `tools/graphrag-certification/recovery.sh`, `tools/graphrag-certification/capacity.sh`.
+  - **2026-09-25 local validation:** All four certification harnesses and deterministic GraphRAG evaluation passed using an isolated temporary Go module/build cache. These repository tests do not supply production-scale provider, tenant, SLO, privacy-review, or recovery evidence; keep the task open.
 
 - [ ] 41. Automate GraphRAG dependency upgrade and rollback certification.
   - **Scope:** Require exact pin/lock bump, SBOM/license/vulnerability review, schema/golden/determinism tests, canary full/update runs, normalized diff, shadow evaluation, signed image, deployment canary, and rollback report.
@@ -375,6 +377,7 @@ Complete desktop/mobile/accessibility walkthroughs for status, Ask, evidence pat
   - **Verification:** `make graphrag-upgrade-certify`
   - **Dependencies:** Tasks 16 and 38–40.
   - **Expected touchpoints:** `tools/graphrag-certification/upgrade.sh`, `tools/graphrag-certification/upgrade-policy.yaml`, `.github/workflows/graphrag-upgrade.yml`, `docs/operations/graphrag-upgrade.md`, `Makefile`.
+  - **2026-09-25 local validation:** `GRAPHRAG_UPGRADE_POLICY_ONLY=1 make graphrag-upgrade-certify` passed lock/policy, adapter, Go contract, and deterministic evaluation checks. The signed canary, immutable candidate image, deployment canary, and image/active-revision rollback report remain unverified.
 
 - [ ] 42. Complete production runbooks, reversible rollout, and final acceptance.
   - **Scope:** Document install/readiness, budgets, enable/disable, full/update, stale graph, poison jobs, cancellation, review, deletion, backup/restore, dependency incident, rollback, and removal; roll out shadow → explicit Local → Auto Local → explicit Global → approved Auto Global with per-workspace kill switches.
@@ -382,6 +385,66 @@ Complete desktop/mobile/accessibility walkthroughs for status, Ask, evidence pat
   - **Verification:** `make graphrag-production-gate && go test ./... && go vet ./... && git diff --check`
   - **Dependencies:** Tasks 1–41.
   - **Expected touchpoints:** `docs/operations/graphrag.md`, `docs/operations/graphrag-incident.md`, `docs/operations/graphrag-removal.md`, `docs/release/graphrag-production-gate.md`, `Makefile`.
+  - **2026-09-25 local validation:** `GRAPHRAG_PRODUCTION_POLICY_ONLY=1 make graphrag-production-gate` passed the repository controls and explicitly skipped external certification. The signed release-bound report, five accountable approvals, standalone/self-managed/hosted matrix evidence, and completed seven-day observation window are still required.
+
+- [x] 43. Add project-scoped Graph Ask for hosted-connected registered projects.
+  - **Scope:** Add an owner-authorized local-project Ask contract that validates a registered workspace name, opens its SQLite store, runs the existing recall pipeline with Auto routing, and returns scoped canonical memories plus Graph route/context; connect the workspace chat adapter without calling tenant-level PostgreSQL Graph endpoints.
+  - **Acceptance:** Path-shaped or unregistered project identities are rejected; eligible graph questions use the active project-local revision; direct or unavailable-index questions retain Basic behavior; no project query can read or write another registered project or the tenant graph store.
+  - **Verification:** Go API tests cover boundary, identity validation, and route response; dashboard tests cover project Ask routing and stored Graph metadata; run affected Go packages and dashboard test/typecheck/build commands.
+  - **Dependencies:** Requirements R9, R11, R14, R19 and Tasks 30–37.
+  - **Expected touchpoints:** `internal/saas/api/local_projects.go`, `internal/saas/api/handler.go`, `cmd/agent-memory-api/local_projects.go`, `tools/agent-memory/dashboard/src/lib/hostedApi.ts`, `tools/agent-memory/dashboard/src/lib/adapters/hostedKnowledgeGateway.ts`, workspace chat and Graph context components.
+
+- [x] 44. Add owner-authorized Graph readiness, status, and Reindex operations for registered projects.
+  - **Scope:** Extend the local-project service and API with scope-resolved SQLite Graph status/readiness and a full Reindex operation. Bootstrap the default project configuration only on explicit Reindex after local adapter readiness; never accept DB or artifact paths and never call tenant Graph APIs.
+  - **Acceptance:** Status is side-effect free and reports unconfigured projects cleanly; owner `memory:write` is required to enqueue; path-shaped/unregistered names fail; idempotent requests coalesce; returned status comes from the same registered SQLite DB.
+  - **Verification:** Focused `internal/saas/api` tests cover authorization, project resolution, unconfigured status, and operation idempotency using temporary SQLite databases.
+  - **Dependencies:** R20, Tasks 4, 7, 24, 35, and 43.
+  - **Expected touchpoints:** `internal/saas/api/local_projects.go`, `internal/saas/api/handler.go`, `internal/saas/api/local_projects_test.go`, `cmd/agent-memory-api/local_projects.go`, `cmd/agent-memory-api/local_projects_system_test.go`.
+
+- [x] 45. Configure local GraphRAG model routes without enabling indexing by default.
+  - **Scope:** Extend the bounded local Graph configuration with completion and embedding provider/model identities needed by the adapter. Preserve disabled-by-default behavior, keep credentials in allowlisted environment variables, and validate model routes before job acceptance.
+  - **Acceptance:** Existing configurations remain loadable; an enabled configuration without complete routes fails readiness; no credentials are serialized into settings, job records, or browser responses.
+  - **Verification:** `go test ./internal/config -run 'Graph'` and config merge/round-trip tests.
+  - **Dependencies:** Task 3 and R20.
+  - **Expected touchpoints:** `internal/config/graph.go`, `internal/config/config.go`, `internal/config/graph_test.go`, `internal/config/config_test.go`.
+
+- [x] 46. Process registered-project SQLite Reindex jobs through the local adapter.
+  - **Scope:** Add a bounded worker that claims durable jobs only from registered project stores, builds an eligible canonical projection, invokes the fixed local GraphRAG adapter, validates normalized artifacts, imports a complete revision, and activates it atomically. Recover expired leases after restart and retain the previous active revision on failure.
+  - **Acceptance:** Fake-adapter tests prove successful rebuild, project isolation, cancellation/retry/restart behavior, malformed-artifact rejection, and Basic/active-revision preservation on failure.
+  - **Verification:** Focused `cmd/agent-memory-api` and SQLite Graph tests; packaged GraphRAG integration remains an opt-in isolated journey.
+  - **Dependencies:** Task 44, Task 45, Tasks 10–16, 20–22, and 24.
+  - **Expected touchpoints:** `cmd/agent-memory-api/main.go`, `cmd/agent-memory-api/local_projects.go`, `cmd/agent-memory-api/local_graph.go`, `cmd/agent-memory-api/local_graph_test.go`, `internal/saas/graphindex/artifact_loader.go`.
+
+- [x] 47. Expose scoped Reindex in workspace and project Settings.
+  - **Scope:** Route hosted tenant workspace Graph operations through existing tenant endpoints and registered-project Graph operations through the owner-authorized local-project APIs. Label full rebuild as Reindex, gate it on readiness, and refresh the same scope's durable job status.
+  - **Acceptance:** Every Graph-capable Settings scope uses its owning store; registered projects never hit tenant PostgreSQL Graph endpoints; disabled/unready runtime cannot show a successful Reindex state; failed status refreshes label retained queued/running data as stale; running job age is not labeled as queue wait.
+  - **Verification:** Dashboard regression tests cover both routing branches, Reindex labeling, readiness gating, queued/running completion refresh, and stale-state labeling after a refresh error; run dashboard test, typecheck, and build.
+  - **Dependencies:** Tasks 44–46 and Task 35.
+  - **Expected touchpoints:** `tools/agent-memory/dashboard/src/lib/hostedApi.ts`, `tools/agent-memory/dashboard/src/lib/adapters/hostedKnowledgeGateway.ts`, `tools/agent-memory/dashboard/src/ui/workspace/GraphSettings.tsx`, `tools/agent-memory/dashboard/tests/graph.test.mjs`.
+
+- [x] 48. Offer optional device-local GraphRAG models in the install TUI.
+  - **Scope:** Extend the spec in `.kiro/specs/install-local-graphrag-setup/`; add a separate default-off model bundle for local GraphRAG completion and embeddings; configure the pinned adapter for loopback-only Ollama routes; enable Graph only after exact model inventory and adapter readiness; preserve explicit per-project Reindex.
+  - **Acceptance:** Declining setup changes no Graph route; selecting a bundle displays the model pair and approximate disk use before confirmation; failed model or adapter readiness cannot enable Graph; no installer path issues a graph indexing operation.
+  - **Verification:** See `.kiro/specs/install-local-graphrag-setup/tasks.md`; run focused TUI/installer/bootstrap and adapter tests plus `git diff --check`.
+  - **Dependencies:** Tasks 3 and 45; R21.
+  - **Expected touchpoints:** `internal/cli/install_tui.go`, installer tests and orchestration, `tools/graphrag-adapter/src/agent_memory_graphrag/settings.py`, adapter settings tests.
+
+- [x] 49. Connect the installed local GraphRAG configuration to the containerized dashboard development API.
+  - **Scope:** Add a development-only Linux API image with the locked adapter; mount the optional installed env file read-only and parse only approved Graph settings while replacing the non-portable host adapter path; pass the image-provided non-secret lockfile path into the adapter's minimal process environment; route local Ollama model calls through a hard-coded Docker host gateway only when the dev API explicitly opts in; preserve loopback as the adapter default. Materialize reviewed prompt templates as exclusive private files under each adapter job directory because pinned GraphRAG 3.1.2 resolves prompt values as filesystem paths. Do not pass unrelated environment entries or credentials, and do not run Reindex on startup or against an existing workspace during verification.
+  - **Acceptance:** A configured local install exposes a compatible in-container adapter and its selected model routes to the project API; adapter readiness successfully fingerprints the image's pinned dependency lock; unrelated env values and credentials stay out of the API and adapter process environments; the dev adapter reaches host Ollama using only `http://host.docker.internal:11434`; standalone mode remains on loopback; cloud routes and hosted images stay unchanged; generated prompt paths remain in the current private job directory, retain GraphRAG's structured output format plus evidence-safety rules, and resolve through the pinned GraphRAG configuration; LanceDB uses the configured embedding model's output dimension; normalization maps the pinned text-unit and community-reference schemas to eligible projection evidence; a synthetic full-index smoke test completes with extractable entities and evidence-bound artifacts; absent config or unavailable models keeps Settings Reindex disabled; no workspace is indexed automatically.
+  - **Verification:** Focused adapter settings, Go subprocess-environment, and Graph config-file parser tests; locked adapter image build/readiness and exact minimal-environment readiness preflight; synthetic one-sentence full-index smoke test using local Ollama and no project records; Compose validation; local API/UI readiness check without reindexing an existing workspace; `git diff --check`.
+  - **Dependencies:** Tasks 44–48; existing local model setup and project Graph Settings.
+  - **Expected touchpoints:** `deploy/saas/Dockerfile.dev`, `deploy/saas/compose.dev.yaml`, `cmd/agent-memory-api/local_graph_config.go` and tests, `cmd/agent-memory-api/local_graph.go`, `internal/application/graph_local_runner.go` and focused tests, `tools/graphrag-adapter/src/agent_memory_graphrag/settings.py` and tests.
+
+- [x] 50. Show active GraphRAG jobs across registered projects.
+  - **Scope:** Add an owner-authorized read-only local-project queue endpoint that aggregates queued/running jobs across registered project stores, reports scan completeness and per-project status-read failures, and expose it in registered-project Graph Settings with state-specific age and pending-record counts.
+  - **Acceptance:** Every queue row is tied to a registered project and shows queued versus running state and elapsed state age; a failed scan is not shown as an empty queue; one project's read failure does not hide other rows; the response excludes paths, lease-owner data, credentials, and canonical content; inspection cannot mutate jobs; the UI refreshes while active jobs are present and explains waiting versus processing.
+  - **Verification:** API tests cover active jobs across projects, no-job and per-project failure handling, owner authorization, and read-only behavior; dashboard regression tests cover queue transport, rendering, active polling, incomplete/error and empty states; run focused Go tests, dashboard test, typecheck, build, and `git diff --check`.
+  - **Dependencies:** R23, Tasks 44–47.
+  - **Expected touchpoints:** `internal/saas/api/local_projects.go`, `internal/saas/api/handler.go`, `internal/saas/api/local_projects_test.go`, `cmd/agent-memory-api/local_graph.go`, `cmd/agent-memory-api/local_graph_test.go`, dashboard hosted API/gateway, `GraphSettings.tsx`, and graph dashboard tests.
+  - **2026-09-26 local validation:** Focused local-project Graph API and registered-project Graph queue/status tests passed; all dashboard tests (106), TypeScript typecheck, Vite production build, and `git diff --check` passed. Full API package tests hit sandbox-denied localhost port binding in unrelated telemetry/OIDC tests; the focused affected tests pass.
+  - **2026-09-26 queue-error follow-up:** The initial screenshot showed an unavailable queue request while the panel still said “Loading”. The UI now replaces that placeholder with a local-API/version hint after failure and includes the HTTP status when the API response is unstructured or returns the generic “The request was not accepted.” message. Full dashboard tests (106), typecheck, build, embedded-asset copy, and `git diff --check` passed. The request's actual status code could not be verified in this session because the browser tab and local API ports were inaccessible here.
+  - **2026-09-26 legacy-API 404 follow-up:** Authenticated reads confirmed the running development API returns 404 for the aggregate queue route while project-status routes remain available. The local-owner status scan found two active jobs (one queued, one running), so the API was not restarted. The dashboard now falls back on aggregate-route 404 to bounded, read-only project status reads and preserves incomplete-scan names. The initial 3-second polling cadence hit the legacy API rate limit, so the fallback now polls every 30 seconds. The running Vite app visibly showed `fuji-dg` running and `conn` queued. Later reads returned the tenant-temporarily-restricted response, so the cached queue state was marked unavailable/stale; no security control was changed. Retain the API process while active work exists.
 
 ### Checkpoint J — Production approval
 
@@ -420,7 +483,12 @@ The final release record must bind:
 | R16 Processing and operator controls | 10, 24, 27, 35 |
 | R17 Observability, cost, and backpressure | 10, 14, 23, 26, 38–40 |
 | R18 Compatibility and rollout | 4, 6, 16, 20, 39–42 |
+| R19 Project-scoped chat retrieval | 30–37, 43 |
+| R20 Registered-project Graph Settings and Reindex | 44–47 |
+| R21 Optional device-local model setup | 48 |
+| R22 Containerized local development inference bridge | 49 |
+| R23 Registered-project Graph queue visibility | 50 |
 | Reliability and recovery | 4–7, 9–10, 20, 22–29, 40, 42 |
-| Performance and scaling | 10, 16, 23, 26, 31–34, 38–40 |
+| Performance and scaling | 10, 16, 23, 26, 31–34, 38–40, 50 |
 | Security and privacy | 8, 11–12, 15–16, 22–23, 26–29, 36, 38, 40 |
-| Operability and maintainability | 3, 10, 16, 20, 24, 27–29, 35, 38, 41–42 |
+| Operability and maintainability | 3, 10, 16, 20, 24, 27–29, 35, 38, 41–42, 50 |

@@ -10,6 +10,10 @@ type GraphConfig struct {
 	Enabled            bool     `yaml:"enabled"`
 	Executable         string   `yaml:"executable"`
 	JobRoot            string   `yaml:"job_root"`
+	CompletionProvider string   `yaml:"completion_provider"`
+	CompletionModel    string   `yaml:"completion_model"`
+	EmbeddingProvider  string   `yaml:"embedding_provider"`
+	EmbeddingModel     string   `yaml:"embedding_model"`
 	TimeoutSeconds     int      `yaml:"timeout_seconds"`
 	CancelGraceSeconds int      `yaml:"cancel_grace_seconds"`
 	MaxOutputBytes     int64    `yaml:"max_output_bytes"`
@@ -39,6 +43,10 @@ func (c GraphConfig) Validate(dataDir string) error {
 	}
 	if c.Enabled && !filepath.IsAbs(c.Executable) {
 		return fmt.Errorf("graph.executable must be absolute when graph indexing is enabled")
+	}
+	if c.Enabled && (strings.TrimSpace(c.CompletionProvider) == "" || strings.TrimSpace(c.CompletionModel) == "" ||
+		strings.TrimSpace(c.EmbeddingProvider) == "" || strings.TrimSpace(c.EmbeddingModel) == "") {
+		return fmt.Errorf("graph completion and embedding routes are required when graph indexing is enabled")
 	}
 	if c.TimeoutSeconds < 1 || c.TimeoutSeconds > 24*60*60 || c.CancelGraceSeconds < 1 || c.CancelGraceSeconds > 60 ||
 		c.MaxOutputBytes < 1024 || c.MaxOutputBytes > 16<<20 || c.MaxRequestBytes < 1024 || c.MaxRequestBytes > 64<<20 ||

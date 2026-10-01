@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import math
+from numbers import Integral, Real
 from pathlib import Path
 from typing import Any
 
@@ -21,8 +22,9 @@ def normalize_graphrag_artifacts(root: Path, correlations: dict[str, dict[str, s
     text_units = _frame(root / "text_units.parquet", required=False)
     evidence_by_text_unit: dict[str, list[dict[str, str]]] = {}
     for row in _records(text_units):
+        document_tokens = _ids(row.get("document_id")) + _ids(row.get("document_ids"))
         evidence_by_text_unit[str(row.get("id", ""))] = _evidence_for_tokens(
-            _ids(row.get("document_ids")), correlations
+            document_tokens, correlations
         )
 
     entities_frame = _frame(root / "entities.parquet", required=True)
@@ -63,14 +65,28 @@ def normalize_graphrag_artifacts(root: Path, correlations: dict[str, dict[str, s
     _write_jsonl(output / "relationships.jsonl", relationships)
 
     communities_frame = _frame(root / "communities.parquet", required=False)
+    community_rows = _records(communities_frame)
+    community_ids_by_reference: dict[str, str] = {}
+    for row in community_rows:
+        community_id = _required_any(row, "id", "community")
+        for alias in (community_id, _community_reference(row.get("community"))):
+            if alias:
+                previous = community_ids_by_reference.get(alias)
+                if previous and previous != community_id:
+                    raise ValueError("GraphRAG community identity is ambiguous")
+                community_ids_by_reference[alias] = community_id
+
     community_entities: dict[str, list[str]] = {}
     communities: list[dict[str, Any]] = []
-    for row in _records(communities_frame):
+    for row in community_rows:
         community_id = _required_any(row, "id", "community")
         entity_ids = sorted(set(_ids(row.get("entity_ids"))))
         if not entity_ids or any(value not in entity_evidence for value in entity_ids):
             raise ValueError("community entity reference is unresolved")
-        parent = _optional_any(row, "parent", "parent_id")
+        parent_reference = _community_reference(row.get("parent_id", row.get("parent")))
+        parent = "" if parent_reference in {"", "-1"} else community_ids_by_reference.get(parent_reference, "")
+        if parent_reference not in {"", "-1"} and not parent:
+            raise ValueError("GraphRAG community parent reference is unresolved")
         community_entities[community_id] = entity_ids
         communities.append({"id": community_id, "parent_id": parent, "entity_ids": entity_ids})
     if communities:
@@ -79,7 +95,10 @@ def normalize_graphrag_artifacts(root: Path, correlations: dict[str, dict[str, s
     reports_frame = _frame(root / "community_reports.parquet", required=False)
     reports: list[dict[str, Any]] = []
     for row in _records(reports_frame):
-        community_id = _required_any(row, "community", "community_id")
+        community_reference = _community_reference(row.get("community_id", row.get("community")))
+        if not community_reference:
+            raise ValueError("GraphRAG community report identity is missing")
+        community_id = community_ids_by_reference.get(community_reference, community_reference)
         evidence = _merge_evidence(*(entity_evidence.get(value, []) for value in community_entities.get(community_id, [])))
         if not evidence:
             raise ValueError("community report evidence is unresolved")
@@ -125,6 +144,16 @@ def _ids(value: Any) -> list[str]:
     if isinstance(value, (list, tuple, set)):
         return [str(item).strip() for item in value if str(item).strip()]
     return [str(value).strip()]
+
+
+def _community_reference(value: Any) -> str:
+    if value is None or (isinstance(value, float) and math.isnan(value)):
+        return ""
+    if isinstance(value, Integral) and not isinstance(value, bool):
+        return str(int(value))
+    if isinstance(value, Real) and math.isfinite(float(value)) and float(value).is_integer():
+        return str(int(value))
+    return str(value).strip()
 
 
 def _required(row: dict[str, Any], name: str) -> str:

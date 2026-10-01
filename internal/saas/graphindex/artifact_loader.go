@@ -214,6 +214,16 @@ func normalizeHostedGraphArtifact(artifact validation.ValidatedGraphArtifact, no
 	}, nil
 }
 
+// NormalizeValidatedGraphArtifact converts already-validated adapter output to
+// Agent Memory's normalized rows. It is shared by the hosted artifact loader
+// and the standalone SQLite worker so both persist the same record contract.
+func NormalizeValidatedGraphArtifact(artifact validation.ValidatedGraphArtifact, now time.Time) (contracts.GraphRevisionImportBatch, error) {
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	return normalizeHostedGraphArtifact(artifact, now.UTC())
+}
+
 func hostedGraphEvidence(scope core.GraphScope, values []validation.GraphArtifactEvidence) []core.GraphEvidence {
 	result := make([]core.GraphEvidence, 0, len(values))
 	for _, value := range values {

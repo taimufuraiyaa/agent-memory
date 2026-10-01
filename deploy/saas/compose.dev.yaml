@@ -1,9 +1,18 @@
 services:
   api:
+    build:
+      context: ../..
+      dockerfile: deploy/saas/Dockerfile.dev
+      args:
+        SERVICE: agent-memory-api
     environment:
       AGENT_MEMORY_LOCAL_PROJECTS_DIR: ${HOME}/.agent-memory
+      AGENT_MEMORY_GRAPH_CONFIG_FILE: ${HOME}/.agent-memory/agent-memory.env
+      AGENT_MEMORY_GRAPH_ADAPTER: /opt/adapter/.venv/bin/agent-memory-graphrag
+      AGENT_MEMORY_GRAPH_OLLAMA_HOST_GATEWAY: "true"
     volumes:
       - ${HOME}/.agent-memory:${HOME}/.agent-memory
+      - ${HOME}/.agent-memory/agent-memory.env:${HOME}/.agent-memory/agent-memory.env:ro
       - ${HOME}/timebooks:${HOME}/timebooks:ro
 
   frontend:

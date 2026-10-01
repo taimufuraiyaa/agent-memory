@@ -88,6 +88,8 @@ export type GraphRecallContext = {
 
 export type GraphReadiness = { configuration_id?: string; ready: boolean; enabled: boolean; compatible: boolean; state: string; adapter_name?: string; adapter_version?: string; artifact_schema_version?: string; reason_code?: string; reason?: string }
 export type GraphStatus = { configuration_id: string; configuration_version: number; enabled: boolean; state: string; adapter_name?: string; adapter_version?: string; compatible: boolean; index_method?: string; artifact_schema_version?: string; active_revision_id?: string; previous_revision_id?: string; indexed_watermark: { sequence: number; event_time: string; digest: string }; pending_changes: number; pending_records: number; current_job?: { id: string; state: string; created_at: string; updated_at: string }; queue_age_seconds: number; last_job_state?: string; last_job_id?: string; last_successful_at?: string; estimated_cost_usd: number; cost_available: boolean; fresh: boolean; degraded: boolean; remediation_code?: string; authorized_operations: GraphOperationAction[] }
+export type LocalProjectGraphQueueJob = { workspace: string; job_id: string; state: 'queued' | 'running'; created_at: string; updated_at: string; age_seconds: number; pending_records: number }
+export type LocalProjectGraphQueue = { projects_scanned: number; projects_unavailable: number; unavailable_project_names?: string[]; legacy_fallback?: boolean; jobs: LocalProjectGraphQueueJob[] }
 export type GraphOperationAction = 'update' | 'rebuild' | 'cancel' | 'retry' | 'disable' | 'rollback'
 export type GraphEntityRecord = { entity: { id: string; trust: string; superseded_by?: string }; version: { name: string; entity_type: string; description: string; aliases?: string[]; occurrence_count: number; degree: number }; evidence: GraphEvidence[]; record_version: number }
 export type GraphEdgeRecord = { edge: { id: string; source_entity_id: string; target_entity_id: string; normalized_kind: string; external_kind?: string; trust: string }; version: { description: string; weight: number; origin: string; provenance_approved: boolean }; evidence: GraphEvidence[]; record_version: number }
@@ -264,6 +266,7 @@ export interface KnowledgeGateway {
   getSettings(scope: WorkspaceScope, signal?: AbortSignal): Promise<Record<string, unknown>>
   getGraphReadiness(scope: WorkspaceScope, signal?: AbortSignal): Promise<GraphReadiness>
   getGraphStatus(scope: WorkspaceScope, signal?: AbortSignal): Promise<GraphStatus>
+  getLocalProjectGraphQueue?(signal?: AbortSignal): Promise<LocalProjectGraphQueue>
   getGraphSnapshot(scope: WorkspaceScope, signal?: AbortSignal): Promise<GraphSnapshot>
   operateGraph(scope: WorkspaceScope, configurationId: string, action: GraphOperationAction, expectedRevision?: string, jobId?: string): Promise<GraphStatus>
   reviewGraph(scope: WorkspaceScope, input: GraphReviewInput): Promise<void>

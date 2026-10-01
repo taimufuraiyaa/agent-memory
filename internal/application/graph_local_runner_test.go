@@ -75,6 +75,52 @@ func TestLocalGraphRunnerBoundsStructuredOutput(t *testing.T) {
 	}
 }
 
+func TestLocalGraphRunnerOnlyPassesBooleanOllamaHostGatewayFlag(t *testing.T) {
+	runner := NewLocalGraphRunner(config.DefaultGraphConfig(t.TempDir()))
+
+	t.Setenv("AGENT_MEMORY_GRAPH_OLLAMA_HOST_GATEWAY", "true")
+	if !containsEnvironmentVariable(runner.adapterEnvironment(t.TempDir()), "AGENT_MEMORY_GRAPH_OLLAMA_HOST_GATEWAY=true") {
+		t.Fatal("explicit dev host-gateway flag was not passed to the adapter")
+	}
+
+	for _, value := range []string{"false", "http://remote.example:11434", "TRUE"} {
+		t.Setenv("AGENT_MEMORY_GRAPH_OLLAMA_HOST_GATEWAY", value)
+		if containsEnvironmentVariable(runner.adapterEnvironment(t.TempDir()), "AGENT_MEMORY_GRAPH_OLLAMA_HOST_GATEWAY=") {
+			t.Fatalf("non-true setting %q was passed to the adapter", value)
+		}
+	}
+}
+
+func TestLocalGraphRunnerPassesPinnedLockfileWithoutForwardingAmbientSecrets(t *testing.T) {
+	lockfile := filepath.Join(t.TempDir(), "uv.lock")
+	if err := os.WriteFile(lockfile, []byte("version = 1\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("AGENT_MEMORY_GRAPHRAG_LOCK_FILE", lockfile)
+	t.Setenv("OPENAI_API_KEY", "must-not-be-forwarded")
+
+	script := graphRunnerScript(t, `printf '{"state":"ready","lock_file":"%s","openai":"%s"}\n' "${AGENT_MEMORY_GRAPHRAG_LOCK_FILE-}" "${OPENAI_API_KEY-unset}"`)
+	result, err := NewLocalGraphRunner(graphRunnerTestConfig(t, script)).Run(context.Background(), LocalGraphReadiness, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.State != "ready" || result.Response["lock_file"] != lockfile {
+		t.Fatalf("adapter did not receive pinned dependency lockfile path: %#v", result)
+	}
+	if result.Response["openai"] != "unset" {
+		t.Fatalf("ambient cloud credential was forwarded to adapter: %#v", result.Response)
+	}
+}
+
+func containsEnvironmentVariable(environment []string, expected string) bool {
+	for _, entry := range environment {
+		if entry == expected {
+			return true
+		}
+	}
+	return false
+}
+
 func graphRunnerTestConfig(t *testing.T, executable string) config.GraphConfig {
 	t.Helper()
 	dataDir := t.TempDir()

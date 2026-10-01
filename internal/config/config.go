@@ -488,6 +488,18 @@ func (c *Config) mergeGraph(other *GraphConfig, present map[string]bool) {
 	if other.JobRoot != "" {
 		c.Graph.JobRoot = other.JobRoot
 	}
+	if other.CompletionProvider != "" {
+		c.Graph.CompletionProvider = other.CompletionProvider
+	}
+	if other.CompletionModel != "" {
+		c.Graph.CompletionModel = other.CompletionModel
+	}
+	if other.EmbeddingProvider != "" {
+		c.Graph.EmbeddingProvider = other.EmbeddingProvider
+	}
+	if other.EmbeddingModel != "" {
+		c.Graph.EmbeddingModel = other.EmbeddingModel
+	}
 	if other.TimeoutSeconds > 0 {
 		c.Graph.TimeoutSeconds = other.TimeoutSeconds
 	}
@@ -669,6 +681,18 @@ func (c *Config) applyEnvOverrides() {
 	}
 	if v := os.Getenv("AGENT_MEMORY_GRAPH_ADAPTER"); v != "" {
 		c.Graph.Executable = v
+	}
+	if v := os.Getenv("AGENT_MEMORY_GRAPH_COMPLETION_PROVIDER"); v != "" {
+		c.Graph.CompletionProvider = v
+	}
+	if v := os.Getenv("AGENT_MEMORY_GRAPH_COMPLETION_MODEL"); v != "" {
+		c.Graph.CompletionModel = v
+	}
+	if v := os.Getenv("AGENT_MEMORY_GRAPH_EMBEDDING_PROVIDER"); v != "" {
+		c.Graph.EmbeddingProvider = v
+	}
+	if v := os.Getenv("AGENT_MEMORY_GRAPH_EMBEDDING_MODEL"); v != "" {
+		c.Graph.EmbeddingModel = v
 	}
 
 	// Adaptive tuning - handled by existing adaptive_tuning.go functions

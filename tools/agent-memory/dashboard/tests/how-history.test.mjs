@@ -5,15 +5,16 @@ import test from 'node:test'
 const root = new URL('../src/', import.meta.url)
 const read = (path) => readFile(new URL(path, root), 'utf8')
 
-test('Knowledge exposes How History without replacing Activity or Memories', async () => {
-  const [shell, route] = await Promise.all([
+test('How History stays reachable from workspace actions alongside Activity and Memories', async () => {
+  const [shell, explorer, route] = await Promise.all([
     read('ui/WorkspaceApp.tsx'),
+    read('ui/workspace/WorkspaceExplorer.tsx'),
     read('ui/workspace/workspaceRoute.ts'),
   ])
-  assert.match(shell, /value: 'history', label: 'How History'/)
-  assert.match(shell, /<HowHistoryView gateway=\{gateway\} workspaceId=\{workspaceId\}/)
-  assert.match(shell, /<ActivityView gateway=\{gateway\} workspaceId=\{workspaceId\}/)
-  assert.match(shell, /<MemoryExplorer gateway=\{gateway\} workspaceId=\{workspaceId\}/)
+  assert.match(explorer, /onWorkspaceAction\(id, 'history'\)\}>How history/)
+  assert.match(shell, /route\.knowledgeView === 'history' \? <HowHistoryView gateway=\{gateway\} workspaceId=\{workspace\.id\}/)
+  assert.match(shell, /route\.destination === 'activity' \? <ActivityView gateway=\{gateway\} workspaceId=\{workspace\.id\}/)
+  assert.match(shell, /route\.knowledgeView === 'memories' \? <Stack gap="md"><Group[\s\S]*?<MemoryExplorer gateway=\{gateway\} workspaceId=\{workspace\.id\}/)
   assert.match(route, /'sources' \| 'memories' \| 'history' \| 'notes'/)
 })
 

@@ -88,6 +88,15 @@ export type HostedGraphRecallResponse = {
   canonical_memories?: HostedMemory[]
 }
 
+export type HostedProjectAskResponse = {
+  graph_request_id: string
+  context_block: string
+  memories_included_full: HostedMemory[]
+  weak_memories?: HostedMemory[]
+  graph_route: GraphRouteDecision
+  graph_context?: GraphRecallContext
+}
+
 export type HostedProjectMemoryResult = { memory: HostedMemory; score: number; explanation?: string }
 
 export type HostedEvidence = {
@@ -188,12 +197,23 @@ export async function logoutLocalSession(): Promise<void> {
   await localSessionRequest('/v1/local-session', { method: 'DELETE' })
 }
 
+class HostedRequestError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message)
+    this.name = 'HostedRequestError'
+  }
+}
+
 async function hostedRequest<T>(connection: HostedConnection, path: string, init: RequestInit = {}): Promise<T> {
   const headers = hostedHeaders(connection, init.headers)
   if (init.body && !(init.body instanceof FormData) && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
   const response = await fetch(path, { ...init, headers, credentials: 'same-origin', cache: 'no-store' })
   const value = await response.json().catch(() => ({})) as Partial<Envelope<T>>
-  if (!response.ok) throw new Error(value.error?.message || 'The request was not accepted.')
+  if (!response.ok) {
+    const message = value.error?.message
+    if (message === 'The request was not accepted.') throw new HostedRequestError(`The request was not accepted (HTTP ${response.status}).`, response.status)
+    throw new HostedRequestError(message || `The server returned HTTP ${response.status}.`, response.status)
+  }
   return value.data as T
 }
 
@@ -209,8 +229,8 @@ export function listHostedProcessingTasks(connection: HostedConnection): Promise
   return hostedRequest(connection, `/v1/processing-tasks?workspace_id=${encodeURIComponent(connection.workspace)}`)
 }
 
-export function listHostedProjects(connection: HostedConnection): Promise<{ projects: HostedProject[] }> {
-  return hostedRequest(connection, '/v1/local-projects')
+export function listHostedProjects(connection: HostedConnection, signal?: AbortSignal): Promise<{ projects: HostedProject[] }> {
+  return hostedRequest(connection, '/v1/local-projects', { signal })
 }
 
 export function getHostedProjectLifecycle(connection: HostedConnection, workspace: string): Promise<{ scheduler?: import('./api').SchedulerSummary; history: import('./api').SchedulerRunHistory[] }> {
@@ -250,6 +270,14 @@ export function studyHostedProject(connection: HostedConnection, input: { worksp
 
 export function searchHostedProjectMemories(connection: HostedConnection, input: { workspace: string; query: string; limit: number; cursor?: string }): Promise<{ items: HostedProjectMemoryResult[]; next_cursor?: string }> {
   return hostedRequest(connection, '/v1/local-projects/search', { method: 'POST', body: JSON.stringify(input) })
+}
+
+export function askHostedProject(connection: HostedConnection, input: { workspace: string; query: string; mode: GraphAskOptions['mode']; required?: boolean; allowStale?: boolean }, signal?: AbortSignal): Promise<HostedProjectAskResponse> {
+  return hostedRequest(connection, '/v1/local-projects/ask', {
+    method: 'POST',
+    signal,
+    body: JSON.stringify({ workspace: input.workspace, query: input.query, graph_mode: input.mode, graph_required: Boolean(input.required), graph_allow_stale: Boolean(input.allowStale) }),
+  })
 }
 
 export function browseHostedProjectMemories(connection: HostedConnection, input: { workspace: string; mode: 'recent' | 'pinned' | 'type' | 'ungrouped'; limit: number; cursor?: string }): Promise<{ items: HostedMemory[]; next_cursor?: string }> {
@@ -453,6 +481,85 @@ export function getHostedGraphStatus(connection: HostedConnection, signal?: Abor
   return hostedRequest(connection, `/v1/graph-index/status?${hostedGraphQuery(connection)}`, { signal })
 }
 
+export function getHostedLocalProjectGraphReadiness(connection: HostedConnection, workspace: string, signal?: AbortSignal): Promise<GraphReadiness> {
+  const query = new URLSearchParams({ workspace, configuration_id: 'default' })
+  return hostedRequest(connection, `/v1/local-projects/graph-index/readiness?${query.toString()}`, { signal })
+}
+
+export function getHostedLocalProjectGraphStatus(connection: HostedConnection, workspace: string, signal?: AbortSignal): Promise<GraphStatus> {
+  const query = new URLSearchParams({ workspace, configuration_id: 'default' })
+  return hostedRequest(connection, `/v1/local-projects/graph-index/status?${query.toString()}`, { signal })
+}
+
+export async function getHostedLocalProjectGraphQueue(connection: HostedConnection, signal?: AbortSignal): Promise<LocalProjectGraphQueue> {
+  try {
+    return await hostedRequest(connection, '/v1/local-projects/graph-index/queue', { signal })
+  } catch (error) {
+    if (error instanceof HostedRequestError && error.status === 404) return getLegacyLocalProjectGraphQueue(connection, signal)
+    throw error
+  }
+}
+
+async function getLegacyLocalProjectGraphQueue(connection: HostedConnection, signal?: AbortSignal): Promise<LocalProjectGraphQueue> {
+  const { projects } = await listHostedProjects(connection, signal)
+  const jobs: LocalProjectGraphQueue['jobs'] = []
+  const unavailable: string[] = []
+  const concurrency = 4
+
+  for (let offset = 0; offset < projects.length; offset += concurrency) {
+    const batch = projects.slice(offset, offset + concurrency)
+    const results = await Promise.all(batch.map(async (project) => {
+      try {
+        return { project, status: await getHostedLocalProjectGraphStatus(connection, project.name, signal) }
+      } catch (error) {
+        if (signal?.aborted) throw error
+        return { project, status: undefined }
+      }
+    }))
+
+    for (const { project, status } of results) {
+      if (!status) {
+        unavailable.push(project.name)
+        continue
+      }
+      const job = status.current_job
+      if (!job || (job.state !== 'queued' && job.state !== 'running')) continue
+      const changedAt = Date.parse(job.state === 'running' ? job.updated_at : job.created_at)
+      const ageSeconds = Number.isFinite(changedAt) ? Math.max(0, Math.floor((Date.now() - changedAt) / 1000)) : 0
+      jobs.push({
+        workspace: project.name,
+        job_id: job.id,
+        state: job.state,
+        created_at: job.created_at,
+        updated_at: job.updated_at,
+        age_seconds: ageSeconds,
+        pending_records: status.pending_records,
+      })
+    }
+  }
+
+  jobs.sort((left, right) => {
+    if (left.state !== right.state) return left.state === 'running' ? -1 : 1
+    return Date.parse(left.created_at) - Date.parse(right.created_at)
+  })
+
+  return {
+    projects_scanned: projects.length,
+    projects_unavailable: unavailable.length,
+    unavailable_project_names: unavailable,
+    legacy_fallback: true,
+    jobs,
+  }
+}
+
+export async function reindexHostedLocalProjectGraph(connection: HostedConnection, input: { workspace: string; configurationId: string; expectedRevision?: string }): Promise<GraphStatus> {
+  const result = await hostedRequest<{ status: GraphStatus }>(connection, '/v1/local-projects/graph-index/operations', {
+    method: 'POST',
+    body: JSON.stringify({ workspace: input.workspace, configuration_id: input.configurationId, action: 'rebuild', expected_revision: input.expectedRevision || '', idempotency_key: crypto.randomUUID() }),
+  })
+  return result.status
+}
+
 export function getHostedGraphSnapshot(connection: HostedConnection, signal?: AbortSignal): Promise<GraphSnapshot> {
   return hostedRequest(connection, `/v1/graph-index/explorer?${hostedGraphQuery(connection)}`, { signal })
 }
@@ -484,4 +591,4 @@ export async function reviewHostedGraph(connection: HostedConnection, input: Gra
 export async function submitHostedGraphFeedback(connection: HostedConnection, requestId: string, targetKind: string, targetId: string, outcome: string, reason?: string): Promise<void> {
   await hostedRequest(connection, '/v1/graph-index/feedback', { method: 'POST', body: JSON.stringify({ scope: { workspace_id: connection.workspace }, request_id: requestId, target_kind: targetKind, target_id: targetId, outcome, reason: reason || '', created_at: new Date().toISOString() }) })
 }
-import type { GraphAskOptions, GraphOperationAction, GraphReadiness, GraphRecallContext, GraphReviewInput, GraphRouteDecision, GraphSnapshot, GraphStatus } from './knowledgeGateway'
+import type { GraphAskOptions, GraphOperationAction, GraphReadiness, GraphRecallContext, GraphReviewInput, GraphRouteDecision, GraphSnapshot, GraphStatus, LocalProjectGraphQueue } from './knowledgeGateway'

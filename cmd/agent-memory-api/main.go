@@ -154,6 +154,11 @@ func run(cfg config.Config) error {
 			return fmt.Errorf("initialize local project registry: %w", err)
 		}
 	}
+	if graphWorker, ok := localProjects.(interface{ StartGraphWorker(context.Context) }); ok {
+		graphWorkerContext, stopGraphWorker := context.WithCancel(context.Background())
+		defer stopGraphWorker()
+		graphWorker.StartGraphWorker(graphWorkerContext)
+	}
 	sourceUploads.SetRolloutGate(launchControls)
 	handler, err := api.NewHandler(api.Dependencies{
 		Readiness: func(ctx context.Context) error {

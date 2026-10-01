@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/taimufuraiyaa/agent-memory/internal/contracts"
 	"github.com/taimufuraiyaa/agent-memory/internal/core"
 )
 
@@ -128,6 +129,63 @@ func TestGraphActivationCompareAndSwapPublishesOnlyReadyRevision(t *testing.T) {
 	}
 	if active != first.ID || previous != "" {
 		t.Fatalf("failed activation changed pointers: active=%q previous=%q", active, previous)
+	}
+}
+
+func TestSQLiteGraphRebuildJobActivatesOnlyAfterValidatedImport(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	store := openGraphControlStore(t)
+	configuration := graphConfigurationFixture()
+	if err := store.UpsertGraphConfiguration(ctx, configuration); err != nil {
+		t.Fatal(err)
+	}
+	active := graphRevisionFixture("revision-active", core.GraphRevisionReady)
+	if err := store.CreateGraphRevision(ctx, active); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.ActivateGraphRevision(ctx, core.GraphActivation{Scope: configuration.Scope, ConfigurationID: configuration.ID, CandidateRevision: active.ID}); err != nil {
+		t.Fatal(err)
+	}
+	result, err := store.ApplyGraphOperation(ctx, contracts.GraphOperationRequest{
+		Scope: configuration.Scope, ConfigurationID: configuration.ID, Action: contracts.GraphOperationRebuild,
+		ExpectedRevision: active.ID, IdempotencyKey: "manual-reindex-1",
+	})
+	if err != nil || !result.Accepted || result.Job == nil {
+		t.Fatalf("queue full graph reindex: result=%#v err=%v", result, err)
+	}
+	if current, previous, err := store.ActiveGraphRevisions(ctx, configuration.Scope, configuration.ID); err != nil || current != active.ID || previous != "" {
+		t.Fatalf("queued rebuild changed active revision: active=%q previous=%q err=%v", current, previous, err)
+	}
+	claimed, err := store.ClaimGraphJobs(ctx, configuration.Scope, "local-worker", 1, time.Minute, time.Now().UTC())
+	if err != nil || len(claimed) != 1 || claimed[0].ID != result.Job.ID {
+		t.Fatalf("claim reindex job: jobs=%#v err=%v", claimed, err)
+	}
+	now := time.Now().UTC()
+	cutoff := core.GraphWatermark{Sequence: 3, EventTime: now, Digest: "sha256:projected"}
+	if err := store.SetGraphRevisionCutoff(ctx, configuration.Scope, configuration.ID, result.RevisionID, cutoff, "sha256:projection", now); err != nil {
+		t.Fatal(err)
+	}
+	for _, transition := range [][2]core.GraphRevisionState{{core.GraphRevisionQueued, core.GraphRevisionProjecting}, {core.GraphRevisionProjecting, core.GraphRevisionIndexing}, {core.GraphRevisionIndexing, core.GraphRevisionValidating}, {core.GraphRevisionValidating, core.GraphRevisionImporting}} {
+		if err := store.TransitionGraphRevision(ctx, configuration.Scope, configuration.ID, result.RevisionID, transition[0], transition[1], now); err != nil {
+			t.Fatalf("transition %s to %s: %v", transition[0], transition[1], err)
+		}
+	}
+	if err := store.ImportGraphRevisionBatch(ctx, contracts.GraphRevisionImportBatch{Scope: configuration.Scope, ConfigurationID: configuration.ID, RevisionID: result.RevisionID}); err != nil {
+		t.Fatalf("commit validated empty fixture import: %v", err)
+	}
+	if err := store.SetGraphRevisionArtifactHash(ctx, configuration.Scope, configuration.ID, result.RevisionID, "sha256:artifact", now); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.ActivateGraphRevision(ctx, core.GraphActivation{Scope: configuration.Scope, ConfigurationID: configuration.ID, ExpectedRevision: active.ID, CandidateRevision: result.RevisionID}); err != nil {
+		t.Fatalf("activate rebuilt graph: %v", err)
+	}
+	if err := store.CompleteGraphJob(ctx, configuration.Scope, result.Job.ID, "local-worker", now); err != nil {
+		t.Fatal(err)
+	}
+	current, previous, err := store.ActiveGraphRevisions(ctx, configuration.Scope, configuration.ID)
+	if err != nil || current != result.RevisionID || previous != active.ID {
+		t.Fatalf("rebuilt revisions = active %q previous %q err %v", current, previous, err)
 	}
 }
 

@@ -2,6 +2,8 @@ package api
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -13,7 +15,9 @@ import (
 	"github.com/taimufuraiyaa/agent-memory/internal/clientprofile"
 	"github.com/taimufuraiyaa/agent-memory/internal/core"
 	"github.com/taimufuraiyaa/agent-memory/internal/engine"
+	graphretrieval "github.com/taimufuraiyaa/agent-memory/internal/retrieval"
 	"github.com/taimufuraiyaa/agent-memory/internal/saas/auth"
+	"github.com/taimufuraiyaa/agent-memory/internal/saas/control"
 	"github.com/taimufuraiyaa/agent-memory/internal/saas/retrieval"
 	"github.com/taimufuraiyaa/agent-memory/internal/workspace"
 )
@@ -21,6 +25,8 @@ import (
 type localProjectFixture struct {
 	projects   []workspace.ListItem
 	input      LocalProjectStudyInput
+	askInput   LocalProjectAskInput
+	askResult  *application.RecallResult
 	feedback   []core.RetrievalRequestLog
 	score      LocalProjectFeedbackInput
 	search     LocalProjectSearchInput
@@ -41,6 +47,45 @@ type localProjectFixture struct {
 	export     LocalProjectSolutionExportInput
 	lifecycle  LocalProjectLifecycle
 	skills     []LocalProjectSkill
+}
+
+type localProjectGraphFixture struct {
+	workspace       string
+	configurationID string
+	operation       LocalProjectGraphOperationInput
+	operationResult application.GraphOperationResult
+	status          application.GraphIndexStatus
+	readiness       application.GraphIndexReadiness
+	operateCalls    int
+	queue           LocalProjectGraphQueue
+	queueErr        error
+	queueCalls      int
+}
+
+func (fixture *localProjectGraphFixture) GraphReadiness(_ context.Context, workspaceName, configurationID string) (application.GraphIndexReadiness, error) {
+	fixture.workspace, fixture.configurationID = workspaceName, configurationID
+	return fixture.readiness, nil
+}
+
+func (fixture *localProjectGraphFixture) GraphStatus(_ context.Context, workspaceName, configurationID string) (application.GraphIndexStatus, error) {
+	fixture.workspace, fixture.configurationID = workspaceName, configurationID
+	return fixture.status, nil
+}
+
+func (fixture *localProjectGraphFixture) OperateGraph(_ context.Context, input LocalProjectGraphOperationInput) (application.GraphOperationResult, error) {
+	fixture.operation = input
+	fixture.operateCalls++
+	return fixture.operationResult, nil
+}
+
+func (fixture *localProjectGraphFixture) GraphQueue(context.Context) (LocalProjectGraphQueue, error) {
+	fixture.queueCalls++
+	return fixture.queue, fixture.queueErr
+}
+
+func (fixture *localProjectFixture) Ask(_ context.Context, input LocalProjectAskInput) (*application.RecallResult, error) {
+	fixture.askInput = input
+	return fixture.askResult, nil
 }
 
 func (fixture *localProjectFixture) Lifecycle(_ context.Context, workspaceName string, limit int) (LocalProjectLifecycle, error) {
@@ -237,6 +282,109 @@ func TestLocalProjectsListReturnsRegisteredProjects(t *testing.T) {
 	}
 }
 
+func TestLocalProjectGraphStatusRequiresRegisteredWorkspaceName(t *testing.T) {
+	fixture := &localProjectGraphFixture{}
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/v1/local-projects/graph-index/status?workspace=..%2Foutside", nil)
+	localProjectGraphStatus(fixture).ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusBadRequest || fixture.workspace != "" {
+		t.Fatalf("path-shaped project scope was not rejected: status=%d workspace=%q body=%s", recorder.Code, fixture.workspace, recorder.Body.String())
+	}
+}
+
+func TestLocalProjectGraphReadinessAndStatusUseSelectedRegisteredWorkspace(t *testing.T) {
+	fixture := &localProjectGraphFixture{
+		readiness: application.GraphIndexReadiness{ConfigurationID: "default", Ready: true, Enabled: true, State: "ready"},
+		status:    application.GraphIndexStatus{ConfigurationID: "default", State: "not_indexed"},
+	}
+	for _, handler := range []http.HandlerFunc{localProjectGraphReadiness(fixture), localProjectGraphStatus(fixture)} {
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/v1/local-projects/graph-index/status?workspace=conn", nil))
+		if recorder.Code != http.StatusOK || fixture.workspace != "conn" || fixture.configurationID != "default" {
+			t.Fatalf("project-scoped graph read failed: status=%d workspace=%q configuration=%q body=%s", recorder.Code, fixture.workspace, fixture.configurationID, recorder.Body.String())
+		}
+	}
+}
+
+func TestLocalProjectGraphQueueIsOwnerAuthorizedReadOnlyAndReportsCrossProjectJobs(t *testing.T) {
+	fixture := &localProjectGraphFixture{queue: LocalProjectGraphQueue{
+		ProjectsScanned: 3, ProjectsUnavailable: 1, UnavailableProjectNames: []string{"dots"},
+		Jobs: []LocalProjectGraphQueueJob{{Workspace: "conn", JobID: "job-1", State: "running", AgeSeconds: 75, PendingRecords: 12}},
+	}}
+	owner := hostedOwnerFixture{status: control.LocalOwnerStatus{State: "authenticated", Account: control.PersonalAccount{TenantID: "tenant-1", AccountID: "account-1"}}}
+	handler := localProjectOwnerBoundary(owner, "memory:read", localProjectGraphQueue(fixture))
+
+	request := httptest.NewRequest(http.MethodGet, "/v1/local-projects/graph-index/queue", nil)
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusForbidden || fixture.queueCalls != 0 {
+		t.Fatalf("unauthorized queue read reached service: status=%d calls=%d", recorder.Code, fixture.queueCalls)
+	}
+
+	request = httptest.NewRequest(http.MethodGet, "/v1/local-projects/graph-index/queue", nil)
+	request = request.WithContext(auth.WithRequestContext(request.Context(), hostedSkillCaller("tenant-1", "account-1", "memory:read")))
+	recorder = httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK || fixture.queueCalls != 1 || fixture.operateCalls != 0 {
+		t.Fatalf("authorized queue read failed or mutated graph state: status=%d reads=%d operations=%d body=%s", recorder.Code, fixture.queueCalls, fixture.operateCalls, recorder.Body.String())
+	}
+	var response struct {
+		Data LocalProjectGraphQueue `json:"data"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if response.Data.ProjectsScanned != 3 || response.Data.ProjectsUnavailable != 1 || len(response.Data.UnavailableProjectNames) != 1 || len(response.Data.Jobs) != 1 || response.Data.Jobs[0].Workspace != "conn" || response.Data.Jobs[0].State != "running" {
+		t.Fatalf("cross-project queue status was incomplete: %+v", response.Data)
+	}
+	if strings.Contains(recorder.Body.String(), "lease_owner") || strings.Contains(recorder.Body.String(), "idempotency_key") || strings.Contains(recorder.Body.String(), "db_path") {
+		t.Fatalf("queue response exposed internal job fields: %s", recorder.Body.String())
+	}
+}
+
+func TestLocalProjectGraphQueueFailureDoesNotLookLikeEmptyQueue(t *testing.T) {
+	fixture := &localProjectGraphFixture{queueErr: errors.New("registry unavailable")}
+	recorder := httptest.NewRecorder()
+	localProjectGraphQueue(fixture).ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/v1/local-projects/graph-index/queue", nil))
+	if recorder.Code != http.StatusServiceUnavailable || fixture.queueCalls != 1 || strings.Contains(recorder.Body.String(), `"jobs":[]`) {
+		t.Fatalf("queue failure was presented as empty: status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestLocalProjectGraphOperationUsesAuthenticatedProjectScopeAndBoundedFields(t *testing.T) {
+	fixture := &localProjectGraphFixture{operationResult: application.GraphOperationResult{
+		Accepted: true,
+		Status:   application.GraphIndexStatus{ConfigurationID: "default", State: "queued", AuthorizedOperations: []application.GraphOperationAction{application.GraphOperationCancel}},
+	}}
+	request := httptest.NewRequest(http.MethodPost, "/v1/local-projects/graph-index/operations", strings.NewReader(`{"workspace":"conn","configuration_id":"default","action":"rebuild","expected_revision":"","idempotency_key":"reindex-1","scope":{"workspace_id":"other"},"db_path":"/outside.db"}`))
+	request = request.WithContext(auth.WithRequestContext(request.Context(), auth.RequestContext{
+		SubjectID: "subject-1", AccountID: "account-1", TenantID: "tenant-1", Role: "owner", SessionID: "session-1",
+		Capabilities: map[string]struct{}{"memory:write": {}},
+	}))
+	recorder := httptest.NewRecorder()
+	localProjectBoundary("memory:write", localProjectGraphOperation(fixture)).ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusBadRequest || fixture.operateCalls != 0 {
+		t.Fatalf("caller-controlled graph scope/path was accepted: status=%d calls=%d body=%s", recorder.Code, fixture.operateCalls, recorder.Body.String())
+	}
+
+	request = httptest.NewRequest(http.MethodPost, "/v1/local-projects/graph-index/operations", strings.NewReader(`{"workspace":"conn","configuration_id":"default","action":"rebuild","expected_revision":"","idempotency_key":"reindex-2"}`))
+	request = request.WithContext(auth.WithRequestContext(request.Context(), auth.RequestContext{
+		SubjectID: "subject-1", AccountID: "account-1", TenantID: "tenant-1", Role: "owner", SessionID: "session-1",
+		Capabilities: map[string]struct{}{"memory:write": {}},
+	}))
+	recorder = httptest.NewRecorder()
+	localProjectBoundary("memory:write", localProjectGraphOperation(fixture)).ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusAccepted || fixture.operateCalls != 1 {
+		t.Fatalf("valid Reindex was not accepted: status=%d calls=%d body=%s", recorder.Code, fixture.operateCalls, recorder.Body.String())
+	}
+	if fixture.operation.Workspace != "conn" || fixture.operation.ConfigurationID != "default" || fixture.operation.Action != application.GraphOperationRebuild || fixture.operation.IdempotencyKey != "reindex-2" {
+		t.Fatalf("operation did not stay in selected project scope: %#v", fixture.operation)
+	}
+	if fixture.operation.TenantID != "tenant-1" || fixture.operation.AccountID != "account-1" || fixture.operation.Actor != "subject-1" {
+		t.Fatalf("owner identity was not attached to operation: %#v", fixture.operation)
+	}
+}
+
 func TestLocalProjectSystemReadsReturnBoundedLifecycleAndSafeSkills(t *testing.T) {
 	fixture := &localProjectFixture{
 		lifecycle: LocalProjectLifecycle{History: []LocalProjectLifecycleRun{{ID: "run-1", Workspace: "agent-memory", StartedAt: time.Date(2026, 8, 24, 1, 2, 3, 0, time.UTC), Result: "success", Promoted: 2}}},
@@ -373,6 +521,41 @@ func TestLocalProjectSearchUsesRegisteredWorkspaceAndCursor(t *testing.T) {
 	searchLocalProject(fixture)(recorder, request)
 	if recorder.Code != http.StatusOK || fixture.search.Workspace != "agent-memory" || fixture.search.Offset != 20 || !strings.Contains(recorder.Body.String(), `"memory-1"`) {
 		t.Fatalf("unexpected search response: status=%d input=%+v body=%s", recorder.Code, fixture.search, recorder.Body.String())
+	}
+}
+
+func TestLocalProjectAskReturnsScopedGraphRecall(t *testing.T) {
+	fixture := &localProjectFixture{askResult: &application.RecallResult{
+		RequestID:    "graph-request-1",
+		ContextBlock: "Grounded project context",
+		Included:     []engine.RetrievalHit{{Memory: core.MemoryEntry{ID: "memory-1", Workspace: "agent-memory", Content: "Project fact"}}},
+		Retrieved:    &engine.RetrievalResult{WeakHits: []engine.RetrievalHit{{Memory: core.MemoryEntry{ID: "weak-1", Workspace: "agent-memory", Content: "Related fact"}}}},
+		GraphRoute:   graphretrieval.GraphRouteDecision{RequestedMode: graphretrieval.GraphQueryAuto, SelectedMode: graphretrieval.GraphQueryLocal, Intent: graphretrieval.GraphIntentRelational, ReasonCode: graphretrieval.GraphReasonAutoRelational},
+	}}
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/v1/local-projects/ask", strings.NewReader(`{"workspace":"agent-memory","query":"How are these systems related?","graph_mode":"auto"}`))
+	askLocalProject(fixture)(recorder, request)
+	if recorder.Code != http.StatusOK || fixture.askInput.Workspace != "agent-memory" || fixture.askInput.GraphMode != "auto" {
+		t.Fatalf("unexpected project Ask: status=%d input=%+v body=%s", recorder.Code, fixture.askInput, recorder.Body.String())
+	}
+	for _, field := range []string{`"graph_request_id":"graph-request-1"`, `"context_block":"Grounded project context"`, `"graph_route":{"requested_mode":"auto","selected_mode":"local_graph"`, `"memory-1"`, `"weak-1"`} {
+		if !strings.Contains(recorder.Body.String(), field) {
+			t.Fatalf("project Ask omitted %s: %s", field, recorder.Body.String())
+		}
+	}
+}
+
+func TestLocalProjectAskRejectsUnregisteredPathScopeAndInvalidMode(t *testing.T) {
+	for _, body := range []string{
+		`{"workspace":"../other","query":"question","graph_mode":"auto"}`,
+		`{"workspace":"agent-memory","query":"question","graph_mode":"tenant_global"}`,
+	} {
+		fixture := &localProjectFixture{}
+		recorder := httptest.NewRecorder()
+		askLocalProject(fixture)(recorder, httptest.NewRequest(http.MethodPost, "/v1/local-projects/ask", strings.NewReader(body)))
+		if recorder.Code != http.StatusBadRequest || fixture.askInput.Workspace != "" {
+			t.Fatalf("invalid project Ask was accepted: body=%s status=%d response=%s", body, recorder.Code, recorder.Body.String())
+		}
 	}
 }
 

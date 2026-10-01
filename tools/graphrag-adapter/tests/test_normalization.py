@@ -12,22 +12,24 @@ def test_normalization_maps_parquet_references_to_owned_evidence_jsonl(tmp_path:
     raw = tmp_path / "raw"
     raw.mkdir()
     pd.DataFrame([{"id": "d1", "title": "Book A"}]).to_parquet(raw / "documents.parquet")
-    pd.DataFrame([{"id": "tu1", "document_ids": ["token-a"]}]).to_parquet(raw / "text_units.parquet")
+    pd.DataFrame([{"id": "tu1", "document_id": "token-a"}]).to_parquet(raw / "text_units.parquet")
     pd.DataFrame([
         {"id": "e1", "title": "Retry Handler", "type": "service", "description": "Retries checkout", "text_unit_ids": ["tu1"]},
         {"id": "e2", "title": "Checkout", "type": "service", "description": "Checkout service", "text_unit_ids": ["tu1"]},
     ]).to_parquet(raw / "entities.parquet")
     pd.DataFrame([{"id": "r1", "source": "e1", "target": "e2", "description": "depends on", "text_unit_ids": ["tu1"]}]).to_parquet(raw / "relationships.parquet")
-    pd.DataFrame([{"id": "c1", "parent": None, "entity_ids": ["e1", "e2"]}]).to_parquet(raw / "communities.parquet")
-    pd.DataFrame([{"id": "cr1", "community": "c1", "title": "Payments", "summary": "Retry and checkout", "rank": 0.8}]).to_parquet(raw / "community_reports.parquet")
+    pd.DataFrame([{"id": "c1", "community": 0, "parent": -1, "entity_ids": ["e1", "e2"]}]).to_parquet(raw / "communities.parquet")
+    pd.DataFrame([{"id": "cr1", "community": 0, "title": "Payments", "summary": "Retry and checkout", "rank": 0.8}]).to_parquet(raw / "community_reports.parquet")
 
     output = normalize_graphrag_artifacts(raw, {"token-a": {"canonical_kind": "source_text", "canonical_id": "passage-a", "canonical_fingerprint": "sha256:passage-a"}})
 
     entity = json.loads((output / "entities.jsonl").read_text(encoding="utf-8").splitlines()[0])
     relationship = json.loads((output / "relationships.jsonl").read_text(encoding="utf-8").splitlines()[0])
+    community = json.loads((output / "communities.jsonl").read_text(encoding="utf-8").splitlines()[0])
     report = json.loads((output / "community_reports.jsonl").read_text(encoding="utf-8").splitlines()[0])
     assert entity["evidence"][0]["canonical_id"] == "passage-a"
     assert relationship["source_id"] == "e1" and relationship["target_id"] == "e2"
+    assert community["id"] == "c1" and community.get("parent_id") in (None, "")
     assert report["community_id"] == "c1" and report["evidence"][0]["canonical_id"] == "passage-a"
     assert not list(output.glob("*.parquet"))
 

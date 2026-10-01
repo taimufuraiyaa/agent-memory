@@ -23,12 +23,12 @@ test('both runtimes receive one controlled visual theme independently from color
   assert.match(workspaceApp, /data-visual-theme=\{visualTheme\}/)
 })
 
-test('the top-left header exposes the Atlas and Classic theme choices after the brand', () => {
-  assert.match(workspaceApp, /className="workspaceBrand"[\s\S]*className="workspaceThemePicker"/)
-  assert.match(workspaceApp, /className="workspaceThemePicker"/)
-  assert.match(workspaceApp, /aria-label="Visual theme"/)
-  assert.match(workspaceApp, /value:\s*'atlas',\s*label:\s*'Living Memory Atlas'/)
-  assert.match(workspaceApp, /value:\s*'classic',\s*label:\s*'Classic Workspace'/)
+test('the compact header keeps Atlas and Classic under Appearance options', () => {
+  assert.match(workspaceApp, /aria-label="Appearance options"/)
+  assert.match(workspaceApp, /<Menu\.Dropdown aria-label="Appearance options">/)
+  assert.match(workspaceApp, /<Menu\.Label>Visual style<\/Menu\.Label>/)
+  assert.match(workspaceApp, /onClick=\{\(\) => onVisualThemeChange\('atlas'\)\}>Living Memory Atlas/)
+  assert.match(workspaceApp, /onClick=\{\(\) => onVisualThemeChange\('classic'\)\}>Classic Workspace/)
 })
 
 test('Atlas supplies explicit dark and light semantic tokens and journey styling', () => {

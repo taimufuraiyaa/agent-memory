@@ -39,6 +39,8 @@ func TestLocalGraphRunnerConfigRejectsUncontainedPathsAndCredentialNames(t *test
 	graph := DefaultGraphConfig(dataDir)
 	graph.Enabled = true
 	graph.Executable = filepath.Join(dataDir, "adapter")
+	graph.CompletionProvider, graph.CompletionModel = "openai", "completion"
+	graph.EmbeddingProvider, graph.EmbeddingModel = "openai", "embedding"
 	graph.JobRoot = filepath.Dir(dataDir)
 	if err := graph.Validate(dataDir); err == nil {
 		t.Fatal("uncontained job root accepted")
@@ -47,5 +49,17 @@ func TestLocalGraphRunnerConfigRejectsUncontainedPathsAndCredentialNames(t *test
 	graph.CredentialEnv = []string{"PATH"}
 	if err := graph.Validate(dataDir); err == nil {
 		t.Fatal("unreviewed credential environment accepted")
+	}
+}
+
+func TestGraphModelRoutesLoadFromEnvironment(t *testing.T) {
+	config := DefaultConfig()
+	t.Setenv("AGENT_MEMORY_GRAPH_COMPLETION_PROVIDER", "openai")
+	t.Setenv("AGENT_MEMORY_GRAPH_COMPLETION_MODEL", "completion-v1")
+	t.Setenv("AGENT_MEMORY_GRAPH_EMBEDDING_PROVIDER", "openai")
+	t.Setenv("AGENT_MEMORY_GRAPH_EMBEDDING_MODEL", "embedding-v1")
+	config.applyEnvOverrides()
+	if config.Graph.CompletionProvider != "openai" || config.Graph.CompletionModel != "completion-v1" || config.Graph.EmbeddingProvider != "openai" || config.Graph.EmbeddingModel != "embedding-v1" {
+		t.Fatalf("graph model routes were not loaded: %#v", config.Graph)
 	}
 }

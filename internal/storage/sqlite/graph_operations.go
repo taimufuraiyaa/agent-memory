@@ -97,7 +97,7 @@ func (s *Store) GraphIndexStatus(ctx context.Context, scope core.GraphScope, con
 	default:
 		status.State = "ready"
 	}
-	if status.CurrentJob == nil && (status.LastJobState == core.GraphJobFailed || status.LastJobState == core.GraphJobDeadLetter || status.LastJobState == core.GraphJobCancelled) && status.PendingChanges > 0 {
+	if status.CurrentJob == nil && (status.LastJobState == core.GraphJobFailed || status.LastJobState == core.GraphJobDeadLetter || status.LastJobState == core.GraphJobCancelled) {
 		status.State = string(status.LastJobState)
 	}
 	contracts.PopulateGraphStatusPolicy(&status)
@@ -144,7 +144,7 @@ func (s *Store) ApplyGraphOperation(ctx context.Context, request contracts.Graph
 		if request.Action == contracts.GraphOperationRebuild {
 			base = ""
 		}
-		revision := core.GraphRevision{ID: revisionID, Scope: request.Scope, ConfigurationID: request.ConfigurationID, BaseRevisionID: base, State: core.GraphRevisionQueued, Cutoff: core.GraphWatermark{EventTime: now}, CreatedAt: now, UpdatedAt: now}
+		revision := core.GraphRevision{ID: revisionID, Scope: request.Scope, ConfigurationID: request.ConfigurationID, BaseRevisionID: base, PreviousRevisionID: active, State: core.GraphRevisionQueued, Cutoff: core.GraphWatermark{EventTime: now}, CreatedAt: now, UpdatedAt: now}
 		if err := s.CreateGraphRevision(ctx, revision); err != nil {
 			return result, err
 		}

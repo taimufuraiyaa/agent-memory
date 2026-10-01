@@ -67,7 +67,7 @@ function SystemToolPanel({ id, workspaceId, gateway }: { id: string; workspaceId
   }, [gateway, id, workspaceId])
 
   if (id === 'diagnostics') return <>{rawOpen ? <Paper withBorder p="md"><Button variant="default" onClick={() => setRawOpen(false)}>Close raw payload</Button><pre>{JSON.stringify(stats, null, 2)}</pre></Paper> : <DiagnosticsPanel workspaceLabel={workspaceId} stats={stats} statsErr={error} healthState={{ tone: error ? 'bad' : stats ? 'good' : 'warn', label: error ? 'Unavailable' : stats ? 'Healthy' : 'Loading', detail: error || 'Workspace diagnostics' }} onOpenRaw={() => setRawOpen(true)} />}</>
-  if (id === 'graph') return <GraphSettings gateway={gateway} workspaceId={workspaceId} />
+  if (id === 'graph') return <GraphSettings gateway={gateway} workspaceId={workspaceId} localProject={gateway.runtime === 'hosted' && gateway.supports('lifecycle', { workspaceId })} />
   if (id === 'lifecycle') return <LifecyclePanel workspace={workspaceId} scheduler={scheduler} history={history} busy={busy} error={error} />
   if (id === 'benchmark') return <BenchmarkPanel workspace={workspaceId} runs={runs} busy={busy} error={error} />
   if (id === 'clients') return <ClientsPanel clientProfiles={gateway} />
@@ -97,6 +97,14 @@ function SystemToolPanel({ id, workspaceId, gateway }: { id: string; workspaceId
   if (id === 'infrastructure') return <DeploymentPanel />
   if (id === 'migration') return <MigrationPanel workspace={workspaceId} />
   return null
+}
+
+export function WorkspaceSkillsView({ gateway, workspaceId }: { gateway: KnowledgeGateway; workspaceId: string }) {
+  const available = gateway.supports('skills', { workspaceId })
+  return <Stack className="workspaceSkillsView settingsView" gap="sm" aria-label="Workspace skills">
+    <Title order={3}>Skills</Title>
+    {available ? <SystemToolPanel id="skills" workspaceId={workspaceId} gateway={gateway} /> : <Alert color="gray" title="Skills unavailable">This runtime does not provide workspace skills.</Alert>}
+  </Stack>
 }
 
 export function SettingsView({ gateway, workspaceId }: { gateway: KnowledgeGateway; workspaceId: string }) {

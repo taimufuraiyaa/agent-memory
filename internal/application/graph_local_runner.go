@@ -21,10 +21,11 @@ import (
 type LocalGraphCommand string
 
 const (
-	LocalGraphReadiness   LocalGraphCommand = "readiness"
-	LocalGraphFullIndex   LocalGraphCommand = "full-index"
-	LocalGraphIncremental LocalGraphCommand = "incremental-update"
-	LocalGraphInspect     LocalGraphCommand = "inspect-artifacts"
+	LocalGraphReadiness        LocalGraphCommand = "readiness"
+	LocalGraphFullIndex        LocalGraphCommand = "full-index"
+	LocalGraphIncremental      LocalGraphCommand = "incremental-update"
+	LocalGraphInspect          LocalGraphCommand = "inspect-artifacts"
+	localGraphLockFileMaxBytes                   = 4 << 20
 )
 
 type LocalGraphRunResult struct {
@@ -175,6 +176,12 @@ func (r *LocalGraphRunner) createJobRequest(command LocalGraphCommand, request a
 	if err != nil {
 		return "", "", err
 	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = os.RemoveAll(jobDir)
+		}
+	}()
 	if err := os.Chmod(jobDir, 0o700); err != nil {
 		return "", "", err
 	}
@@ -206,17 +213,36 @@ func (r *LocalGraphRunner) createJobRequest(command LocalGraphCommand, request a
 	if err := file.Close(); err != nil {
 		return "", "", err
 	}
+	committed = true
 	return jobDir, requestPath, nil
 }
 
 func (r *LocalGraphRunner) adapterEnvironment(jobDir string) []string {
 	environment := []string{"HOME=" + jobDir, "TMPDIR=" + jobDir, "PYTHONUNBUFFERED=1", "NO_COLOR=1"}
+	if lockFile := localGraphLockFilePath(); lockFile != "" {
+		environment = append(environment, "AGENT_MEMORY_GRAPHRAG_LOCK_FILE="+lockFile)
+	}
+	if os.Getenv("AGENT_MEMORY_GRAPH_OLLAMA_HOST_GATEWAY") == "true" {
+		environment = append(environment, "AGENT_MEMORY_GRAPH_OLLAMA_HOST_GATEWAY=true")
+	}
 	for _, name := range r.configuration.CredentialEnv {
 		if value, ok := os.LookupEnv(name); ok {
 			environment = append(environment, name+"="+value)
 		}
 	}
 	return environment
+}
+
+func localGraphLockFilePath() string {
+	path := strings.TrimSpace(os.Getenv("AGENT_MEMORY_GRAPHRAG_LOCK_FILE"))
+	if path == "" || len(path) > 1024 || !filepath.IsAbs(path) || filepath.Clean(path) != path {
+		return ""
+	}
+	info, err := os.Lstat(path)
+	if err != nil || !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 || info.Size() < 1 || info.Size() > localGraphLockFileMaxBytes {
+		return ""
+	}
+	return path
 }
 
 func validLocalGraphCommand(command LocalGraphCommand) bool {

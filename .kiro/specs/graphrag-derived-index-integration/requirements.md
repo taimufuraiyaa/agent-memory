@@ -176,6 +176,7 @@ The feature is successful when knowledge learned on different days can become co
 - The existing Processing experience must expose graph jobs with queued, running, completed, failed, cancelled, and stale states using safe bounded failure guidance.
 - Authorized operators must be able to request update, rebuild, retry, cancel, disable, and roll back to the prior valid revision.
 - Users must be able to inspect active revision freshness, indexed watermark, last successful update, pending eligible records, and degraded status.
+- The Settings view must distinguish queued work from running work; it must not label a running job's elapsed age as queue wait.
 - Operations must be idempotent and must not create overlapping active revisions for the same workspace and configuration.
 - Standalone CLI and hosted API operations must have equivalent lifecycle semantics even when their execution adapters differ.
 
@@ -194,6 +195,57 @@ The feature is successful when knowledge learned on different days can become co
 - The first release must run graph retrieval in shadow evaluation before it can affect default recall ranking.
 - Enabling graph candidates in production must be separately controllable for local and global routes and reversible per workspace.
 - Upstream GraphRAG upgrades must pass schema-contract, golden-projection, deterministic-import, isolation, cost, and retrieval-quality gates before rollout.
+
+### R19 — Graph-Aware Chat for Every Workspace Scope
+
+- A chat scoped to a registered local project may request Auto Graph retrieval from that project's own Agent Memory store, including when the project is listed by the hosted-connected local-owner runtime.
+- Project-scoped Graph Ask must resolve only the registered workspace identity and open its registered local store; it must not use a caller-provided path or pass the project identifier to the tenant-level PostgreSQL Graph API.
+- Auto routing preserves Basic retrieval for direct factual questions and uses Local or Global graph enrichment only when the existing workspace policy and active readable revision permit it.
+- Missing, disabled, stale, or unreadable graph state must follow the existing router's bounded fallback/degraded behavior. A chat question must not fail solely because optional graph enrichment is unavailable.
+- Graph route decisions, graph context, freshness, and fallback state returned to the chat remain distinct from canonical memory/source evidence and are bounded before browser-local persistence.
+- Graph readiness and index operations remain scoped to the store that owns the workspace. A project chat route does not imply that hosted tenant graph APIs can operate on a local project's SQLite store.
+
+### R20 — Registered-Project Graph Settings and Reindex
+
+- A local owner can inspect Graph readiness and status for any registered project from that project's Settings view.
+- A Reindex request resolves only a registered workspace name through the local project registry and operates on that project's SQLite store. Callers cannot supply database, artifact, or filesystem paths.
+- Reindex is an explicit, idempotent full rebuild from eligible canonical records. It uses the configured local GraphRAG adapter and model routes, records durable job status, validates and imports the completed revision, and activates it atomically.
+- An unconfigured project can create its default Graph configuration only as part of an explicit Reindex request, and only when local Graph indexing is enabled and adapter readiness succeeds. Readiness and status GET requests have no side effects.
+- A missing/disabled adapter, missing model route, empty eligible corpus, cancellation, process restart, or invalid artifact produces a bounded visible state; the previous active revision remains usable unless a complete candidate passes import and activation.
+- Registered-project Settings never call tenant PostgreSQL Graph endpoints. Tenant workspace Graph operations continue to use the hosted Graph API and its existing worker.
+- The dashboard labels a full rebuild **Reindex** for workspace and project scopes, shows live progress, and keeps the action unavailable when the selected store's local runtime cannot accept it.
+- If a readiness or status refresh fails, the Settings view must label any retained status as stale and must not present a cached queued/running state as current.
+
+### R21 — Optional Device-Local Model Setup
+
+- The install TUI must present device-local GraphRAG model setup as a separate opt-in choice from the local query planner; neither model feature is selected by default.
+- The local setup offers a completion model bundle paired with a dedicated embedding model and shows approximate combined download size before any runtime or model download begins.
+- The installer configures only the fixed loopback Ollama endpoint for these local model routes. It must not silently fall back to a cloud provider or store cloud credentials for Ollama.
+- GraphRAG may be enabled by the installer only after both exact model IDs are available locally and the configured pinned adapter passes readiness. Any failure leaves graph setup disabled and does not write a partial active route.
+- Local model setup must never trigger a GraphRAG full index, incremental update, or project/workspace Reindex. Indexing remains an explicit operator action in that scope's Settings.
+
+### R22 — Containerized Local Development Inference Bridge
+
+- The local development API must run the same version-pinned GraphRAG adapter as the standalone install while retaining its isolated, bounded per-job process environment.
+- When configured for device-local Ollama, the adapter must use only the fixed Docker host gateway for model calls; project text must not fall back to a cloud provider.
+- The adapter must materialize its fixed reviewed prompts as private files inside the Agent Memory-owned job directory and pass their file paths to pinned GraphRAG 3.1.2, whose prompt fields resolve through filesystem reads.
+- Fixed prompts must retain the pinned GraphRAG response-format templates and append Agent Memory's evidence-safety constraints so entity extraction remains parseable without weakening source grounding.
+- The LanceDB vector dimension must match the configured embedding model's actual output dimension; the installed `qwen3-embedding:0.6b` route is configured for 1,024 dimensions instead of GraphRAG's 3,072 default.
+- Artifact normalization must map GraphRAG 3.1.2 text-unit `document_id` values through the projection correlation map before attaching evidence to entities, relationships, and reports; unresolved evidence fails closed.
+- Numeric GraphRAG community and parent labels must resolve to the corresponding immutable community IDs; the `-1` root-parent sentinel becomes no parent.
+
+### R23 — Registered-Project Graph Queue Visibility
+
+- A local owner can inspect queued and running Graph index jobs across all registered projects from any registered project's Graph Settings view.
+- The queue view identifies each job's project, state, job ID, state age, and pending record count, and refreshes while jobs are active.
+- The queue read is owner-authorized, read-only, and resolves status only through registered project identities; it never accepts filesystem paths or exposes lease owners, credentials, canonical memory text, or source contents.
+- A partial status scan is identified as incomplete and never presented as an empty queue. Unavailable project statuses are counted separately from projects with no active job.
+- The queue view explains that a queued job is waiting for a worker and a running job is being processed; per-project Settings remains the place to start or cancel supported operations.
+- Queue inspection failure is labeled unavailable and cannot alter graph jobs or their state.
+- When the initial queue request fails, the panel replaces its loading placeholder with an unavailable/retry message and preserves the HTTP status when the server omits a useful diagnostic, including the generic "The request was not accepted." response.
+- If a development API returns 404 for the aggregate queue route, the dashboard may use the existing owner-authorized registered-project list and per-project Graph status reads as a compatibility fallback. The fallback is read-only, bounds concurrent status requests, and reports partial failures rather than presenting an incomplete scan as empty.
+- Prompt paths must be generated by the adapter, remain inside the current job directory, and never be accepted from workspace content or the API caller.
+- A synthetic adapter index using local models must verify full GraphRAG workflow execution; readiness alone does not prove that configured prompt paths or inference work.
 
 ## Non-Functional Requirements
 
@@ -326,3 +378,16 @@ Commands are provisional until the design gate selects the adapter transport and
 6. What latency, token, cost, and measurable quality thresholds must local and global routes satisfy before leaving shadow mode?
 7. How long should raw GraphRAG inputs, caches, inactive revisions, and community reports be retained?
 8. Should GraphRAG-derived entity aliases influence the existing memory write-time relationship inference before human review?
+
+## Local Development GraphRAG Runtime
+
+The containerized dashboard development stack must load an explicitly installed local GraphRAG configuration into its API process and provide a Linux-compatible copy of the locked adapter. For Ollama inference, the adapter may use only the fixed Docker host gateway `http://host.docker.internal:11434` when a dev-only API flag is enabled; the default standalone adapter endpoint remains `http://127.0.0.1:11434`. No arbitrary endpoint may be configured. The development stack must not forward this flag into hosted, staging, or production services. Missing user configuration or adapter readiness keeps Graph disabled and Reindex unavailable. Configuration and adapter availability never trigger indexing; project Settings Reindex remains explicit.
+
+Acceptance criteria:
+
+1. The dev API image contains the exact locked GraphRAG adapter package and has a known executable path usable by the local-project service.
+2. The dev Compose API mounts the user-installed environment file read-only and reads only allow-listed Graph enablement/model route values; unrelated environment entries and cloud credentials are never injected into the API or adapter environment. The in-container Linux adapter path overrides any host platform path. The adapter child also receives the image's non-secret pinned-lockfile path so its readiness fingerprint can be computed without inheriting the API environment.
+3. Local Ollama routes use the single hard-coded Docker host-gateway endpoint only inside the dev container, while the adapter default remains loopback and cloud provider routes remain unchanged.
+4. The dev-only endpoint selector is allow-listed into the adapter subprocess environment and cannot carry an arbitrary URL or host.
+5. Hosted service images/manifests receive no local host-gateway option or Ollama endpoint.
+6. After rebuilding the local dev API, Graph Settings can report adapter/model readiness for the registered project; no project is indexed until its owner manually activates Reindex.

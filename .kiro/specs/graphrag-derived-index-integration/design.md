@@ -347,6 +347,18 @@ Extraction and report prompts are immutable versioned assets owned by the adapte
 
 Model retention, region, purpose, maximum input, maximum output, rate, and cost policies are validated before a job begins. Provider failure cannot expose partial revisions.
 
+## Optional Device-Local Model Installation
+
+The CLI install TUI exposes local GraphRAG completion and embedding models as an optional bundle, separate from the local question planner. The default selection is off. When selected, the review screen names the completion/embedding models and approximate combined download size before the existing Ollama runtime helper can install anything.
+
+The first supported local route is loopback-only Ollama. The adapter maps `ollama_chat` completion and `ollama` embedding provider identities to the backend-owned `http://127.0.0.1:11434` API base and does not attach cloud API-key environment placeholders. GraphRAG's LiteLLM schema requires a non-empty key field, so settings use the fixed non-secret `ollama` value that the local service does not use for authentication. User-supplied endpoint overrides are outside this contract. Hosted workers continue to use their server-owned gateway and never inherit this local route.
+
+After review confirmation, the installer first runs the configured absolute adapter's bounded readiness command; if it fails, no model downloads occur. It then verifies the exact selected Ollama model IDs and writes the local route, persists the same validated path as `AGENT_MEMORY_GRAPH_ADAPTER`, and enables Graph only after both checks pass. On partial model pull it preserves the existing Graph configuration and reports a sanitized failure. The installer does not issue a graph job; a user must trigger Reindex explicitly in a project/workspace Settings view.
+
+Alternatives considered: using the query planner model was rejected because planner and index roles are distinct; allowing arbitrary endpoints was rejected because it creates an SSRF and privacy boundary; enabling Graph before exact local readiness was rejected because configuration success is not provider readiness; automatic sample/full indexing during installation was rejected because it can consume large CPU/RAM and process multiple workspaces without scope-specific user intent.
+
+Operational limits: model inventory confirms availability, not that a full project will fit device memory or produce acceptable extraction quality. Indexing remains bounded by existing worker process limits, and the first Reindex remains an explicit project-level action. A model pull may leave downloaded weights behind after a later failure, but it must not activate Graph configuration or alter an existing active graph revision.
+
 ## Failure Modes and Recovery
 
 | Failure | Required behavior |
@@ -610,3 +622,99 @@ Rejected. It exposes online behavior to upstream schemas, prevents consistent SQ
 - Official indexing methods: `https://microsoft.github.io/graphrag/index/methods/`
 - Official output schemas: `https://microsoft.github.io/graphrag/index/outputs/`
 - Official CLI/update behavior: `https://microsoft.github.io/graphrag/cli/`
+
+## Registered-Project Chat Retrieval
+
+The dashboard's workspace chat requests `auto` routing for the active stable workspace ID. Standalone projects use the existing local recall pipeline. A registered project exposed through the hosted-connected local-owner runtime uses `/v1/local-projects/ask`, protected by the same browser-owner and `memory:read` boundary as local-project search. The service accepts a project identifier and bounded query/options, resolves the identifier through `workspace.Manager`, and invokes `application.MemoryService.Recall` with that project's SQLite store and existing local embedding provider.
+
+The hosted local-project route returns the recall request ID, included/weak canonical memories, graph route, optional graph context, and context block. It never calls the generic hosted Graph endpoints: those endpoints authorize and read the tenant PostgreSQL graph workspace. Graph feedback controls are exposed only when the selected adapter has an operation that writes to the same graph store; local registered-project responses may still show route and evidence context without offering a cross-store feedback write.
+
+Auto remains intent-aware and non-required. Basic questions stay on Basic retrieval. Relational/global routing is bounded by the existing Graph router and project-local readable active revision. An absent or unusable graph snapshot uses the current fallback/degraded route response, while Basic retrieval errors remain normal request failures. No schema, GraphRAG worker, tenant authorization, or hosted graph index changes are implied by the chat route.
+
+This design deliberately separates Graph Ask capability from Graph lifecycle capability. It makes chat graph-aware for every scope with a local active index while avoiding the unsafe shortcut of treating all workspace identifiers as tenant database scopes. The project Graph index can be managed through the local API/CLI; extending lifecycle settings through the hosted local-project API is a separate increment.
+
+## Registered-Project Graph Settings and Reindex
+
+### Scope and data contract
+
+The hosted-connected local-owner dashboard can list both tenant workspaces and registered local projects. The former keep using the existing tenant PostgreSQL Graph controller. A registered project uses a separate owner-authorized `/v1/local-projects/graph-index/*` surface. Each request carries a registered workspace name, configuration identity, and bounded operation fields only. The service resolves that name through `workspace.Manager` and opens the resolved SQLite database; the API never accepts a path or forwards a project identity to `/v1/graph-index/*`.
+
+Readiness and status reads are side-effect free. If a registered project has no default graph configuration, they report `unconfigured`. The explicit Reindex operation may create the default configuration only when server configuration has Graph indexing enabled, model routes are complete, and the installed adapter passes readiness. This keeps Graph indexing opt-in and prevents viewing Settings from provisioning a graph or spending model cost. Reindex uses the existing operation idempotency key and durable per-project job table.
+
+### Rebuild lifecycle
+
+The local-owner runtime claims a job from only the selected project's SQLite database. It serializes work per project and bounds projection records/bytes, process time, output size, temporary storage, and parallel jobs. The projection contains only eligible canonical records from that workspace. The process adapter receives the fixed full-index command, an Agent Memory-owned private job directory, configured model routes, and allowlisted credentials; no user input becomes a command argument, executable, or path.
+
+The worker validates the output manifest and files, resolves evidence to the selected project's canonical records, imports a complete candidate revision, and activates it through the existing compare-and-swap activation service. A full Reindex does not mutate the previous active revision in place. Any failure, cancellation, adapter outage, malformed output, or process restart leaves Basic retrieval and the previously active revision available; the job state is safe to inspect and retry. Durable queue leases allow an expired claim to resume after a process restart. No indexing request is issued by Ask or by a GET endpoint.
+
+### Settings behavior
+
+Graph Settings uses the gateway's scope-aware methods. For tenant workspaces, those methods continue to call the hosted tenant Graph endpoints. For registered projects, readiness, status, and operations use the local-project routes. The operation labeled **Reindex** maps to a full rebuild, while incremental Update remains a separate operator action. Status polling reflects queued/running/completed/failed/cancelled state. The Settings view labels elapsed age as Queue age while queued and Job age while running, so a long-running job is not presented as if it were still waiting. When the local Graph runtime is disabled or not ready, the view explains the bounded readiness reason and disables Reindex instead of claiming that work was accepted.
+
+If a status or readiness refresh fails after a status was loaded, retain the last-known details for continuity, keep the failure notice visible, and label the badge as stale. A cached queued or running state must never look current while refresh is failing.
+
+## Registered-Project Graph Queue View
+
+The local-owner API adds a read-only owner-authorized queue endpoint that obtains the registry's sorted project names and reads the default Graph status from each resolved project store. Its response contains only queued/running jobs (project name, job ID, state, creation/update timestamps, state age, and pending-record count), the number of projects checked, and the number whose status could not be read. It does not expose job lease owners, idempotency keys, memory content, source content, database paths, or model configuration. A failed status read for one project does not hide active jobs from other projects; the response marks the scan incomplete. Registry enumeration failure fails the request rather than returning a misleading empty queue. The implementation checks request cancellation between projects and avoids retaining or mutating job state.
+
+The registered-project Graph Settings page shows this global active queue below the selected project's controls. It polls every 3 seconds while jobs are active and every 15 seconds while idle, so a job started from the selected project's controls appears without requiring a manual refresh and idle scans remain less frequent. Rows label elapsed time by state: queued age is measured from creation and running age from the claim/update timestamp. A short explanation distinguishes waiting from active processing. Refresh and empty/error/incomplete states are explicit. Queue entries are informational; supported start/cancel actions remain bound to the selected project's existing settings controls.
+
+For local development deployments whose API image predates the aggregate queue route, the dashboard falls back only on HTTP 404 to the already owner-authorized project list and Graph status routes. It reads at most four project statuses concurrently, includes queued/running jobs, and reports project names whose reads failed so partial results cannot appear complete. A 404 from any other status route remains visible as an incomplete scan. Current API versions continue to use the single aggregate endpoint. Because the compatibility path makes multiple requests per scan, it polls every 30 seconds instead of the aggregate endpoint's 3-second active-job interval. This avoids rate limiting and avoids restarting an API that may host a local graph worker with active jobs.
+
+On a failed initial fetch, the queue panel shows an unavailable message and refresh control rather than leaving its loading placeholder in place. Hosted API errors retain useful structured messages; when a response is unstructured or contains the generic "The request was not accepted." diagnostic, the HTTP status is included so an outdated or missing route is diagnosable. A prior queue snapshot remains visible only with an unavailable/stale warning.
+
+This design trades an O(number of registered projects) read on refresh for a small API contract and avoids browser fan-out requests or exposing a new cross-project mutation surface. A 3-second refresh while work is active matches per-project status polling; inactive queue views poll less frequently or stop polling. If project counts grow beyond acceptable local status-scan latency, a registry-level queue index can be considered later, but must preserve per-project durable job authority.
+
+| Option | Decision | Trade-off |
+|---|---|---|
+| Query the current project's Settings status only | Rejected | It cannot show a job waiting behind a different project, which is the operator's reported failure mode. |
+| Let the browser request each project status separately on every refresh | Rejected | It multiplies routine requests and exposes partial-load behavior without improving authorization or data isolation. A bounded status fan-out remains only as a 404-triggered compatibility path for older local development API images. |
+| Add one owner-authorized read-only registry queue endpoint | Selected | The API can report completeness and isolate per-project read failures while keeping project identity resolution in the local service. |
+
+### Alternatives and trade-offs
+
+| Option | Decision | Trade-off |
+|---|---|---|
+| Reuse hosted tenant Graph endpoints for a project name | Rejected | Those endpoints resolve PostgreSQL tenant/workspace identities and can target a different store than the selected SQLite project. |
+| Add a button that only enqueues a SQLite job | Rejected | The queue would never complete without a project-local worker and would present false progress. |
+| Run the adapter synchronously in the HTTP request | Rejected | GraphRAG may take minutes or hours; client/server timeouts would lose the result and make cancellation/restart unsafe. |
+| Use one owner-authorized local worker and the existing per-project job tables | Selected | It adds lifecycle plumbing but preserves the current SQLite isolation and durable status model; work remains bounded and explicit. |
+
+### Failure, performance, and rollout
+
+Missing model routes, credentials, executable, compatible adapter version, or eligible records are reported before accepting a rebuild whenever detectable. A later adapter or import failure marks the job failed with a content-free reason code; it never activates partial data. Cancellation is scoped to the active job and project. Per-project serialization prevents two full builds from competing for the same local database, and Graph workspace limits reject oversized projections before model calls.
+
+The change is additive: no canonical memory schema changes are required. The Graph configuration remains disabled by default; project configuration is created only after explicit Reindex and successful readiness. Ship API/status and job recovery before enabling the project Settings action. Verify with temporary SQLite databases and fake adapter executables, then run a live packaged-adapter journey only in an isolated test workspace with configured test credentials. Do not reindex an existing user workspace as part of deployment or verification.
+
+## Local Development API Bridge for Device-Local Ollama
+
+### Chosen transport
+
+The dashboard's local development API runs inside Docker, while the user's approved Ollama service and downloaded models run on the host. Extend only the development API image to include the same GraphRAG adapter source and dependency lock used by the standalone adapter image. Install dependencies from `uv.lock` into a Linux virtual environment during the dev image build, and set the API's adapter executable to that in-image path. The dev Compose stack mounts `~/.agent-memory/agent-memory.env` read-only at its existing project-data path and points the API at it. The API extracts only the Graph enablement and model route keys through a strict allowlist; it never imports the file as an env file, so unrelated settings and any cloud credentials do not become API or adapter process variables. The adapter subprocess environment remains minimal but must include the image-provided `AGENT_MEMORY_GRAPHRAG_LOCK_FILE` path, a non-secret integrity input required to fingerprint the exact locked dependency set during readiness. The host adapter path is ignored because a macOS virtualenv is not executable from Linux.
+
+For `ollama` and `ollama_chat`, preserve the adapter's loopback endpoint as the default. A dev-only boolean flag explicitly selects one constant, `http://host.docker.internal:11434`, for the Dockerized API's adapter child. The selector carries no endpoint string, is absent from hosted/staging/production configuration, and is passed through the adapter's minimal environment only when true. This makes local inference reachable across Docker's host boundary without opening a configurable remote route. Cloud providers retain their existing credential placeholders and bases.
+
+The reviewed prompts start with the response-format templates bundled by pinned GraphRAG 3.1.2 and append Agent Memory evidence-safety constraints. This retains the parser contract while telling the model to treat source text as untrusted data and preserve uncertainty. GraphRAG resolves its extraction, description-summary, and community-report prompt fields by reading configured values as file paths. The adapter therefore writes each prompt into a newly created file beneath the private per-job directory, with restrictive file permissions and exclusive creation, then supplies only those generated paths to GraphRAG. Prompt content remains independent of project records and its content fingerprint remains the prompt identity; no caller- or source-provided path is accepted. The vector-store width is selected from the configured embedding route; the installed `qwen3-embedding:0.6b` model emits 1,024-dimensional vectors, while GraphRAG's default index width is 3,072. Normalization binds each entity's and relationship's text-unit IDs through GraphRAG's `text_units.document_id` field to the immutable projection correlation map; report and parent community ordinals resolve to GraphRAG's community UUID, with its `-1` root sentinel converted to an absent parent. Missing or ambiguous evidence and references remain hard failures. A synthetic packaged-adapter index verifies prompt resolution, extraction output, vector compatibility, evidence binding, and the complete workflow before treating local readiness as usable.
+
+### Alternatives and trade-offs
+
+| Option | Decision | Trade-off |
+|---|---|---|
+| Run API on the macOS host with the installed host adapter | Rejected for this stack | It changes the established Compose networking, API lifecycle, and dashboard proxy assumptions. |
+| Mount the host virtualenv into Linux | Rejected | Native Python dependencies and executable format are platform-specific; a macOS venv is not a safe Linux runtime. |
+| Build a dev-only Linux adapter in the API image from the existing pinned lock | Selected | Image build is larger and resolves the locked Python packages, but the API and adapter share a simple process boundary and existing resource controls. Production service images remain unchanged. |
+| Accept an Ollama URL as Compose or adapter input | Rejected | A mutable URL widens the local-only boundary and could route workspace text to an unintended host. |
+| Pass reviewed prompt text directly in GraphRAG configuration | Rejected | Pinned GraphRAG reads prompt fields from files at workflow start, so inline text is interpreted as a filesystem path and the index fails before inference. |
+
+### Failure modes and operations
+
+- If the optional environment file is absent, the API starts with its ordinary disabled defaults; the host-gateway selector alone does not enable graph indexing.
+- If the API image lacks a compatible adapter or its locked dependencies cannot build, API health/readiness does not claim Graph availability; the user can still use Basic memory features.
+- If host Ollama is stopped or models are missing, Graph readiness reports unavailable and Settings keeps Reindex disabled. No fallback sends text to a cloud provider.
+- If the adapter route flag is absent, local providers remain loopback-only; arbitrary URL values are never read.
+- If a reviewed prompt cannot be safely materialized under the job directory, indexing fails before model inference and no candidate revision can activate.
+- Project Reindex remains owner-authorized, idempotent, queued, and scoped to the selected registered SQLite project. Rebuilding or restarting the API never queues jobs.
+
+### Security, performance, and rollout
+
+The dev-only host-gateway constant is confined to `compose.dev.yaml`, the dev API image, and an exact boolean selector consumed by the adapter. Production manifests, hosted worker environment, and default standalone configuration do not set it. Only the five allow-listed Graph config fields may be parsed from the read-only user file; API keys, shell expressions, and unrelated entries are ignored. The adapter child environment includes only fixed runtime values, the image-provided lockfile path, the exact host-gateway boolean when enabled, and explicitly configured provider credentials. The process adapter continues to use its isolated job directory and bounded output/time/resource policies; fixed prompts use exclusive, private files under that same directory. Image build time and size increase; local model memory and indexing cost remain user-triggered and are not paid during API startup. Roll out only to the local Compose development stack, with parser security tests, adapter configuration tests, dev Compose config validation, a readiness fingerprint check, and a synthetic one-sentence packaged-adapter full-index smoke test against Ollama. Never reindex an existing user workspace as part of deployment or verification.

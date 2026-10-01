@@ -19,7 +19,7 @@ func TestInstallTUIRendersFullScreenHierarchyAndActiveRow(t *testing.T) {
 	rendered := model.View().Content
 	plain := ansi.Strip(rendered)
 	for _, expected := range []string{
-		"AGENT MEMORY", "LOCAL SETUP", "STEP 1 OF 3", "SELECTED 6/6",
+		"AGENT MEMORY", "LOCAL SETUP", "STEP 1 OF 2", "SELECTED 5/7",
 		"›  [x]  Agent Memory core", "↑/↓ Navigate", "Space Toggle", "Enter Continue", "Q/Esc Quit",
 	} {
 		if !strings.Contains(plain, expected) {
@@ -50,6 +50,7 @@ func TestInstallTUICompactViewportKeepsPrimaryControlsAndModels(t *testing.T) {
 		}
 	}
 
+	model.components[installComponentPlannerIndex].Selected = true
 	updated, _ = model.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
 	model = updated.(installSelectionModel)
 	modelView := ansi.Strip(model.View().Content)
@@ -95,6 +96,7 @@ func TestInstallSelectionLocksCoreAndTogglesOptionalComponents(t *testing.T) {
 
 func TestInstallSelectionConfirmsOrCancelsWithoutMutation(t *testing.T) {
 	model := newInstallSelectionModel(defaultInstallComponents(installDetection{}))
+	model.components[installComponentPlannerIndex].Selected = true
 	updated, command := model.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
 	choosingModel := updated.(installSelectionModel)
 	if choosingModel.phase != installPhaseModel || choosingModel.confirmed || command != nil {
@@ -141,6 +143,7 @@ func TestInstallLLMModelCatalogHasSingleRecommendedChoiceAndCosts(t *testing.T) 
 
 func TestInstallLLMModelSelectionIsRadioStyleAndPropagatesExactModel(t *testing.T) {
 	model := newInstallSelectionModel(defaultInstallComponents(installDetection{}))
+	model.components[installComponentPlannerIndex].Selected = true
 	updated, _ := model.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
 	model = updated.(installSelectionModel)
 	if model.phase != installPhaseModel || model.modelCursor != 2 || model.selectedModel != "qwen3:8b" {
@@ -167,6 +170,7 @@ func TestInstallLLMModelSelectionIsRadioStyleAndPropagatesExactModel(t *testing.
 
 func TestInstallLLMNoneDisablesPlannerAndBackPreservesComponents(t *testing.T) {
 	model := newInstallSelectionModel(defaultInstallComponents(installDetection{}))
+	model.components[installComponentPlannerIndex].Selected = true
 	updated, _ := model.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
 	model = updated.(installSelectionModel)
 	updated, _ = model.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEsc}))
@@ -194,8 +198,10 @@ func TestInstallLLMNoneDisablesPlannerAndBackPreservesComponents(t *testing.T) {
 }
 
 func TestInstallSelectionExplainsKeysDiskCostAndInstalledState(t *testing.T) {
+	components := defaultInstallComponents(installDetection{Ollama: true, QwenPlanner: true})
+	components[installComponentPlannerIndex].Selected = true
 	model := newInstallSelectionModelWithOptions(
-		defaultInstallComponents(installDetection{Ollama: true, QwenPlanner: true}),
+		components,
 		defaultLocalLLMOptions(map[string]bool{"qwen3:8b": true}),
 	)
 	componentView := model.View().Content
@@ -234,7 +240,7 @@ func TestInstallTUIComponentFilterNarrowsNavigatesAndTogglesSourceOption(t *test
 	}
 	updated, _ = model.Update(tea.KeyPressMsg(tea.Key{Code: ' '}))
 	model = updated.(installSelectionModel)
-	if model.components[installComponentPlannerIndex].Selected {
+	if !model.components[installComponentPlannerIndex].Selected {
 		t.Fatalf("space did not toggle filtered source option: %+v", model.components[installComponentPlannerIndex])
 	}
 }
@@ -303,6 +309,7 @@ func TestInstallTUIFilterSupportsBackspaceEscapeAndNoMatches(t *testing.T) {
 
 func TestInstallTUIModelFilterMatchesMetadataAndSelectsVisibleModel(t *testing.T) {
 	model := newInstallSelectionModel(defaultInstallComponents(installDetection{}))
+	model.components[installComponentPlannerIndex].Selected = true
 	updated, _ := model.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
 	model = updated.(installSelectionModel)
 	for _, key := range []rune{'/', 'h', 'i', 'g', 'h', 'e', 'r'} {
@@ -319,6 +326,84 @@ func TestInstallTUIModelFilterMatchesMetadataAndSelectsVisibleModel(t *testing.T
 	model = updated.(installSelectionModel)
 	if model.selectedModel != "qwen3:14b" {
 		t.Fatalf("selected filtered model=%q", model.selectedModel)
+	}
+}
+
+func TestInstallGraphModelsAreSeparateOptInAndShowBundleCosts(t *testing.T) {
+	components := defaultInstallComponents(installDetection{})
+	if components[installComponentPlannerIndex].Selected {
+		t.Fatal("local planner must default off")
+	}
+	if components[installComponentGraphIndex].Selected {
+		t.Fatal("local GraphRAG models must default off")
+	}
+	options := defaultGraphModelOptions(map[string]bool{"qwen3:8b": true, "qwen3-embedding:0.6b": true})
+	if len(options) != 2 {
+		t.Fatalf("graph options=%+v", options)
+	}
+	if options[0].Model != "qwen3:8b" || options[0].EmbeddingModel != "qwen3-embedding:0.6b" || options[0].Disk != "~5.8 GB" || !options[0].Installed || !options[0].Recommended {
+		t.Fatalf("light graph bundle=%+v", options[0])
+	}
+	if options[1].Model != "qwen3:14b" || options[1].EmbeddingModel != "qwen3-embedding:0.6b" || options[1].Disk != "~9.9 GB" {
+		t.Fatalf("quality graph bundle=%+v", options[1])
+	}
+	components = defaultInstallComponents(installDetection{Ollama: true, GraphModels: map[string]bool{"qwen3:14b": true, "qwen3-embedding:0.6b": true}})
+	if !components[installComponentGraphIndex].Installed {
+		t.Fatal("installed 14B GraphRAG bundle was not detected")
+	}
+}
+
+func TestInstallGraphModelSelectionIsIndependentAndPreservesExactBundle(t *testing.T) {
+	components := defaultInstallComponents(installDetection{})
+	for index := range components {
+		components[index].Selected = components[index].ID == installComponentCore || components[index].ID == installComponentGraphModels
+	}
+	model := newInstallSelectionModelWithOptions(components, defaultLocalLLMOptions(nil))
+	updated, _ := model.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
+	model = updated.(installSelectionModel)
+	if model.phase != installPhaseGraphModels {
+		t.Fatalf("phase=%v want graph model selection", model.phase)
+	}
+	updated, _ = model.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyDown}))
+	model = updated.(installSelectionModel)
+	updated, _ = model.Update(tea.KeyPressMsg(tea.Key{Code: ' '}))
+	model = updated.(installSelectionModel)
+	updated, _ = model.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
+	model = updated.(installSelectionModel)
+	selection, err := model.selection()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !selection.InstallGraphModels || selection.GraphCompletionModel != "qwen3:14b" || selection.GraphEmbeddingModel != "qwen3-embedding:0.6b" {
+		t.Fatalf("selection=%+v", selection)
+	}
+	plain := ansi.Strip(model.View().Content)
+	for _, expected := range []string{"qwen3:14b", "qwen3-embedding:0.6b", "~9.9 GB", "adapter must pass readiness", "No workspace is reindexed"} {
+		if !strings.Contains(plain, expected) {
+			t.Fatalf("review missing %q:\n%s", expected, plain)
+		}
+	}
+}
+
+func TestInstallPlannerAndGraphModelPhasesNavigateIndependently(t *testing.T) {
+	components := defaultInstallComponents(installDetection{})
+	components[installComponentPlannerIndex].Selected = true
+	components[installComponentGraphIndex].Selected = true
+	model := newInstallSelectionModelWithOptions(components, defaultLocalLLMOptions(nil))
+	updated, _ := model.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
+	model = updated.(installSelectionModel)
+	if model.phase != installPhaseModel {
+		t.Fatalf("first phase=%v want planner model selection", model.phase)
+	}
+	updated, _ = model.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
+	model = updated.(installSelectionModel)
+	if model.phase != installPhaseGraphModels {
+		t.Fatalf("second phase=%v want Graph model selection", model.phase)
+	}
+	updated, _ = model.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEsc}))
+	model = updated.(installSelectionModel)
+	if model.phase != installPhaseModel || model.selectedModel != "qwen3:8b" {
+		t.Fatalf("Back did not preserve planner choice: %+v", model)
 	}
 }
 

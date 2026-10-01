@@ -162,7 +162,14 @@ func NewHandler(deps Dependencies) (http.Handler, error) {
 	}
 	if deps.LocalOwner != nil && deps.LocalProjects != nil {
 		protected.Handle("GET /v1/local-projects", localProjectBoundary("memory:read", listLocalProjects(deps.LocalProjects)))
+		if graph, ok := deps.LocalProjects.(LocalProjectGraphService); ok {
+			protected.Handle("GET /v1/local-projects/graph-index/readiness", localProjectOwnerBoundary(deps.LocalOwner, "memory:read", localProjectGraphReadiness(graph)))
+			protected.Handle("GET /v1/local-projects/graph-index/status", localProjectOwnerBoundary(deps.LocalOwner, "memory:read", localProjectGraphStatus(graph)))
+			protected.Handle("GET /v1/local-projects/graph-index/queue", localProjectOwnerBoundary(deps.LocalOwner, "memory:read", localProjectGraphQueue(graph)))
+			protected.Handle("POST /v1/local-projects/graph-index/operations", localProjectOwnerBoundary(deps.LocalOwner, "memory:write", localProjectGraphOperation(graph)))
+		}
 		protected.Handle("POST /v1/local-projects/study", localProjectBoundary("memory:write", studyLocalProject(deps.LocalProjects)))
+		protected.Handle("POST /v1/local-projects/ask", localProjectBoundary("memory:read", askLocalProject(deps.LocalProjects)))
 		protected.Handle("POST /v1/local-projects/search", localProjectBoundary("memory:read", searchLocalProject(deps.LocalProjects)))
 		protected.Handle("GET /v1/local-projects/memories", localProjectBoundary("memory:read", browseLocalProject(deps.LocalProjects)))
 		protected.Handle("GET /v1/local-projects/memories/{memory_id}", localProjectBoundary("memory:read", getLocalProjectMemory(deps.LocalProjects)))
