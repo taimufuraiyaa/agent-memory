@@ -27,6 +27,18 @@ test('local system tools expose the expected capability contracts', () => {
   assert.match(source, /<ClientsPanel clientProfiles=\{gateway\}/)
 })
 
+test('SystemToolPanel declares shared callbacks before conditional tool rendering', () => {
+  const panelStart = source.indexOf('function SystemToolPanel')
+  const panel = source.slice(panelStart, source.indexOf('\nexport function WorkspaceSkillsView', panelStart))
+  const firstConditionalReturn = panel.indexOf("if (id === 'diagnostics') return")
+  const firstSkillCallback = panel.indexOf('const inspectSkill = useCallback')
+
+  assert.ok(panelStart >= 0, 'SystemToolPanel should exist')
+  assert.ok(firstConditionalReturn >= 0, 'SystemToolPanel should render tools conditionally')
+  assert.ok(firstSkillCallback >= 0, 'SystemToolPanel should declare Skills callbacks')
+  assert.ok(firstSkillCallback < firstConditionalReturn, 'all shared hooks must run before conditional returns')
+})
+
 test('System tools allocate extra-wide space to content and stack Skills before overflow', () => {
   assert.match(source, /span=\{\{ base: 12, md: 4, lg: 3, xl: 2 \}\}/)
   assert.match(source, /span=\{\{ base: 12, md: 8, lg: 9, xl: 10 \}\}/)

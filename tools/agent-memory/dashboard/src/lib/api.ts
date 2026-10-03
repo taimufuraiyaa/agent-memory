@@ -1049,9 +1049,9 @@ export function recallPreview(input: {
   })
 }
 
-function graphQuery(scope: { workspaceId: string }, configurationId?: string): string {
+function graphQuery(scope: { workspaceId: string }, configurationId = 'default'): string {
   const query = new URLSearchParams({ workspace: scope.workspaceId })
-  if (configurationId) query.set('configuration_id', configurationId)
+  query.set('configuration_id', configurationId)
   return query.toString()
 }
 

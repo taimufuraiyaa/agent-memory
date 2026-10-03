@@ -48,11 +48,6 @@ function SystemToolPanel({ id, workspaceId, gateway }: { id: string; workspaceId
     return () => { current = false }
   }, [gateway, id, workspaceId])
 
-  if (id === 'diagnostics') return <>{rawOpen ? <Paper withBorder p="md"><Button variant="default" onClick={() => setRawOpen(false)}>Close raw payload</Button><pre>{JSON.stringify(stats, null, 2)}</pre></Paper> : <DiagnosticsPanel workspaceLabel={workspaceId} stats={stats} statsErr={error} healthState={{ tone: error ? 'bad' : stats ? 'good' : 'warn', label: error ? 'Unavailable' : stats ? 'Healthy' : 'Loading', detail: error || 'Workspace diagnostics' }} onOpenRaw={() => setRawOpen(true)} />}</>
-  if (id === 'graph') return <GraphSettings gateway={gateway} workspaceId={workspaceId} />
-  if (id === 'lifecycle') return <LifecyclePanel workspace={workspaceId} scheduler={scheduler} history={history} busy={busy} error={error} />
-  if (id === 'benchmark') return <BenchmarkPanel workspace={workspaceId} runs={runs} busy={busy} error={error} />
-  if (id === 'clients') return <ClientsPanel clientProfiles={gateway} />
   const inspectSkill = useCallback((skillId: string) => gateway.inspectSkillLifecycle({ workspaceId }, skillId, 'local'), [gateway, workspaceId])
   const approveSkill = useCallback(async (detail: SkillLifecycleDetail, revisionId: string) => {
 	const policyDecisionId = detail.policy_decisions?.find((decision) => decision.revision_id === revisionId && decision.decision === 'approval_required')?.id
@@ -74,6 +69,12 @@ function SystemToolPanel({ id, workspaceId, gateway }: { id: string; workspaceId
   const controlSkillOrchestration = useCallback(async (input: import('../../lib/api').SkillOrchestrationControl) => {
     await gateway.controlSkillOrchestration({ workspaceId }, 'dashboard-operator', input)
   }, [gateway, workspaceId])
+
+  if (id === 'diagnostics') return <>{rawOpen ? <Paper withBorder p="md"><Button variant="default" onClick={() => setRawOpen(false)}>Close raw payload</Button><pre>{JSON.stringify(stats, null, 2)}</pre></Paper> : <DiagnosticsPanel workspaceLabel={workspaceId} stats={stats} statsErr={error} healthState={{ tone: error ? 'bad' : stats ? 'good' : 'warn', label: error ? 'Unavailable' : stats ? 'Healthy' : 'Loading', detail: error || 'Workspace diagnostics' }} onOpenRaw={() => setRawOpen(true)} />}</>
+  if (id === 'graph') return <GraphSettings gateway={gateway} workspaceId={workspaceId} />
+  if (id === 'lifecycle') return <LifecyclePanel workspace={workspaceId} scheduler={scheduler} history={history} busy={busy} error={error} />
+  if (id === 'benchmark') return <BenchmarkPanel workspace={workspaceId} runs={runs} busy={busy} error={error} />
+  if (id === 'clients') return <ClientsPanel clientProfiles={gateway} />
 
   if (id === 'skills') return <SkillsPanel theme="dark" workspace={workspaceId} skills={skills} lifecycleSkills={skillLifecycle} busy={busy} error={error} inspect={inspectSkill} approve={approveSkill} rollback={rollbackSkill} inspectOrchestration={inspectSkillOrchestration} controlOrchestration={controlSkillOrchestration} />
   if (id === 'migration') return <MigrationPanel workspace={workspaceId} />

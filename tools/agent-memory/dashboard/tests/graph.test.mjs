@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 
 const read = (path) => readFile(new URL(`../src/${path}`, import.meta.url), 'utf8')
-const [contract, standalone, settings, explorer, review, ask, context, chat, records] = await Promise.all([
+const [contract, standalone, settings, explorer, review, ask, context, chat, records, api] = await Promise.all([
   read('lib/knowledgeGateway.ts'),
   read('lib/adapters/standaloneKnowledgeGateway.ts'),
   read('ui/workspace/GraphSettings.tsx'),
@@ -13,6 +13,7 @@ const [contract, standalone, settings, explorer, review, ask, context, chat, rec
   read('ui/workspace/GraphContext.tsx'),
   read('ui/workspace/WorkspaceChatView.tsx'),
   read('ui/workspace/workspaceRecords.ts'),
+  read('lib/api.ts'),
 ])
 
 test('local graph controls expose compatible, fresh, bounded processing state', () => {
@@ -56,4 +57,9 @@ test('Graph Settings labels the retained status stale when a refresh fails', () 
   assert.match(settings, /setStatusStale\(false\)/)
   assert.match(settings, /statusStale \? `Stale · \$\{status\.state\}` : status\.state/)
   assert.match(settings, /status\.state === 'running' \? 'job' : 'queue'/)
+})
+
+test('graph read requests include the backend-required default configuration identity', () => {
+  assert.match(api, /function graphQuery\(scope: \{ workspaceId: string \}, configurationId = 'default'\)/)
+  assert.match(api, /query\.set\('configuration_id', configurationId\)/)
 })
