@@ -5,24 +5,17 @@ import test from 'node:test'
 const root = new URL('../src/', import.meta.url)
 const read = (path) => readFile(new URL(path, root), 'utf8')
 
-test('Activity is one workspace-scoped timeline with filters and paging', async () => {
-  const [source, contract, standalone, hosted] = await Promise.all([
-    read('ui/workspace/ActivityView.tsx'),
-    read('lib/knowledgeGateway.ts'),
-    read('lib/adapters/standaloneKnowledgeGateway.ts'),
-    read('lib/adapters/hostedKnowledgeGateway.ts'),
-  ])
+test('Activity is one local workspace-scoped timeline with filters and paging', async () => {
+  const [source, contract, standalone] = await Promise.all([read('ui/workspace/ActivityView.tsx'), read('lib/knowledgeGateway.ts'), read('lib/adapters/standaloneKnowledgeGateway.ts')])
   for (const label of ['Study', 'Uploads', 'Indexing', 'Sessions', 'Episodes', 'Retrieval', 'Feedback', 'Deletion']) assert.match(source, new RegExp(label))
   assert.match(source, /gateway\.listActivity\(\{ workspaceId \}, pageCursor, activityFilter/)
   assert.match(source, /cursorHistory/)
   assert.match(source, /<CursorPagination/)
   assert.doesNotMatch(source, /Load more activity/)
   assert.match(contract, /ACTIVITY_PAGE_SIZE = 10/)
-  for (const adapter of [standalone, hosted]) {
-    assert.match(adapter, /numericCursor\(cursor\)/)
-    assert.match(adapter, /filter === 'all'.*item\.kind === filter/s)
-    assert.match(adapter, /slice\(offset, offset \+ ACTIVITY_PAGE_SIZE\)/)
-  }
+  assert.match(standalone, /numericCursor\(cursor\)/)
+  assert.match(standalone, /filter === 'all'.*item\.kind === filter/s)
+  assert.match(standalone, /slice\(offset, offset \+ ACTIVITY_PAGE_SIZE\)/)
 })
 
 test('Rate retrieval opens a viewport modal instead of appending an editor', async () => {
@@ -35,11 +28,7 @@ test('Rate retrieval opens a viewport modal instead of appending an editor', asy
 })
 
 test('episode cards open a keyboard-accessible safe-path drawer with review controls', async () => {
-  const [view, contract, standalone] = await Promise.all([
-    read('ui/workspace/ActivityView.tsx'),
-    read('lib/knowledgeGateway.ts'),
-    read('lib/adapters/standaloneKnowledgeGateway.ts'),
-  ])
+  const [view, contract, standalone] = await Promise.all([read('ui/workspace/ActivityView.tsx'), read('lib/knowledgeGateway.ts'), read('lib/adapters/standaloneKnowledgeGateway.ts')])
   assert.match(contract, /kind: 'study'.*'episode'.*'retrieval'/)
   assert.match(contract, /getSolutionEpisode\(scope: WorkspaceScope, episodeId: string/)
   assert.match(contract, /reviewSolutionEpisode\(scope: WorkspaceScope, input: SolutionEpisodeReviewInput/)
@@ -57,25 +46,4 @@ test('failed work can retry and retrievals accept scored feedback', async () => 
   assert.match(source, /gateway\.submitFeedback/)
   assert.match(source, /Score \(0–5\)/)
   assert.match(source, /replace\(\/\^retrieval:/)
-})
-
-test('feedback cards open full retrieval details without losing Activity context', async () => {
-  const [view, contract, standalone, hosted] = await Promise.all([
-    read('ui/workspace/ActivityView.tsx'),
-    read('lib/knowledgeGateway.ts'),
-    read('lib/adapters/standaloneKnowledgeGateway.ts'),
-    read('lib/adapters/hostedKnowledgeGateway.ts'),
-  ])
-  assert.match(contract, /feedback\?: \{[\s\S]*requestId:[\s\S]*requestType:[\s\S]*query:[\s\S]*score:[\s\S]*reason:[\s\S]*usefulCount\?:[\s\S]*totalCount\?:/)
-  for (const adapter of [standalone, hosted]) {
-    for (const field of ['requestId', 'requestType', 'query', 'score', 'reason', 'usefulCount', 'totalCount']) assert.match(adapter, new RegExp(field))
-  }
-  assert.match(view, /<Drawer[\s\S]*'Feedback details'/)
-  assert.match(view, /Open feedback details for \$\{item\.title\}/)
-  for (const label of ['Question / task', 'Quality score', 'Feedback reason', 'Useful hits', 'Total hits', 'Request type', 'Request ID', 'Logged time']) assert.match(view, new RegExp(label))
-})
-
-test('empty and legacy-null registered-project feedback render as an empty activity list', async () => {
-  const hosted = await read('lib/adapters/hostedKnowledgeGateway.ts')
-  assert.match(hosted, /\(response\.feedback \?\? \[\]\)\.map/)
 })

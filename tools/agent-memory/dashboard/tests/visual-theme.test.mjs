@@ -3,7 +3,6 @@ import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 
 const main = await readFile(new URL('../src/main.tsx', import.meta.url), 'utf8')
-const hostedBootstrap = await readFile(new URL('../src/ui/HostedWorkspaceBootstrap.tsx', import.meta.url), 'utf8')
 const workspaceApp = await readFile(new URL('../src/ui/WorkspaceApp.tsx', import.meta.url), 'utf8')
 const workspaceCss = await readFile(new URL('../src/ui/workspace/workspace.css', import.meta.url), 'utf8')
 
@@ -16,10 +15,8 @@ test('the shared root restores and persists an exact visual theme with Atlas as 
   assert.match(main, /localStorage\.setItem\(VISUAL_THEME_KEY, visualTheme\)/)
 })
 
-test('both runtimes receive one controlled visual theme independently from color scheme', () => {
-  assert.match(main, /<HostedWorkspaceBootstrap[^>]*visualTheme=\{visualTheme\}[^>]*onVisualThemeChange=\{setVisualTheme\}/s)
+test('the local runtime receives one controlled visual theme independently from color scheme', () => {
   assert.match(main, /<WorkspaceApp[^>]*visualTheme=\{visualTheme\}[^>]*onVisualThemeChange=\{setVisualTheme\}/s)
-  assert.match(hostedBootstrap, /<WorkspaceApp[^>]*visualTheme=\{visualTheme\}[^>]*onVisualThemeChange=\{onVisualThemeChange\}/s)
   assert.match(workspaceApp, /data-visual-theme=\{visualTheme\}/)
 })
 

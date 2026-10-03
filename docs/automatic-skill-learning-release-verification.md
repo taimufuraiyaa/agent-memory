@@ -6,7 +6,7 @@ Release requires the permanent `TestAutomaticSkillLearningNaturalClosedLoop` reg
 
 - Fresh and upgraded SQLite migrations, revision-1 import, immutable bundle custody, and shadow-selection parity.
 - Authorization, idempotency, generation checks, accountable approval, exact resolution acknowledgement, and safety disablement.
-- Standalone HTTP/CLI, expanded MCP, registered-project hosted API, responsive dashboard, portable export, legal hold, deletion, retention, and tombstone behavior.
+- Local HTTP/CLI, expanded MCP, responsive dashboard, encrypted portable backup, deletion, retention, and tombstone behavior.
 - Bounded content-free metrics, routed alerts, evaluator failure handling, canary analysis, materialization restoration, and rollback drills.
 - Full Go tests and vet, MCP tests, dashboard tests/typecheck/build, and the embedded-dashboard production smoke gate.
 
@@ -14,8 +14,8 @@ Release requires the permanent `TestAutomaticSkillLearningNaturalClosedLoop` reg
 
 Automatic promotion remains off when no policy exists and whenever `allow_automatic_activation` is false. Enabling it requires a versioned low-risk policy whose accountable product review records thresholds, canary allocation, false-promotion evidence, rollback evidence, isolation evidence, and retention approval. Medium risk requires accountable approval; high risk cannot enable automatic activation.
 
-The production boundary is `EvaluateSkillOrchestratorReleaseGate`. It verifies each full staged configuration receipt, independently signed release evidence, and accountable product approval. All receipts bind the same release, build, migration, and policy digests; product approval additionally binds the final automatic configuration digest and exact release-evidence digest. The release evidence must contain the exact disabled → shadow → manual → canary → automatic-low-risk sequence and two complete pause, drain, restore, and shutdown staging iterations. Each drill preserves the active skill digest and audit history, meets the approved rollback SLO, and verifies alert routing and the production runbook.
+The local boundary is the versioned skill configuration and acknowledgement flow. It verifies policy, authorization, generation, digest, and safety invariants before a local low-risk policy can activate. Failed or missing evidence keeps automatic promotion disabled.
 
 ## Release decision
 
-Do not enable automatic promotion merely because automated tests pass. Follow [the production release runbook](runbooks/skill-orchestrator-production-release.md), retain both signed payloads and their gate report, and complete the final product-review checkbox in the production release record. Any failed or missing evidence keeps the feature disabled. The repository's base hosted deployment intentionally remains at zero skill-worker replicas with its feature flag false.
+Do not enable automatic promotion merely because automated tests pass. Review the local skill lifecycle and migration runbooks, retain the bounded audit records, and complete the local policy review before enabling it. Any failed or missing evidence keeps the feature disabled.

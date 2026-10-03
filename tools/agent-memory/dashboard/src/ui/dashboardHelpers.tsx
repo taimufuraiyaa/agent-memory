@@ -11,7 +11,7 @@ import type {
 } from '../lib/api'
 import { renderDiagramMarkupForExport } from './DiagramViewer'
 
-export type Surface = 'notes' | 'overview' | 'sessions' | 'diagnostics' | 'benchmark' | 'wiki' | 'lifecycle' | 'feedback' | 'skills' | 'clients' | 'deployment' | 'migration'
+export type Surface = 'notes' | 'overview' | 'sessions' | 'diagnostics' | 'benchmark' | 'wiki' | 'lifecycle' | 'feedback' | 'skills' | 'clients' | 'migration'
 export type WikiViewMode = 'article' | 'raw'
 export type WikiMode = 'search' | 'recall' | 'recents'
 

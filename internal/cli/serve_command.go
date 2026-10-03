@@ -286,9 +286,6 @@ func newServeCommand() *cobra.Command {
 			if err := api.ConfigureLocalClientProfiles(svc); err != nil {
 				return err
 			}
-			if err := api.ConfigureLocalDeploymentProfile(svc); err != nil {
-				return err
-			}
 			server := &http.Server{
 				Addr:    addr,
 				Handler: api.LocalRequestBoundary(api.InstrumentedHandler(api.NewMux(svc))),

@@ -2,13 +2,10 @@ package engine
 
 import (
 	"context"
-	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/taimufuraiyaa/agent-memory/internal/core"
-	"github.com/taimufuraiyaa/agent-memory/internal/storage/sqlite"
 )
 
 // TestQueryCacheKeysOmitRawQueryText verifies that neither cache retains raw
@@ -94,49 +91,5 @@ func TestGraphCacheIdentityInvalidatesResultForRevisionReviewDeletionOrConfigura
 	changed.GraphCacheIdentity = "graph-epoch-2"
 	if got := cache.GetResults(ctx, changed); got != nil {
 		t.Fatalf("stale graph epoch returned cached context: %#v", got)
-	}
-}
-
-// TestLifecycleOnWorkspaceChangeHookFiresAfterRun verifies that the
-// OnWorkspaceChange invalidation hook fires with the maintained workspace when
-// Run completes.
-func TestLifecycleOnWorkspaceChangeHookFiresAfterRun(t *testing.T) {
-	ctx := context.Background()
-	store, err := sqlite.Open(ctx, filepath.Join(t.TempDir(), "lifecycle-hook.db"))
-	if err != nil {
-		t.Fatalf("open store: %v", err)
-	}
-	t.Cleanup(func() { _ = store.Close() })
-
-	pipe := NewWritePipeline(store)
-	if _, err := pipe.Write(ctx, WriteInput{
-		Workspace: "hook-ws",
-		Type:      core.SemanticMemory,
-		Content:   "orders service emits order.created event",
-		Source:    core.MemorySource{Type: core.SourceCodeAnalysis},
-	}); err != nil {
-		t.Fatalf("write memory: %v", err)
-	}
-
-	lm := NewLifecycleManager(store, pipe)
-	var mu sync.Mutex
-	var fired []string
-	lm.OnWorkspaceChange = func(ws string) {
-		mu.Lock()
-		defer mu.Unlock()
-		fired = append(fired, ws)
-	}
-
-	if _, err := lm.Run(ctx, "hook-ws"); err != nil {
-		t.Fatalf("lifecycle run: %v", err)
-	}
-
-	mu.Lock()
-	defer mu.Unlock()
-	if len(fired) != 1 {
-		t.Fatalf("expected hook to fire exactly once after Run, fired %d times: %v", len(fired), fired)
-	}
-	if fired[0] != "hook-ws" {
-		t.Errorf("hook fired with workspace %q, want %q", fired[0], "hook-ws")
 	}
 }

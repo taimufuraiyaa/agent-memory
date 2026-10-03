@@ -4,11 +4,10 @@ import test from 'node:test'
 
 const read = (path) => readFile(new URL(`../src/${path}`, import.meta.url), 'utf8')
 
-test('standalone gateway exposes local translation without advertising it in hosted', async () => {
-  const [gateway, standalone, hosted, api] = await Promise.all([
+test('standalone gateway exposes local translation', async () => {
+  const [gateway, standalone, api] = await Promise.all([
     read('lib/knowledgeGateway.ts'),
     read('lib/adapters/standaloneKnowledgeGateway.ts'),
-    read('lib/adapters/hostedKnowledgeGateway.ts'),
     read('lib/api.ts'),
   ])
   assert.match(gateway, /\| 'translation'/)
@@ -16,7 +15,6 @@ test('standalone gateway exposes local translation without advertising it in hos
   assert.match(gateway, /getTranslationStatus\(/)
   assert.match(standalone, /'translation'/)
   assert.match(standalone, /translateLibraryAnswer/)
-  assert.doesNotMatch(hosted, /capabilities[^\n]+translation/)
   assert.match(api, /\/api\/v1\/library\/local-llm\/translate/)
 })
 

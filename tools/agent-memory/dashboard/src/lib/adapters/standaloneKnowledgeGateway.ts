@@ -337,8 +337,5 @@ export function createStandaloneKnowledgeGateway(): KnowledgeGateway {
     async operateGraph(scope, configurationId, action, expectedRevision, jobId) { return operateGraph(scope, configurationId, action, expectedRevision, jobId) },
     async reviewGraph(scope, input) { return reviewGraph(scope, input) },
     async submitGraphFeedback(scope, requestId, targetKind, targetId, outcome, reason) { return submitGraphFeedback(scope, requestId, targetKind, targetId, outcome, reason) },
-    async importMigration() {
-      throw new Error('Standalone workspaces export migration copies from System > Migration.')
-    },
   }
 }

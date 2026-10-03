@@ -9,7 +9,6 @@ import (
 	"unicode"
 
 	"github.com/taimufuraiyaa/agent-memory/internal/portable"
-	exportservice "github.com/taimufuraiyaa/agent-memory/internal/saas/export"
 	"github.com/taimufuraiyaa/agent-memory/internal/storage/sqlite"
 )
 
@@ -56,7 +55,7 @@ func portableMigrationExportHandler(svc *Service) http.HandlerFunc {
 			writeErr(w, http.StatusInternalServerError, "portable_export_failed", "could not encode portable export")
 			return
 		}
-		encrypted, err := exportservice.EncryptPortable(request.Passphrase, plain)
+		encrypted, err := portable.EncryptPortable(request.Passphrase, plain)
 		if err != nil {
 			writeErr(w, http.StatusInternalServerError, "portable_export_failed", "could not encrypt portable export")
 			return

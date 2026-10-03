@@ -2,7 +2,7 @@
 
 ## Operating boundary
 
-GraphRAG 3.1.2 is an exact, offline Python dependency behind the `graph-adapter/v1` contract. It converts an immutable Agent Memory projection into signed `graph-artifact/v1` output. Agent Memory validates and imports that output into its own normalized SQLite or PostgreSQL graph store. Online Ask never calls GraphRAG, Python, or the adapter container.
+GraphRAG 3.1.2 is an exact, offline Python dependency behind the `graph-adapter/v1` contract. It converts an immutable Agent Memory projection into signed `graph-artifact/v1` output. Agent Memory validates and imports that output into its own normalized local SQLite graph store. Online Ask never calls GraphRAG, Python, or the adapter container.
 
 The graph is disposable navigation data. Canonical memories, source evidence, Basic vector retrieval, identity, authorization, deletion, review, and audit remain owned by Agent Memory. A graph outage must not block writes or Basic retrieval.
 
@@ -13,12 +13,13 @@ Build or obtain the adapter image only through `tools/graphrag-adapter`; require
 ```sh
 make graphrag-adapter-supply-chain
 make graphrag-adapter-container-test
-GRAPHRAG_UPGRADE_POLICY_ONLY=1 make graphrag-upgrade-certify
 ```
 
-Hosted deployments use the `staging-graphrag` or `production-graphrag` Kubernetes overlay and set the adapter image by digest. `AGENT_MEMORY_GRAPHRAG_ENABLED=false` is the process-level default and kill switch. The worker refuses enabled startup without its signing and workload-attestation configuration.
+Local installations set `AGENT_MEMORY_GRAPHRAG_ENABLED=false` by default. The
+local adapter refuses enabled startup without its signing and attestation
+configuration.
 
-Readiness is authoritative only when the UI/API reports: enabled, compatible adapter and artifact schema, an active revision, a current indexed watermark, and a fresh state. A running worker alone is not readiness. Verify Prometheus loads `deploy/saas/observability/graph-alerts.yaml` and the `agent-memory-graph-index` dashboard before enabling a workspace.
+Readiness is authoritative only when the UI/API reports: enabled, compatible adapter and artifact schema, an active revision, a current indexed watermark, and a fresh state. A running worker alone is not readiness.
 
 ## Budgets and backpressure
 
@@ -37,7 +38,7 @@ Track queue age, coalescing, projection/entity/relationship/rejection counts, in
 7. Use `rollback` with the expected active revision. It atomically restores the previous compatible normalized revision.
 8. Use `disable` to force Basic immediately. Disabling does not delete canonical data.
 
-All mutations require the correct workspace scope, graph operator authorization, an idempotency key where applicable, optimistic revision intent, and a durable audit event. Use the dashboard controls or the corresponding `/api/v1/graph-index/*` standalone and `/v1/graph-index/*` hosted endpoints; do not modify graph tables directly.
+All mutations require the correct workspace scope, graph operator authorization, an idempotency key where applicable, optimistic revision intent, and a durable audit event. Use the dashboard controls or the `/api/v1/graph-index/*` endpoints; do not modify graph tables directly.
 
 ## Freshness, review, and query policy
 
@@ -47,7 +48,7 @@ Review actions are approve, reject, annotate, supersede, and reconsider with opt
 
 ## Routine checks
 
-Before and after a rollout step, record status for all selected workspaces, Basic success rate and p95, graph p95, fallback reasons, freshness, queue and dead-letter state, cost, grounding, and deletion lag. Run `make graphrag-evaluate` for deterministic quality checks. Run all four certification harnesses after changes to queues, workers, storage, deletion, identity, validation, or model routing.
+Before and after a local rollout step, record Basic success rate and p95, graph p95, fallback reasons, freshness, queue and dead-letter state, cost, grounding, and deletion lag. Run `make graphrag-evaluate` for deterministic quality checks and `make graphrag-adapter-supply-chain` after adapter changes.
 
 Backups must include canonical stores, graph configuration/review/audit state, normalized active and previous revisions, and immutable object manifests needed by policy. Restore tests must prove atomic active-revision recovery and canonical-only rebuild. Adapter state is an optimization, not the sole recovery source.
 

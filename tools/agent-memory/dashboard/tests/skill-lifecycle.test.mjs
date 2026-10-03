@@ -6,7 +6,6 @@ const panel = await readFile(new URL('../src/ui/SkillsPanel.tsx', import.meta.ur
 const settings = await readFile(new URL('../src/ui/workspace/SettingsView.tsx', import.meta.url), 'utf8')
 const css = await readFile(new URL('../src/ui/workspace/workspace.css', import.meta.url), 'utf8')
 const api = await readFile(new URL('../src/lib/api.ts', import.meta.url), 'utf8')
-const hosted = await readFile(new URL('../src/lib/hostedApi.ts', import.meta.url), 'utf8')
 
 test('skills UI distinguishes immutable revision roles and provenance', () => {
   for (const label of ['Latest', 'Active', 'Canary', 'Last known good', 'Provenance', 'Evaluation']) assert.match(panel, new RegExp(label))
@@ -25,9 +24,8 @@ test('approval and rollback are explicit guarded operations', () => {
   assert.match(settings, /idempotency_key: crypto\.randomUUID\(\)/)
 })
 
-test('standalone and hosted transports expose lifecycle parity', () => {
-  for (const route of ['/api/v1/skills/lifecycle/list', '/api/v1/skills/inspect', '/api/v1/skills/lifecycle']) assert.ok(api.includes(route))
-  assert.match(hosted, /\/v1\/local-project-skills\/lifecycle/)
+test('local transport exposes skill lifecycle and orchestration routes', () => {
+  for (const route of ['/api/v1/skills/lifecycle/list', '/api/v1/skills/inspect', '/api/v1/skills/lifecycle', '/api/v1/skills/orchestration/status', '/api/v1/skills/orchestration/control']) assert.ok(api.includes(route))
 })
 
 test('skills lifecycle remains keyboard and narrow-screen accessible', () => {
@@ -48,11 +46,4 @@ test('skills orchestration shows bounded operational state without implying appr
   assert.match(panel, /expected_generation: orchestration\.workflow\.generation/)
   assert.match(panel, /inspectOrchestration\(selectedId\)\.then\(setOrchestration\)/)
   assert.match(panel, /\|\| 'N\/A'/)
-})
-
-test('standalone and registered-project hosted gateways expose orchestration parity', () => {
-  assert.match(api, /\/api\/v1\/skills\/orchestration\/status/)
-  assert.match(api, /\/api\/v1\/skills\/orchestration\/control/)
-  assert.match(hosted, /\/v1\/local-project-skills\/orchestration\/status/)
-  assert.match(hosted, /\/v1\/local-project-skills\/orchestration\/control/)
 })

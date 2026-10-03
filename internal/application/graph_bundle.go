@@ -149,8 +149,8 @@ func (s *LocalGraphBundleStore) Create(ctx context.Context, input GraphBundleInp
 	return GraphBundle{Path: filepath.Join(s.root, finalName), Manifest: manifest}, nil
 }
 
-// BuildGraphBundleManifest signs the same immutable projection contract for
-// local filesystem and hosted object custody.
+// BuildGraphBundleManifest signs the immutable projection contract for the
+// local filesystem.
 func BuildGraphBundleManifest(input GraphBundleInput, signingKey ed25519.PrivateKey) (GraphBundleManifest, error) {
 	if err := validateGraphBundleInput(input); err != nil {
 		return GraphBundleManifest{}, err

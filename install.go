@@ -2,12 +2,10 @@ package main
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -60,19 +58,6 @@ const (
 	modelMirrorBaseURL = "https://raw.githubusercontent.com/Xyntopia/all-MiniLM-L6-v2/main"
 	onnxRuntimeVersion = "1.25.0"
 )
-
-type modelFile struct {
-	name string
-	path string
-}
-
-var modelFiles = []modelFile{
-	{name: "config.json", path: "config.json"},
-	{name: "tokenizer.json", path: "tokenizer.json"},
-	{name: "tokenizer_config.json", path: "tokenizer_config.json"},
-	{name: "special_tokens_map.json", path: "special_tokens_map.json"},
-	{name: "model.onnx", path: "onnx/model_quantized.onnx"},
-}
 
 func main() {
 	cfg := parseFlags()
@@ -369,47 +354,6 @@ func existsLabel(p string) string {
 
 func timestamp() string {
 	return time.Now().UTC().Format("20060102T150405")
-}
-
-func downloadFile(url, dest string) error {
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return err
-	}
-	req.Header.Set("User-Agent", "agent-memory-installer/0.1")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("HTTP %d for %s", resp.StatusCode, url)
-	}
-
-	tmp := dest + ".part"
-	f, err := os.OpenFile(tmp, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
-	if err != nil {
-		return err
-	}
-	h := sha256.New()
-	w := io.MultiWriter(f, h)
-	if _, err := io.Copy(w, resp.Body); err != nil {
-		_ = f.Close()
-		_ = os.Remove(tmp)
-		return err
-	}
-	if err := f.Close(); err != nil {
-		_ = os.Remove(tmp)
-		return err
-	}
-	if err := os.Rename(tmp, dest); err != nil {
-		_ = os.Remove(tmp)
-		return err
-	}
-	if fileExists(dest) {
-		return nil
-	}
-	return fmt.Errorf("download produced no file: %s", dest)
 }
 
 func streamOrDiscard(cfg config) io.Writer {

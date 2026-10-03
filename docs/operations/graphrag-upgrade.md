@@ -4,8 +4,8 @@ Agent Memory consumes Microsoft GraphRAG as an exact, replaceable PyPI dependenc
 
 An upgrade must change the exact `graphrag==X.Y.Z` pin, regenerate and review `uv.lock` and the offline wheelhouse, and update the reviewed policy version. Automated dependency-update pull requests are not accepted. The graph-index owner, security, privacy, and operations reviewers must approve the candidate.
 
-Run `GRAPHRAG_UPGRADE_POLICY_ONLY=1 make graphrag-upgrade-certify` while developing. This checks the exact pin, lock, offline wheel hashes, adapter tests, graph contracts, malicious-artifact validation, full/update worker paths, and deterministic shadow evaluation. It does not grant release approval.
+Run `make graphrag-adapter-supply-chain` while developing. This checks the exact pin, lock, offline wheel hashes, adapter tests, and artifact supply-chain metadata.
 
-Release certification additionally requires a digest-pinned, signed candidate image and a signed `agent-memory-graphrag-upgrade-report/v1`. The report records SBOM, license and vulnerability review; schema/golden/determinism results; full and incremental canaries; normalized artifact diff; shadow quality/latency/cost; deployment canary; and proof that rollback restored both the prior image digest and active derived revision.
+Local validation additionally runs the deterministic GraphRAG evaluation and the adapter container test. No remote deployment or service release gate is part of the local product.
 
-Any adapter, GraphRAG, artifact schema, prompt fingerprint, or model-route change creates a new graph configuration and full rebuild. Keep the prior image digest and prior active revision until the canary and observation window are approved. On failure, disable graph routing, restore the prior digest, atomically reactivate the prior revision, verify Basic retrieval, and retain the failed candidate only for bounded incident evidence.
+Any adapter, GraphRAG, artifact schema, prompt fingerprint, or model-route change creates a new graph configuration and full rebuild. On failure, disable graph routing, reactivate the prior local revision, and verify Basic retrieval.

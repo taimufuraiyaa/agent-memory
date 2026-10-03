@@ -92,23 +92,21 @@ func TestSkillChaosCertificateRejectsMissingFailedDuplicateAndUnboundedCases(t *
 }
 
 func completeSkillChaosInput() SkillChaosCertificationInput {
-	observations := make([]SkillChaosObservation, 0, len(RequiredSkillChaosCaseIDs())*2)
-	for _, runtime := range []SkillChaosRuntime{SkillChaosHosted, SkillChaosStandalone} {
-		for _, caseID := range RequiredSkillChaosCaseIDs() {
-			observation := SkillChaosObservation{
-				CaseID: caseID, Runtime: runtime, Passed: true, Converged: true,
-				DomainSideEffects: 1, DurationMillis: 1,
-			}
-			if strings.HasPrefix(caseID, "crash_before:") {
-				observation.Stage = core.SkillOrchestratorStage(strings.TrimPrefix(caseID, "crash_before:"))
-				observation.FaultPoint = SkillChaosBeforeSideEffect
-			}
-			if strings.HasPrefix(caseID, "crash_after:") {
-				observation.Stage = core.SkillOrchestratorStage(strings.TrimPrefix(caseID, "crash_after:"))
-				observation.FaultPoint = SkillChaosAfterSideEffect
-			}
-			observations = append(observations, observation)
+	observations := make([]SkillChaosObservation, 0, len(RequiredSkillChaosCaseIDs()))
+	for _, caseID := range RequiredSkillChaosCaseIDs() {
+		observation := SkillChaosObservation{
+			CaseID: caseID, Runtime: SkillChaosStandalone, Passed: true, Converged: true,
+			DomainSideEffects: 1, DurationMillis: 1,
 		}
+		if strings.HasPrefix(caseID, "crash_before:") {
+			observation.Stage = core.SkillOrchestratorStage(strings.TrimPrefix(caseID, "crash_before:"))
+			observation.FaultPoint = SkillChaosBeforeSideEffect
+		}
+		if strings.HasPrefix(caseID, "crash_after:") {
+			observation.Stage = core.SkillOrchestratorStage(strings.TrimPrefix(caseID, "crash_after:"))
+			observation.FaultPoint = SkillChaosAfterSideEffect
+		}
+		observations = append(observations, observation)
 	}
 	return SkillChaosCertificationInput{
 		ReleaseID: "release-2026-09-01", BuildDigest: "sha256:" + strings.Repeat("a", 64),

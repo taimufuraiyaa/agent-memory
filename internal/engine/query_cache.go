@@ -19,8 +19,7 @@ import (
 // Keys are deterministic truncated SHA-256 digests, so raw query text is never
 // retained in the LRU map keys; the full identity of each entry is stored inside
 // the value and verified on read to guard against hash collisions. The TTL acts
-// as a backstop for stale entries that are not invalidated explicitly (see
-// InvalidateWorkspace and the LifecycleManager.OnWorkspaceChange hook).
+// as a backstop for stale entries that are not invalidated explicitly.
 type QueryCache struct {
 	embeddingCache *lruCache // normalized-query digest → CachedEmbedding
 	resultCache    *lruCache // retrieval-options digest → CachedResult

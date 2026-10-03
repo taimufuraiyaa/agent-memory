@@ -746,7 +746,6 @@ type SkillChaosRuntime string
 
 const (
 	SkillChaosStandalone SkillChaosRuntime = "standalone"
-	SkillChaosHosted     SkillChaosRuntime = "hosted"
 )
 
 type SkillChaosFaultPoint string

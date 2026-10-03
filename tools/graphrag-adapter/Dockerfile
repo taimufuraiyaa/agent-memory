@@ -31,7 +31,6 @@ RUN groupadd --system --gid 65532 adapter \
  && rm -rf /usr/local/lib/python*/site-packages/pip* /usr/local/bin/pip* /usr/bin/apt* /usr/bin/dpkg* /var/lib/apt/lists/*
 COPY --from=build --chown=65532:65532 /opt/adapter/.venv /opt/adapter/.venv
 COPY --from=build --chown=65532:65532 /build/uv.lock /opt/adapter/uv.lock
-COPY --chown=65532:65532 wheelhouse/agent-memory-graph-worker /usr/local/bin/agent-memory-graph-worker
 WORKDIR /graph-job
 USER 65532:65532
-ENTRYPOINT ["/usr/local/bin/agent-memory-graph-worker"]
+ENTRYPOINT ["/opt/adapter/.venv/bin/agent-memory-graphrag"]

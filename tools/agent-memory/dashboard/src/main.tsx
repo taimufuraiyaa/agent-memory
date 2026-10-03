@@ -6,11 +6,9 @@ import { RightsAttestationGate } from './ui/RightsAttestationGate'
 import { loadDashboardRuntime } from './lib/runtime'
 import { createStandaloneKnowledgeGateway } from './lib/adapters/standaloneKnowledgeGateway'
 import { WorkspaceApp } from './ui/WorkspaceApp'
-import { HostedWorkspaceBootstrap } from './ui/HostedWorkspaceBootstrap'
 import { agentMemoryTheme } from './ui/theme'
 import type { DashboardColorScheme, DashboardVisualTheme } from './ui/WorkspaceApp'
 import './ui/styles.css'
-import './ui/connection.css'
 
 type PreloadRecoveryState = {
   attempted: boolean
@@ -325,17 +323,11 @@ async function bootstrap(): Promise<void> {
   )
   try {
     const runtime = await loadDashboardRuntime()
-    const gateway = runtime.mode === 'standalone' ? createStandaloneKnowledgeGateway() : null
+    const gateway = createStandaloneKnowledgeGateway()
     render((colorScheme, setColorScheme, visualTheme, setVisualTheme) =>
-      runtime.mode === 'hosted' ? (
-        <HostedWorkspaceBootstrap runtime={runtime} colorScheme={colorScheme} onColorSchemeChange={setColorScheme} visualTheme={visualTheme} onVisualThemeChange={setVisualTheme} />
-      ) : gateway ? (
-        <RightsAttestationGate>
-          <WorkspaceApp runtime={runtime} gateway={gateway} colorScheme={colorScheme} onColorSchemeChange={setColorScheme} visualTheme={visualTheme} onVisualThemeChange={setVisualTheme} />
-        </RightsAttestationGate>
-      ) : (
-        <RuntimeUnavailable message="No knowledge gateway is available for this runtime." />
-      ),
+      <RightsAttestationGate>
+        <WorkspaceApp runtime={runtime} gateway={gateway} colorScheme={colorScheme} onColorSchemeChange={setColorScheme} visualTheme={visualTheme} onVisualThemeChange={setVisualTheme} />
+      </RightsAttestationGate>,
     )
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Runtime discovery failed.'

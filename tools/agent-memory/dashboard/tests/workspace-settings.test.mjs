@@ -3,8 +3,6 @@ import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 
 const source = await readFile(new URL('../src/ui/workspace/SettingsView.tsx', import.meta.url), 'utf8')
-const hosted = await readFile(new URL('../src/lib/adapters/hostedKnowledgeGateway.ts', import.meta.url), 'utf8')
-const bootstrap = await readFile(new URL('../src/ui/HostedWorkspaceBootstrap.tsx', import.meta.url), 'utf8')
 const skills = await readFile(new URL('../src/ui/SkillsPanel.tsx', import.meta.url), 'utf8')
 const workspaceCss = await readFile(new URL('../src/ui/workspace/workspace.css', import.meta.url), 'utf8')
 
@@ -14,21 +12,15 @@ test('primary settings keep account, data, and access ahead of System', () => {
 })
 
 test('advanced tools live in one capability-aware System registry', () => {
-  for (const tool of ['Diagnostics', 'Lifecycle', 'Benchmark', 'Clients', 'Skills', 'Infrastructure', 'Migration']) assert.match(source, new RegExp(tool))
+  for (const tool of ['Diagnostics', 'Lifecycle', 'Benchmark', 'Clients', 'Skills', 'Migration']) assert.match(source, new RegExp(tool))
+  assert.doesNotMatch(source, /Infrastructure/)
   assert.match(source, /gateway\.supports\(tool\.capability, \{ workspaceId \}\)/)
   assert.match(source, /Unavailable in/)
 })
 
-test('private-installation hosted mode requires the dedicated system-tools runtime feature', () => {
-  assert.match(bootstrap, /runtime\.features\.includes\('local_system_tools'\)/)
-  assert.match(bootstrap, /createHostedKnowledgeGateway\(connection, \{ localOwner: localOnboarding, localSystemTools \}\)/)
-  assert.match(hosted, /localSystemTools \? \[/)
-  assert.doesNotMatch(hosted, /localOwner \? \[/)
-  assert.match(hosted, /capability === 'clients'/)
-  assert.match(hosted, /isRegisteredProject\(scope\.workspaceId\)/)
+test('local system tools expose the expected capability contracts', () => {
   for (const capability of ['lifecycle', 'clients', 'skills']) {
     assert.match(source, new RegExp(`capability: '${capability}'`))
-    assert.match(hosted, new RegExp(`'${capability}'`))
   }
   assert.match(source, /gateway\.listLifecycle/)
   assert.match(source, /gateway\.listSkills/)

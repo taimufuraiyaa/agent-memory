@@ -104,7 +104,7 @@ func checkAndWarnModelVersion(ctx context.Context, workspace string, store *sqli
 		return
 	}
 
-	_, _ = os.Stderr.WriteString(fmt.Sprintf("✅ Auto-reembed complete:\n"))
+	_, _ = os.Stderr.WriteString("✅ Auto-reembed complete:\n")
 	_, _ = os.Stderr.WriteString(fmt.Sprintf("   - Re-embedded: %d memories\n", result.ReEmbedded))
 	_, _ = os.Stderr.WriteString(fmt.Sprintf("   - Skipped: %d memories\n\n", result.Skipped))
 }

@@ -240,24 +240,6 @@ test("rejects calls to tools hidden from the default profile", async (t) => {
   assert.match(response.result.content[0].text, /unknown tool: memory_health/);
 });
 
-test("keeps orchestration controls unavailable in managed hosted compatibility mode", async (t) => {
-  const child = startServer({
-    AGENT_MEMORY_MCP_PROFILE: "expanded",
-    AGENT_MEMORY_MODE: "hosted",
-    AGENT_MEMORY_API_URL: "http://127.0.0.1:1",
-    AGENT_MEMORY_TOKEN: "hosted-secret",
-    AGENT_MEMORY_TENANT_ID: "tenant-1",
-  });
-  t.after(() => child.kill());
-  child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 70, method: "tools/call", params: { name: "skill_orchestration_status", arguments: { actor: "operator", workflow_id: "workflow-1" } } })}\n`);
-
-  const response = await readMessage(child);
-
-  assert.equal(response.result.isError, true);
-  assert.match(response.result.content[0].text, /available only in local mode/);
-  assert.doesNotMatch(response.result.content[0].text, /ECONNREFUSED/);
-});
-
 test("fails closed for an unsupported tool profile", async () => {
   const child = startServer({ AGENT_MEMORY_MCP_PROFILE: "everything" });
   let stderr = "";
@@ -335,10 +317,10 @@ test("fails closed when an explicit client id cannot be resolved", async (t) => 
   assert.doesNotMatch(stderr, /client_profile_not_found|missing"/);
 });
 
-test("rejects malformed and hosted client-id resolution", async () => {
+test("rejects malformed client ids and removed remote mode", async () => {
   for (const env of [
     { AGENT_MEMORY_CLIENT_ID: "Bad ID" },
-    { AGENT_MEMORY_CLIENT_ID: "codex", AGENT_MEMORY_MODE: "hosted", AGENT_MEMORY_TOKEN: "token", AGENT_MEMORY_TENANT: "tenant" },
+    { AGENT_MEMORY_MODE: "remote" },
   ]) {
     const child = startServer(env);
     let stderr = "";
@@ -348,7 +330,7 @@ test("rejects malformed and hosted client-id resolution", async () => {
       child.once("exit", resolve);
     });
     assert.notEqual(exitCode, 0);
-    assert.match(stderr, /AGENT_MEMORY_CLIENT_ID/);
+    assert.match(stderr, env.AGENT_MEMORY_MODE === "remote" ? /unsupported AGENT_MEMORY_MODE: remote/ : /AGENT_MEMORY_CLIENT_ID/);
   }
 });
 
@@ -481,55 +463,4 @@ test("reports HTTP transport degradation without silently changing backends", as
   assert.equal(response.result.isError, true);
   assert.match(response.result.content[0].text, /transport=http/);
   assert.match(response.result.content[0].text, /degraded=true/);
-});
-
-test("hosted mode is explicit, authenticated, tenant-scoped, and uses hosted paths", async (t) => {
-  const requests = [];
-  const server = http.createServer((request, response) => {
-    let body = "";
-    request.on("data", (chunk) => { body += chunk; });
-    request.on("end", () => {
-      requests.push({ url: request.url, authorization: request.headers.authorization, tenant: request.headers["x-agent-memory-tenant"], body: JSON.parse(body) });
-      const data = request.url === "/v1/source-queries"
-        ? { evidence: [{ passage_id: "p1", citation_id: "c1", text: "hosted evidence", score: 0.9 }], context: { used_tokens: 2, budget: 100 } }
-        : request.url === "/v1/search"
-          ? { items: [{ id: "m1", workspace_id: "workspace-1", type: "semantic", content: "hosted memory", score: 0.8 }], next_cursor: "next-1" }
-          : { id: "m1" };
-      response.writeHead(200, { "content-type": "application/json" });
-      response.end(JSON.stringify({ ok: true, version: "v1", data }));
-    });
-  });
-  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
-  t.after(() => server.close());
-  const child = startServer({
-    AGENT_MEMORY_MODE: "hosted",
-    AGENT_MEMORY_API_URL: `http://127.0.0.1:${server.address().port}`,
-    AGENT_MEMORY_TOKEN: "hosted-secret",
-    AGENT_MEMORY_TENANT_ID: "tenant-1",
-  });
-  t.after(() => child.kill());
-
-  child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 30, method: "tools/call", params: { name: "memory_write", arguments: { workspace: "workspace-1", content: "hosted fact", type: "semantic" } } })}\n`);
-  const write = await readMessage(child);
-  assert.equal(write.result.structuredContent._transport.mode, "hosted");
-  child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 31, method: "tools/call", params: { name: "memory_search", arguments: { workspace: "workspace-1", query: "hosted", top_k: 10 } } })}\n`);
-  const search = await readMessage(child);
-  assert.equal(search.result.structuredContent.results[0].content, "hosted memory");
-  assert.equal(search.result.structuredContent.next_cursor, "next-1");
-  assert.deepEqual(requests.map((request) => request.url), ["/v1/memories", "/v1/search"]);
-  assert.ok(requests.every((request) => request.authorization === "Bearer hosted-secret" && request.tenant === "tenant-1"));
-  assert.equal(requests[0].body.workspace_id, "workspace-1");
-  assert.deepEqual(requests[1].body, { workspace_id: "workspace-1", query: "hosted", limit: 10 });
-});
-
-test("hosted mode fails closed without explicit credentials", async () => {
-  const child = startServer({ AGENT_MEMORY_MODE: "hosted", AGENT_MEMORY_TOKEN: "", AGENT_MEMORY_TENANT: "" });
-  let stderr = "";
-  child.stderr.on("data", (chunk) => { stderr += chunk.toString("utf8"); });
-  const exitCode = await new Promise((resolve, reject) => {
-    child.once("error", reject);
-    child.once("exit", resolve);
-  });
-  assert.notEqual(exitCode, 0);
-  assert.match(stderr, /requires AGENT_MEMORY_TOKEN and AGENT_MEMORY_TENANT/);
 });

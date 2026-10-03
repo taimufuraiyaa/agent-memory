@@ -11,7 +11,6 @@ import (
 
 	"github.com/taimufuraiyaa/agent-memory/internal/core"
 	"github.com/taimufuraiyaa/agent-memory/internal/library"
-	exportservice "github.com/taimufuraiyaa/agent-memory/internal/saas/export"
 	"github.com/taimufuraiyaa/agent-memory/internal/storage/sqlite"
 )
 
@@ -97,7 +96,7 @@ func TestBuildLocalRoundTripsSkillRevisionLineageAndTelemetryManifest(t *testing
 		t.Fatalf("skill lifecycle export = %+v", bundle.SkillLifecycle)
 	}
 	encoded, _ := json.Marshal(bundle)
-	var roundTrip exportservice.Bundle
+	var roundTrip Bundle
 	if err := json.Unmarshal(encoded, &roundTrip); err != nil {
 		t.Fatal(err)
 	}

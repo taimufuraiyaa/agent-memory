@@ -5,12 +5,15 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/taimufuraiyaa/agent-memory/internal/core"
 )
 
 const SkillOrchestratorConfigurationReceiptSchemaV1 = "agent-memory/skill-orchestrator-configuration-receipt/v1"
+
+const maxSkillReferenceBytes = 256
 
 type SkillOrchestratorConfigurationReceipt struct {
 	Schema          string                              `json:"schema"`
@@ -54,14 +57,14 @@ func VerifySkillOrchestratorConfigurationReceipt(receipt SkillOrchestratorConfig
 	if err != nil {
 		return err
 	}
-	if !verifyReleaseSignature(trustedKeys, receipt.SigningKeyID, receipt.Signature, payload) {
+	if !verifySignature(trustedKeys, receipt.SigningKeyID, receipt.Signature, payload) {
 		return errors.New("orchestrator configuration receipt signature is invalid")
 	}
 	return nil
 }
 
 func skillOrchestratorConfigurationReceiptBytes(receipt SkillOrchestratorConfigurationReceipt) ([]byte, error) {
-	if receipt.Schema != SkillOrchestratorConfigurationReceiptSchemaV1 || !boundedReleaseReference(receipt.ReceiptID) || !boundedReleaseReference(receipt.ReleaseID) || !boundedReleaseReference(receipt.SignerID) || !boundedReleaseReference(receipt.SigningKeyID) || !validSHA256Digest(receipt.BuildDigest) || !validSHA256Digest(receipt.MigrationDigest) || receipt.SignedAt.IsZero() {
+	if receipt.Schema != SkillOrchestratorConfigurationReceiptSchemaV1 || !boundedReference(receipt.ReceiptID) || !boundedReference(receipt.ReleaseID) || !boundedReference(receipt.SignerID) || !boundedReference(receipt.SigningKeyID) || !validSHA256Digest(receipt.BuildDigest) || !validSHA256Digest(receipt.MigrationDigest) || receipt.SignedAt.IsZero() {
 		return nil, errors.New("orchestrator configuration receipt identity or provenance is invalid")
 	}
 	if err := receipt.Configuration.Validate(); err != nil {
@@ -83,4 +86,14 @@ func skillOrchestratorConfigurationReceiptBytes(receipt SkillOrchestratorConfigu
 		Configuration: receipt.Configuration, SignerID: receipt.SignerID,
 		SignedAt: receipt.SignedAt.UTC(), SigningKeyID: receipt.SigningKeyID,
 	})
+}
+
+func verifySignature(keys map[string]ed25519.PublicKey, keyID, encoded string, payload []byte) bool {
+	key, ok := keys[keyID]
+	signature, err := base64.StdEncoding.DecodeString(encoded)
+	return ok && len(key) == ed25519.PublicKeySize && err == nil && len(signature) == ed25519.SignatureSize && ed25519.Verify(key, payload, signature)
+}
+
+func boundedReference(value string) bool {
+	return strings.TrimSpace(value) != "" && len(value) <= maxSkillReferenceBytes && !strings.ContainsAny(value, "\r\n\t")
 }

@@ -6,11 +6,7 @@ const root = new URL('../src/', import.meta.url)
 const read = (path) => readFile(new URL(path, root), 'utf8')
 
 test('How History stays reachable from workspace actions alongside Activity and Memories', async () => {
-  const [shell, explorer, route] = await Promise.all([
-    read('ui/WorkspaceApp.tsx'),
-    read('ui/workspace/WorkspaceExplorer.tsx'),
-    read('ui/workspace/workspaceRoute.ts'),
-  ])
+  const [shell, explorer, route] = await Promise.all([read('ui/WorkspaceApp.tsx'), read('ui/workspace/WorkspaceExplorer.tsx'), read('ui/workspace/workspaceRoute.ts')])
   assert.match(explorer, /onWorkspaceAction\(id, 'history'\)\}>How history/)
   assert.match(shell, /route\.knowledgeView === 'history' \? <HowHistoryView gateway=\{gateway\} workspaceId=\{workspace\.id\}/)
   assert.match(shell, /route\.destination === 'activity' \? <ActivityView gateway=\{gateway\} workspaceId=\{workspace\.id\}/)
@@ -28,19 +24,14 @@ test('How History renders a lazy accessible provenance tree', async () => {
   for (const label of ['Steps', 'What', 'When', 'Where', 'Feedback', 'Ungrouped memories']) assert.match(source, new RegExp(label))
   assert.match(source, /NotApplicable/)
   assert.match(source, />N\/A</)
-  assert.match(source, /Started/)
-  assert.match(source, /Last updated/)
-  assert.match(source, /Finalized/)
+  assert.match(source, /label="Started"/)
+  assert.match(source, /label="Last updated"/)
+  assert.match(source, /label="Finalized"/)
   assert.doesNotMatch(source, /similarity|semantic parent/i)
 })
 
-test('gateway contracts normalize promoted memories, evidence, and feedback in both runtimes', async () => {
-  const [contract, adapter, standalone, hosted] = await Promise.all([
-    read('lib/knowledgeGateway.ts'),
-    read('lib/adapters/solutionEpisodeAdapter.ts'),
-    read('lib/adapters/standaloneKnowledgeGateway.ts'),
-    read('lib/adapters/hostedKnowledgeGateway.ts'),
-  ])
+test('local gateway exposes the solution history contract', async () => {
+  const [contract, adapter, standalone] = await Promise.all([read('lib/knowledgeGateway.ts'), read('lib/adapters/solutionEpisodeAdapter.ts'), read('lib/adapters/standaloneKnowledgeGateway.ts')])
   assert.match(contract, /listHowHistory\(scope: WorkspaceScope/)
   assert.match(contract, /promotionTargets:/)
   assert.match(contract, /pathFeedback:/)
@@ -49,5 +40,4 @@ test('gateway contracts normalize promoted memories, evidence, and feedback in b
   assert.match(adapter, /path_feedback/)
   assert.match(adapter, /finalizedAt: record\.summary\?\.created_at/)
   assert.match(standalone, /listSolutionEpisodes/)
-  assert.match(hosted, /listHostedProjectSolutions/)
 })

@@ -179,7 +179,7 @@ func graphTermSeedQuery(query string) string {
 func normalizedGraphQueryTerms(query string) map[string]struct{} {
 	result := map[string]struct{}{}
 	for _, value := range strings.Fields(strings.ToLower(query)) {
-		value = strings.Trim(value, " \\t\\r\\n.,:;!?()[]{}\"'")
+		value = strings.Trim(value, " \t\r\n.,:;!?()[]{}\"'")
 		if len(value) >= 3 {
 			result[value] = struct{}{}
 		}
@@ -194,7 +194,7 @@ func graphEntityMatchesTerms(version core.GraphEntityVersion, queryTerms map[str
 	values := append([]string{version.Name}, version.Aliases...)
 	for _, value := range values {
 		for _, term := range strings.Fields(strings.ToLower(value)) {
-			term = strings.Trim(term, " \\t\\r\\n.,:;!?()[]{}\"'")
+			term = strings.Trim(term, " \t\r\n.,:;!?()[]{}\"'")
 			if _, ok := queryTerms[term]; ok {
 				return true
 			}

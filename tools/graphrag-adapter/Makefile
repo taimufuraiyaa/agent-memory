@@ -25,14 +25,13 @@ image:
 	test -n "$(UV_IMAGE)"
 	case "$(PYTHON_IMAGE)" in *@sha256:*) ;; *) exit 1 ;; esac
 	case "$(UV_IMAGE)" in *@sha256:*) ;; *) exit 1 ;; esac
-	cd ../.. && CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o tools/graphrag-adapter/$(WHEELHOUSE)/agent-memory-graph-worker ./cmd/agent-memory-graph-worker
 	docker build --network=none --build-arg PYTHON_IMAGE="$(PYTHON_IMAGE)" --build-arg UV_IMAGE="$(UV_IMAGE)" --tag "$(IMAGE)" .
 
 container-test:
 	docker run --rm --network=none --read-only --tmpfs /graph-job:rw,noexec,nosuid,size=64m --cap-drop=ALL --security-opt=no-new-privileges --entrypoint /opt/adapter/.venv/bin/agent-memory-graphrag "$(IMAGE)" readiness
 	docker inspect "$(IMAGE)" --format '{{json .Config.User}}' | grep -q '65532'
 	docker run --rm --entrypoint sh "$(IMAGE)" -c '! command -v pip && ! command -v apt && ! command -v uv'
-	docker run --rm --entrypoint sh "$(IMAGE)" -c 'test -x /usr/local/bin/agent-memory-graph-worker'
+	docker run --rm --entrypoint sh "$(IMAGE)" -c 'test -x /opt/adapter/.venv/bin/agent-memory-graphrag'
 
 supply-chain:
 	command -v syft

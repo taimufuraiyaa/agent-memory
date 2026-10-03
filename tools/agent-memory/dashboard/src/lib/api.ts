@@ -16,16 +16,6 @@ export type ClientProfile = {
   updated_at: string
 }
 
-export type DeploymentDecisionStatus = 'assumed' | 'operator_confirmed'
-
-export type DeploymentProfile = {
-  monthly_infrastructure_operations_budget_usd: number
-  decision_status: DeploymentDecisionStatus
-  revision: number
-  created_at: string
-  updated_at: string
-}
-
 export type RightsBasis = 'author_owned' | 'licensed' | 'public_domain' | 'lawfully_acquired_private_use'
 
 export type RightsAttestationPolicy = {
@@ -781,18 +771,6 @@ export function updateClientProfile(input: {
 export function deleteClientProfile(input: { id: string; expected_revision: number }): Promise<{ deleted: boolean; id: string }> {
   const query = new URLSearchParams({ expected_revision: String(input.expected_revision) })
   return api(`/api/v1/client-profiles/${encodeURIComponent(input.id)}?${query.toString()}`, { method: 'DELETE' })
-}
-
-export function getDeploymentProfile(): Promise<{ profile: DeploymentProfile }> {
-  return api('/api/v1/deployment-profile', { method: 'GET' })
-}
-
-export function updateDeploymentProfile(input: {
-  monthly_infrastructure_operations_budget_usd: number
-  decision_status: DeploymentDecisionStatus
-  expected_revision: number
-}): Promise<{ profile: DeploymentProfile }> {
-  return api('/api/v1/deployment-profile', { method: 'PUT', body: JSON.stringify(input) })
 }
 
 export function listNotes(input: { workspace: string; include_deleted?: boolean }): Promise<{ workspace: string; notes: NoteDocument[] }> {

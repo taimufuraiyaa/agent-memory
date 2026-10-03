@@ -2,16 +2,13 @@ package integration
 
 import (
 	"context"
-	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/taimufuraiyaa/agent-memory/internal/contracts"
 	"github.com/taimufuraiyaa/agent-memory/internal/core"
-	saaspq "github.com/taimufuraiyaa/agent-memory/internal/saas/postgres"
 	localsqlite "github.com/taimufuraiyaa/agent-memory/internal/storage/sqlite"
 )
 
@@ -24,38 +21,6 @@ func TestGraphStoreParity(t *testing.T) {
 		}
 		defer func() { _ = store.Close() }()
 		runGraphStoreParity(t, store, core.GraphScope{WorkspaceID: "workspace-a"})
-	})
-
-	t.Run("postgres", func(t *testing.T) {
-		connectionURL := strings.TrimSpace(os.Getenv("AGENT_MEMORY_TEST_POSTGRES_URL"))
-		if connectionURL == "" {
-			t.Skip("AGENT_MEMORY_TEST_POSTGRES_URL is not configured")
-		}
-		pool, err := saaspq.Open(ctx, connectionURL)
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer pool.Close()
-		if err := saaspq.Apply(ctx, pool); err != nil {
-			t.Fatal(err)
-		}
-		accountID, tenantID, workspaceID := uuid.New(), uuid.New(), uuid.New()
-		now := time.Now().UTC()
-		if _, err := pool.Exec(ctx, `INSERT INTO saas_accounts(id,external_subject,verified_email,state,created_at,updated_at)
-			VALUES($1,$2,$3,'active',$4,$4)`, accountID, accountID.String(), accountID.String()+"@example.test", now); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := pool.Exec(ctx, `INSERT INTO saas_tenants(id,kind,state,personal_owner_account_id,created_at,updated_at)
-			VALUES($1,'personal','active',$2,$3,$3)`, tenantID, accountID, now); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := pool.Exec(ctx, `INSERT INTO saas_workspaces(tenant_id,id,name,state,created_at,updated_at)
-			VALUES($1,$2,$3,'active',$4,$4)`, tenantID, workspaceID, "parity-"+workspaceID.String(), now); err != nil {
-			t.Fatal(err)
-		}
-		runGraphStoreParity(t, saaspq.NewGraphIndexRepository(pool), core.GraphScope{
-			TenantID: tenantID.String(), WorkspaceID: workspaceID.String(),
-		})
 	})
 }
 

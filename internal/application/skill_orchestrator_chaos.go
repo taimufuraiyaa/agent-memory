@@ -28,7 +28,6 @@ type SkillChaosObservation = core.SkillChaosObservation
 
 const (
 	SkillChaosStandalone       = core.SkillChaosStandalone
-	SkillChaosHosted           = core.SkillChaosHosted
 	SkillChaosBeforeSideEffect = core.SkillChaosBeforeSideEffect
 	SkillChaosAfterSideEffect  = core.SkillChaosAfterSideEffect
 )
@@ -114,14 +113,12 @@ func CertifySkillOrchestratorChaos(input SkillChaosCertificationInput, keyID str
 
 func validateSkillChaosMatrix(observations []SkillChaosObservation, maximumCaseDurationMS int64) error {
 	want := RequiredSkillChaosCaseIDs()
-	if len(observations) != len(want)*2 || len(observations) > MaxSkillChaosObservations {
-		return errors.New("complete standalone and hosted chaos observations are required")
+	if len(observations) != len(want) || len(observations) > MaxSkillChaosObservations {
+		return errors.New("complete standalone chaos observations are required")
 	}
-	required := make(map[string]struct{}, len(want)*2)
-	for _, runtime := range []SkillChaosRuntime{SkillChaosStandalone, SkillChaosHosted} {
-		for _, caseID := range want {
-			required[string(runtime)+"\x00"+caseID] = struct{}{}
-		}
+	required := make(map[string]struct{}, len(want))
+	for _, caseID := range want {
+		required[string(SkillChaosStandalone)+"\x00"+caseID] = struct{}{}
 	}
 	for _, observation := range observations {
 		key := string(observation.Runtime) + "\x00" + observation.CaseID

@@ -4,7 +4,6 @@ package connectors
 import (
 	"context"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/taimufuraiyaa/agent-memory/internal/hooks"
@@ -48,7 +47,6 @@ type Connector interface {
 
 type Manager struct {
 	connectors []Connector
-	mu         sync.RWMutex
 	health     map[string]Health
 }
 

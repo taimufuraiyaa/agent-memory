@@ -13,10 +13,10 @@ import (
 	"github.com/taimufuraiyaa/agent-memory/internal/core"
 )
 
-// RunRepositoryChaosCertification exercises the same crash/replay and fencing
-// contract against standalone and hosted repository implementations.
+// RunRepositoryChaosCertification exercises the local crash/replay and fencing
+// contract against the SQLite repository.
 func RunRepositoryChaosCertification(ctx context.Context, repository contracts.SkillOrchestratorRepository, scope core.SkillOrchestratorScope, runtime core.SkillChaosRuntime) ([]core.SkillChaosObservation, error) {
-	if repository == nil || scope.Validate() != nil || runtime != core.SkillChaosStandalone && runtime != core.SkillChaosHosted {
+	if repository == nil || scope.Validate() != nil || runtime != core.SkillChaosStandalone {
 		return nil, errors.New("valid chaos repository, scope, and runtime are required")
 	}
 	now := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)

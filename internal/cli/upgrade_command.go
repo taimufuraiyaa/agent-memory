@@ -40,7 +40,6 @@ type upgradeResult struct {
 	TuningCommand    string                                      `json:"tuning_command,omitempty"`
 	TermIndexes      map[string]*workspace.TermIndexSetupResult  `json:"term_indexes,omitempty"`
 	TermIndexErrors  map[string]string                           `json:"term_index_errors,omitempty"`
-	ServicesBuild    *upgradeDevelopmentServicesResult           `json:"services_build,omitempty"`
 }
 
 const canonicalUpgradeModule = "github.com/taimufuraiyaa/agent-memory"
@@ -399,7 +398,6 @@ func newUpgradeCommand() *cobra.Command {
 	var noDashboard bool
 	var dashboardDir string
 	var all bool
-	var noServicesBuild bool
 	var ideTargets []string
 
 	cmd := &cobra.Command{
@@ -412,8 +410,7 @@ upgrade every registered project.
 
 Hooks are always written by default. Use --no-hooks to skip them.
 Use --hooks-only to push hooks without touching the binary (useful for existing projects).
-A source-backed --all upgrade also rebuilds a detected running local Docker stack;
-use --no-services-build to schedule that recreation separately.`,
+A source-backed --all upgrade also refreshes the local dashboard when requested.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			f, err := validateTextOrJSONFormat(format)
 			if err != nil {
@@ -482,9 +479,6 @@ use --no-services-build to schedule that recreation separately.`,
 			if hooksOnly {
 				var res upgradeResult
 				if all {
-					res.ServicesBuild = &upgradeDevelopmentServicesResult{Status: "disabled", Reason: "disabled by --hooks-only"}
-				}
-				if all {
 					aaf, err := writeAllAgentFiles(forceHooks)
 					if err != nil {
 						return fmt.Errorf("all agent files: %w", err)
@@ -507,9 +501,6 @@ use --no-services-build to schedule that recreation separately.`,
 					}
 				} else {
 					printAgentFiles(res.AgentFiles)
-				}
-				if res.ServicesBuild != nil {
-					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  services build: %s (%s)\n", res.ServicesBuild.Status, res.ServicesBuild.Reason)
 				}
 				return nil
 			}
@@ -578,9 +569,6 @@ use --no-services-build to schedule that recreation separately.`,
 			}
 
 			if dryRun {
-				if all {
-					res.ServicesBuild = &upgradeDevelopmentServicesResult{Status: "disabled", Reason: "disabled by --dry-run"}
-				}
 				if f == "json" {
 					return writeSuccessEnvelope(cmd.OutOrStdout(), "upgrade", res)
 				}
@@ -723,14 +711,6 @@ use --no-services-build to schedule that recreation separately.`,
 				}
 			}
 
-			if all {
-				servicesBuild, err := upgradeDevelopmentServices(cmd, srcDir, noServicesBuild)
-				res.ServicesBuild = &servicesBuild
-				if err != nil {
-					return fmt.Errorf("upgrade local services: %w", err)
-				}
-			}
-
 			if f == "json" {
 				return writeSuccessEnvelope(cmd.OutOrStdout(), "upgrade", res)
 			}
@@ -759,13 +739,6 @@ use --no-services-build to schedule that recreation separately.`,
 			for project, message := range res.TermIndexErrors {
 				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  term index preparation failed: %s: %s\n", project, message)
 			}
-			if res.ServicesBuild != nil {
-				if res.ServicesBuild.Reason == "" {
-					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  services build: %s\n", res.ServicesBuild.Status)
-				} else {
-					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  services build: %s (%s)\n", res.ServicesBuild.Status, res.ServicesBuild.Reason)
-				}
-			}
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  inspect tuning: %s\n", res.TuningCommand)
 			return nil
 		},
@@ -785,7 +758,6 @@ use --no-services-build to schedule that recreation separately.`,
 	cmd.Flags().BoolVar(&noDashboard, "no-dashboard", false, "Skip refreshing standalone dashboard from source checkout")
 	cmd.Flags().StringVar(&dashboardDir, "dashboard-dir", "", "Dashboard install dir (default: $AGENT_MEMORY_DASHBOARD_DIR or ~/.agent-memory/dashboard)")
 	cmd.Flags().BoolVarP(&all, "all", "a", false, "Upgrade all registered workspaces/projects")
-	cmd.Flags().BoolVar(&noServicesBuild, "no-services-build", false, "Do not rebuild a running local Docker service stack during --all")
 	return cmd
 }
 

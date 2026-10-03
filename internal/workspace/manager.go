@@ -1333,33 +1333,6 @@ func writeCodexHooks(path, workspaceName string) error {
 	return writeRuleFile(path, string(b)+"\n")
 }
 
-func appendRuleSectionIfMissing(path, marker, section string) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return fmt.Errorf("create directory for %s: %w", path, err)
-	}
-	b, err := os.ReadFile(path)
-	if err == nil {
-		if strings.Contains(string(b), marker) {
-			return nil
-		}
-		existing := strings.TrimRight(string(b), "\n")
-		add := strings.TrimLeft(section, "\n")
-		out := existing + "\n\n---\n\n" + add + "\n"
-		if err := os.WriteFile(path, []byte(out), 0o644); err != nil {
-			return fmt.Errorf("append to rule file %s: %w", path, err)
-		}
-		return nil
-	}
-	if !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("read rule file %s: %w", path, err)
-	}
-	base := "# AI Agent Rules\n\n" + strings.TrimLeft(section, "\n") + "\n"
-	if err := os.WriteFile(path, []byte(base), 0o644); err != nil {
-		return fmt.Errorf("write new rule file %s: %w", path, err)
-	}
-	return nil
-}
-
 func antigravityRuleContent(workspace string) string {
 	return "---\ntrigger: always_on\n---\n# agent-memory\nworkspace: " + workspace + "\n\n" + genericRulesSection(workspace) + "\n"
 }
@@ -1561,79 +1534,6 @@ func HippocampusHooks(workspace string) []HookFile {
 // cursorRuleContent returns the full content for a cursor rule file.
 func cursorRuleContent(workspace string) string {
 	return fmt.Sprintf("---\ndescription: Always use Agent Memory for What, Where, When, How, and Feedback\nglobs: *\nalwaysApply: true\n---\n# agent-memory\nworkspace: %s\n\n## Default memory policy (MANDATORY)\n\n%s\n", workspace, strings.TrimRight(genericRulesSection(workspace), "\n"))
-}
-
-// legacyCursorRuleContent is retained temporarily as migration reference for
-// older generated files; new files use the canonical contract above.
-func legacyCursorRuleContent(workspace string) string {
-	return fmt.Sprintf(`---
-description: Always use agent-memory CLI for memory search, recall, write, and session-end
-globs: *
-alwaysApply: true
----
-# agent-memory
-workspace: %s
-
-## Default memory policy (MANDATORY)
-
-You MUST use the `+"`"+`agent-memory`+"`"+` CLI for memory retrieval and persistence.
-
-### Before doing any self-research
-
-- Run a focused memory search for the key terms and entities you're about to research.
-- Run a recall for the current task only when the task is about continuing previous work, or when search returns no useful / weak / insufficient results.
-- Directly escalate to recall for prompts like `+"`"+`continue`+"`"+`, `+"`"+`resume`+"`"+`, or `+"`"+`what were we doing`+"`"+`.
-
-Commands:
-- `+"`"+`agent-memory search --query "<keywords/entities>" --top-k 8`+"`"+`
-- `+"`"+`agent-memory recall --task "<one-line task>" --budget 800 --format raw`+"`"+`
-
-### After running search or recall
-
-- You MUST immediately submit a feedback score from 0 (useless) to 5 (extremely helpful), indicating how many retrieved memories were useful.
-- You MUST score honestly and objectively based on the true usefulness of the retrieved memories. Do not default to high scores.
-- You MUST always provide a reason regardless of the score; if the score is below 4, you MUST provide a detailed explanation (the command will fail if reason is omitted for scores below 4).
-
-Command:
-- `+"`"+`agent-memory feedback --request-id "<request_id>" --score <0-5> --reason "<explanation>" --useful-count <useful_memories_count> --total-count <total_memories_retrieved>`+"`"+`
-
-### While working
-
-- If you discover durable new knowledge (facts, commands, config, constraints, architecture decisions), write it immediately.
-- When writing a memory: Choose up to three explicit keywords: names, terms, or helpful locators a human would search later. Do not copy the full content into keywords.
-- Prefer short, atomic memories. Include the source (file path / command / URL) in the content when available.
-- You MUST proactively package reusable scripts, grep queries, workflows, or complex setup/learnings into a custom agent skill under `+"`"+`.agents/skills/`+"`"+` (using `+"`"+`agent-memory distill`+"`"+` or manual packaging) if they are valuable and highly likely to be reused. Do NOT wait for the user to ask; proactively distill skills once a workflow or learning pattern is successfully validated.
-  - Do NOT use generic, numbered, or index-based filenames (like `+"`"+`part1.md`+"`"+`, `+"`"+`workflows_part1.md`+"`"+`).
-  - Always use clear, descriptive, and meaningful names for all custom skill reference files (e.g., `+"`"+`db_performance.md`+"`"+`, `+"`"+`ui_fixes.md`+"`"+`).
-  - Limit every individual skill file's size strictly to a maximum of 12,000 characters. If a skill grows beyond this, partition it by domain/feature and place the detailed references into a `+"`"+`references/`+"`"+` subdirectory with descriptive, meaningful filenames.
-
-Commands:
-- `+"`"+`agent-memory write --type semantic --content "<durable fact + source>"`+"`"+`
-- `+"`"+`agent-memory write --type procedural --content "<repeatable steps/checklist>"`+"`"+`
-
-### Corrective action on low-scoring queries (Score 0-3)
-
-If retrieval has a low score (0-3), proceed to investigate and solve the task. Once correct information is learned/verified:
-- **Missing information**: Write a new memory with `+"`"+`agent-memory write`+"`"+`.
-- **Out-of-date or incorrect memory**:
-  1. Write the corrected memory entry using `+"`"+`agent-memory write`+"`"+` and copy the returned memory ID.
-  2. Update the old memory by linking it to the new successor:
-     `+"`"+`agent-memory feedback --memory-id <old_id> --outcome rejected --reconsolidation-action superseded --successor-memory-id <new_id> --reason "<explanation>"`+"`"+`
-
-### After attempts (success/failure)
-
-- Record outcomes that would prevent repeating mistakes or preserve a working approach.
-
-Command:
-- `+"`"+`agent-memory write --type outcome --content "<what you tried> (result: success|failure|partial, approach: <how>, reason: <why>)"`+"`"+`
-
-### At the end of a session
-
-- Extract learnings from the session summary/transcript into memory.
-
-Command:
-- `+"`"+`agent-memory session-end --transcript "<session summary or transcript>" --format json`+"`"+`
-`, workspace)
 }
 
 // WriteAgentFilesOptions controls how agent IDE files are written during upgrade.

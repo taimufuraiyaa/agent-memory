@@ -50,7 +50,7 @@ type GraphRevisionBatchStore interface {
 }
 
 // GraphRepository is the provider-neutral normalized derived-index store used
-// by both standalone SQLite and hosted PostgreSQL implementations.
+// by the standalone SQLite implementation.
 type GraphRepository interface {
 	UpsertGraphConfiguration(context.Context, core.GraphConfiguration) error
 	CreateGraphRevision(context.Context, core.GraphRevision) error

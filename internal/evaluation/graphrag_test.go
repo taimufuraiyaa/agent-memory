@@ -17,7 +17,7 @@ func TestGraphRAGProductionGoldCorpusMeetsFailClosedThresholds(t *testing.T) {
 	}
 }
 
-func TestGraphRAGProductionGateRejectsUngroundedTenantCrossingAndRegression(t *testing.T) {
+func TestGraphRAGLocalGateRejectsUngroundedScopeCrossingAndRegression(t *testing.T) {
 	corpus := loadGraphRAGGold(t)
 	corpus.Cases[0].Claims[0].EvidenceIDs = []string{"local:not-authorized"}
 	report, err := EvaluateGraphRAG(corpus)
@@ -26,9 +26,9 @@ func TestGraphRAGProductionGateRejectsUngroundedTenantCrossingAndRegression(t *t
 	}
 
 	corpus = loadGraphRAGGold(t)
-	corpus.Cases[0].GraphIDs = []string{"other-tenant:m1"}
+	corpus.Cases[0].GraphIDs = []string{"other-scope:m1"}
 	if _, err := EvaluateGraphRAG(corpus); err == nil {
-		t.Fatal("cross-tenant result passed corpus validation")
+		t.Fatal("cross-scope result passed corpus validation")
 	}
 
 	corpus = loadGraphRAGGold(t)

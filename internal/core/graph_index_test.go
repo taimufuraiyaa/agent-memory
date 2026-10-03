@@ -14,8 +14,8 @@ func TestGraphScopeRequiresWorkspaceAndConsistentTenant(t *testing.T) {
 	if err := (GraphScope{WorkspaceID: "workspace-a"}).Validate(); err != nil {
 		t.Fatalf("standalone scope rejected: %v", err)
 	}
-	if err := (GraphScope{TenantID: "tenant-a", WorkspaceID: "workspace-a"}).Validate(); err != nil {
-		t.Fatalf("hosted scope rejected: %v", err)
+	if err := (GraphScope{WorkspaceID: "workspace-a"}).Validate(); err != nil {
+		t.Fatalf("local scope rejected: %v", err)
 	}
 }
 

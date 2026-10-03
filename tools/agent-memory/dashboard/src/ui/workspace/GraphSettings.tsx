@@ -2,9 +2,8 @@ import { Alert, Badge, Button, Card, Group, SimpleGrid, Stack, Text, Title } fro
 import { useEffect, useState } from 'react'
 import type { GraphOperationAction, GraphReadiness, GraphStatus, KnowledgeGateway } from '../../lib/knowledgeGateway'
 import { GraphExplorer } from './GraphExplorer'
-import { ProjectGraphQueue } from './ProjectGraphQueue'
 
-export function GraphSettings({ gateway, workspaceId, localProject = false }: { gateway: KnowledgeGateway; workspaceId: string; localProject?: boolean }) {
+export function GraphSettings({ gateway, workspaceId }: { gateway: KnowledgeGateway; workspaceId: string }) {
   const [readiness, setReadiness] = useState<GraphReadiness | null>(null)
   const [status, setStatus] = useState<GraphStatus | null>(null)
   const [statusStale, setStatusStale] = useState(false)
@@ -28,10 +27,9 @@ export function GraphSettings({ gateway, workspaceId, localProject = false }: { 
       {readiness && !readiness.ready ? <Alert color="orange" title={readiness.state}>{readiness.reason || readiness.reason_code || 'Graph adapter is not ready.'}</Alert> : null}
       {status ? <><SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }}><Metric label="Adapter" value={`${status.adapter_name || 'unknown'} ${status.adapter_version || ''}`} /><Metric label="Revision" value={status.active_revision_id || 'Not indexed'} /><Metric label="Pending" value={`${status.pending_records} records`} /><Metric label={statusStale ? `Last known ${status.state === 'running' ? 'job' : 'queue'} age` : status.state === 'running' ? 'Job age' : 'Queue age'} value={`${status.queue_age_seconds}s`} /><Metric label="Watermark" value={String(status.indexed_watermark.sequence)} /><Metric label="Last success" value={status.last_successful_at ? new Date(status.last_successful_at).toLocaleString() : 'Never'} /><Metric label="Compatibility" value={status.compatible ? 'Supported' : 'Unsupported'} /><Metric label="Cost" value={status.cost_available ? `$${status.estimated_cost_usd.toFixed(4)}` : 'Not reported'} /></SimpleGrid>
       {status.remediation_code ? <Text size="sm" c="dimmed">Remediation: {status.remediation_code.replaceAll('_', ' ')}</Text> : null}
-      <Group>{localProject ? <Button size="xs" variant="light" disabled={busy || statusStale || !readiness?.ready || ['queued', 'running'].includes(status.state)} onClick={() => void operate('rebuild')} title={statusStale ? 'Refresh status before starting a reindex.' : !readiness?.ready ? readiness?.reason : undefined}>Reindex</Button> : status.authorized_operations.map((action) => <Button key={action} size="xs" variant={action === 'disable' ? 'outline' : 'light'} color={action === 'disable' ? 'red' : undefined} disabled={busy || statusStale || (action === 'retry' && !status.last_job_id)} onClick={() => void operate(action)}>{action === 'rebuild' ? 'Reindex' : action[0].toUpperCase() + action.slice(1)}</Button>)}<Button size="xs" variant="default" loading={busy} onClick={() => void load()}>Refresh</Button></Group></> : localProject && readiness ? <Button size="xs" variant="light" disabled={busy || !readiness.ready} title={!readiness.ready ? readiness.reason : undefined} onClick={() => void operate('rebuild')}>Reindex</Button> : null}
+      <Group>{status.authorized_operations.map((action) => <Button key={action} size="xs" variant={action === 'disable' ? 'outline' : 'light'} color={action === 'disable' ? 'red' : undefined} disabled={busy || statusStale || (action === 'retry' && !status.last_job_id)} onClick={() => void operate(action)}>{action === 'rebuild' ? 'Reindex' : action[0].toUpperCase() + action.slice(1)}</Button>)}<Button size="xs" variant="default" loading={busy} onClick={() => void load()}>Refresh</Button></Group></> : null}
     </Stack></Card>
-    {localProject ? <Alert color="gray" title={status?.active_revision_id ? 'Project graph ready' : 'No active project graph revision'}>{status?.active_revision_id ? 'The project graph is available to project-scoped retrieval. Reindex rebuilds it from the selected project database.' : 'Reindex builds the graph from this project database. Basic retrieval is unaffected.'}</Alert> : status?.active_revision_id ? <GraphExplorer gateway={gateway} workspaceId={workspaceId} /> : <Alert color="gray" title="No active graph revision">Run a rebuild after the adapter is ready. Basic retrieval is unaffected.</Alert>}
-    {localProject && gateway.getLocalProjectGraphQueue ? <ProjectGraphQueue gateway={gateway} /> : null}
+    {status?.active_revision_id ? <GraphExplorer gateway={gateway} workspaceId={workspaceId} /> : <Alert color="gray" title="No active graph revision">Run a rebuild after the adapter is ready. Basic retrieval is unaffected.</Alert>}
   </Stack>
 }
 

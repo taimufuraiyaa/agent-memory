@@ -60,15 +60,14 @@ test('workspace actions create scoped chats and saved searches', () => {
   assert.match(chatSource, /aria-label="Message this workspace"/)
 })
 
-test('both runtimes are inputs to one shell instead of separate navigation contracts', () => {
+test('the local runtime is an input to the canonical shell', () => {
   assert.match(workspaceAppSource, /DashboardRuntime/)
   assert.match(workspaceAppSource, /KnowledgeGateway/)
-  assert.doesNotMatch(workspaceAppSource, /HostedApp|<App\s/)
+  assert.doesNotMatch(workspaceAppSource, /<App\s/)
 })
 
 test('canonical shell is the only mounted workspace without changing stored data', () => {
-  assert.doesNotMatch(mainSource, /VITE_UNIFIED_WORKSPACE_ENABLED|<HostedApp|<App\s/)
+  assert.doesNotMatch(mainSource, /VITE_UNIFIED_WORKSPACE_ENABLED|<App\s/)
   assert.match(mainSource, /<WorkspaceApp runtime=\{runtime\} gateway=\{gateway\}/)
   assert.match(mainSource, /createStandaloneKnowledgeGateway/)
-  assert.match(mainSource, /<HostedWorkspaceBootstrap runtime=\{runtime\}/)
 })

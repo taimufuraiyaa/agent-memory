@@ -34,16 +34,11 @@ func NewLocalProvider(modelDir string) (*LocalProvider, error) {
 	if err := ensureModelDir(modelDir); err != nil {
 		return nil, err
 	}
-	auto := parseBoolEnv(os.Getenv("AGENT_MEMORY_MODEL_AUTODOWNLOAD"))
+	options := modelLifecycleOptionsFromEnv()
+	auto := options.AutoDownload
 	strict := parseBoolEnv(os.Getenv("AGENT_MEMORY_MODEL_STRICT"))
 	if auto || strict {
-		err := EnsureMiniLMModel(modelDir, ModelLifecycleOptions{
-			AutoDownload: auto,
-			URLs: map[string]string{
-				"model.onnx":     strings.TrimSpace(os.Getenv("AGENT_MEMORY_MINILM_ONNX_URL")),
-				"tokenizer.json": strings.TrimSpace(os.Getenv("AGENT_MEMORY_MINILM_TOKENIZER_URL")),
-			},
-		})
+		err := EnsureMiniLMModel(modelDir, options)
 		if err != nil {
 			return nil, err
 		}

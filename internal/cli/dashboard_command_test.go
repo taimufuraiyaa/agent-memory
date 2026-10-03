@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"context"
 	"net"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -13,69 +11,6 @@ import (
 
 	"github.com/spf13/cobra"
 )
-
-func TestDiscoverHostedDashboardAcceptsOnlyHostedRuntimeManifest(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/dashboard/runtime.json" {
-			t.Fatalf("unexpected discovery path %q", r.URL.Path)
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"schema":"agent-memory-dashboard-runtime-v1","mode":"hosted","api_prefix":"/v1","features":[]}`))
-	}))
-	defer server.Close()
-
-	url, ok := discoverHostedDashboard(context.Background(), server.Client(), server.URL)
-	if !ok {
-		t.Fatal("expected hosted dashboard discovery to succeed")
-	}
-	if want := server.URL + "/dashboard/"; url != want {
-		t.Fatalf("discovered URL %q, want %q", url, want)
-	}
-}
-
-func TestDiscoverHostedDashboardRejectsStandaloneAndMalformedRuntime(t *testing.T) {
-	responses := []string{
-		`{"schema":"agent-memory-dashboard-runtime-v1","mode":"standalone"}`,
-		`{"schema":"unknown","mode":"hosted"}`,
-		`not-json`,
-	}
-	for _, response := range responses {
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			_, _ = w.Write([]byte(response))
-		}))
-		if url, ok := discoverHostedDashboard(context.Background(), server.Client(), server.URL); ok || url != "" {
-			t.Fatalf("expected discovery rejection for %q, got url=%q ok=%v", response, url, ok)
-		}
-		server.Close()
-	}
-}
-
-func TestDashboardStartReusesDiscoveredHostedWebapp(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/dashboard/runtime.json" {
-			http.NotFound(w, r)
-			return
-		}
-		_, _ = w.Write([]byte(`{"schema":"agent-memory-dashboard-runtime-v1","mode":"hosted"}`))
-	}))
-	defer server.Close()
-	previousURL := localHostedDashboardBaseURL
-	localHostedDashboardBaseURL = server.URL
-	t.Cleanup(func() { localHostedDashboardBaseURL = previousURL })
-	t.Setenv("HOME", t.TempDir())
-
-	cmd := newDashboardCommand()
-	var stdout bytes.Buffer
-	cmd.SetOut(&stdout)
-	cmd.SetErr(&bytes.Buffer{})
-	cmd.SetArgs([]string{"--start", "--no-open"})
-	if err := cmd.Execute(); err != nil {
-		t.Fatalf("start dashboard: %v", err)
-	}
-	if want := server.URL + "/dashboard/\n"; stdout.String() != want {
-		t.Fatalf("dashboard output %q, want %q", stdout.String(), want)
-	}
-}
 
 func TestBuildDashboardProcessArgsOmitsWorkspaceWhenEmpty(t *testing.T) {
 	cfg := runtimeConfig{
@@ -229,26 +164,6 @@ func TestLooksLikeDashboardCommandLine(t *testing.T) {
 func TestEmbeddedDashboardWrapperUsesBundledAssets(t *testing.T) {
 	if !(&embeddedDashboardWrapper{}).hasAssets() {
 		t.Fatal("expected embedded dashboard assets to be available")
-	}
-}
-
-func TestDashboardForceLocalFlagIsAvailable(t *testing.T) {
-	command := newDashboardCommand()
-	flag := command.Flags().Lookup("force-local")
-	if flag == nil || flag.DefValue != "false" {
-		t.Fatalf("expected opt-in --force-local flag, got %#v", flag)
-	}
-}
-
-func TestDashboardForceLocalBypassesHostedDiscovery(t *testing.T) {
-	if !shouldDiscoverHostedDashboard(true, false, false) {
-		t.Fatal("background start should discover a hosted dashboard by default")
-	}
-	if shouldDiscoverHostedDashboard(true, false, true) {
-		t.Fatal("--force-local must bypass hosted dashboard discovery")
-	}
-	if shouldDiscoverHostedDashboard(true, true, false) {
-		t.Fatal("hot reload must remain local")
 	}
 }
 

@@ -1,2 +1,0 @@
-DROP TABLE IF EXISTS saas_skill_orchestrator_budget_reservations;
-DROP TABLE IF EXISTS saas_skill_orchestrator_budget_accounts;

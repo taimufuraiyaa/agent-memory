@@ -143,12 +143,8 @@ accepted for compatibility. One damaged project does not prevent healthy
 projects from upgrading in `--all` mode. `upgrade --dry-run` and
 `upgrade --hooks-only` do not touch project databases.
 
-When `am upgrade --all` builds from the configured Agent Memory source checkout
-and detects its local Docker API running, it also runs the safe `am build`
-lifecycle so service binaries cannot lag behind database migrations. Named
-volumes are preserved. A stopped or unavailable Docker stack is skipped with a
-reason. Use `--no-services-build` when container recreation is scheduled
-separately; `--hooks-only` and `--dry-run` never inspect or rebuild services.
+`am upgrade` updates the local installation and workspace hooks. The dry-run
+and hooks-only modes remain side-effect-limited and do not rebuild the dashboard.
 
 ---
 
@@ -216,7 +212,7 @@ Open one explicitly selected local workspace without starting the HTTP server or
 agent-memory tui --workspace my-project
 ```
 
-The initial terminal UI provides a workspace overview, recent-memory browsing, semantic search, memory details, loading and error states, and an in-app help screen. It is intentionally read-only except for normal retrieval telemetry recorded by semantic search. The existing React dashboard remains the interface for source ingestion, notes, graph exploration, settings, hosted mode, and other mutations.
+The initial terminal UI provides a workspace overview, recent-memory browsing, semantic search, memory details, loading and error states, and an in-app help screen. It is intentionally read-only except for normal retrieval telemetry recorded by semantic search. The existing React dashboard remains the interface for source ingestion, notes, graph exploration, settings, and other local mutations.
 
 | Key | Action |
 | --- | --- |
@@ -244,44 +240,18 @@ Missing, dirty, rebuilding, corrupt, incompatible, generation-mismatched, satura
 
 ---
 
-## Containerized Development
+## Local Development
 
-From anywhere inside an Agent Memory source checkout, use the concise lifecycle
-commands to run the hosted backend stack and the Vite frontend in containers:
+Build and test the local binary, embedded dashboard, and MCP server directly from the checkout:
 
-```bash
-# Start the API, its mandatory dependencies, and the frontend.
-am start
+~~~bash
+make build
+make test
+make integration-test
+make build-with-dashboard
+~~~
 
-# Also start the hosted worker, reconciler, and edge services.
-am start --enable-saas
-
-# Stop and remove all related containers. Named data volumes are preserved.
-am stop
-
-# Restart the API and recreate the frontend.
-am restart
-
-# Restart the complete SaaS topology in dependency order.
-am restart --enable-saas
-
-# Rebuild the API, wait for infrastructure health, then recreate dependents.
-am build
-```
-
-The default `start` and `restart` operations include the API and hot-reload
-frontend while leaving worker, reconciler, and edge services out of the
-requested lifecycle. Compose still starts the API's declared PostgreSQL,
-migration, MinIO, object-initialization, and NATS dependencies when needed.
-Use `--enable-saas` to add the hosted services. The frontend is available at
-`http://localhost:3100`. These commands use
-`deploy/saas/compose.yaml` together with
-`deploy/saas/compose.dev.yaml`; they are development-source commands and must be
-run inside this repository. Production binaries continue serving the embedded
-dashboard without Node.js.
-
----
-
+The Go binary serves the local API and embedded dashboard. The MCP server uses the same local API and exposes only local tools; set `AGENT_MEMORY_URL` when the API listens on a non-default address.
 ## Local HTTP Dashboard
 The dashboard is served locally by the Go binary (no separate servers required) and matches the core API engine path exactly:
 
@@ -313,10 +283,8 @@ For a source checkout, build the embedded dashboard and binary once with
 dashboard listens on port 3100 by default, and the production binary serves
 `/dashboard/` itself; npm is not needed at runtime.
 
-The standalone command and the hosted URL now use one embedded React webapp.
-The server publishes a small, no-store runtime manifest that selects either
-standalone SQLite workflows or hosted tenant-scoped workflows; there is no
-second hosted frontend to maintain.
+The local command uses one embedded React webapp. The server publishes a small,
+no-store runtime manifest for the standalone SQLite workflow.
 
 ### Notebook and dashboard capabilities
 
@@ -327,8 +295,8 @@ second hosted frontend to maintain.
 - **Grounded Ask**: Ask can search the active note, current workspace, or all local workspaces; citations reopen human notes, and answers can become notes only through an explicit confirmed action.
 - **System workspace**: Existing Overview, Sessions, Diagnostics, Benchmark, Lifecycle, Wiki, Feedback, Skills, raw stats, Explain Mode, Recall Preview, and Memory Advisor remain reachable under System.
 - **Per-client MCP profiles**: System → Clients registers Codex, Claude, Cursor, or custom clients and assigns Default (five workflow tools) or Expanded (adds health and session browsing). Add the displayed `AGENT_MEMORY_CLIENT_ID` value to that client's MCP environment and reconnect it. Profiles apply across all local workspaces, but each client selects its own profile.
-- **Internal infrastructure settings**: System → Infrastructure lets internal operators configure the installation-wide monthly infrastructure operations budget and its assumption status. New installations default to an assumed USD 1,000/month. The control is not available to tenants or MCP clients, and saving never deploys infrastructure or spends money.
-- **Copy-first hosted migration**: System → Migration downloads an encrypted AMPB2 copy of the selected workspace's memories and active notes. Browser migration excludes uploaded source originals and never deletes local data.
+- **Local installation settings**: System → Diagnostics exposes local runtime health and resource signals. Saving changes local configuration only.
+- **Encrypted local backup**: System → Migration downloads an encrypted AMPB2 copy of the selected workspace's memories and active notes. It excludes source originals and never deletes local data.
 - **Keyboard workflow**: Command palette, new note, global search, Ask, save, close tab, and next/previous tab shortcuts are supported with visible focus states.
 
 The notebook is enabled by default. For the one-release rollback window, build
@@ -341,81 +309,6 @@ VITE_NOTEBOOK_ENABLED=false make build-with-dashboard
 
 Rebuild without that environment variable to re-enable the notebook. The
 rollout is additive: existing memory rows require no destructive migration.
-
----
-
-## Local SaaS Service Deployment
-
-Run the complete multi-process product locally with persistent PostgreSQL,
-object storage, NATS, migration, API, worker, and reconciler services:
-
-```bash
-# Default profile: MinIO with service-specific capability policies
-make saas-local-up
-
-# Optional AWS compatibility profile: Floci 1.6.0 provides S3 locally
-make saas-floci-up
-
-# Optional managed-identity rehearsal: Floci plus ephemeral local OIDC
-make saas-floci-oidc-up
-
-# Verify the complete signup-to-account-deletion lifecycle
-make saas-upload-smoke
-
-# Run an isolated Floci alpha and publish a content-free evidence package
-make saas-local-alpha-gate
-
-# Stop either profile without deleting its named volumes
-make saas-local-down
-```
-
-Both profiles serve the hosted dashboard through the separate local edge at
-`http://localhost:58081/dashboard/`. The edge binds only to loopback, replaces
-trusted geography assertions, owns request correlation, and keeps internal
-metrics off customer ingress. The Floci profile stores its state in a separate
-volume and leaves PostgreSQL and NATS on their native local services.
-Its digest-pinned base is patched during the local build, runs as a non-root
-user with a read-only root filesystem and no Linux capabilities, and exposes
-S3 only on loopback. It is intended for functional AWS S3 compatibility; the
-MinIO profile remains the required least-privilege object-policy gate, and
-neither emulator is production release evidence. See the
-[Floci project](https://github.com/floci-io/floci) for its AWS compatibility
-scope.
-
-To migrate from the standalone dashboard, download an encrypted copy from
-System → Migration. In the hosted dashboard, connect an authorized tenant and
-workspace, then use **Import standalone migration** with that `.ampb2` file and
-its passphrase. Imports are manifest-verified, resumable, and idempotent. Retry
-the same selected file without changing it to reuse the same request key; keep
-the standalone database until the hosted counts have been verified.
-
-The OIDC profile keeps the same edge URL and exposes its loopback-only provider
-on port `58082`. It exercises the production discovery/JWKS verifier with one
-fixed synthetic identity and ephemeral signing keys. It is opt-in; restoring
-`make saas-floci-up` removes the provider and returns to development identity.
-This rehearsal is not evidence of a managed identity provider, production key
-custody, MFA, recovery policy, staging, or production readiness.
-
-The alpha gate creates a separate Compose project with dynamic loopback ports
-and temporary volumes, so it does not mutate the persistent local product. It
-exercises OIDC authentication and rotation/outage recovery, runtime trust-secret
-rotation and failed-configuration rollback, scratch-only operator break-glass,
-lifecycle, retrieval parity, a two-tenant isolation/timing corpus, bounded
-concurrent retrieval load, credential-abuse detection and revocation, a
-production-adapter model-provider outage, explicit source/account deletion
-evidence, scratch-database backup/restore,
-deployment contracts, runtime hardening, image vulnerability scans, and real
-PostgreSQL/NATS/Floci impairment and recovery. API readiness checks all three
-dependencies while liveness remains process-only. Passed manifests, receipts,
-archives, and SHA-256 sidecars are written under
-`.local/evidence/`; they are classified as local development evidence and do
-not replace staging or accountable-owner approval.
-
-For internally operated staging and production, the repository also provides a
-provider-neutral inventory → plan → apply/drift → production exposure evidence
-chain. The final receipt binds private firewall and external reachability
-artifacts by SHA-256 without putting network addresses or scanner output in
-Git. See the [production private-authority exposure runbook](docs/saas/production-private-authority-exposure.md).
 
 ---
 

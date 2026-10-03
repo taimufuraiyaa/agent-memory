@@ -1,1 +1,0 @@
-DROP TABLE IF EXISTS saas_skill_orchestrator_reconciliation_partitions;

@@ -18,7 +18,6 @@ import (
 	"github.com/taimufuraiyaa/agent-memory/internal/application"
 	"github.com/taimufuraiyaa/agent-memory/internal/attestation"
 	"github.com/taimufuraiyaa/agent-memory/internal/clientprofile"
-	"github.com/taimufuraiyaa/agent-memory/internal/deploymentprofile"
 	"github.com/taimufuraiyaa/agent-memory/internal/embeddings"
 	"github.com/taimufuraiyaa/agent-memory/internal/engine"
 	"github.com/taimufuraiyaa/agent-memory/internal/localllm"
@@ -42,7 +41,6 @@ type Service struct {
 	RightsAttestationStore *attestation.SQLiteStore
 	RightsSubjectResolver  func(*http.Request) (string, error)
 	ClientProfiles         *clientprofile.Store
-	DeploymentProfile      *deploymentprofile.Store
 	LocalLLMStore          *localllm.Store
 	LocalLLMChecker        *localllm.Checker
 	// GraphOperations is optional and primarily supports embedding/tests. When
@@ -260,7 +258,6 @@ func NewMux(svc *Service) *http.ServeMux {
 	mux.HandleFunc("/api/v1/capabilities", capabilitiesHandler())
 	mux.HandleFunc("/api/v1/client-profiles", clientProfilesHandler(svc))
 	mux.HandleFunc("/api/v1/client-profiles/", clientProfileHandler(svc))
-	mux.HandleFunc("/api/v1/deployment-profile", deploymentProfileHandler(svc))
 	mux.HandleFunc("/ops/dashboard", opsDashboardHandler(svc))
 	mux.HandleFunc("/api/v1/scheduler/status", schedulerStatusHandler(svc))
 	mux.HandleFunc("/api/v1/scheduler/history", schedulerHistoryHandler(svc))
@@ -475,8 +472,22 @@ func serveWorkspaceDashboard() http.Handler {
 		}
 		clone := r.Clone(r.Context())
 		urlCopy := *r.URL
-		urlCopy.Path = "/"
+		urlCopy.Path = workspaceDashboardAssetPath(r.URL.Path)
 		clone.URL = &urlCopy
 		assets.ServeHTTP(w, clone)
 	})
+}
+
+func workspaceDashboardAssetPath(requestPath string) string {
+	const workspacePrefix = "/w/"
+	rest := strings.TrimPrefix(requestPath, workspacePrefix)
+	workspaceEnd := strings.IndexByte(rest, '/')
+	if workspaceEnd < 0 {
+		return "/"
+	}
+	suffix := rest[workspaceEnd:]
+	if strings.HasPrefix(suffix, "/assets/") {
+		return suffix
+	}
+	return "/"
 }

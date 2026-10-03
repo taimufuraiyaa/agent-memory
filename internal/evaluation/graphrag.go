@@ -22,7 +22,7 @@ type GraphRAGCorpus struct {
 type GraphRAGCase struct {
 	ID                          string          `json:"id"`
 	Topology                    string          `json:"topology"`
-	Tenant                      string          `json:"tenant"`
+	Scope                       string          `json:"scope"`
 	Language                    string          `json:"language"`
 	Scenario                    string          `json:"scenario"`
 	Episode                     string          `json:"episode"`
@@ -146,12 +146,12 @@ func validateGraphRAGCorpus(corpus GraphRAGCorpus) error {
 	if corpus.Schema != GraphRAGCorpusSchemaV1 || corpus.ApprovedCostMicroUSD < 1 || len(corpus.Cases) < 11 {
 		return errors.New("GraphRAG evaluation corpus identity, budget, or coverage is invalid")
 	}
-	requiredTopologies := stringSet([]string{"standalone", "self-managed-a", "self-managed-b", "hosted-a", "hosted-b"})
+	requiredTopologies := stringSet([]string{"standalone"})
 	requiredScenarios := stringSet([]string{"direct", "relational", "global", "contradiction", "ambiguity", "deletion", "cache_hit", "provider_failure", "multilingual", "adversarial", "large_corpus"})
 	seenIDs, topologies, scenarios, languages := map[string]struct{}{}, map[string]struct{}{}, map[string]struct{}{}, map[string]struct{}{}
 	episodesByTopology := map[string]map[string]struct{}{}
 	for _, evaluationCase := range corpus.Cases {
-		if strings.TrimSpace(evaluationCase.ID) == "" || strings.TrimSpace(evaluationCase.Tenant) == "" || !slices.Contains([]string{"day1", "day10"}, evaluationCase.Episode) || !slices.Contains([]string{"direct", "relational", "global"}, evaluationCase.Category) || len(evaluationCase.GoldIDs) == 0 || !evaluationCase.BasicAvailable || !evaluationCase.ShadowOnly || evaluationCase.BasicLatencyMicroseconds < 1 || evaluationCase.ShadowBasicLatencyMicros < 1 || evaluationCase.GraphSelectionLatencyMicros < 0 || evaluationCase.CostMicroUSD < 0 {
+		if strings.TrimSpace(evaluationCase.ID) == "" || strings.TrimSpace(evaluationCase.Scope) == "" || !slices.Contains([]string{"day1", "day10"}, evaluationCase.Episode) || !slices.Contains([]string{"direct", "relational", "global"}, evaluationCase.Category) || len(evaluationCase.GoldIDs) == 0 || !evaluationCase.BasicAvailable || !evaluationCase.ShadowOnly || evaluationCase.BasicLatencyMicroseconds < 1 || evaluationCase.ShadowBasicLatencyMicros < 1 || evaluationCase.GraphSelectionLatencyMicros < 0 || evaluationCase.CostMicroUSD < 0 {
 			return fmt.Errorf("GraphRAG evaluation case %q is incomplete", evaluationCase.ID)
 		}
 		if _, duplicate := seenIDs[evaluationCase.ID]; duplicate {
@@ -163,10 +163,10 @@ func validateGraphRAGCorpus(corpus GraphRAGCorpus) error {
 			episodesByTopology[evaluationCase.Topology] = map[string]struct{}{}
 		}
 		episodesByTopology[evaluationCase.Topology][evaluationCase.Episode] = struct{}{}
-		prefix := evaluationCase.Tenant + ":"
+		prefix := evaluationCase.Scope + ":"
 		for _, id := range append(append(append([]string{}, evaluationCase.GoldIDs...), evaluationCase.BasicIDs...), append(evaluationCase.GraphIDs, evaluationCase.AuthorizedEvidenceIDs...)...) {
 			if !strings.HasPrefix(id, prefix) {
-				return fmt.Errorf("GraphRAG case %q crosses tenant scope", evaluationCase.ID)
+				return fmt.Errorf("GraphRAG case %q crosses local scope", evaluationCase.ID)
 			}
 		}
 		for _, deleted := range evaluationCase.DeletedIDs {

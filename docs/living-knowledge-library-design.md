@@ -371,7 +371,7 @@ Always:
 
 Ask first:
 
-- introduce external parsers or hosted model providers
+- introduce external parsers or remote model providers
 - change source retention defaults
 - enable automatic durable retention for users or organizations
 - make breaking API or destructive schema changes
