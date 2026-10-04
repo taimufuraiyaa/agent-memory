@@ -212,17 +212,36 @@ Open one explicitly selected local workspace without starting the HTTP server or
 agent-memory tui --workspace my-project
 ```
 
-The initial terminal UI provides a workspace overview, recent-memory browsing, semantic search, memory details, loading and error states, and an in-app help screen. It is intentionally read-only except for normal retrieval telemetry recorded by semantic search. The existing React dashboard remains the interface for source ingestion, notes, graph exploration, settings, and other local mutations.
+The terminal UI provides a workspace overview, recent-memory browsing, semantic search, memory details, loading and error states, an in-app help screen, and local Jev access-token setup. Memory browsing remains read-only except for normal retrieval telemetry recorded by semantic search. The existing React dashboard remains the interface for source ingestion, notes, graph exploration, settings, and other local mutations.
+
+For Claude Code, `agent-memory connect claude-code --workspace <name> --root <project>` installs a project `/am` skill alongside the existing MCP server and lifecycle hooks. In Claude Code, run `/am listen` for bounded local Agent Memory recall, or `/am listen all` to opt into both local recall and Jev advice. `/am listen status` reports both; `/am listen off` stops both. The CLI equivalents are `agent-memory listen on [--jev]|status|off --workspace <name>`. Keep the local Agent Memory service running. The listener is off by default and only emits context when the hook's working directory is inside the registered project. Plain listen never initiates Jev consent, and actual model switching requires host integration.
+
+On the Jev screen, press `s` to set or replace the token and `x` then `y` to remove it. Entry is hidden. The token is stored only for the local user in `~/.agent-memory/credentials/jev-access-token` (private directory and file); it is not a workspace setting. “Configured” reports presence, not successful authentication with Jev. The TypeSafe decision adapter validates access only when explicitly enabled; full harness model/tool execution is separate work. For a confident `/am listen all` choice, the synchronous Claude `UserPromptSubmit` hook also shows a `[Jev] Recommended ... Model not switched.` message; without a model catalog it names a reasoning tier, not a model. No status is shown for failed or low-confidence choices.
+
+In a connected Claude Code project, `/am listen all` explicitly opts into sending a bounded, redacted prompt and local project skill names/descriptions to TypeSafe for advisory task-complexity and skill choices. It requires a configured token and verified Jev access; failed verification leaves the listener state unchanged. `/am listen off` stops both local recall and Jev egress; `/am listen status` shows separate `jev_enabled` and live `jev_decisions_ready` states. `/am jev on|off` and CLI `listen jev-on|jev-off` remain compatibility controls for Jev alone. Jev results do not switch Claude's main-session model, load skills automatically, or authorize tool actions. See the [TypeSafe System One API contract](https://api.typesafe.ai/openapi.json).
+
+To let Jev choose a specific model, create `~/.agent-memory/model-catalog.json` as a private (`0600`) user-owned file. Its version-1 `hosts` object may contain `claude` and `chatgpt`, each with two to sixteen `id`/`description` candidates. For example:
+
+```json
+{"version":1,"hosts":{"claude":[{"id":"claude-sonnet-5-5","description":"Balanced coding work"},{"id":"claude-opus-5-5","description":"Complex, long-running work"}],"chatgpt":[{"id":"gpt-6-luna","description":"Fast, scoped app tasks"},{"id":"gpt-6.1-sol","description":"Complex app tasks"}],"openai_api":[{"id":"gpt-6-luna","description":"Fast API tasks"},{"id":"gpt-6.1-sol","description":"Complex API tasks"}]}}
+```
+
+These are example identifiers from the [Claude model catalog](https://platform.claude.com/docs/en/models/overview) and [official OpenAI documentation](https://developers.openai.com/api/docs/models/all), **not** an entitlement check. Configure only models available to your account and host. With `/am listen all`, the Claude prompt hook asks Jev to choose from the Claude entries instead of a generic complexity tier and presents the exact choice as advice. Separately, when Claude invokes an `Agent` subtask, the managed `PreToolUse` hook asks Jev about that bounded, redacted subtask and replaces only the Agent call's `model` field with a confident Claude-catalog choice. It does not change the main session or bypass Claude Code's tool permissions. Missing catalog, Jev failure, or low confidence leaves the original Agent call unchanged. The hook reports the requested subagent model; Claude Code may substitute another allowed model, and its Agent tool result's `resolvedModel` is the actual host observation. This adds a Jev request to the subagent-start critical path; latency and cost improvements are unproven until measured. A local ChatGPT/OpenAI-side dispatcher can request a one-shot recommendation by piping the task into `agent-memory model-choice --workspace <name> --host chatgpt --allow-jev` from the registered project. The command returns a validated candidate ID and `model_switched:false`; it does not change an existing ChatGPT conversation or call the OpenAI API. Without a catalog, Claude retains the complexity-tier advisory and the one-shot command returns no choice. The task and candidate descriptions leave the machine only after the explicit Jev opt-in or one-shot flag.
+
+The `chatgpt` catalog and project [jev-model-router skill](.agents/skills/jev-model-router/SKILL.md) support the ChatGPT app as a recommendation; apply the choice in its model picker if available. The separate `openai_api` catalog supports a bounded, text-only API execution path: set `OPENAI_API_KEY`, then pipe one task into `agent-memory model-run --workspace <name> --allow-jev --allow-openai-api` from the registered project. The command probes access to Jev's selected model and creates one [OpenAI Responses request](https://developers.openai.com/api/reference/cli/resources/responses/methods/create) with `store:false`, no tools, a 512-token default output cap, and no retry. Both the task and model candidates go to TypeSafe; the redacted task also goes to OpenAI. This may incur API charges. It does not change any existing ChatGPT chat, run a coding-agent tool loop, or infer API access from a ChatGPT subscription.
+
+Interactive `agent-memory install` also offers an optional masked Jev token prompt after setup. Interactive `agent-memory upgrade` offers it after a successful upgrade only when no token is configured. Answer `y` to approve or press Enter to skip. Existing tokens are never replaced by upgrade; non-interactive, JSON, dry-run, and hooks-only runs do not prompt. The TUI remains the place to replace or remove a token later.
 
 | Key | Action |
 | --- | --- |
-| `Tab` / `Shift-Tab`, `1` / `2` / `3` | Switch between Home, Search, and Browse |
+| `Tab` / `Shift-Tab`, `1` / `2` / `3` / `4` | Switch between Home, Search, Browse, and Jev |
 | `/` | Focus search input |
 | `Enter` | Run a search or open the selected memory |
 | Arrow keys or `j` / `k` | Move through results and detail content |
 | `g` / `G` | Jump to the start or end |
 | `r` | Refresh the current view |
 | `Esc` | Leave search input, detail, or help |
+| `s` / `x` on Jev | Set/replace or request removal of the token |
 | `?` | Toggle help |
 | `q` or `Ctrl-C` | Quit |
 

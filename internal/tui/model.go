@@ -14,6 +14,7 @@ const (
 	DestinationHome   Destination = "home"
 	DestinationSearch Destination = "search"
 	DestinationBrowse Destination = "browse"
+	DestinationJev    Destination = "jev"
 )
 
 type Overview struct {
@@ -54,9 +55,16 @@ type Backend interface {
 	Search(context.Context, string, int) ([]MemoryItem, error)
 }
 
+type JevCredentialStore interface {
+	Configured(context.Context) (bool, error)
+	Save(context.Context, string) error
+	Clear(context.Context) error
+}
+
 type Model struct {
 	workspace          string
 	backend            Backend
+	jevCredentials     JevCredentialStore
 	context            context.Context
 	destination        Destination
 	query              string
@@ -82,6 +90,15 @@ type Model struct {
 	detail             *MemoryItem
 	detailParent       Destination
 	detailScroll       int
+	jevConfigured      bool
+	jevLoading         bool
+	jevBusy            bool
+	jevError           string
+	jevNotice          string
+	jevInput           bool
+	jevDraft           string
+	jevConfirmClear    bool
+	jevGeneration      int
 }
 
 const browseLimit = 100
@@ -111,14 +128,19 @@ func NewModel(workspace string, backend Backend) Model {
 }
 
 func NewModelWithContext(ctx context.Context, workspace string, backend Backend) Model {
+	return NewModelWithCredentials(ctx, workspace, backend, nil)
+}
+
+func NewModelWithCredentials(ctx context.Context, workspace string, backend Backend, credentials JevCredentialStore) Model {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	model := Model{
-		workspace:   sanitizeTerminalText(strings.TrimSpace(workspace), false),
-		backend:     backend,
-		context:     ctx,
-		destination: DestinationHome,
+		workspace:      sanitizeTerminalText(strings.TrimSpace(workspace), false),
+		backend:        backend,
+		jevCredentials: credentials,
+		context:        ctx,
+		destination:    DestinationHome,
 	}
 	if backend != nil {
 		model.overviewLoading = true
@@ -126,17 +148,25 @@ func NewModelWithContext(ctx context.Context, workspace string, backend Backend)
 		model.overviewGeneration = 1
 		model.browseGeneration = 1
 	}
+	if credentials != nil {
+		model.jevLoading = true
+		model.jevGeneration = 1
+	}
 	return model
 }
 
 func (m Model) Init() tea.Cmd {
-	if m.backend == nil {
+	var commands []tea.Cmd
+	if m.backend != nil {
+		commands = append(commands, loadOverviewCmd(m.context, m.backend, m.overviewGeneration), loadRecentCmd(m.context, m.backend, m.browseGeneration))
+	}
+	if m.jevCredentials != nil {
+		commands = append(commands, loadJevStatusCmd(m.context, m.jevCredentials, m.jevGeneration))
+	}
+	if len(commands) == 0 {
 		return nil
 	}
-	return tea.Batch(
-		loadOverviewCmd(m.context, m.backend, m.overviewGeneration),
-		loadRecentCmd(m.context, m.backend, m.browseGeneration),
-	)
+	return tea.Batch(commands...)
 }
 
 func loadOverviewCmd(ctx context.Context, backend Backend, generation int) tea.Cmd {
@@ -194,6 +224,34 @@ func (m Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		m.searchItems = append([]MemoryItem(nil), loaded.items...)
 		m.searchCursor = clampCursor(m.searchCursor, len(m.searchItems))
 		return m, nil
+	case jevStatusMsg:
+		if loaded.generation != m.jevGeneration {
+			return m, nil
+		}
+		m.jevLoading = false
+		if loaded.err != nil {
+			m.jevError = "Cannot read local Jev credential status."
+		} else {
+			m.jevConfigured = loaded.configured
+			m.jevError = ""
+		}
+		return m, nil
+	case jevMutationMsg:
+		m.jevBusy = false
+		m.jevLoading = false
+		if loaded.err != nil {
+			m.jevError = "Jev credential change failed; check local permissions."
+			m.jevNotice = ""
+		} else {
+			m.jevConfigured = loaded.configured
+			m.jevError = ""
+			if loaded.configured {
+				m.jevNotice = "Jev token saved."
+			} else {
+				m.jevNotice = "Jev token removed."
+			}
+		}
+		return m, nil
 	}
 	if size, ok := message.(tea.WindowSizeMsg); ok {
 		m.width = size.Width
@@ -236,6 +294,9 @@ func (m Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			m.detailScroll = int(^uint(0) >> 1)
 		}
 		return m, nil
+	}
+	if next, command, handled := m.updateJevKey(key); handled {
+		return next, command
 	}
 	if m.searchFocused {
 		switch pressed {
@@ -280,6 +341,8 @@ func (m Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		m.destination = DestinationSearch
 	case "3":
 		m.destination = DestinationBrowse
+	case "4":
+		m.destination = DestinationJev
 	case "up", "k":
 		if m.destination == DestinationBrowse && m.browseCursor > 0 {
 			m.browseCursor--
@@ -346,6 +409,13 @@ func (m Model) refresh() (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		return m.startSearch(query)
+	case DestinationJev:
+		if m.jevCredentials == nil {
+			return m, nil
+		}
+		m.jevLoading = true
+		m.jevGeneration++
+		return m, loadJevStatusCmd(m.context, m.jevCredentials, m.jevGeneration)
 	default:
 		return m, nil
 	}
@@ -384,6 +454,8 @@ func nextDestination(current Destination) Destination {
 		return DestinationSearch
 	case DestinationSearch:
 		return DestinationBrowse
+	case DestinationBrowse:
+		return DestinationJev
 	default:
 		return DestinationHome
 	}
@@ -392,9 +464,11 @@ func nextDestination(current Destination) Destination {
 func previousDestination(current Destination) Destination {
 	switch current {
 	case DestinationHome:
-		return DestinationBrowse
+		return DestinationJev
 	case DestinationBrowse:
 		return DestinationSearch
+	case DestinationJev:
+		return DestinationBrowse
 	default:
 		return DestinationHome
 	}

@@ -349,6 +349,11 @@ configure environment variables, and initialize the current directory as a proje
 				}
 			}
 
+			if shouldPromptJevSetup(inputTerminal, outputTerminal, "text", noTUI, false) {
+				if err := runInteractiveJevSetup(cmd.Context(), dataDir, inputFile, errOut); err != nil {
+					return fmt.Errorf("Jev onboarding after installation: %w", err)
+				}
+			}
 			fmt.Fprintln(errOut, "\n✓ Installation and rules setup complete!")
 			return nil
 		},

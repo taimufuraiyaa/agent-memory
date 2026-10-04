@@ -83,8 +83,9 @@ pnpm-debug.log*
 all-MiniLM-L6-v2/
 models/
 
-# Kiro specs (project-specific)
-.kiro/specs/
+# Kiro specs (project-specific); keep the Jev harness implementation spec.
+.kiro/specs/*
+!.kiro/specs/jev-harness/
 
 # OS files
 .DS_Store

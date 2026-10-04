@@ -9,12 +9,14 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/taimufuraiyaa/agent-memory/internal/validation"
 	"github.com/taimufuraiyaa/agent-memory/internal/workspace"
 )
 
 type ClaudeAdapter struct{}
 
 const claudeHookMarker = "agent-memory managed hook"
+const claudeSkillMarker = "agent-memory managed Claude skill"
 
 func NewClaudeAdapter() ClaudeAdapter { return ClaudeAdapter{} }
 func (ClaudeAdapter) Name() string    { return "claude-code" }
@@ -32,6 +34,9 @@ func (ClaudeAdapter) Plan(_ context.Context, options Options) (Result, error) {
 }
 
 func (ClaudeAdapter) Connect(_ context.Context, options Options) (Result, error) {
+	if err := validation.ValidateWorkspaceName(options.Workspace); err != nil {
+		return Result{}, err
+	}
 	path := filepath.Join(options.Root, ".mcp.json")
 	root, err := readJSONObject(path)
 	if err != nil {
@@ -58,6 +63,9 @@ func (ClaudeAdapter) Connect(_ context.Context, options Options) (Result, error)
 	if err := workspace.WriteManagedProjectRule(filepath.Join(options.Root, "CLAUDE.md"), options.Workspace, options.Force); err != nil {
 		return Result{}, err
 	}
+	if err := writeClaudeSkill(options.Root, options.Workspace); err != nil {
+		return Result{}, err
+	}
 	verified, err := verifyClaude(options.Root, true)
 	return Result{Agent: "claude-code", Applied: claudePaths(options.Root), Verified: verified}, err
 }
@@ -79,6 +87,9 @@ func (ClaudeAdapter) Disconnect(_ context.Context, options Options) (Result, err
 		return Result{}, err
 	}
 	if err := workspace.RemoveManagedProjectRule(filepath.Join(options.Root, "CLAUDE.md")); err != nil {
+		return Result{}, err
+	}
+	if err := removeClaudeSkill(options.Root); err != nil {
 		return Result{}, err
 	}
 	verified, err := verifyClaude(options.Root, false)
@@ -134,11 +145,66 @@ func verifyClaude(rootPath string, connected bool) (bool, error) {
 	hasHooks := strings.Contains(fmt.Sprint(settings["hooks"]), claudeHookMarker)
 	rules, readErr := os.ReadFile(filepath.Join(rootPath, "CLAUDE.md"))
 	hasContract := readErr == nil && strings.Contains(string(rules), workspace.MemoryContractMarker)
-	return exists == connected && hasHooks == connected && hasContract == connected, nil
+	skill, skillErr := os.ReadFile(claudeSkillPath(rootPath))
+	hasSkill := skillErr == nil && strings.Contains(string(skill), claudeSkillMarker)
+	return exists == connected && hasHooks == connected && hasContract == connected && hasSkill == connected, nil
 }
 
 func claudePaths(root string) []string {
-	return []string{filepath.Join(root, ".mcp.json"), filepath.Join(root, ".claude", "settings.json"), filepath.Join(root, "CLAUDE.md")}
+	return []string{filepath.Join(root, ".mcp.json"), filepath.Join(root, ".claude", "settings.json"), filepath.Join(root, "CLAUDE.md"), claudeSkillPath(root)}
+}
+
+func claudeSkillPath(root string) string {
+	return filepath.Join(root, ".claude", "skills", "am", "SKILL.md")
+}
+
+func writeClaudeSkill(root, workspaceName string) error {
+	path := claudeSkillPath(root)
+	if existing, err := os.ReadFile(path); err == nil {
+		if !strings.Contains(string(existing), claudeSkillMarker) {
+			return fmt.Errorf("Claude /am skill already exists and is not managed by agent-memory: %s", path)
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	content := fmt.Sprintf(`---
+name: am
+description: Control Agent Memory's opt-in Claude Code prompt listener
+disable-model-invocation: true
+---
+
+<!-- %s -->
+
+Interpret $ARGUMENTS strictly:
+- "listen" or "listen on": run `+"`agent-memory listen on --workspace %s`"+`.
+- "listen all": this explicitly opts into sending bounded, redacted future prompts and project skill names/descriptions to TypeSafe Jev as well as local recall. Run `+"`agent-memory listen on --jev --workspace %s`"+` only for this explicit form.
+- "listen off": run `+"`agent-memory listen off --workspace %s`"+`.
+- "listen status": run `+"`agent-memory listen status --workspace %s`"+`.
+- "jev on": compatibility alias for enabling Jev on an already-running local listener; explain remote prompt egress, then run `+"`agent-memory listen jev-on --workspace %s`"+` only if explicitly requested.
+- "jev off": compatibility alias for stopping only Jev advice; run `+"`agent-memory listen jev-off --workspace %s`"+`.
+- For anything else, explain the supported forms; do not run a command.
+
+Report the command result. Plain listen is local-only unless Jev was already separately enabled; listen off stops both. With Jev listening and a private Claude model catalog, Agent Memory may route Claude Code Agent subtask calls to Jev's selected model. It does not switch the main session, automatically load another skill, or authorize an action.
+`, claudeSkillMarker, workspaceName, workspaceName, workspaceName, workspaceName, workspaceName, workspaceName)
+	return os.WriteFile(path, []byte(content), 0o644)
+}
+
+func removeClaudeSkill(root string) error {
+	path := claudeSkillPath(root)
+	content, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if !strings.Contains(string(content), claudeSkillMarker) {
+		return nil
+	}
+	return os.Remove(path)
 }
 
 func writeClaudeHooks(path, workspaceName string) error {
@@ -160,7 +226,13 @@ func writeClaudeHooks(path, workspaceName string) error {
 			}
 		}
 		command := fmt.Sprintf("agent-memory hook --event %s --agent claude-code --workspace %s # %s | %s", event, workspaceName, claudeHookMarker, workspace.MemoryContractMarker)
-		kept = append(kept, map[string]any{"hooks": []any{map[string]any{"type": "command", "command": command, "timeout": 2}}})
+		timeout := 2
+		if event == "UserPromptSubmit" {
+			timeout = 7 // observe, local recall, and optional Jev each have deadlines
+		} else if event == "PreToolUse" {
+			timeout = 4 // Agent subtasks may make one bounded Jev decision
+		}
+		kept = append(kept, map[string]any{"hooks": []any{map[string]any{"type": "command", "command": command, "timeout": timeout}}})
 		hooksMap[event] = kept
 	}
 	return writeJSONObject(path, root)

@@ -12,14 +12,16 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/taimufuraiyaa/agent-memory/internal/embeddings"
+	"github.com/taimufuraiyaa/agent-memory/internal/jevconfig"
 	"github.com/taimufuraiyaa/agent-memory/internal/storage/sqlite"
 	memorytui "github.com/taimufuraiyaa/agent-memory/internal/tui"
 )
 
 type tuiCommandDependencies struct {
-	isTerminal func(any) bool
-	open       func(context.Context, runtimeConfig) (*sqlite.Store, embeddings.Provider, error)
-	run        func(context.Context, io.Reader, io.Writer, memorytui.Model) (tea.Model, error)
+	isTerminal  func(any) bool
+	open        func(context.Context, runtimeConfig) (*sqlite.Store, embeddings.Provider, error)
+	run         func(context.Context, io.Reader, io.Writer, memorytui.Model) (tea.Model, error)
+	credentials func() memorytui.JevCredentialStore
 }
 
 func defaultTUICommandDependencies() tuiCommandDependencies {
@@ -29,6 +31,9 @@ func defaultTUICommandDependencies() tuiCommandDependencies {
 			return ok && term.IsTerminal(file.Fd())
 		},
 		open: openDeps,
+		credentials: func() memorytui.JevCredentialStore {
+			return jevconfig.NewTokenStore(defaultAgentMemoryDataDir())
+		},
 		run: func(ctx context.Context, input io.Reader, output io.Writer, model memorytui.Model) (tea.Model, error) {
 			return tea.NewProgram(
 				model,
@@ -77,7 +82,11 @@ func newTUICommandWithDependencies(dependencies tuiCommandDependencies) *cobra.C
 				return errors.New("the TUI runtime returned incomplete dependencies")
 			}
 			backend := newLocalTUIBackend(store, provider, config.workspace)
-			model := memorytui.NewModelWithContext(command.Context(), config.workspace, backend)
+			var credentials memorytui.JevCredentialStore
+			if dependencies.credentials != nil {
+				credentials = dependencies.credentials()
+			}
+			model := memorytui.NewModelWithCredentials(command.Context(), config.workspace, backend, credentials)
 			_, runErr := dependencies.run(command.Context(), input, output, model)
 			closeErr := store.Close()
 			if runErr != nil {

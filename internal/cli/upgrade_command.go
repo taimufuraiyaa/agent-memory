@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/x/term"
 	"github.com/spf13/cobra"
 
 	"github.com/taimufuraiyaa/agent-memory/internal/workspace"
@@ -708,6 +709,14 @@ A source-backed --all upgrade also refreshes the local dashboard when requested.
 				} else if updated {
 					res.EnvFile = envPath
 					res.EnvUpdated = true
+				}
+			}
+
+			inputFile, inputIsFile := cmd.InOrStdin().(*os.File)
+			outputFile, outputIsFile := cmd.ErrOrStderr().(*os.File)
+			if inputIsFile && outputIsFile && shouldPromptJevSetup(term.IsTerminal(inputFile.Fd()), term.IsTerminal(outputFile.Fd()), f, dryRun, hooksOnly) {
+				if err := runInteractiveJevSetup(cmd.Context(), defaultAgentMemoryDataDir(), inputFile, outputFile); err != nil {
+					return fmt.Errorf("Jev onboarding after upgrade: %w", err)
 				}
 			}
 

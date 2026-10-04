@@ -71,6 +71,9 @@ func (m Model) renderWorkspace(width, height int) string {
 	case DestinationBrowse:
 		lines = append(lines, accentStyle.Render("Recent memories"), "")
 		lines = append(lines, m.renderBrowse(height-len(lines)-2)...)
+	case DestinationJev:
+		lines = append(lines, accentStyle.Render("Jev access token"), "")
+		lines = append(lines, m.renderJev()...)
 	default:
 		lines = append(lines, accentStyle.Render("Workspace overview"), "")
 		lines = append(lines, m.renderOverview()...)
@@ -146,6 +149,39 @@ func (m Model) renderOverview() []string {
 		"",
 		"Types     " + renderCounts(m.overview.TypeCounts),
 		"Tiers     " + renderCounts(m.overview.TierCounts),
+	}
+	return lines
+}
+
+func (m Model) renderJev() []string {
+	if m.jevCredentials == nil {
+		return []string{mutedStyle.Render("Local Jev credential setup is unavailable.")}
+	}
+	if m.jevLoading {
+		return []string{mutedStyle.Render("Checking local credential status…")}
+	}
+	status := "Not configured"
+	if m.jevConfigured {
+		status = "Configured (not verified with Jev)"
+	}
+	lines := []string{"Status  " + status, "", mutedStyle.Render("Stored locally for this user. No connection test is available yet."), ""}
+	if m.jevInput {
+		lines = append(lines, "Token   [hidden input]", mutedStyle.Render("Type or paste token · Enter Save · Esc Cancel"))
+	} else if m.jevConfirmClear {
+		lines = append(lines, errorStyle.Render("Remove the saved Jev token?"), "y Confirm · any other key Cancel")
+	} else if m.jevBusy {
+		lines = append(lines, mutedStyle.Render("Updating local credential…"))
+	} else {
+		lines = append(lines, "s Set or replace token")
+		if m.jevConfigured {
+			lines = append(lines, "x Remove token")
+		}
+	}
+	if m.jevError != "" {
+		lines = append(lines, "", errorStyle.Render(m.jevError))
+	}
+	if m.jevNotice != "" {
+		lines = append(lines, "", mutedStyle.Render(m.jevNotice))
 	}
 	return lines
 }
@@ -281,6 +317,7 @@ func (m Model) renderNavigation() string {
 		{DestinationHome, "1 Home"},
 		{DestinationSearch, "2 Search"},
 		{DestinationBrowse, "3 Browse"},
+		{DestinationJev, "4 Jev"},
 	}
 	parts := make([]string, 0, len(items))
 	for _, item := range items {
@@ -298,13 +335,14 @@ func (m Model) renderHelp(width, height int) string {
 	lines := []string{
 		accentStyle.Render("Keyboard help"),
 		mutedStyle.Render(strings.Repeat("─", width)),
-		"Tab / Shift-Tab  Switch Home, Search, and Browse",
-		"1 / 2 / 3        Open Home, Search, or Browse",
+		"Tab / Shift-Tab  Switch Home, Search, Browse, and Jev",
+		"1 / 2 / 3 / 4    Open Home, Search, Browse, or Jev",
 		"/                Focus Search input",
 		"↑ / ↓ or j / k   Move through a list or detail",
 		"Enter            Search or open selected memory",
 		"Esc              Close input, detail, or help",
 		"r                Refresh the active destination",
+		"s / x            Set or remove Jev token on Jev screen",
 		"?                Toggle this help",
 		"q / Ctrl-C       Quit",
 	}
