@@ -182,6 +182,9 @@ type EvidenceRef struct {
 	ID       string
 	Revision string
 	Class    string
+	// Note is a bounded, redacted line of project-derived text. Only decision questions of an
+	// internal data class carry one; everywhere else it is empty.
+	Note string
 }
 
 type DecisionQuestion struct {

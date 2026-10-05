@@ -232,15 +232,18 @@ func TestSessionBoundsRequestsBeforeAnyProviderWork(t *testing.T) {
 		refs[i] = harness.EvidenceRef{ID: "chunk"}
 	}
 	for name, q := range map[string]harness.DecisionQuestion{
-		"no candidates":       {Envelope: envelope, Kind: "visibility"},
-		"too many":            {Envelope: envelope, Kind: "visibility", Candidates: many},
-		"duplicate":           {Envelope: envelope, Kind: "visibility", Candidates: []string{"a", "a"}},
-		"oversized":           {Envelope: envelope, Kind: "visibility", Candidates: []string{strings.Repeat("x", harness.MaxFieldBytes+1)}},
-		"control character":   {Envelope: envelope, Kind: "visibility", Candidates: []string{"a\x00b"}},
-		"invalid UTF-8":       {Envelope: envelope, Kind: "visibility", Candidates: []string{"\xff\xfe"}},
-		"bad kind":            {Envelope: envelope, Kind: "Not A Kind", Candidates: []string{"a"}},
-		"too much evidence":   {Envelope: envelope, Kind: "visibility", Candidates: []string{"a"}, Evidence: refs},
-		"evidence without ID": {Envelope: envelope, Kind: "visibility", Candidates: []string{"a"}, Evidence: []harness.EvidenceRef{{}}},
+		"no candidates":           {Envelope: envelope, Kind: "visibility"},
+		"too many":                {Envelope: envelope, Kind: "visibility", Candidates: many},
+		"duplicate":               {Envelope: envelope, Kind: "visibility", Candidates: []string{"a", "a"}},
+		"oversized":               {Envelope: envelope, Kind: "visibility", Candidates: []string{strings.Repeat("x", harness.MaxFieldBytes+1)}},
+		"control character":       {Envelope: envelope, Kind: "visibility", Candidates: []string{"a\x00b"}},
+		"invalid UTF-8":           {Envelope: envelope, Kind: "visibility", Candidates: []string{"\xff\xfe"}},
+		"bad kind":                {Envelope: envelope, Kind: "Not A Kind", Candidates: []string{"a"}},
+		"too much evidence":       {Envelope: envelope, Kind: "visibility", Candidates: []string{"a"}, Evidence: refs},
+		"evidence without ID":     {Envelope: envelope, Kind: "visibility", Candidates: []string{"a"}, Evidence: []harness.EvidenceRef{{}}},
+		"a note over its bound":   {Envelope: envelope, Kind: "visibility", Candidates: []string{"a"}, Evidence: []harness.EvidenceRef{{ID: "a", Note: strings.Repeat("n", harness.MaxFieldBytes+1)}}},
+		"a note with a control":   {Envelope: envelope, Kind: "visibility", Candidates: []string{"a"}, Evidence: []harness.EvidenceRef{{ID: "a", Note: "x\x1b[31m"}}},
+		"a note that is not text": {Envelope: envelope, Kind: "visibility", Candidates: []string{"a"}, Evidence: []harness.EvidenceRef{{ID: "a", Note: "\xff"}}},
 	} {
 		if _, err := s.Decide(context.Background(), q); !errors.Is(err, harness.ErrInvalid) {
 			t.Errorf("%s accepted: %v", name, err)

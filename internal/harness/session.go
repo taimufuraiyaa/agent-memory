@@ -566,7 +566,7 @@ func validateEvidence(refs []EvidenceRef) error {
 		return fmt.Errorf("%w: evidence count", ErrInvalid)
 	}
 	for _, ref := range refs {
-		if !boundedText(ref.ID, false) || !boundedText(ref.Revision, true) || !boundedText(ref.Class, true) {
+		if !boundedText(ref.ID, false) || !boundedText(ref.Revision, true) || !boundedText(ref.Class, true) || !boundedText(ref.Note, true) {
 			return fmt.Errorf("%w: evidence reference", ErrInvalid)
 		}
 	}
