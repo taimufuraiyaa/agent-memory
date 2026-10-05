@@ -155,7 +155,7 @@ func TestSubgoalsThatRepeatAreMergedAndOnlyRemoveWork(t *testing.T) {
 	}
 	for name, in := range map[string][]Subgoal{
 		"none":        nil,
-		"too many":    make([]Subgoal, MaxSubgoals+1),
+		"too many":    manySubgoals(MaxSubgoals + 1),
 		"no key":      {{"", "x"}},
 		"no goal":     {{"a", "  !! "}},
 		"a duplicate": {{"a", "x"}, {"a", "y"}},
@@ -166,9 +166,19 @@ func TestSubgoalsThatRepeatAreMergedAndOnlyRemoveWork(t *testing.T) {
 	}
 }
 
+func manySubgoals(n int) []Subgoal {
+	out := make([]Subgoal, n)
+	for i := range out {
+		out[i] = Subgoal{Key: fmt.Sprintf("k%d", i), Goal: fmt.Sprintf("distinct goal number %d", i)}
+	}
+	return out
+}
+
 type picker struct {
 	positions []int
 	questions atomic.Int32
+	mu        sync.Mutex
+	notes     []string
 }
 
 func (p *picker) Probe(_ context.Context, scope harness.Scope) (harness.LiveAccess, error) {
@@ -177,6 +187,11 @@ func (p *picker) Probe(_ context.Context, scope harness.Scope) (harness.LiveAcce
 func (p *picker) Close() error { return nil }
 func (p *picker) Decide(_ context.Context, q harness.DecisionQuestion) (harness.DecisionAnswer, error) {
 	p.questions.Add(1)
+	p.mu.Lock()
+	for _, e := range q.Evidence {
+		p.notes = append(p.notes, e.Note)
+	}
+	p.mu.Unlock()
 	var sel []string
 	for _, i := range p.positions {
 		if i < len(q.Candidates) {
@@ -212,6 +227,12 @@ func TestAdviceMayMergeANearRepeatButNeverAddOrReorderWork(t *testing.T) {
 	keep, merged, err := c.Plan(context.Background(), []Subgoal{{"a", "tidy the parser"}, {"b", "clean up the parser hunter2"}, {"c", "write docs"}})
 	if err != nil || len(keep) != 1 || !reflect.DeepEqual(merged, map[string]string{"b": "a", "c": "a"}) {
 		t.Fatalf("%v %v %v", keep, merged, err)
+	}
+	merge.mu.Lock()
+	sent := strings.Join(merge.notes, "|")
+	merge.mu.Unlock()
+	if strings.Contains(sent, "hunter2") || !strings.Contains(sent, "[X]") {
+		t.Fatalf("the redaction was not applied before anything was sent: %q", sent)
 	}
 	none := &picker{positions: []int{1}}
 	c, _ = New(Config{Runs: &fakeRuns{}, Decisions: decisions(t, none)})
@@ -462,5 +483,62 @@ func TestNormalizeAndClipNote(t *testing.T) {
 	long := strings.Repeat("é", 150)
 	if got := clipNote(long); len(got) > 200 || !strings.HasPrefix(long, got) {
 		t.Errorf("clipNote cut a character: %d bytes", len(got))
+	}
+}
+
+func TestWorkersKeepRunningWhileTheParentWaitsForAPerson(t *testing.T) {
+	f := newFake()
+	f.hold = make(chan struct{})
+	c, _ := New(Config{Runs: f, MaxParallel: 2, Poll: time.Millisecond})
+	done := make(chan []Result, 1)
+	go func() {
+		r, _ := c.Run(context.Background(), harnessrun.Owner{}, "run_parent", []Subgoal{{"a", "one"}, {"b", "two"}})
+		done <- r
+	}()
+	for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); time.Sleep(2 * time.Millisecond) {
+		f.mu.Lock()
+		n := len(f.started)
+		f.mu.Unlock()
+		if n == 2 {
+			break
+		}
+	}
+	f.mu.Lock()
+	f.parent.State = harnessrun.StateNeedsAttention
+	f.mu.Unlock()
+	time.Sleep(60 * time.Millisecond)
+	f.mu.Lock()
+	cancelled := len(f.cancels)
+	for _, ch := range f.children {
+		ch.State, ch.Code = harnessrun.StateCompleted, "completed"
+	}
+	f.mu.Unlock()
+	if cancelled != 0 {
+		t.Fatalf("%d workers were cancelled while the parent waited", cancelled)
+	}
+	select {
+	case results := <-done:
+		for _, r := range results {
+			if r.State != harnessrun.StateCompleted {
+				t.Errorf("%+v", r)
+			}
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the workers did not finish")
+	}
+}
+
+func TestAWorkersClaimsAreReleasedWhenItEnds(t *testing.T) {
+	f := newFake()
+	c, _ := New(Config{Runs: f, MaxParallel: 1, Poll: time.Millisecond})
+	f.finish = func(goal string) (harnessrun.State, string) {
+		_ = c.Claims().Claim("run_child0", []string{"held.go"}) // the worker takes a file while it runs
+		return harnessrun.StateCompleted, "completed"
+	}
+	if _, err := c.Run(context.Background(), harnessrun.Owner{}, "run_parent", []Subgoal{{"a", "one"}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, held := c.Claims().Owner("held.go"); held {
+		t.Fatal("a finished worker still owns a file")
 	}
 }
