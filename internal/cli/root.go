@@ -134,6 +134,7 @@ func NewRootCommand() *cobra.Command {
 	cmd.AddCommand(requireExplicitWorkspace(newListenCommand()))
 	cmd.AddCommand(requireExplicitWorkspace(newModelChoiceCommand()))
 	cmd.AddCommand(requireExplicitWorkspace(newModelRunCommand()))
+	cmd.AddCommand(newHarnessCommand())
 	cmd.AddCommand(newAuditCommand())
 	cmd.AddCommand(newImportJSONLCommand())
 	cmd.AddCommand(newGraphCommand())

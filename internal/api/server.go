@@ -51,6 +51,9 @@ type Service struct {
 	SkillResolutionAuthorizer application.SkillResolutionAuthorizer
 	SkillMutationAuthorizer   SkillMutationAuthorizer
 	SkillOrchestrationDrainer interface{ Drain(context.Context) error }
+	// Harness is the opt-in local coding-harness gateway. When nil its routes are
+	// not registered, so an unconfigured install exposes nothing.
+	Harness *HarnessGateway
 
 	mu             sync.RWMutex
 	stores         map[string]*workspaceAssets
@@ -256,6 +259,9 @@ func NewMux(svc *Service) *http.ServeMux {
 	mux.HandleFunc("/health", healthHandler(svc))
 	mux.HandleFunc("/dashboard/runtime.json", dashboardRuntime("standalone", "/api/v1", "notebook", "memory", "portable_export"))
 	mux.HandleFunc("/api/v1/capabilities", capabilitiesHandler())
+	if svc != nil && svc.Harness != nil && svc.Harness.Authority != nil && svc.Harness.Runs != nil {
+		mux.HandleFunc(harnessBasePath, harnessRouter(svc.Harness))
+	}
 	mux.HandleFunc("/api/v1/client-profiles", clientProfilesHandler(svc))
 	mux.HandleFunc("/api/v1/client-profiles/", clientProfileHandler(svc))
 	mux.HandleFunc("/ops/dashboard", opsDashboardHandler(svc))

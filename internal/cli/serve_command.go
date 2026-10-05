@@ -286,6 +286,12 @@ func newServeCommand() *cobra.Command {
 			if err := api.ConfigureLocalClientProfiles(svc); err != nil {
 				return err
 			}
+			harnessGateway, closeHarness, err := buildHarnessGateway(ctx, svc, cmd.ErrOrStderr())
+			if err != nil {
+				return err
+			}
+			defer closeHarness()
+			svc.Harness = harnessGateway
 			server := &http.Server{
 				Addr:    addr,
 				Handler: api.LocalRequestBoundary(api.InstrumentedHandler(api.NewMux(svc))),

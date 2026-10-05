@@ -9,8 +9,16 @@ const maxResponseBytes = Number(process.env.AGENT_MEMORY_MCP_MAX_RESPONSE_BYTES 
 const clientID = process.env.AGENT_MEMORY_CLIENT_ID || "";
 const legacyProfile = process.env.AGENT_MEMORY_MCP_PROFILE || "default";
 
+const harnessToken = (process.env.AGENT_MEMORY_HARNESS_TOKEN || "").trim();
+const harnessEnabled = harnessToken !== "";
+const harnessTimeoutMs = 15000;
+
 if (serviceMode !== "local") {
   process.stderr.write(`unsupported AGENT_MEMORY_MODE: ${serviceMode}; only local MCP mode is available\n`);
+  process.exit(2);
+}
+if (harnessEnabled && !/^hcap1\.[a-f0-9]{32}\.[A-Za-z0-9_-]{43}$/.test(harnessToken)) {
+  process.stderr.write("AGENT_MEMORY_HARNESS_TOKEN is not a valid harness grant\n");
   process.exit(2);
 }
 
@@ -204,9 +212,42 @@ const defaultToolNames = new Set([
 	"solution_recall",
 	"solution_promote",
 ]);
-const tools = profile === "expanded"
-  ? allTools
-  : allTools.filter((definition) => defaultToolNames.has(definition.name));
+const budgetProperties = {
+  max_turns: { type: "integer", minimum: 1, maximum: 64 },
+  max_active_seconds: { type: "integer", minimum: 1, maximum: 3600 },
+  max_tool_calls: { type: "integer", minimum: 1, maximum: 256 },
+  max_output_bytes: { type: "integer", minimum: 1, maximum: 4194304 },
+  max_spend_micros: { type: "integer", minimum: 1, maximum: 100000000 },
+  max_depth: { type: "integer", minimum: 1, maximum: 3 },
+};
+// The harness tools are a separate opt-in pack: they exist only when a harness grant
+// is configured, never in the default or expanded profile. Approval of a mutation is
+// deliberately not a tool; it belongs to the trusted local channel.
+const harnessTools = [
+  tool("harness_capabilities", "Discover what this harness grant allows in one workspace", {
+    workspace: { type: "string", maxLength: 64 },
+  }, ["workspace"]),
+  tool("harness_start", "Start a bounded harness run; returns promptly. Pass idempotency_key to make retries safe", {
+    workspace: { type: "string", maxLength: 64 },
+    goal: { type: "string", maxLength: 4096 },
+    idempotency_key: { type: "string", minLength: 8, maxLength: 64 },
+    budget: { type: "object", properties: budgetProperties, additionalProperties: false },
+  }, ["workspace", "goal"]),
+  tool("harness_status", "Read the content-minimized status of a harness run", {
+    workspace: { type: "string", maxLength: 64 },
+    run_id: { type: "string", maxLength: 36 },
+  }, ["workspace", "run_id"]),
+  tool("harness_cancel", "Cancel a harness run using the generation you last saw", {
+    workspace: { type: "string", maxLength: 64 },
+    run_id: { type: "string", maxLength: 36 },
+    expected_generation: { type: "integer", minimum: 1 },
+    idempotency_key: { type: "string", minLength: 8, maxLength: 64 },
+  }, ["workspace", "run_id", "expected_generation"]),
+];
+const tools = [
+  ...(profile === "expanded" ? allTools : allTools.filter((definition) => defaultToolNames.has(definition.name))),
+  ...(harnessEnabled ? harnessTools : []),
+];
 
 function tool(name, description, properties, required = []) {
   return { name, description, inputSchema: { type: "object", properties, required, additionalProperties: false } };
@@ -252,6 +293,62 @@ async function requestService(path, { method = "POST", body } = {}) {
     throw new Error(payload.error?.message || `service returned HTTP ${response.status}`);
   }
   return payload.data ?? payload;
+}
+
+const harnessWorkspacePattern = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+const harnessRunPattern = /^run_[a-f0-9]{32}$/;
+
+function scrubHarness(text) {
+  return String(text).split(harnessToken).join("[redacted]").slice(0, 240);
+}
+
+// requestHarness carries the grant as a bearer header, never in a URL or log line, and
+// refuses redirects so the credential cannot be forwarded elsewhere. Failures keep only
+// the service's fixed error code and message.
+async function requestHarness(path, { method = "GET", body } = {}) {
+  const headers = { accept: "application/json", authorization: `Bearer ${harnessToken}` };
+  if (clientID) headers["x-agent-memory-client"] = clientID;
+  if (body) headers["content-type"] = "application/json";
+  let response;
+  try {
+    response = await fetch(`${serviceURL}${path}`, {
+      method, headers, body: body ? JSON.stringify(body) : undefined,
+      redirect: "error", signal: AbortSignal.timeout(harnessTimeoutMs),
+    });
+  } catch {
+    throw new Error("harness service is unavailable");
+  }
+  let payload;
+  try {
+    payload = await response.json();
+  } catch {
+    throw new Error(`harness service returned HTTP ${response.status}`);
+  }
+  if (!response.ok || payload.ok === false) {
+    const code = scrubHarness(payload?.error?.code || `http_${response.status}`);
+    const message = scrubHarness(payload?.error?.message || "request failed");
+    throw new Error(`harness ${code}: ${message}`);
+  }
+  return payload.data ?? payload;
+}
+
+function requireHarnessArguments(args) {
+  if (!harnessWorkspacePattern.test(String(args.workspace ?? ""))) throw new Error("workspace is invalid");
+  if (args.run_id !== undefined && !harnessRunPattern.test(String(args.run_id))) throw new Error("run_id is invalid");
+  if (args.idempotency_key !== undefined && !/^[A-Za-z0-9._:-]{8,64}$/.test(String(args.idempotency_key))) {
+    throw new Error("idempotency_key is invalid");
+  }
+  if (args.budget !== undefined) {
+    if (args.budget === null || typeof args.budget !== "object" || Array.isArray(args.budget)) throw new Error("budget must be an object");
+    for (const [name, value] of Object.entries(args.budget)) {
+      const bounds = budgetProperties[name];
+      if (!bounds) throw new Error(`unknown budget field: ${name}`);
+      if (!Number.isInteger(value) || value < bounds.minimum || value > bounds.maximum) throw new Error(`budget.${name} is out of range`);
+    }
+  }
+  if (args.expected_generation !== undefined && (!Number.isInteger(args.expected_generation) || args.expected_generation < 1)) {
+    throw new Error("expected_generation must be a positive integer");
+  }
 }
 
 function compactSearch(data) {
@@ -383,6 +480,22 @@ async function callTool(name, args) {
     case "skill_orchestration_control":
       validateSkillOrchestrationControl(args);
       return requestService("/api/v1/skills/orchestration/control", { body: args });
+    case "harness_capabilities":
+      requireHarnessArguments(args);
+      return requestHarness(`/api/v1/harness/capabilities?workspace=${encodeURIComponent(args.workspace)}`);
+    case "harness_start":
+      requireHarnessArguments(args);
+      return requestHarness("/api/v1/harness/runs", { method: "POST", body: {
+        workspace: args.workspace, goal: args.goal, idempotency_key: args.idempotency_key || randomUUID(), budget: args.budget || {},
+      } });
+    case "harness_status":
+      requireHarnessArguments(args);
+      return requestHarness(`/api/v1/harness/runs/${args.run_id}?workspace=${encodeURIComponent(args.workspace)}`);
+    case "harness_cancel":
+      requireHarnessArguments(args);
+      return requestHarness(`/api/v1/harness/runs/${args.run_id}/cancel`, { method: "POST", body: {
+        workspace: args.workspace, expected_generation: args.expected_generation, idempotency_key: args.idempotency_key || randomUUID(),
+      } });
     default:
       throw new Error(`tool execution is not available for ${name}`);
   }
