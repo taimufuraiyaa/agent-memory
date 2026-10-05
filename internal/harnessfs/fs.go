@@ -7,8 +7,6 @@ package harnessfs
 
 import (
 	"bytes"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -185,8 +183,7 @@ func (r *Root) Read(rel string, limit int) (File, error) {
 	if bytes.IndexByte(data[:min(len(data), binarySniff)], 0) >= 0 {
 		return File{}, ErrBinary
 	}
-	sum := sha256.Sum256(data)
-	return File{Data: data, Revision: hex.EncodeToString(sum[:])[:16] + fmt.Sprintf("-%d", info.Size()), Size: info.Size(), Truncated: info.Size() > int64(len(data))}, nil
+	return File{Data: data, Revision: revisionOf(data, info.Size()), Size: info.Size(), Truncated: info.Size() > int64(len(data))}, nil
 }
 
 // Entry is one directory entry. Symlinks, devices and other non-regular files are not
