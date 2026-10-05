@@ -3,6 +3,7 @@ package openaiapi
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -65,5 +66,79 @@ func TestClientRejectsDeniedMalformedAndMismatchedResponses(t *testing.T) {
 	defer server.Close()
 	if _, err := NewClientWithURL(server.URL).Generate(context.Background(), "test-key", "gpt-6-luna", "Task", 128); err == nil || strings.Contains(err.Error(), "private-key") {
 		t.Fatalf("denial leaked response: %v", err)
+	}
+}
+
+func TestRespondRejectsBadBoundsAndKeysBeforeAnyRequest(t *testing.T) {
+	var calls int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		_, _ = w.Write([]byte(`{"status":"completed","model":"gpt-x","output_text":"ok"}`))
+	}))
+	defer server.Close()
+	client := NewHarnessClient(server.URL, 0)
+	ctx := context.Background()
+	for name, call := range map[string]func() error{
+		"input too large": func() error {
+			_, err := client.Respond(ctx, "key", "gpt-x", Request{Input: strings.Repeat("p", MaxRespondInputBytes+1), MaxOutputTokens: 16})
+			return err
+		},
+		"empty input": func() error {
+			_, err := client.Respond(ctx, "key", "gpt-x", Request{Input: "  ", MaxOutputTokens: 16})
+			return err
+		},
+		"zero output": func() error { _, err := client.Respond(ctx, "key", "gpt-x", Request{Input: "x"}); return err },
+		"huge output": func() error {
+			_, err := client.Respond(ctx, "key", "gpt-x", Request{Input: "x", MaxOutputTokens: MaxRespondOutputTokens + 1})
+			return err
+		},
+		"bad model": func() error {
+			_, err := client.Respond(ctx, "key", "gpt x", Request{Input: "x", MaxOutputTokens: 16})
+			return err
+		},
+		"newline in key": func() error {
+			_, err := client.Respond(ctx, "key\nX-Injected: 1", "gpt-x", Request{Input: "x", MaxOutputTokens: 16})
+			return err
+		},
+		"empty key": func() error {
+			_, err := client.Respond(ctx, "", "gpt-x", Request{Input: "x", MaxOutputTokens: 16})
+			return err
+		},
+		"oversized key": func() error {
+			_, err := client.Respond(ctx, strings.Repeat("k", 5000), "gpt-x", Request{Input: "x", MaxOutputTokens: 16})
+			return err
+		},
+		"bad probe model": func() error { return client.ModelStatus(ctx, "key", "bad model") },
+	} {
+		if err := call(); err == nil {
+			t.Errorf("%s was accepted", name)
+		}
+	}
+	if calls != 0 {
+		t.Fatalf("%d invalid calls reached the service", calls)
+	}
+	// At the bounds a call goes through, and the status code of a failure is reported.
+	if _, err := client.Respond(ctx, "key", "gpt-x", Request{Input: strings.Repeat("p", MaxRespondInputBytes), MaxOutputTokens: MaxRespondOutputTokens}); err != nil || calls != 1 {
+		t.Fatalf("a call at the bounds = %v (calls %d)", err, calls)
+	}
+}
+
+func TestRespondFailsClosedOnAnOversizedBodyAndReportsStatusCodes(t *testing.T) {
+	status := http.StatusOK
+	body := `{"status":"completed","model":"gpt-x","output_text":"` + strings.Repeat("x", 2<<20) + `"}`
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(status)
+		_, _ = w.Write([]byte(body))
+	}))
+	defer server.Close()
+	client := NewHarnessClient(server.URL, 0)
+	if _, err := client.Respond(context.Background(), "key", "gpt-x", Request{Input: "x", MaxOutputTokens: 16}); err == nil {
+		t.Fatal("a 2 MB response was accepted")
+	}
+	status, body = http.StatusTooManyRequests, `{"error":"slow down"}`
+	_, err := client.Respond(context.Background(), "key", "gpt-x", Request{Input: "x", MaxOutputTokens: 16})
+	var statusErr StatusError
+	if !errors.As(err, &statusErr) || statusErr.Code != http.StatusTooManyRequests || strings.Contains(err.Error(), "slow down") {
+		t.Fatalf("err = %v", err)
 	}
 }
