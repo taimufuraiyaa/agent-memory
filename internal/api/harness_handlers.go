@@ -37,6 +37,9 @@ type HarnessGateway struct {
 	Providers []harness.Manifest
 	// Fake marks providers that are test doubles, so discovery never overstates them.
 	Fake bool
+	// Decisions, when set, reports the content-free health of the Jev decisions: counts per
+	// kind and status, what is paused, and whether the provider is reachable. It does no I/O.
+	Decisions func() map[string]any
 }
 
 type harnessBudgetView struct {
@@ -242,7 +245,12 @@ func (g *HarnessGateway) capabilities(w http.ResponseWriter, r *http.Request) {
 	for i, operation := range principal.Operations {
 		operations[i] = string(operation)
 	}
+	var decisions map[string]any
+	if g.Decisions != nil {
+		decisions = g.Decisions()
+	}
 	writeOK(w, http.StatusOK, map[string]any{
+		"decisions":        decisions,
 		"contract_version": harness.ContractVersion,
 		"workspace":        principal.Workspace,
 		"operations":       operations,

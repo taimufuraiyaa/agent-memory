@@ -301,6 +301,18 @@ Approvals for staging and committing use the same terminal flow as edits (`agent
 
 **Limits.** This does not make a repository safe in general: an approved `run_command` or edit still runs as you, and the settings check is an allowlist by name: a section or key it does not list is refused, but a few sections that hold only harmless settings today (user, branch, push, pull, fetch, color, advice, pack, gc and similar) are accepted whole, so a program-starting key that a future Git adds to one of them would not be noticed. Your global Git configuration is trusted and not scanned. There is no commit undo and no way to unstage; fix mistakes in your own terminal. Branch creation or switching is not offered, so work happens on whatever branch is checked out. Submodules and nested repositories are ignored. Windows refuses Git rather than half-support it. The tools are not composed into `serve` yet, because the only real provider is text-only; they are verified with a scripted model, the real manager, the real approval command and a real Git against deliberately hostile repositories.
 
+### Jev decisions in the harness (opt-in, openai mode)
+
+With the OpenAI provider composed, the harness can ask TypeSafe Jev for **advice** on three choices: which eligible model to prefer (`model`), which context chunks deserve more room (`visibility`) and how to order evidence for the provider's prompt cache once cache hits have been measured (`cache`). Advice only chooses among options the harness already allowed; it can never grant access, approve, lower friction or run anything, and any failure (slow, denied, malformed, low confidence, unreachable) leaves the deterministic choice in place. Four more kinds exist in code and are wired where their consumers are composed (tool narrowing, command-risk friction, file sensitivity, subgoal deduplication); they are refused here because this mode has no tools yet.
+
+Enable it with all of: `AGENT_MEMORY_HARNESS_PROVIDERS=openai` and its settings, a Jev credential stored through the TUI, `AGENT_MEMORY_HARNESS_JEV=model,visibility,cache` (any subset), and `AGENT_MEMORY_HARNESS_JEV_EGRESS=typesafe`. Optional: `AGENT_MEMORY_HARNESS_JEV_BUDGET` (requests per run, default 40) and `AGENT_MEMORY_HARNESS_JEV_PER_MINUTE` (default 30). Anything missing, misspelled or duplicated stops startup.
+
+**What is sent.** Only positional aliases, counts, sizes and a fixed vocabulary: never prompts, goals, file contents, paths, run identifiers or the credential. Chunk identifiers are replaced by aliases before anything leaves the process; model names are the ones you configured. Questions that would need project text are not asked at all in this mode.
+
+**Safety net.** Each request has its own deadline, requests are bounded in flight, per run and per minute, and repeated failures pause asking (every kind on provider faults, one kind on malformed answers). The capabilities endpoint reports a content-free `decisions` view: reachability, what is paused, and counts per kind and status.
+
+**Limits.** The structure of every answer is verified, not the quality of Jev's judgment. The live check of the decision provider against the real service has not been run (`AGENT_MEMORY_LIVE_JEV_TEST=1 go test ./internal/harnessjev -run TestLiveTypeSafeDecision -v` sends a few synthetic questions with your stored token). Tools, risk and sensitivity advice await composing tools into `serve`.
+
 ### Real model provider (OpenAI, text-only, opt-in)
 
 By default the harness composes only fakes. A single real provider is available for text-only runs; it **sends assembled prompts to OpenAI and may incur charges**, so it needs every one of these, and refuses to start if any is missing or unrecognized:

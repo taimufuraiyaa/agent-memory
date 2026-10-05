@@ -17,6 +17,7 @@ import (
 	"github.com/taimufuraiyaa/agent-memory/internal/harness/harnesstest"
 	"github.com/taimufuraiyaa/agent-memory/internal/harnessauth"
 	"github.com/taimufuraiyaa/agent-memory/internal/harnesscontext"
+	"github.com/taimufuraiyaa/agent-memory/internal/harnessdecide"
 	"github.com/taimufuraiyaa/agent-memory/internal/harnessmodel"
 	"github.com/taimufuraiyaa/agent-memory/internal/harnessrun"
 	"github.com/taimufuraiyaa/agent-memory/internal/workspace"
@@ -42,6 +43,7 @@ const (
 // harnessBuildOptions exists for tests. Production code never sets it.
 type harnessBuildOptions struct {
 	openAIBaseURL string
+	jevBaseURL    string
 }
 
 const harnessFakeReply = "Fake harness provider: no real model was called."
@@ -84,6 +86,7 @@ func buildHarnessGatewayWith(ctx context.Context, svc *api.Service, errOut io.Wr
 	}
 	fake := mode == "fake"
 	var notice string
+	var decisions *jevComposition
 	switch mode {
 	case "fake":
 		if _, err := harnesstest.Register(registry, harnesstest.Manifest("fake-model", harness.KindModel, "generation"),
@@ -97,14 +100,16 @@ func buildHarnessGatewayWith(ctx context.Context, svc *api.Service, errOut io.Wr
 		cfg.Tool = &harnessrun.Binding{Provider: "fake-tool", Capability: "read"}
 		notice = "harness: fake providers enabled; no real model is called"
 	case "openai":
-		composed, err := composeOpenAI(registry, workspaces, opts)
+		composed, err := composeOpenAI(ctx, registry, workspaces, svc.BaseDir, opts)
 		if err != nil {
 			return nil, nil, err
 		}
 		cfg.Model, cfg.Router, cfg.Context, notice = composed.model, composed.router, composed.context, composed.notice
+		decisions = composed.jev
 	}
 	runs, err := harnessrun.NewManager(cfg)
 	if err != nil {
+		decisions.close()
 		return nil, nil, err
 	}
 	report, err := runs.Recover(ctx)
@@ -116,6 +121,9 @@ func buildHarnessGatewayWith(ctx context.Context, svc *api.Service, errOut io.Wr
 		_, _ = fmt.Fprintf(errOut, "harness: recovered %d run(s), finished %d cancellation(s), quarantined %d damaged record(s)\n", report.Requeued, report.Cancelled, report.Quarantined)
 	}
 	_, _ = fmt.Fprintln(errOut, notice)
+	if decisions != nil {
+		_, _ = fmt.Fprintln(errOut, decisions.notice)
+	}
 
 	sweepCtx, stopSweep := context.WithCancel(ctx)
 	var sweeper sync.WaitGroup
@@ -139,9 +147,14 @@ func buildHarnessGatewayWith(ctx context.Context, svc *api.Service, errOut io.Wr
 			stopSweep()
 			sweeper.Wait()
 			_ = runs.Close()
+			decisions.close()
 		})
 	}
-	return &api.HarnessGateway{Authority: authority, Runs: runs, Providers: registry.Manifests(), Fake: fake}, closeAll, nil
+	gateway := &api.HarnessGateway{Authority: authority, Runs: runs, Providers: registry.Manifests(), Fake: fake}
+	if decisions != nil {
+		gateway.Decisions = decisions.snapshot
+	}
+	return gateway, closeAll, nil
 }
 
 type openAIComposition struct {
@@ -149,13 +162,14 @@ type openAIComposition struct {
 	router  harnessrun.ModelRouter
 	context harnessrun.ContextSource
 	notice  string
+	jev     *jevComposition
 }
 
 // composeOpenAI wires one real, text-only OpenAI provider. Every setting that changes what
 // leaves the machine or what it costs must be stated explicitly, and nothing has a default
 // that could silently widen egress or misreport spend: the key, the model, an egress
 // confirmation and the prices are all required, and the data class is capped at internal.
-func composeOpenAI(registry *harness.Registry, workspaces *workspace.Manager, opts harnessBuildOptions) (openAIComposition, error) {
+func composeOpenAI(ctx context.Context, registry *harness.Registry, workspaces *workspace.Manager, baseDir string, opts harnessBuildOptions) (openAIComposition, error) {
 	var none openAIComposition
 	if strings.TrimSpace(os.Getenv(harnessEgressEnv)) != "openai" {
 		return none, fmt.Errorf("set %s=openai to confirm that assembled prompts are sent to OpenAI", harnessEgressEnv)
@@ -197,13 +211,22 @@ func composeOpenAI(registry *harness.Registry, workspaces *workspace.Manager, op
 		return none, err
 	}
 	meter := harnessmodel.NewMeter(nil)
-	router, err := harnessmodel.NewRouter(harnessmodel.RouterConfig{
+	decisions, err := composeJev(ctx, registry, baseDir, opts)
+	if err != nil {
+		return none, err
+	}
+	routerConfig := harnessmodel.RouterConfig{
 		Profiles: []harnessmodel.Profile{{Provider: harnessmodel.OpenAIProviderID, Capability: harnessmodel.OpenAICapability, Pricing: pricing,
 			MaxClass: class, ContextTokens: window, MaxOutputTokens: harnessOpenAIOutputCap}},
 		Prober: &harnessmodel.RegistryProber{Registry: registry, Workspace: "harness-router"},
 		Meter:  meter,
-	})
+	}
+	if decisions != nil && decisions.enabled[harnessdecide.KindModel] {
+		routerConfig.Advisor = harnessmodel.ServiceAdvisor{Service: decisions.hub.Service("")}
+	}
+	router, err := harnessmodel.NewRouter(routerConfig)
 	if err != nil {
+		decisions.close()
 		return none, err
 	}
 	source := &harnesscontext.RunSource{
@@ -219,7 +242,26 @@ func composeOpenAI(registry *harness.Registry, workspaces *workspace.Manager, op
 			return rules, nil
 		},
 	}
+	if decisions != nil {
+		if decisions.enabled[harnessdecide.KindVisibility] {
+			source.AdvisorFor = func(runID string) harnesscontext.Advisor {
+				return harnesscontext.ServiceAdvisor{Service: decisions.hub.Service(runID)}
+			}
+		}
+		if decisions.enabled[harnessdecide.KindCache] {
+			source.CacheFor = func(runID string) harnesscontext.CacheAdvisor {
+				return harnesscontext.ServiceCacheAdvisor{Service: decisions.hub.Service(runID), Stats: func(string) harnesscontext.CacheStats {
+					st := meter.Stats(harnessmodel.OpenAIProviderID)
+					if st.Calls == 0 || st.InputTokens == 0 {
+						return harnesscontext.CacheStats{}
+					}
+					return harnesscontext.CacheStats{Measured: true, HitPercent: int(st.CachedInputTokens * 100 / st.InputTokens), Turns: st.Calls, PrefixTokens: int(st.InputTokens / int64(st.Calls))}
+				}}
+			}
+		}
+	}
 	return openAIComposition{
+		jev:     decisions,
 		model:   harnessrun.Binding{Provider: harnessmodel.OpenAIProviderID, Capability: harnessmodel.OpenAICapability},
 		router:  harnessmodel.LoopRouter{Router: router, Meter: meter},
 		context: source,
