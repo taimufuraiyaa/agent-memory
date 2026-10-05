@@ -1,5 +1,7 @@
 package harnesstools
 
+import "time"
+
 // Schema describes one tool for a model: its name, purpose and argument schema. The
 // argument schemas are strict and carry the same bounds the provider enforces.
 type Schema struct {
@@ -62,4 +64,18 @@ func EditSchemas() []Schema {
 				}, "old_text", "new_text")},
 			}, "path", "edits")},
 	}
+}
+
+// CommandSchemas returns the command tool's description, offered only when commands are
+// enabled. The description tells a model what the harness will and will not do.
+func CommandSchemas() []Schema {
+	return []Schema{{Name: ToolRunCommand, Description: "Run one program with an exact argument list, without a shell, in the project or a subdirectory. " +
+		"Use it for tests, builds and linters, for example [\"go\",\"test\",\"./...\"]. Pipes, redirection, globbing, && and environment assignments are not interpreted. " +
+		"Shells, network tools, deletion tools and version control are refused. The command gets a minimal environment and no network settings, runs for at most the timeout, " +
+		"and reports its output and the files it changed. A person must approve each call.",
+		Parameters: object(map[string]any{
+			"argv":            map[string]any{"type": "array", "minItems": 1, "maxItems": maxArgvItems, "items": map[string]any{"type": "string", "maxLength": maxArgvItemBytes}},
+			"cwd":             map[string]any{"type": "string", "maxLength": 512, "description": "Directory relative to the project root; default is the root"},
+			"timeout_seconds": map[string]any{"type": "integer", "minimum": 1, "maximum": int(MaxCommandTimeout / time.Second), "description": "Default 60"},
+		}, "argv")}}
 }

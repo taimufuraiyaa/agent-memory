@@ -71,7 +71,7 @@ func (m *Manager) drive(ctx context.Context, run Run) {
 	}
 	var tool *harness.Session
 	if m.cfg.Tool != nil {
-		opened, err := m.cfg.Registry.OpenSession(ctx, m.cfg.Tool.Provider, scope, harness.WithCallTimeout(m.cfg.CallTimeout))
+		opened, err := m.cfg.Registry.OpenSession(ctx, m.cfg.Tool.Provider, scope, harness.WithCallTimeout(m.cfg.ToolTimeout))
 		if err == nil {
 			tool = opened
 		} else {
@@ -420,7 +420,9 @@ func (m *Manager) runTool(ctx context.Context, run Run, answer harness.ModelAnsw
 		m.recordTool(id, "tool_denied", "", 0, run.Usage.Turns)
 		return true
 	}
+	began := m.now()
 	result, err := tool.Invoke(ctx, prepared)
+	m.account(id, m.now().Sub(began), 0, harness.Usage{}) // tool time counts against the run's time budget
 	if ctx.Err() != nil {
 		m.interrupted(ctx, id)
 		return false

@@ -11,6 +11,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -54,6 +55,8 @@ type Config struct {
 	SearchBudget time.Duration
 	// Edit turns on the mutating tools; the zero value offers read tools only.
 	Edit EditConfig
+	// Command turns on run_command; the zero value does not offer it.
+	Command CommandConfig
 }
 
 type Provider struct{ cfg Config }
@@ -71,6 +74,9 @@ func NewProvider(cfg Config) (*Provider, error) {
 	if cfg.Edit.Enabled && cfg.Edit.PreimageDir == "" {
 		return nil, errors.New("editing needs a directory for saved copies")
 	}
+	if cfg.Command.Enabled && cfg.Command.TempRoot == "" {
+		return nil, errors.New("running commands needs a private directory for temporary files")
+	}
 	return &Provider{cfg: cfg}, nil
 }
 
@@ -85,8 +91,12 @@ func Manifest() harness.Manifest {
 func (p *Provider) Manifest() harness.Manifest {
 	m := Manifest()
 	if p.cfg.Edit.Enabled {
-		m.Capabilities = []harness.CapabilityID{ToolCreateFile, ToolDeleteFile, ToolEditFile, ToolListDir, ToolReadFile, ToolSearch}
+		m.Capabilities = append(m.Capabilities, ToolCreateFile, ToolDeleteFile, ToolEditFile)
 	}
+	if p.cfg.Command.Enabled {
+		m.Capabilities = append(m.Capabilities, ToolRunCommand)
+	}
+	sort.Slice(m.Capabilities, func(i, j int) bool { return m.Capabilities[i] < m.Capabilities[j] })
 	return m
 }
 
@@ -103,6 +113,8 @@ type call struct {
 	root string
 	// plan is the fully computed change for a mutating tool.
 	plan *plan
+	// command is the fully resolved command for run_command.
+	command *commandPlan
 }
 
 type session struct {
@@ -196,6 +208,8 @@ func (s *session) Prepare(_ context.Context, q harness.ToolRequest) (harness.Pre
 	switch q.ToolID {
 	case ToolEditFile, ToolCreateFile, ToolDeleteFile:
 		return s.prepareMutation(q, root, action), nil
+	case ToolRunCommand:
+		return s.prepareCommand(q, root, action), nil
 	case ToolReadFile:
 		var a readArgs
 		if decodeStrict(q.Arguments, &a) != nil {
@@ -319,6 +333,15 @@ func (s *session) Invoke(ctx context.Context, action harness.PreparedAction) (ha
 	defer project.Close()
 	var body []byte
 	var outcome harness.Outcome
+	if prepared.command != nil {
+		var audit []string
+		body, outcome, audit = s.execute(ctx, project, prepared, action)
+		answer.Outcome = outcome
+		if outcome == harness.OutcomeOK || outcome == harness.OutcomePartial {
+			answer.Output, answer.Audit = body, audit
+		}
+		return answer, nil
+	}
 	if prepared.plan != nil {
 		body, outcome = s.apply(ctx, project, prepared, action)
 		answer.Outcome = outcome

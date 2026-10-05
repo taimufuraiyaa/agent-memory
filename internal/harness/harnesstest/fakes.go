@@ -40,6 +40,7 @@ type Behavior struct {
 	Preview       string              // preview a prepared tool action reports
 	Escalate      []string            // escalation codes a prepared tool action reports
 	Reason        string              // reason code a prepared tool action reports
+	Audit         []string            // audit codes a tool answer reports
 }
 
 // Step scripts one model reply in a Behavior.Script.
@@ -236,7 +237,7 @@ func (f *Tool) Invoke(ctx context.Context, action harness.PreparedAction) (harne
 	if f.Behavior.Oversize {
 		output = []byte(strings.Repeat("x", action.MaxBytes+1))
 	}
-	return harness.ToolAnswer{Envelope: f.Behavior.envelope(action.Envelope), Outcome: f.Behavior.outcome(), Output: output}, nil
+	return harness.ToolAnswer{Envelope: f.Behavior.envelope(action.Envelope), Outcome: f.Behavior.outcome(), Output: output, Audit: f.Behavior.Audit}, nil
 }
 
 // Register adds a fake of the manifest's kind to the registry and returns its

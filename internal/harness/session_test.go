@@ -771,3 +771,67 @@ func TestDiscardTellsAProviderThatKeepsItsOwnStateOnlyAboutHandlesItPrepared(t *
 		t.Fatalf("released = %v", tool.released)
 	}
 }
+
+func TestAToolAnswersAuditCodesAreBoundedWellFormedAndDroppedOnFailure(t *testing.T) {
+	invoke := func(behavior harnesstest.Behavior) (harness.ToolAnswer, error) {
+		registry, _ := register(t, harness.KindTool, "fake-tool", behavior, "run")
+		s := open(t, registry, "fake-tool", scope)
+		envelope, _ := s.Envelope("run", 64)
+		action, err := s.Prepare(context.Background(), harness.ToolRequest{Envelope: envelope, ToolID: "run"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return s.Invoke(context.Background(), action)
+	}
+	if answer, err := invoke(harnesstest.Behavior{Audit: []string{"protected_changed", "timed_out"}}); err != nil || len(answer.Audit) != 2 {
+		t.Fatalf("valid codes = %+v %v", answer, err)
+	}
+	for name, codes := range map[string][]string{
+		"too many":     {"a", "b", "c", "d", "e"},
+		"uppercase":    {"Bad"},
+		"with a space": {"a b"},
+		"empty":        {""},
+		"too long":     {strings.Repeat("a", 40)},
+		"with content": {"password=hunter2"},
+	} {
+		if _, err := invoke(harnesstest.Behavior{Audit: codes}); !errors.Is(err, harness.ErrInvalid) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	// A failed, denied or stale answer carries none, whatever the provider tried to attach.
+	for _, outcome := range []harness.Outcome{harness.OutcomeFailed, harness.OutcomeDenied, harness.OutcomeStale, harness.OutcomeCancelled} {
+		tool := &answeringTool{outcome: outcome, audit: []string{"protected_changed"}}
+		registry := harness.NewRegistry()
+		manifest := harness.Manifest{Version: harness.ContractVersion, ID: "answering-tool", Kind: harness.KindTool, Capabilities: []harness.CapabilityID{"run"}}
+		if err := registry.Register(manifest, func() (harness.Provider, error) { return tool, nil }); err != nil {
+			t.Fatal(err)
+		}
+		s := open(t, registry, "answering-tool", scope)
+		envelope, _ := s.Envelope("run", 64)
+		action, err := s.Prepare(context.Background(), harness.ToolRequest{Envelope: envelope, ToolID: "run"})
+		if err != nil || action.Outcome != harness.OutcomeOK {
+			t.Fatalf("prepare: %+v %v", action, err)
+		}
+		if answer, err := s.Invoke(context.Background(), action); err != nil || answer.Outcome != outcome || answer.Audit != nil || answer.Output != nil {
+			t.Errorf("%s: %+v %v", outcome, answer, err)
+		}
+	}
+}
+
+// answeringTool prepares fine and answers with a chosen outcome, output and audit codes.
+type answeringTool struct {
+	outcome harness.Outcome
+	audit   []string
+}
+
+func (a *answeringTool) Probe(_ context.Context, scope harness.Scope) (harness.LiveAccess, error) {
+	return harness.LiveAccess{Version: harness.ContractVersion, Provider: "answering-tool", Scope: scope, Revision: 1,
+		Capabilities: map[harness.CapabilityID]harness.AccessState{"run": harness.AccessAvailable}}, nil
+}
+func (a *answeringTool) Close() error { return nil }
+func (a *answeringTool) Prepare(_ context.Context, q harness.ToolRequest) (harness.PreparedAction, error) {
+	return harness.PreparedAction{Envelope: q.Envelope, Outcome: harness.OutcomeOK, Digest: "digest-answering", Summary: "prepared"}, nil
+}
+func (a *answeringTool) Invoke(_ context.Context, p harness.PreparedAction) (harness.ToolAnswer, error) {
+	return harness.ToolAnswer{Envelope: p.Envelope, Outcome: a.outcome, Output: []byte("output"), Audit: a.audit}, nil
+}

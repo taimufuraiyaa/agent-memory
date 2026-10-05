@@ -316,10 +316,16 @@ type PreparedAction struct {
 	Escalate []string
 }
 
+// MaxAuditCodes bounds how many audit codes one answer can carry.
+const MaxAuditCodes = 4
+
 type ToolAnswer struct {
 	Envelope
 	Outcome Outcome
 	Output  []byte
+	// Audit lists fixed reason codes the caller records beside the action in its audit, such
+	// as a command having changed a protected location. They carry no content.
+	Audit []string
 }
 
 // Provider only probes live access and closes its session. Operations are split

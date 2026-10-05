@@ -337,7 +337,9 @@ func (m *Manager) runApproved(ctx context.Context, current Run, tool *harness.Se
 		finish("denied_by_policy")
 		return note("tool_denied", "tool_denied: policy")
 	}
+	began := m.now()
 	result, err := tool.Invoke(harnessproof.Mint(ctx, pending.Digest), prepared)
+	m.account(id, m.now().Sub(began), 0, harness.Usage{}) // tool time counts against the run's time budget
 	if ctx.Err() != nil {
 		finish("interrupted")
 		m.interrupted(ctx, id)
@@ -347,10 +349,13 @@ func (m *Manager) runApproved(ctx context.Context, current Run, tool *harness.Se
 		finish("failed")
 		return note("tool_failed", "")
 	}
-	if result.Outcome == harness.OutcomeOK {
+	if result.Outcome == harness.OutcomeOK || result.Outcome == harness.OutcomePartial {
 		finish("applied")
 	} else {
 		finish(string(result.Outcome))
+	}
+	for _, code := range result.Audit {
+		_ = m.cfg.Approvals.Note(context.WithoutCancel(ctx), pending.ApprovalID, code, "")
 	}
 	return m.finishToolCall(ctx, id, current.Usage.Turns, result)
 }

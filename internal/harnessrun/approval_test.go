@@ -31,6 +31,7 @@ type writeTool struct {
 	prepares  int
 	escalate  []string
 	paths     []string
+	onInvoke  func() // runs inside Invoke, for a test that needs time to pass
 	scope     harness.Scope
 	invokeErr error
 }
@@ -107,8 +108,11 @@ func (s *writeSession) Invoke(ctx context.Context, a harness.PreparedAction) (ha
 	s.mu.Unlock()
 	s.tool.mu.Lock()
 	s.tool.invoked = append(s.tool.invoked, invocation{proof: harnessproof.Approved(ctx), digest: a.Digest, args: args})
-	err := s.tool.invokeErr
+	err, hook := s.tool.invokeErr, s.tool.onInvoke
 	s.tool.mu.Unlock()
+	if hook != nil {
+		hook()
+	}
 	if err != nil {
 		return harness.ToolAnswer{}, err
 	}
@@ -747,5 +751,18 @@ func TestCancellingARunThatHasAReplayPendingLeavesAValidRecord(t *testing.T) {
 	}
 	if a.tool.invocations() != nil {
 		t.Fatal("a cancelled run acted")
+	}
+}
+
+// An approved call's time is charged to the run just as an allowed call's is.
+func TestAnApprovedCallsTimeCountsAgainstTheRunsTimeBudget(t *testing.T) {
+	a := newApprovalFixture(t, approvalOpts{})
+	a.tool.onInvoke = func() { a.clock.advance(400 * time.Millisecond) } // the run's clock is a fake one
+	started := a.start("key-00000001", "change the notes", harnessrun.Budget{})
+	_, record := a.parked(started.ID)
+	a.approve(record)
+	done := a.waitState(started.ID, harnessrun.StateCompleted)
+	if done.Usage.ActiveMillis < 400 {
+		t.Fatalf("the approved call's time was not charged: %+v", done.Usage)
 	}
 }

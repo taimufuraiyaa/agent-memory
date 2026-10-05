@@ -400,7 +400,15 @@ func (s *Session) Invoke(ctx context.Context, action PreparedAction) (ToolAnswer
 		return ToolAnswer{}, err
 	}
 	if !carriesPayload(answer.Outcome) {
-		answer.Output = nil
+		answer.Output, answer.Audit = nil, nil
+	}
+	if len(answer.Audit) > MaxAuditCodes {
+		return ToolAnswer{}, fmt.Errorf("%w: audit codes", ErrInvalid)
+	}
+	for _, code := range answer.Audit {
+		if !reasonCodeOK(code) {
+			return ToolAnswer{}, fmt.Errorf("%w: audit code", ErrInvalid)
+		}
 	}
 	return answer, nil
 }

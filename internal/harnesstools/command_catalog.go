@@ -207,7 +207,7 @@ func (s flagSpec) valueOK(value string) bool {
 		return s.pattern == nil || s.pattern.MatchString(value)
 	case flagDuration:
 		d, err := time.ParseDuration(value)
-		return err == nil && d > 0 && d <= 10*time.Minute
+		return err == nil && d > 0 && d <= MaxCommandTimeout
 	case flagEnum:
 		for _, v := range s.enum {
 			if value == v {

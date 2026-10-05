@@ -34,7 +34,7 @@ const (
 // without a person's approval, whatever its table says.
 func Mutating(capability harness.CapabilityID) bool {
 	switch capability {
-	case ToolEditFile, ToolCreateFile, ToolDeleteFile:
+	case ToolEditFile, ToolCreateFile, ToolDeleteFile, ToolRunCommand:
 		return true
 	}
 	return false
@@ -299,13 +299,7 @@ func (s *session) prepareMutation(q harness.ToolRequest, root string, action har
 	digest := "sha256:" + hex.EncodeToString(sum[:])
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	pendingMutations := 0
-	for _, c := range s.pending {
-		if c.plan != nil {
-			pendingMutations++
-		}
-	}
-	if len(s.pending) >= maxPending || pendingMutations >= maxPendingMutations {
+	if len(s.pending) >= maxPending || s.pendingMutations() >= maxPendingMutations {
 		return fail(harness.OutcomeFailed, "busy")
 	}
 	s.pending[digest] = call{tool: q.ToolID, root: root, plan: p}

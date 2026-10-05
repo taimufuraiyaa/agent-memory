@@ -95,6 +95,9 @@ type Config struct {
 	MaxActive   int
 	QueueSize   int
 	CallTimeout time.Duration
+	// ToolTimeout bounds one tool call. A command can legitimately run for minutes, so it
+	// is separate from the model call timeout; zero uses CallTimeout.
+	ToolTimeout time.Duration
 	// CloseTimeout bounds how long a run waits for provider sessions to close before
 	// it publishes a terminal state, so a provider that hangs in Close cannot hold a
 	// finished run hostage.
@@ -217,6 +220,9 @@ func NewManager(cfg Config) (*Manager, error) {
 	defaults(&cfg.ReplyBytes, 64<<10)
 	if cfg.CallTimeout <= 0 {
 		cfg.CallTimeout = 30 * time.Second
+	}
+	if cfg.ToolTimeout <= 0 {
+		cfg.ToolTimeout = cfg.CallTimeout
 	}
 	if cfg.CloseTimeout <= 0 {
 		cfg.CloseTimeout = 2 * time.Second

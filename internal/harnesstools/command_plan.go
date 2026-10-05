@@ -25,7 +25,7 @@ const (
 	maxArgvBytes     = 8 << 10
 	// DefaultCommandTimeout and MaxCommandTimeout bound how long one command may run.
 	DefaultCommandTimeout = 60 * time.Second
-	MaxCommandTimeout     = 10 * time.Minute
+	MaxCommandTimeout     = 8 * time.Minute // under the session call limit, leaving room to stop and clean up
 	// DefaultCommandOutput is how much combined output the model can receive.
 	DefaultCommandOutput = 64 << 10
 	maxProjectProgram    = 64 << 10
@@ -76,6 +76,7 @@ type runArgs struct {
 
 // commandPlan is a fully resolved, not yet started command.
 type commandPlan struct {
+	realRoot string
 	argv     []string
 	program  string // absolute path of the program
 	dir      string // relative working directory, "." for the root
@@ -201,7 +202,7 @@ func planCommand(project *harnessfs.Root, root string, cfg CommandConfig, raw []
 	if a.TimeoutSeconds > 0 {
 		timeout = time.Duration(a.TimeoutSeconds) * time.Second
 	}
-	plan := &commandPlan{argv: append([]string(nil), a.Argv...), dir: cwd, realDir: filepath.Join(realRoot, filepath.FromSlash(cwd)), timeout: timeout}
+	plan := &commandPlan{realRoot: realRoot, argv: append([]string(nil), a.Argv...), dir: cwd, realDir: filepath.Join(realRoot, filepath.FromSlash(cwd)), timeout: timeout}
 
 	name := a.Argv[0]
 	var base string

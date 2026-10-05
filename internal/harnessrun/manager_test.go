@@ -879,8 +879,9 @@ func TestNewManagerRejectsUnusableBindings(t *testing.T) {
 }
 
 func TestTimeBudgetStopsBeforeTheProviderIsCalledAgain(t *testing.T) {
-	// Every clock reading advances one second, so each turn's measured time is
-	// exactly one second no matter how fast the fake provider answers.
+	// Every clock reading advances one second, so each measured span (a model call, a tool
+	// call) is exactly one second no matter how fast the fake provider answers. Tool time
+	// counts against the run's time budget, so a turn here costs two seconds.
 	var mu sync.Mutex
 	tick := time.Date(2026, 10, 4, 12, 0, 0, 0, time.UTC)
 	clock := func() time.Time { mu.Lock(); defer mu.Unlock(); tick = tick.Add(time.Second); return tick }
@@ -894,8 +895,34 @@ func TestTimeBudgetStopsBeforeTheProviderIsCalledAgain(t *testing.T) {
 	if done.State != harnessrun.StatePartial || done.Code != "budget_time" || done.Usage.ActiveMillis != 2000 {
 		t.Fatalf("status = %+v", done)
 	}
-	if f.model.Calls.Load() != 2 {
-		t.Fatalf("the provider was called %d times; the spent budget must stop a third call", f.model.Calls.Load())
+	if f.model.Calls.Load() != 1 {
+		t.Fatalf("the provider was called %d times; the spent budget must stop a second call", f.model.Calls.Load())
+	}
+}
+
+// A tool that takes a long time is not free: its time is charged to the run, so a command
+// cannot run past the run's time budget by being slow.
+func TestToolTimeCountsAgainstTheRunsTimeBudget(t *testing.T) {
+	f := newFixture(t, opts{
+		model:  harnesstest.Behavior{Script: []harnesstest.Step{{ToolID: "read", Text: "go"}, {Text: "done"}}},
+		tool:   &harnesstest.Behavior{Delay: 400 * time.Millisecond},
+		policy: allow,
+	})
+	id := f.start("key-00000001", "slow tool", harnessrun.Budget{}).ID
+	done := f.waitState(id, harnessrun.StateCompleted, harnessrun.StatePartial, harnessrun.StateFailed)
+	if done.State != harnessrun.StateCompleted || done.Usage.ActiveMillis < 400 {
+		t.Fatalf("tool time was not charged: %+v", done)
+	}
+	// And a budget the tool alone exhausts ends the run before another model call.
+	g := newFixture(t, opts{
+		model:  harnesstest.Behavior{Script: []harnesstest.Step{{ToolID: "read", Text: "go"}, {Text: "never reached"}}},
+		tool:   &harnesstest.Behavior{Delay: 600 * time.Millisecond},
+		policy: allow,
+	})
+	slow := g.start("key-00000002", "slow tool, small budget", harnessrun.Budget{MaxActive: 500 * time.Millisecond}).ID
+	ended := g.waitState(slow, harnessrun.StatePartial, harnessrun.StateCompleted, harnessrun.StateFailed)
+	if ended.State != harnessrun.StatePartial || ended.Code != "budget_time" || g.model.Calls.Load() != 1 {
+		t.Fatalf("a slow tool did not spend the budget: %+v (model calls %d)", ended, g.model.Calls.Load())
 	}
 }
 
@@ -1098,4 +1125,23 @@ func TestABudgetStopHasAlreadyReleasedItsProviderSessions(t *testing.T) {
 	f := newFixture(t, opts{model: model, tool: tool, policy: allow, edit: func(c *harnessrun.Config) { c.CloseTimeout = 5 * time.Second }})
 	f.waitState(f.start("key-00000001", "goal", harnessrun.Budget{MaxTurns: 2}).ID, harnessrun.StatePartial)
 	requireReleased(t, f, "partial")
+}
+
+// Tool calls have their own timeout: a tool that takes longer than the model call timeout is
+// not cut off by it.
+func TestAToolIsNotCutOffByTheModelCallTimeout(t *testing.T) {
+	f := newFixture(t, opts{
+		model:  harnesstest.Behavior{Script: []harnesstest.Step{{ToolID: "read", Text: "go"}, {Text: "done"}}},
+		tool:   &harnesstest.Behavior{Delay: 500 * time.Millisecond},
+		policy: allow,
+		edit: func(c *harnessrun.Config) {
+			c.CallTimeout = 150 * time.Millisecond // short enough that a 500 ms tool would be cut off by it
+			c.ToolTimeout = 5 * time.Second
+		},
+	})
+	id := f.start("key-00000001", "slow tool", harnessrun.Budget{}).ID
+	done := f.waitState(id, harnessrun.StateCompleted, harnessrun.StateFailed, harnessrun.StatePartial)
+	if done.State != harnessrun.StateCompleted || !contains(f.eventCodes(id), "tool:tool_ok") {
+		t.Fatalf("the tool was cut off: %+v events %v", done, f.eventCodes(id))
+	}
 }

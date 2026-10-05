@@ -193,3 +193,6 @@ func startReason(err error) string {
 	}
 	return "start failed"
 }
+
+// Supported reports whether this platform can run commands.
+func Supported() bool { return true }

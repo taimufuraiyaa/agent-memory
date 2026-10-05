@@ -18,9 +18,6 @@ const (
 var (
 	ErrInvalid = errors.New("invalid command specification")
 	ErrStart   = errors.New("the command could not be started")
-	// ErrUnsupported: this platform has no process groups, so commands are refused rather
-	// than half supported.
-	ErrUnsupported = errors.New("running commands is not supported on this platform")
 )
 
 type Spec struct {
@@ -46,3 +43,6 @@ type Result struct {
 }
 
 func Run(context.Context, Spec) (Result, error) { return Result{ExitCode: -1}, ErrUnsupported }
+
+// Supported reports whether this platform can run commands.
+func Supported() bool { return false }

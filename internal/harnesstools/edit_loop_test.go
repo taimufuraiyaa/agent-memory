@@ -29,7 +29,12 @@ type editLoop struct {
 
 func newEditLoop(t *testing.T, script []harnesstest.Step, policy harnessrun.ToolPolicy) *editLoop {
 	t.Helper()
-	l := &editLoop{editEnv: newEditEnv(t), t: t, dir: t.TempDir()}
+	return newEditLoopOn(t, newEditEnv(t), script, policy)
+}
+
+func newEditLoopOn(t *testing.T, env *editEnv, script []harnesstest.Step, policy harnessrun.ToolPolicy) *editLoop {
+	t.Helper()
+	l := &editLoop{editEnv: env, t: t, dir: t.TempDir()}
 	registry := harness.NewRegistry()
 	model, err := harnesstest.Register(registry, harnesstest.Manifest("fake-model", harness.KindModel, "generation"), harnesstest.Behavior{Script: script})
 	if err != nil {

@@ -44,6 +44,12 @@ func EditPolicy() Policy {
 		ToolEditFile: TierAsk, ToolCreateFile: TierAsk, ToolDeleteFile: TierAsk})
 }
 
+// ProjectPolicy is EditPolicy plus running commands, which always ask.
+func ProjectPolicy() Policy {
+	return NewPolicy(map[harness.CapabilityID]Tier{ToolReadFile: TierAllow, ToolListDir: TierAllow, ToolSearch: TierAllow,
+		ToolEditFile: TierAsk, ToolCreateFile: TierAsk, ToolDeleteFile: TierAsk, ToolRunCommand: TierAsk})
+}
+
 var (
 	_ harnessrun.ToolPolicy     = Policy{}
 	_ harnessrun.StrictReasoner = Policy{}
@@ -67,7 +73,9 @@ func (p Policy) tier(capability harness.CapabilityID) Tier {
 func (p Policy) Reasons(action harness.PreparedAction) []string {
 	var reasons []string
 	for _, path := range action.Paths {
-		if kind := ControlPlane(path); kind != "" {
+		// A command's path is the directory it runs in, not a file it changes; what makes a
+		// command careful is what it is, which the tool reports as escalation codes.
+		if kind := ControlPlane(path); kind != "" && action.Capability != ToolRunCommand {
 			reasons = append(reasons, kind)
 		}
 	}

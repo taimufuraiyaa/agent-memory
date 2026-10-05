@@ -484,3 +484,25 @@ func TestEditReviewApproveAndUndoThroughTheRealCommandAndRuntime(t *testing.T) {
 		t.Fatalf("audit = %v %s", err, audit)
 	}
 }
+
+// A command that ran changed nothing this command can restore, so undo says so rather than
+// pretending: only edits, creates and deletes keep a saved copy.
+func TestUndoOfAnAppliedCommandSaysThereIsNothingToRestore(t *testing.T) {
+	terminal(t, true)
+	e := newApprovalsEnv(t)
+	record := e.request("run_cmd", 9, func(r *harnessapproval.Request) {
+		r.Tool, r.Summary, r.Paths, r.Friction, r.Reasons = "run_command", "run go test ./... (in .)", []string{"."}, harnessapproval.FrictionStandard, nil
+	})
+	if _, err := e.store.Decide(context.Background(), record.ID, harnessapproval.Decision{Approve: true, Code: harnessapproval.Code(record), Via: "terminal"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.store.Consume(context.Background(), record.ID, "run_cmd", record.Digest); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.store.Finish(context.Background(), record.ID, "applied"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.run("undo\n", "undo", record.ID); err == nil || !strings.Contains(err.Error(), "no saved copy") {
+		t.Fatalf("undo of a command = %v", err)
+	}
+}
