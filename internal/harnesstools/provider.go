@@ -52,6 +52,8 @@ type Config struct {
 	Redact func(string) string
 	// SearchBudget bounds one search's wall time.
 	SearchBudget time.Duration
+	// Edit turns on the mutating tools; the zero value offers read tools only.
+	Edit EditConfig
 }
 
 type Provider struct{ cfg Config }
@@ -66,18 +68,31 @@ func NewProvider(cfg Config) (*Provider, error) {
 	if cfg.SearchBudget <= 0 {
 		cfg.SearchBudget = DefaultSearchBudget
 	}
+	if cfg.Edit.Enabled && cfg.Edit.PreimageDir == "" {
+		return nil, errors.New("editing needs a directory for saved copies")
+	}
 	return &Provider{cfg: cfg}, nil
 }
 
-// Manifest declares the tools. A declaration is not proof the workspace root exists.
+// Manifest declares the read tools. A declaration is not proof the workspace root exists.
 func Manifest() harness.Manifest {
 	return harness.Manifest{Version: harness.ContractVersion, ID: ProviderID, Kind: harness.KindTool,
 		Capabilities: []harness.CapabilityID{ToolListDir, ToolReadFile, ToolSearch}}
 }
 
+// Manifest declares the tools this provider offers: the read tools, and the mutating
+// tools only when editing is enabled.
+func (p *Provider) Manifest() harness.Manifest {
+	m := Manifest()
+	if p.cfg.Edit.Enabled {
+		m.Capabilities = []harness.CapabilityID{ToolCreateFile, ToolDeleteFile, ToolEditFile, ToolListDir, ToolReadFile, ToolSearch}
+	}
+	return m
+}
+
 // Register adds the provider; each session gets its own state.
 func (p *Provider) Register(registry *harness.Registry) error {
-	return registry.Register(Manifest(), func() (harness.Provider, error) {
+	return registry.Register(p.Manifest(), func() (harness.Provider, error) {
 		return &session{provider: p, pending: map[string]call{}}, nil
 	})
 }
@@ -86,6 +101,8 @@ type call struct {
 	tool string
 	args any
 	root string
+	// plan is the fully computed change for a mutating tool.
+	plan *plan
 }
 
 type session struct {
@@ -97,6 +114,14 @@ type session struct {
 }
 
 func (s *session) Close() error { return nil }
+
+// Release forgets a prepared call that policy or approval declined, so declined calls
+// cannot fill the session's bounded table of pending work.
+func (s *session) Release(digest string) {
+	s.mu.Lock()
+	delete(s.pending, digest)
+	s.mu.Unlock()
+}
 
 // Probe reports every tool available when the workspace's project root resolves and opens.
 func (s *session) Probe(_ context.Context, scope harness.Scope) (harness.LiveAccess, error) {
@@ -110,7 +135,7 @@ func (s *session) Probe(_ context.Context, scope harness.Scope) (harness.LiveAcc
 	}
 	access := harness.LiveAccess{Version: harness.ContractVersion, Provider: ProviderID, Scope: scope, Revision: 1,
 		Capabilities: map[harness.CapabilityID]harness.AccessState{}}
-	for _, c := range Manifest().Capabilities {
+	for _, c := range s.provider.Manifest().Capabilities {
 		access.Capabilities[c] = state
 	}
 	return access, nil
@@ -169,6 +194,8 @@ func (s *session) Prepare(_ context.Context, q harness.ToolRequest) (harness.Pre
 	var normalized any
 	var summary string
 	switch q.ToolID {
+	case ToolEditFile, ToolCreateFile, ToolDeleteFile:
+		return s.prepareMutation(q, root, action), nil
 	case ToolReadFile:
 		var a readArgs
 		if decodeStrict(q.Arguments, &a) != nil {
@@ -292,6 +319,14 @@ func (s *session) Invoke(ctx context.Context, action harness.PreparedAction) (ha
 	defer project.Close()
 	var body []byte
 	var outcome harness.Outcome
+	if prepared.plan != nil {
+		body, outcome = s.apply(ctx, project, prepared, action)
+		answer.Outcome = outcome
+		if outcome == harness.OutcomeOK {
+			answer.Output = body
+		}
+		return answer, nil
+	}
 	switch prepared.tool {
 	case ToolReadFile:
 		body, outcome = s.read(project, prepared.args.(readArgs), action.MaxBytes)

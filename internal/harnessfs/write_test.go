@@ -308,3 +308,38 @@ func TestInspectReadWholeAndRevisionAgreeWithRead(t *testing.T) {
 		}
 	}
 }
+
+// The recheck just before the rename is what protects a change made after the first look.
+func TestAChangeBetweenTheFirstLookAndTheRenameIsNotOverwritten(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "race.txt", "start\n", 0o644)
+	root := open(t, dir)
+	replaceHook = func() { writeFile(t, dir, "race.txt", "someone else\n", 0o644) }
+	defer func() { replaceHook = nil }()
+	if err := root.ReplaceFile("race.txt", []byte("mine\n"), Revision([]byte("start\n"))); !errors.Is(err, ErrStale) {
+		t.Fatalf("error = %v", err)
+	}
+	if readFile(t, dir, "race.txt") != "someone else\n" {
+		t.Fatal("the other change was overwritten")
+	}
+	if names := leftovers(t, dir); len(names) != 1 {
+		t.Fatalf("a temporary file was left behind: %v", names)
+	}
+}
+
+// A file that appears after the existence check but before the create is not truncated.
+func TestACreateNeverTruncatesAFileThatAppearsInTheGap(t *testing.T) {
+	dir := t.TempDir()
+	root := open(t, dir)
+	createHook = func(string) error {
+		writeFile(t, dir, "new.txt", "theirs\n", 0o644)
+		return nil
+	}
+	defer func() { createHook = nil }()
+	if _, err := root.CreateFile("new.txt", []byte("mine\n"), 0o644); !errors.Is(err, ErrExists) {
+		t.Fatalf("error = %v", err)
+	}
+	if readFile(t, dir, "new.txt") != "theirs\n" {
+		t.Fatal("a file that appeared in the gap was overwritten")
+	}
+}

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"strings"
 	"sync"
 	"time"
 	"unicode"
@@ -331,14 +332,21 @@ func (s *Session) Prepare(ctx context.Context, request ToolRequest) (PreparedAct
 	}
 	if action.Outcome != OutcomeOK {
 		// Only a fully successful preparation yields an invokable handle.
-		action.Digest = ""
+		action.Digest, action.Paths, action.Preview, action.Escalate = "", nil, "", nil
 		if !carriesPayload(action.Outcome) {
 			action.Summary = ""
 		}
+		if !reasonCodeOK(action.Reason) {
+			action.Reason = ""
+		}
 		return action, nil
 	}
+	action.Reason = ""
 	if !digestOK(action.Digest) {
 		return PreparedAction{}, fmt.Errorf("%w: action digest", ErrInvalid)
+	}
+	if err := validateChange(action); err != nil {
+		return PreparedAction{}, err
 	}
 	key := preparedKey{capability: action.Capability, digest: action.Digest}
 	s.mu.Lock()
@@ -399,12 +407,22 @@ func (s *Session) Invoke(ctx context.Context, action PreparedAction) (ToolAnswer
 
 // Discard releases a prepared action that policy or approval declined, so the
 // handle cannot be invoked later and an identical action can be prepared again.
-// It is idempotent and never contacts the provider.
+// It is idempotent and is not a provider call: it never waits on a provider.
 func (s *Session) Discard(action PreparedAction) {
 	s.mu.Lock()
+	_, held := s.prepared[preparedKey{capability: action.Capability, digest: action.Digest}]
 	delete(s.prepared, preparedKey{capability: action.Capability, digest: action.Digest})
 	s.mu.Unlock()
+	// A provider that keeps its own state for a prepared action may offer Release so a
+	// declined action does not occupy it. Release must not block and is never given a
+	// handle this session did not prepare.
+	if releaser, ok := s.provider.(Releaser); ok && held {
+		releaser.Release(action.Digest)
+	}
 }
+
+// Releaser is implemented by a tool provider that holds state for prepared actions.
+type Releaser interface{ Release(digest string) }
 
 // invoke runs one provider call under the session and caller contexts. A provider
 // that ignores cancellation cannot hold the run loop: the call returns a typed
@@ -473,6 +491,42 @@ func copyAccess(a LiveAccess) LiveAccess {
 		copied.Capabilities[id] = state
 	}
 	return copied
+}
+
+// reasonCodeOK accepts a short lowercase code, so a reason can never carry file content.
+func reasonCodeOK(code string) bool {
+	if code == "" || len(code) > maxEscalationLen {
+		return false
+	}
+	for _, r := range code {
+		if !(r >= 'a' && r <= 'z' || r == '_') {
+			return false
+		}
+	}
+	return true
+}
+
+// validateChange bounds what a prepared action reports about the change it would make.
+func validateChange(action PreparedAction) error {
+	if len(action.Paths) > MaxActionPaths || len(action.Preview) > MaxPreviewBytes || !utf8.ValidString(action.Preview) || len(action.Escalate) > MaxEscalations {
+		return fmt.Errorf("%w: change description", ErrInvalid)
+	}
+	for _, path := range action.Paths {
+		if path == "" || len(path) > MaxActionPath || !utf8.ValidString(path) || strings.ContainsAny(path, "\n\r\t\x00") {
+			return fmt.Errorf("%w: action path", ErrInvalid)
+		}
+	}
+	for _, code := range action.Escalate {
+		if code == "" || len(code) > maxEscalationLen {
+			return fmt.Errorf("%w: escalation code", ErrInvalid)
+		}
+		for _, r := range code {
+			if !(r >= 'a' && r <= 'z' || r == '_') {
+				return fmt.Errorf("%w: escalation code", ErrInvalid)
+			}
+		}
+	}
+	return nil
 }
 
 func digestOK(digest string) bool {

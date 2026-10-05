@@ -395,7 +395,13 @@ func (m *Manager) runTool(ctx context.Context, run Run, answer harness.ModelAnsw
 		return true
 	}
 	if prepared.Outcome != harness.OutcomeOK {
-		m.recordTool(id, "tool_"+string(prepared.Outcome), "", 0, run.Usage.Turns)
+		code := "tool_" + string(prepared.Outcome)
+		detail := ""
+		if prepared.Reason != "" {
+			// A fixed reason code lets the model correct itself; it never carries file content.
+			detail = code + ": " + prepared.Reason
+		}
+		m.recordTool(id, code, detail, len(detail), run.Usage.Turns)
 		return true
 	}
 	switch m.cfg.Policy.Decide(ctx, run.Owner, prepared) {

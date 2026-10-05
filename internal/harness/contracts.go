@@ -288,11 +288,32 @@ type ToolRequest struct {
 	Arguments []byte
 }
 
+// Limits on what a prepared action may report about a change.
+const (
+	MaxActionPaths   = 32
+	MaxActionPath    = 512
+	MaxPreviewBytes  = 48 << 10
+	MaxEscalations   = 8
+	maxEscalationLen = 32
+)
+
 type PreparedAction struct {
 	Envelope
 	Outcome Outcome
 	Digest  string
 	Summary string
+	// Paths are the project-relative paths the action would change; empty for a read.
+	Paths []string
+	// Preview is a bounded description of the change for a person to review. It goes to
+	// the trusted approval channel only and is never offered to a model or a client.
+	Preview string
+	// Reason is a fixed code saying why a preparation did not succeed, such as
+	// "no_match", so a model can correct itself; it carries no file content.
+	Reason string
+	// Escalate lists fixed reason codes that can only raise how carefully a change is
+	// approved, never lower it: policy classifies the paths itself and treats these as
+	// extra reasons for friction.
+	Escalate []string
 }
 
 type ToolAnswer struct {

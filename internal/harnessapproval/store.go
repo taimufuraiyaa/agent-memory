@@ -42,7 +42,7 @@ const (
 	MaxRecords = 400
 	// MaxPaths, MaxPreviewBytes and MaxArgumentBytes bound what one record holds.
 	MaxPaths         = 32
-	MaxPreviewBytes  = 16 << 10
+	MaxPreviewBytes  = 48 << 10
 	MaxArgumentBytes = 96 << 10
 	maxSummaryBytes  = 256
 

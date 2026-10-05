@@ -650,3 +650,124 @@ func TestReportedUsageAndModelAreValidatedAndKeptOnFailure(t *testing.T) {
 		t.Fatalf("failed call = %+v, %v", answer, err)
 	}
 }
+
+func TestAPreparedActionsChangeReportIsBoundedAndStrippedOnFailure(t *testing.T) {
+	big := make([]string, harness.MaxActionPaths+1)
+	for i := range big {
+		big[i] = "f.go"
+	}
+	for name, behavior := range map[string]harnesstest.Behavior{
+		"too many paths":     {Paths: big},
+		"empty path":         {Paths: []string{""}},
+		"newline in a path":  {Paths: []string{"a\nb"}},
+		"NUL in a path":      {Paths: []string{"a\x00b"}},
+		"long path":          {Paths: []string{strings.Repeat("a", harness.MaxActionPath+1)}},
+		"invalid UTF-8 path": {Paths: []string{"a\xffb"}},
+		"huge preview":       {Preview: strings.Repeat("p", harness.MaxPreviewBytes+1)},
+		"invalid preview":    {Preview: "a\xff"},
+		"too many codes":     {Escalate: []string{"a", "b", "c", "d", "e", "f", "g", "h", "i"}},
+		"empty code":         {Escalate: []string{""}},
+		"uppercase code":     {Escalate: []string{"Delete"}},
+		"code with a space":  {Escalate: []string{"a b"}},
+		"long code":          {Escalate: []string{strings.Repeat("a", 40)}},
+	} {
+		registry, _ := register(t, harness.KindTool, "fake-tool", behavior, "write")
+		s := open(t, registry, "fake-tool", scope)
+		envelope, _ := s.Envelope("write", 64)
+		if _, err := s.Prepare(context.Background(), harness.ToolRequest{Envelope: envelope, ToolID: "write"}); !errors.Is(err, harness.ErrInvalid) {
+			t.Errorf("%s: error = %v", name, err)
+		}
+	}
+
+	good := harnesstest.Behavior{Paths: []string{"a.go", "b/c.go"}, Preview: "-old\n+new\n", Escalate: []string{"delete", "control_plane"}}
+	registry, _ := register(t, harness.KindTool, "fake-tool", good, "write")
+	s := open(t, registry, "fake-tool", scope)
+	envelope, _ := s.Envelope("write", 64)
+	action, err := s.Prepare(context.Background(), harness.ToolRequest{Envelope: envelope, ToolID: "write"})
+	if err != nil || action.Preview != "-old\n+new\n" || len(action.Paths) != 2 || len(action.Escalate) != 2 {
+		t.Fatalf("a valid change report = %+v %v", action, err)
+	}
+
+	// A failed preparation keeps a well-formed reason code and drops anything else.
+	for reason, want := range map[string]string{"no_match": "no_match", "Has Space": "", "has\nnewline": "", strings.Repeat("a", 40): "", "": ""} {
+		registry, _ := register(t, harness.KindTool, "fake-tool", harnesstest.Behavior{Outcome: harness.OutcomeFailed, Reason: reason}, "write")
+		s := open(t, registry, "fake-tool", scope)
+		envelope, _ := s.Envelope("write", 64)
+		action, err := s.Prepare(context.Background(), harness.ToolRequest{Envelope: envelope, ToolID: "write"})
+		if err != nil || action.Reason != want {
+			t.Errorf("reason %q kept as %q (%v), want %q", reason, action.Reason, err, want)
+		}
+	}
+	// A reason on a successful preparation is dropped.
+	{
+		registry, _ := register(t, harness.KindTool, "fake-tool", harnesstest.Behavior{Reason: "no_match"}, "write")
+		s := open(t, registry, "fake-tool", scope)
+		envelope, _ := s.Envelope("write", 64)
+		if action, err := s.Prepare(context.Background(), harness.ToolRequest{Envelope: envelope, ToolID: "write"}); err != nil || action.Reason != "" {
+			t.Errorf("a successful preparation kept reason %q (%v)", action.Reason, err)
+		}
+	}
+
+	// A preparation that did not succeed carries none of it, so nothing a failed or denied
+	// call reports can reach a reviewer as if it were a real change.
+	for _, outcome := range []harness.Outcome{harness.OutcomeDenied, harness.OutcomeFailed, harness.OutcomeStale, harness.OutcomePartial} {
+		failing := good
+		failing.Outcome = outcome
+		registry, _ := register(t, harness.KindTool, "fake-tool", failing, "write")
+		s := open(t, registry, "fake-tool", scope)
+		envelope, _ := s.Envelope("write", 64)
+		action, err := s.Prepare(context.Background(), harness.ToolRequest{Envelope: envelope, ToolID: "write"})
+		if err != nil || action.Digest != "" || action.Paths != nil || action.Preview != "" || action.Escalate != nil {
+			t.Errorf("%s: %+v %v", outcome, action, err)
+		}
+	}
+}
+
+// releasingTool is a minimal tool provider that also implements harness.Releaser.
+type releasingTool struct {
+	scope    harness.Scope
+	released []string
+}
+
+func (r *releasingTool) Probe(_ context.Context, scope harness.Scope) (harness.LiveAccess, error) {
+	r.scope = scope
+	return harness.LiveAccess{Version: harness.ContractVersion, Provider: "releasing-tool", Scope: scope, Revision: 1,
+		Capabilities: map[harness.CapabilityID]harness.AccessState{"read": harness.AccessAvailable}}, nil
+}
+
+func (r *releasingTool) Close() error { return nil }
+
+func (r *releasingTool) Prepare(_ context.Context, q harness.ToolRequest) (harness.PreparedAction, error) {
+	return harness.PreparedAction{Envelope: q.Envelope, Outcome: harness.OutcomeOK, Digest: "digest-releasing", Summary: "prepared"}, nil
+}
+
+func (r *releasingTool) Invoke(_ context.Context, a harness.PreparedAction) (harness.ToolAnswer, error) {
+	return harness.ToolAnswer{Envelope: a.Envelope, Outcome: harness.OutcomeOK, Output: []byte("ok")}, nil
+}
+
+func (r *releasingTool) Release(digest string) { r.released = append(r.released, digest) }
+
+func TestDiscardTellsAProviderThatKeepsItsOwnStateOnlyAboutHandlesItPrepared(t *testing.T) {
+	tool := &releasingTool{}
+	registry := harness.NewRegistry()
+	manifest := harness.Manifest{Version: harness.ContractVersion, ID: "releasing-tool", Kind: harness.KindTool, Capabilities: []harness.CapabilityID{"read"}}
+	if err := registry.Register(manifest, func() (harness.Provider, error) { return tool, nil }); err != nil {
+		t.Fatal(err)
+	}
+	s := open(t, registry, "releasing-tool", scope)
+	envelope, _ := s.Envelope("read", 64)
+	action, err := s.Prepare(context.Background(), harness.ToolRequest{Envelope: envelope, ToolID: "read"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A handle the session never prepared, or one already used, is not forwarded.
+	s.Discard(harness.PreparedAction{Envelope: envelope, Digest: "digest-forged", Outcome: harness.OutcomeOK})
+	if len(tool.released) != 0 {
+		t.Fatalf("a forged handle reached the provider: %v", tool.released)
+	}
+	s.Discard(action)
+	s.Discard(action) // idempotent: the second discard holds nothing
+	if len(tool.released) != 1 || tool.released[0] != action.Digest {
+		t.Fatalf("released = %v", tool.released)
+	}
+}

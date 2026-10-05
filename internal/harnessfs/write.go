@@ -202,6 +202,9 @@ func (r *Root) ReplaceFile(rel string, data []byte, expect string) error {
 		cleanup()
 		return ErrUnreadable
 	}
+	if replaceHook != nil {
+		replaceHook()
+	}
 	// The recheck that matters is the last one before the replacement.
 	if err := r.verify(cleaned, expect); err != nil {
 		cleanup()
@@ -213,6 +216,11 @@ func (r *Root) ReplaceFile(rel string, data []byte, expect string) error {
 	}
 	return nil
 }
+
+// replaceHook lets a test change the file between writing the temporary file and the
+// final recheck, to prove that recheck is what stops a stale replacement. It is nil
+// outside tests.
+var replaceHook func()
 
 // createHook lets a test force a failure after directories exist, to prove they are
 // removed again. It is nil outside tests.

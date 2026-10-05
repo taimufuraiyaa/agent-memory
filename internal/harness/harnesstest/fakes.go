@@ -36,6 +36,10 @@ type Behavior struct {
 	Usage         harness.Usage       // usage reported by every model reply
 	ModelName     string              // provider-reported model identity
 	Digest        string              // tool preparation digest (default derived from the tool ID)
+	Paths         []string            // paths a prepared tool action reports it would change
+	Preview       string              // preview a prepared tool action reports
+	Escalate      []string            // escalation codes a prepared tool action reports
+	Reason        string              // reason code a prepared tool action reports
 }
 
 // Step scripts one model reply in a Behavior.Script.
@@ -213,7 +217,8 @@ func (f *Tool) Prepare(ctx context.Context, q harness.ToolRequest) (harness.Prep
 	if digest == "" {
 		digest = "digest-" + q.ToolID
 	}
-	return harness.PreparedAction{Envelope: f.Behavior.envelope(q.Envelope), Outcome: f.Behavior.outcome(), Digest: digest, Summary: "prepared " + q.ToolID}, nil
+	return harness.PreparedAction{Envelope: f.Behavior.envelope(q.Envelope), Outcome: f.Behavior.outcome(), Digest: digest, Summary: "prepared " + q.ToolID,
+		Paths: f.Behavior.Paths, Preview: f.Behavior.Preview, Escalate: f.Behavior.Escalate, Reason: f.Behavior.Reason}, nil
 }
 
 func (f *Tool) Invoke(ctx context.Context, action harness.PreparedAction) (harness.ToolAnswer, error) {

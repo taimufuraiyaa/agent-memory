@@ -39,3 +39,27 @@ func Schemas() []Schema {
 			}, "query")},
 	}
 }
+
+// EditSchemas returns the mutating tool descriptions, offered only when editing is enabled.
+// Every change is shown to a person who must approve it, so the descriptions tell a model
+// to keep changes small and exact.
+func EditSchemas() []Schema {
+	pathProp := map[string]any{"type": "string", "maxLength": 512, "description": "Path relative to the project root"}
+	return []Schema{
+		{Name: ToolCreateFile, Description: "Create a new text file, and any missing directories, in the project. Fails if the path exists. A person must approve each call.",
+			Parameters: object(map[string]any{
+				"path":    pathProp,
+				"content": map[string]any{"type": "string", "maxLength": MaxCreateBytes},
+			}, "path", "content")},
+		{Name: ToolDeleteFile, Description: "Delete one text file in the project. A person must approve each call, with extra care.",
+			Parameters: object(map[string]any{"path": pathProp}, "path")},
+		{Name: ToolEditFile, Description: "Replace exact text in one existing text file. Each old_text must appear exactly once in the file as it is now, and edits must not overlap. Keep each change small. A person must approve each call.",
+			Parameters: object(map[string]any{
+				"path": pathProp,
+				"edits": map[string]any{"type": "array", "minItems": 1, "maxItems": MaxEdits, "items": object(map[string]any{
+					"old_text": map[string]any{"type": "string", "minLength": 1, "maxLength": MaxEditTextBytes},
+					"new_text": map[string]any{"type": "string", "maxLength": MaxEditTextBytes},
+				}, "old_text", "new_text")},
+			}, "path", "edits")},
+	}
+}
