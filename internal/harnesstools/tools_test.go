@@ -671,3 +671,38 @@ func TestSearchResultsAreOrderedByFullPathNotByWalkOrder(t *testing.T) {
 		t.Fatalf("matches = %v, want %v", got, want)
 	}
 }
+
+// A link inside the project can name a protected file, so the tools must never follow
+// one: not to read it, not to list it, and not to search through it.
+func TestToolsNeverFollowALinkToAProtectedTarget(t *testing.T) {
+	e := newEnv(t)
+	if err := os.Symlink(".env", filepath.Join(e.root, "notes.txt")); err != nil {
+		t.Skip("symlinks unavailable")
+	}
+	if err := os.Mkdir(filepath.Join(e.root, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	write(t, e.root, ".git/config", "[core]\n\tneedle = 1\n")
+	if err := os.Symlink(".git", filepath.Join(e.root, "src")); err != nil {
+		t.Fatal(err)
+	}
+	for name, call := range map[string]result{
+		"read a file link":      e.call(ToolReadFile, map[string]any{"path": "notes.txt"}, 4096),
+		"read through a dir":    e.call(ToolReadFile, map[string]any{"path": "src/config"}, 4096),
+		"list a directory link": e.call(ToolListDir, map[string]any{"path": "src"}, 4096),
+		"search a file link":    e.call(ToolSearch, map[string]any{"query": "hunter2", "path": "notes.txt"}, 4096),
+	} {
+		if strings.Contains(call.output, "hunter2") || strings.Contains(call.output, "core") || (call.prepared == harness.OutcomeOK && call.outcome == harness.OutcomeOK) {
+			t.Errorf("%s: reached a protected target: prepared=%s outcome=%s output=%q", name, call.prepared, call.outcome, call.output)
+		}
+	}
+	// A project-wide search must not surface content reached only through a link.
+	// (The result echoes the query, so the check is on the matches, not on the text.)
+	res := e.call(ToolSearch, map[string]any{"query": "hunter2"}, 1<<16)
+	var found struct {
+		Matches []map[string]any `json:"matches"`
+	}
+	if err := json.Unmarshal([]byte(res.output), &found); err != nil || len(found.Matches) != 0 || strings.Contains(res.output, "notes.txt") {
+		t.Errorf("search followed a link: %q (%v)", res.output, err)
+	}
+}

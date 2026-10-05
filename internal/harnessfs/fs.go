@@ -107,7 +107,40 @@ func (r *Root) check(rel string) (string, error) {
 	if Denied(cleaned) {
 		return "", ErrDenied
 	}
+	if err := r.noLinks(cleaned); err != nil {
+		return "", err
+	}
 	return cleaned, nil
+}
+
+// noLinks refuses a path with a symlink in any component that exists. The operating
+// system already stops a link from leaving the root, but a link inside the root can
+// still name a protected target (`notes.txt` -> `.env`, `src` -> `.git`) that the name
+// checks never see, so links are never followed. A component that does not exist yet is
+// not an error here: creating a new file is checked against its existing parents.
+func (r *Root) noLinks(rel string) error {
+	if rel == "." {
+		return nil
+	}
+	prefix := ""
+	for _, part := range strings.Split(filepath.ToSlash(rel), "/") {
+		if prefix == "" {
+			prefix = part
+		} else {
+			prefix += "/" + part
+		}
+		info, err := r.root.Lstat(prefix)
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		if err != nil {
+			return ErrUnreadable
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return ErrDenied
+		}
+	}
+	return nil
 }
 
 // File is the result of one bounded read.

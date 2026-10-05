@@ -133,7 +133,7 @@ func TestAnInstructionFileCannotEscapeTheProjectRoot(t *testing.T) {
 		t.Fatalf("a blocked instruction file must be reported, not silently skipped: chunks=%v excluded=%v", chunks, excluded)
 	}
 	got := reasons(excluded)
-	if got["instr-CLAUDE.md"] != ReasonUnreadable || got["instr-AGENTS.md"] != ReasonUnreadable {
+	if got["instr-CLAUDE.md"] != ReasonDenied || got["instr-AGENTS.md"] != ReasonUnreadable {
 		t.Fatalf("exclusions = %v", got)
 	}
 }
@@ -184,8 +184,8 @@ func TestRepositoryPathsCannotEscapeOrReachCredentials(t *testing.T) {
 	if err := os.Symlink(outside, filepath.Join(root, "dir-out")); err != nil {
 		t.Fatal(err)
 	}
-	// A relative link that stays inside the root is followed; an absolute target is
-	// refused even when it happens to point back inside, which is the conservative choice.
+	// No link is followed, whether its target is relative, absolute, outside the root or
+	// back inside it: the target could be a protected file the name checks cannot see.
 	if err := os.Symlink("ok.txt", filepath.Join(root, "link-in.txt")); err != nil {
 		t.Fatal(err)
 	}
@@ -207,7 +207,7 @@ func TestRepositoryPathsCannotEscapeOrReachCredentials(t *testing.T) {
 			t.Fatalf("protected content was read: %+v", c)
 		}
 	}
-	if !got["ok.txt"] || !got["link-in.txt"] || len(chunks) != 2 {
+	if !got["ok.txt"] || len(chunks) != 1 {
 		t.Fatalf("only ordinary in-root files may be read; got %v", got)
 	}
 	for _, escape := range []string{"../" + filepath.Base(outside) + "/stolen.txt", "../../etc/passwd", filepath.Join(outside, "stolen.txt"), "/etc/passwd", "", "."} {
@@ -221,8 +221,8 @@ func TestRepositoryPathsCannotEscapeOrReachCredentials(t *testing.T) {
 			t.Errorf("%q was excluded as %q, want %q", protected, got, ReasonDenied)
 		}
 	}
-	if len(excluded) != len(hints)-2 {
-		t.Fatalf("excluded %d of %d denied paths: %v", len(excluded), len(hints)-2, excluded)
+	if len(excluded) != len(hints)-1 {
+		t.Fatalf("excluded %d of %d denied paths: %v", len(excluded), len(hints)-1, excluded)
 	}
 }
 

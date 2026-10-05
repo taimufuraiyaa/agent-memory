@@ -130,8 +130,10 @@ func TestSymlinksAndSpecialFilesCannotEscapeOrHang(t *testing.T) {
 			t.Errorf("%s was readable: %q, %v", name, f.Data, err)
 		}
 	}
-	if f, err := r.Read("link-in.txt", 100); err != nil || string(f.Data) != "inside" {
-		t.Fatalf("a relative link that stays inside the root should be followed: %q, %v", f.Data, err)
+	// Links are never followed, even one that stays inside the root, because the target
+	// could be a protected file the path checks cannot see.
+	if f, err := r.Read("link-in.txt", 100); !errors.Is(err, ErrDenied) {
+		t.Fatalf("a link inside the root must be refused: %q, %v", f.Data, err)
 	}
 	done := make(chan error, 1)
 	go func() { _, err := r.Read("pipe", 100); done <- err }()
@@ -143,7 +145,7 @@ func TestSymlinksAndSpecialFilesCannotEscapeOrHang(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("reading a FIFO blocked")
 	}
-	if _, _, err := r.ReadDir("dir-out", 100); !errors.Is(err, ErrUnreadable) {
+	if _, _, err := r.ReadDir("dir-out", 100); !errors.Is(err, ErrDenied) {
 		t.Fatalf("listing an escaping directory link = %v", err)
 	}
 	if !r.Exists("link-out.txt") || !r.Exists("ok.txt") || r.Exists("nope") || r.Exists("../x") {
@@ -253,5 +255,59 @@ func TestWalkIsOrderedBoundedAndNeverFollowsOrEntersProtectedPlaces(t *testing.T
 	}
 	if n, _, _ := r.Walk("a.go", opts, func(string, int64) error { return nil }); n != 0 {
 		t.Fatalf("walking a file visited %d", n)
+	}
+}
+
+// A link inside the root can name a protected target that the path checks never see, so
+// no component of a path may be a link, for files, directories, listings and walks.
+func TestLinksInsideTheRootAreNeverFollowed(t *testing.T) {
+	dir := t.TempDir()
+	must := func(err error) {
+		t.Helper()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	must(os.WriteFile(filepath.Join(dir, ".env"), []byte("TOKEN=abc\n"), 0o600))
+	must(os.Mkdir(filepath.Join(dir, ".git"), 0o755))
+	must(os.WriteFile(filepath.Join(dir, ".git", "config"), []byte("[core]\n"), 0o600))
+	must(os.Mkdir(filepath.Join(dir, "real"), 0o755))
+	must(os.WriteFile(filepath.Join(dir, "real", "a.txt"), []byte("ok\n"), 0o644))
+	must(os.Symlink(".env", filepath.Join(dir, "notes.txt")))
+	must(os.Symlink(".git", filepath.Join(dir, "src")))
+	must(os.Symlink("real", filepath.Join(dir, "alias")))
+	must(os.Symlink("real/a.txt", filepath.Join(dir, "a-link.txt")))
+	root, err := Open(dir)
+	must(err)
+	defer root.Close()
+
+	for _, path := range []string{"notes.txt", "src/config", "alias/a.txt", "a-link.txt"} {
+		if f, err := root.Read(path, 1000); err == nil {
+			t.Errorf("Read(%q) followed a link: %q", path, f.Data)
+		}
+	}
+	if _, _, err := root.ReadDir("src", 10); err == nil {
+		t.Error("ReadDir followed a directory link")
+	}
+	if _, _, err := root.ReadDir("alias", 10); err == nil {
+		t.Error("ReadDir followed a link to an ordinary directory")
+	}
+	if _, _, err := root.Walk("src", WalkOptions{}, func(string, int64) error { return nil }); err == nil {
+		t.Error("Walk started inside a directory link")
+	}
+	var seen []string
+	_, _, err = root.Walk(".", WalkOptions{}, func(p string, _ int64) error { seen = append(seen, p); return nil })
+	must(err)
+	for _, p := range seen {
+		if p != "real/a.txt" {
+			t.Errorf("a walk visited %q through a link", p)
+		}
+	}
+	// A genuine file still reads, and a path that does not exist is unreadable, not denied.
+	if f, err := root.Read("real/a.txt", 1000); err != nil || string(f.Data) != "ok\n" {
+		t.Errorf("ordinary file = %q, %v", f.Data, err)
+	}
+	if _, err := root.Read("real/missing.txt", 1000); !errors.Is(err, ErrUnreadable) {
+		t.Errorf("missing file = %v", err)
 	}
 }
