@@ -47,6 +47,9 @@ type Config struct {
 	// Health is shared by runs that use one provider. Nil makes a private one.
 	Health *Health
 	Now    func() time.Time
+
+	// limiter is set by a Hub so that its services share one in-flight bound and rate.
+	limiter *limiter
 }
 
 // Service asks one provider for advice on behalf of one run.
@@ -56,11 +59,45 @@ type Service struct {
 	required map[Kind]bool
 	health   *Health
 	now      func() time.Time
-	slots    chan struct{}
+	lim      *limiter
+
+	mu   sync.Mutex
+	used int
+}
+
+// limiter bounds how many requests are in flight and how fast they start. Services made
+// by one Hub share it, because the provider's capacity and the person's bill do not depend
+// on which run asked.
+type limiter struct {
+	slots     chan struct{}
+	perMinute int
+	now       func() time.Time
 
 	mu     sync.Mutex
-	used   int
 	recent []time.Time
+}
+
+func newLimiter(inFlight, perMinute int, now func() time.Time) *limiter {
+	return &limiter{slots: make(chan struct{}, inFlight), perMinute: perMinute, now: now}
+}
+
+// allow takes one unit of the rate, or says the minute is full.
+func (l *limiter) allow() bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	now := l.now()
+	kept := l.recent[:0]
+	for _, at := range l.recent {
+		if now.Sub(at) < time.Minute {
+			kept = append(kept, at)
+		}
+	}
+	l.recent = kept
+	if len(l.recent) >= l.perMinute {
+		return false
+	}
+	l.recent = append(l.recent, now)
+	return true
 }
 
 // New validates a configuration. A configuration that could not behave as stated, such as a
@@ -91,7 +128,10 @@ func New(cfg Config) (*Service, error) {
 	if s.cfg.PerMinute == 0 {
 		s.cfg.PerMinute = DefaultPerMinute
 	}
-	s.slots = make(chan struct{}, s.cfg.MaxInFlight)
+	s.lim = cfg.limiter
+	if s.lim == nil {
+		s.lim = newLimiter(s.cfg.MaxInFlight, s.cfg.PerMinute, s.now)
+	}
 	for _, kind := range cfg.Enabled {
 		if _, ok := specs[kind]; !ok {
 			return nil, fmt.Errorf("harnessdecide: unknown kind %q", kind)
@@ -205,26 +245,22 @@ func (s Spec) validateSubject(subject Item) error {
 	return s.validateNote(subject.Note)
 }
 
-// reserve takes one unit of the run's budget and rate, atomically, or says which is spent.
+// reserve takes one unit of the run's budget and of the shared rate, or says which is spent.
+// A refusal for rate gives the budget back, so only requests that can go out are counted.
 func (s *Service) reserve() Status {
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	now := s.now()
-	kept := s.recent[:0]
-	for _, at := range s.recent {
-		if now.Sub(at) < time.Minute {
-			kept = append(kept, at)
-		}
-	}
-	s.recent = kept
-	switch {
-	case s.used >= s.cfg.RunBudget:
+	if s.used >= s.cfg.RunBudget {
+		s.mu.Unlock()
 		return StatusExhausted
-	case len(s.recent) >= s.cfg.PerMinute:
-		return StatusBusy
 	}
 	s.used++
-	s.recent = append(s.recent, now)
+	s.mu.Unlock()
+	if !s.lim.allow() {
+		s.mu.Lock()
+		s.used--
+		s.mu.Unlock()
+		return StatusBusy
+	}
 	return ""
 }
 
@@ -274,8 +310,8 @@ func (s *Service) ask(ctx context.Context, kind Kind, r request) ([]string, Outc
 		return finish(status)
 	}
 	select {
-	case s.slots <- struct{}{}:
-		defer func() { <-s.slots }()
+	case s.lim.slots <- struct{}{}:
+		defer func() { <-s.lim.slots }()
 	default:
 		s.health.settle(kind, permission, StatusBusy)
 		return finish(StatusBusy)

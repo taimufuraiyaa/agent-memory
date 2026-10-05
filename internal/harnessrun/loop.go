@@ -244,7 +244,7 @@ func (m *Manager) callModel(ctx context.Context, current Run, models *modelSet, 
 	if fatal != "" {
 		return modelResult{fatal: fatal}
 	}
-	toolIDs := offeredTools(tool)
+	toolIDs := m.narrowTools(ctx, id, offeredTools(tool))
 	var spent time.Duration
 	var last modelResult
 	for i, binding := range chain {
@@ -358,6 +358,95 @@ func offeredTools(tool *harness.Session) []string {
 	}
 	sort.Strings(ids)
 	return ids
+}
+
+// toolSelectTimeout bounds how long a turn waits for tool advice.
+const toolSelectTimeout = 2 * time.Second
+
+// narrowTools applies the limit on offered tools. Advice may only choose among the available
+// tools, in the number the limit allows; anything else about it is discarded and the first
+// tools in the fixed order are kept, so a selector can neither add a tool nor stall a turn.
+// The clarification request is always offered.
+func (m *Manager) narrowTools(ctx context.Context, runID string, all []string) []string {
+	limit := m.cfg.MaxOfferedTools
+	if limit <= 0 || len(all) <= limit {
+		return all
+	}
+	rest := make([]string, 0, len(all))
+	for _, id := range all {
+		if id != ToolClarify {
+			rest = append(rest, id)
+		}
+	}
+	keep := max(limit-1, 0)
+	var chosen []string
+	if keep > 0 && m.cfg.ToolSelector != nil {
+		chosen = m.adviseTools(ctx, runID, rest, keep)
+	}
+	applied := len(chosen) > 0
+	for _, id := range rest {
+		if len(chosen) >= keep {
+			break
+		}
+		if !contains(chosen, id) {
+			chosen = append(chosen, id)
+		}
+	}
+	if applied {
+		m.record(runID, "turn", "tools_advice_used")
+	} else if keep > 0 && m.cfg.ToolSelector != nil {
+		m.record(runID, "turn", "tools_advice_ignored")
+	}
+	out := append([]string{ToolClarify}, chosen...)
+	sort.Strings(out)
+	return out
+}
+
+// adviseTools asks the selector within a deadline, contained against a panic, and returns
+// its choice only if it is valid: every tool offered, none twice, no more than keep.
+func (m *Manager) adviseTools(ctx context.Context, runID string, offered []string, keep int) []string {
+	adviceCtx, cancel := context.WithTimeout(ctx, toolSelectTimeout)
+	defer cancel()
+	type result struct {
+		ids []string
+		err error
+	}
+	done := make(chan result, 1)
+	go func() {
+		defer func() {
+			if recover() != nil {
+				done <- result{err: errors.New("tool selector panicked")}
+			}
+		}()
+		ids, err := m.cfg.ToolSelector.Select(adviceCtx, runID, append([]string(nil), offered...), keep)
+		done <- result{ids: ids, err: err}
+	}()
+	var got result
+	select {
+	case got = <-done:
+	case <-adviceCtx.Done():
+		return nil
+	}
+	if got.err != nil || len(got.ids) == 0 || len(got.ids) > keep {
+		return nil
+	}
+	seen := make(map[string]bool, len(got.ids))
+	for _, id := range got.ids {
+		if !contains(offered, id) || seen[id] {
+			return nil
+		}
+		seen[id] = true
+	}
+	return append([]string(nil), got.ids...)
+}
+
+func contains(list []string, want string) bool {
+	for _, item := range list {
+		if item == want {
+			return true
+		}
+	}
+	return false
 }
 
 // evidenceRefs names the goal and the most recent run chunks. Content is resolved by

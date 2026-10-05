@@ -220,6 +220,13 @@ func (a *Assembler) Assemble(ctx context.Context, req Request, chunks []Chunk, a
 		}
 		return excluded[i].Reason < excluded[j].Reason
 	})
+	if req.Order == OrderStable {
+		// Only the arrangement changes: the same chunks at the same visibility, the pinned
+		// instructions still first, the rest by identifier.
+		evidence := items[len(pinned):]
+		sort.SliceStable(evidence, func(i, j int) bool { return evidence[i].ID < evidence[j].ID })
+	}
+	report.Order = req.Order.String()
 	report.Included, report.TokensUsed = len(items), used
 	return Assembled{Items: items, Excluded: excluded, Report: report, Boundary: boundary, PolicyTok: policyTokens, PrefixID: prefixID(boundary, items)}, nil
 }

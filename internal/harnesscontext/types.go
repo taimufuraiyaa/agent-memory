@@ -223,6 +223,7 @@ type Report struct {
 	TokensAvail   int            `json:"tokens_available"`
 	PinnedTokens  int            `json:"pinned_tokens"`
 	AdviceApplied []string       `json:"-"`
+	Order         string         `json:"order"`
 }
 
 type Assembled struct {
@@ -262,10 +263,32 @@ type Budget struct {
 	ReserveOutput int
 }
 
+// Order is how the selected evidence is arranged in the prompt. Which chunks are included
+// and at what visibility does not depend on it; only their order does. Relevance puts the
+// most relevant first. Stable orders by identifier, so the evidence keeps the same order from
+// turn to turn and a provider's prompt cache can reuse more of it.
+type Order int
+
+const (
+	OrderRelevance Order = iota
+	OrderStable
+)
+
+func (o Order) valid() bool { return o == OrderRelevance || o == OrderStable }
+
+func (o Order) String() string {
+	if o == OrderStable {
+		return "stable"
+	}
+	return "relevance"
+}
+
 type Request struct {
 	Workspace   string
 	Eligibility Eligibility
 	Budget      Budget
+	// Order arranges the selected evidence. The zero value is the relevance order.
+	Order Order
 	// BoundarySeed, when set, makes the section boundary stable for everything sharing
 	// the seed, such as the turns of one run. Empty means a fresh random boundary.
 	BoundarySeed string
@@ -277,6 +300,9 @@ func (r Request) validate() error {
 	}
 	if !r.Eligibility.MaxSensitivity.valid() || !r.Eligibility.AdvisorMaxSensitivity.valid() {
 		return fmt.Errorf("%w: eligibility", ErrInvalid)
+	}
+	if !r.Order.valid() {
+		return fmt.Errorf("%w: order", ErrInvalid)
 	}
 	b := r.Budget
 	if b.Total < 1 || b.ToolSchema < 0 || b.ReserveOutput < 0 || b.ToolSchema+b.ReserveOutput >= b.Total {

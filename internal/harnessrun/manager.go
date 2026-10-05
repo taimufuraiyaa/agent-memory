@@ -44,6 +44,13 @@ type StrictReasoner interface {
 	Reasons(action harness.PreparedAction) []string
 }
 
+// ToolSelector advises which of the offered tools to keep when the model can be told about
+// only keep of them. offered is in a fixed order and never includes the clarification
+// request, which is always kept.
+type ToolSelector interface {
+	Select(ctx context.Context, runID string, offered []string, keep int) ([]string, error)
+}
+
 type denyAll struct{}
 
 func (denyAll) Decide(context.Context, Owner, harness.PreparedAction) Decision { return DecisionDeny }
@@ -76,6 +83,14 @@ type Config struct {
 	// Router, when set, plans an eligible chain of model providers for each call from the
 	// data class, size and remaining spend. Without it every call goes to Model.
 	Router ModelRouter
+	// MaxOfferedTools, when positive, is how many tools the model is told about in one
+	// call, the clarification request included. More tools than that are narrowed to the
+	// limit before the call. Zero offers everything that is available.
+	MaxOfferedTools int
+	// ToolSelector advises which tools to keep when there are more than MaxOfferedTools.
+	// It is advice only: the choice is validated and, if the selector is missing, slow,
+	// wrong or fails, the first tools in the fixed order are kept.
+	ToolSelector ToolSelector
 	// StillAuthorized is consulted before every turn; false cancels the run, so a
 	// revoked or expired grant stops its running work.
 	StillAuthorized func(Owner) bool
