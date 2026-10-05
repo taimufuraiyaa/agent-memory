@@ -430,7 +430,9 @@ func (g *Git) Log(ctx context.Context, n int, path string) (Log, error) {
 			return Log{}, err
 		}
 	}
-	args := []string{"log", "-n", strconv.Itoa(n), "--no-color", "--no-decorate", "--no-show-signature", "--format=%x1e%H%x1f%an%x1f%aI%x1f%s"}
+	// Every field is introduced by a NUL, which a commit's text cannot contain, so nothing a
+	// commit says can end a field early or start a record of its own.
+	args := []string{"log", "-n", strconv.Itoa(n), "--no-color", "--no-decorate", "--no-show-signature", "--format=%x00%H%x00%an%x00%aI%x00%s"}
 	if path != "" {
 		args = append(args, "--", path)
 	}
@@ -444,15 +446,23 @@ func (g *Git) Log(ctx context.Context, n int, path string) (Log, error) {
 		}
 		return Log{}, failed(res)
 	}
-	log := Log{Entries: []LogEntry{}}
-	for _, record := range strings.Split(string(res.Stdout), "\x1e") {
-		f := strings.Split(strings.TrimSpace(record), "\x1f")
-		if len(f) != 4 || !hashRE.MatchString(f[0]) {
+	return Log{Entries: parseLog(res.Stdout)}, nil
+}
+
+// parseLog reads Log's format: a leading empty field, then four fields per commit (hash,
+// author name, author date, subject), each introduced by a NUL. A group that does not hold a
+// real hash, or that is cut short, is dropped rather than guessed at.
+func parseLog(raw []byte) []LogEntry {
+	entries := []LogEntry{}
+	fields := strings.Split(string(raw), "\x00")
+	for i := 1; i+3 < len(fields); i += 4 {
+		if !hashRE.MatchString(fields[i]) {
 			continue
 		}
-		log.Entries = append(log.Entries, LogEntry{Commit: f[0], Author: harnessexec.Sanitize([]byte(f[1])), Date: harnessexec.Sanitize([]byte(f[2])), Subject: harnessexec.Sanitize([]byte(f[3]))})
+		entries = append(entries, LogEntry{Commit: fields[i], Author: harnessexec.Sanitize([]byte(fields[i+1])), Date: harnessexec.Sanitize([]byte(fields[i+2])),
+			Subject: harnessexec.Sanitize([]byte(strings.TrimRight(fields[i+3], "\n")))})
 	}
-	return log, nil
+	return entries
 }
 
 // ---- the pieces a stage or a commit is bound to ----

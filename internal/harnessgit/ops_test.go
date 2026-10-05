@@ -255,6 +255,62 @@ func TestLogListsRecentCommitsBoundedAndSanitized(t *testing.T) {
 	}
 }
 
+// Commit text is written by whoever made the commit, so it may contain any character Git
+// allows, including the ones the log format uses to separate records and fields.
+func TestAHostileCommitMessageCannotForgeOrHideLogEntries(t *testing.T) {
+	e := newRepo(t)
+	forged := strings.Repeat("a", 40)
+	e.git("commit", "-q", "--allow-empty", "-m", "real subject\x1e"+forged+"\x1fFake Author\x1f2020-01-01T00:00:00Z\x1fforged subject")
+	e.git("commit", "-q", "--allow-empty", "-m", "a subject with a field mark \x1f inside")
+	g := e.open()
+	log, err := g.Log(bg, 5, "")
+	if err != nil || len(log.Entries) != 3 {
+		t.Fatalf("%d entries (want the 3 real commits): %+v %v", len(log.Entries), log, err)
+	}
+	for _, entry := range log.Entries {
+		if entry.Commit == forged || entry.Author == "Fake Author" || entry.Subject == "forged subject" {
+			t.Fatalf("a commit message forged a log entry: %+v", entry)
+		}
+	}
+	if !strings.Contains(log.Entries[0].Subject, "field mark") || !strings.Contains(log.Entries[1].Subject, "real subject") {
+		t.Fatalf("a real commit was cut or hidden: %+v", log.Entries[:2])
+	}
+}
+
+func TestParseLogReadsOnlyWholeGroupsWithARealHash(t *testing.T) {
+	hash := strings.Repeat("c", 40)
+	other := strings.Repeat("d", 64)
+	group := func(h, author, date, subject string) string {
+		return "\x00" + h + "\x00" + author + "\x00" + date + "\x00" + subject + "\n"
+	}
+	for name, tc := range map[string]struct {
+		raw  string
+		want []string
+	}{
+		"nothing":             {"", nil},
+		"one":                 {group(hash, "A", "2020-01-01T00:00:00Z", "first"), []string{hash}},
+		"two":                 {group(hash, "A", "d", "one") + group(other, "B", "d", "two"), []string{hash, other}},
+		"a bad hash":          {group("nothex", "A", "d", "x") + group(hash, "A", "d", "y"), []string{hash}},
+		"a short hash":        {group(strings.Repeat("c", 39), "A", "d", "x"), nil},
+		"upper case hash":     {group(strings.ToUpper(hash), "A", "d", "x"), nil},
+		"cut short":           {group(hash, "A", "d", "one") + "\x00" + other + "\x00B", []string{hash}},
+		"no leading marker":   {hash + "\x00A\x00d\x00x\n", nil},
+		"a bad group between": {group(hash, "A", "d", "one") + group("bad", "A", "d", "two") + group(other, "B", "d", "three"), []string{hash, other}},
+	} {
+		var got []string
+		for _, e := range parseLog([]byte(tc.raw)) {
+			got = append(got, e.Commit)
+		}
+		if strings.Join(got, ",") != strings.Join(tc.want, ",") {
+			t.Errorf("%s: %v, want %v", name, got, tc.want)
+		}
+	}
+	entries := parseLog([]byte(group(hash, "Red \x1b[31mName", "d", "subject \x07 with controls")))
+	if len(entries) != 1 || entries[0].Author != "Red Name" || entries[0].Subject != "subject  with controls" {
+		t.Fatalf("%+v", entries)
+	}
+}
+
 func TestAddStagesExactlyTheNamedFilesAndReadsNothingAsAPattern(t *testing.T) {
 	e := newRepo(t)
 	e.write("a.txt", "a\n")
