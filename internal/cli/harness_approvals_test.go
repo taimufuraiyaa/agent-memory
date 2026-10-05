@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -504,5 +505,137 @@ func TestUndoOfAnAppliedCommandSaysThereIsNothingToRestore(t *testing.T) {
 	}
 	if _, err := e.run("undo\n", "undo", record.ID); err == nil || !strings.Contains(err.Error(), "no saved copy") {
 		t.Fatalf("undo of a command = %v", err)
+	}
+}
+
+// The whole path for Git: a scripted model changes a file, stages it and commits it, each step
+// parks the run, a person reviews and approves each with the real command, and the repository
+// ends up exactly as approved.
+func TestEditStageAndCommitThroughTheRealCommandAndRuntime(t *testing.T) {
+	terminal(t, true)
+	gitPath, err := exec.LookPath("git")
+	if err != nil {
+		t.Skip("no git on this machine")
+	}
+	e := newApprovalsEnv(t)
+	home := t.TempDir()
+	git := func(args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = e.root
+		cmd.Env = []string{"PATH=" + filepath.Dir(gitPath) + ":/usr/bin:/bin", "HOME=" + home, "GIT_CONFIG_NOSYSTEM=1", "LC_ALL=C"}
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	if err := os.WriteFile(filepath.Join(e.root, "notes.txt"), []byte("alpha\nbeta\ngamma\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	git("init", "-q", "-b", "main")
+	git("config", "user.name", "Test Person")
+	git("config", "user.email", "test@example.com")
+	git("add", "notes.txt")
+	git("commit", "-q", "-m", "start")
+	start := git("rev-parse", "HEAD")
+
+	provider, err := harnesstools.NewProvider(harnesstools.Config{Root: func(string) (string, error) { return e.root, nil },
+		Edit: harnesstools.EditConfig{Enabled: true, PreimageDir: harnessSavedDir(e.dataDir)},
+		Git:  harnesstools.GitConfig{Enabled: true, SearchPath: []string{filepath.Dir(gitPath)}, Home: home, TempRoot: filepath.Join(t.TempDir(), "gitwork")}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry := harness.NewRegistry()
+	if _, err := harnesstest.Register(registry, harnesstest.Manifest("fake-model", harness.KindModel, "generation"), harnesstest.Behavior{Script: []harnesstest.Step{
+		{ToolID: harnesstools.ToolEditFile, Arguments: `{"path":"notes.txt","edits":[{"old_text":"beta","new_text":"BETA"}]}`},
+		{ToolID: harnesstools.ToolGitStage, Arguments: `{"paths":["notes.txt"]}`},
+		{ToolID: harnesstools.ToolGitCommit, Arguments: `{"message":"Shout beta"}`},
+		{ToolID: harnesstools.ToolGitLog, Arguments: `{"count":2}`},
+		{Text: "committed"},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := provider.Register(registry); err != nil {
+		t.Fatal(err)
+	}
+	manager, err := harnessrun.NewManager(harnessrun.Config{DataDir: e.dataDir, Registry: registry,
+		Model: harnessrun.Binding{Provider: "fake-model", Capability: "generation"}, Tool: &harnessrun.Binding{Provider: harnesstools.ProviderID, Capability: harnesstools.ToolReadFile},
+		Policy: harnesstools.ProjectPolicy(), Approvals: e.store, ApprovalPoll: 15 * time.Millisecond})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+	owner := harnessrun.Owner{ClientID: "claude-desktop", Workspace: "ws", GrantID: strings.Repeat("b", 32), GrantRevision: 1}
+	started, err := manager.Start(context.Background(), owner, harnessrun.StartRequest{IdempotencyKey: "key-00000001", Goal: "shout beta and commit it"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	seen := map[string]bool{}
+	approveNext := func(tool string) (approvalID, shown string) {
+		t.Helper()
+		for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
+			status, err := manager.Status(context.Background(), owner, started.ID)
+			if err != nil || status.Attention == nil || seen[status.Attention.ApprovalID] {
+				continue
+			}
+			record := e.state(status.Attention.ApprovalID)
+			if record.State != harnessapproval.StatePending {
+				continue
+			}
+			if record.Tool != tool {
+				t.Fatalf("the run asked for %s, want %s", record.Tool, tool)
+			}
+			seen[record.ID] = true
+			out, err := e.run(harnessapproval.Code(record)+"\n", "approve", record.ID)
+			if err != nil {
+				t.Fatalf("approve %s: %v\n%s", tool, err, out)
+			}
+			return record.ID, out
+		}
+		t.Fatalf("the run never asked for %s", tool)
+		return "", ""
+	}
+	if _, shown := approveNext(harnesstools.ToolEditFile); !strings.Contains(shown, "+BETA") {
+		t.Fatalf("the edit was shown as:\n%s", shown)
+	}
+	if _, shown := approveNext(harnesstools.ToolGitStage); !strings.Contains(shown, "STAGE FILES") || !strings.Contains(shown, "modified     notes.txt") || !strings.Contains(shown, "+BETA") {
+		t.Fatalf("the stage was shown as:\n%s", shown)
+	}
+	// Approving records the decision; the run applies it a moment later.
+	staged := ""
+	for deadline := time.Now().Add(10 * time.Second); staged != "notes.txt" && time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
+		staged = git("diff", "--cached", "--name-only")
+	}
+	if staged != "notes.txt" || git("rev-parse", "HEAD") != start {
+		t.Fatalf("after the stage: staged %q, head moved %v", staged, git("rev-parse", "HEAD") != start)
+	}
+	commitID, shown := approveNext(harnesstools.ToolGitCommit)
+	for _, want := range []string{"COMMIT", "branch    main", "author    Test Person <test@example.com>", "| Shout beta", "+BETA"} {
+		if !strings.Contains(shown, want) {
+			t.Errorf("the commit was shown without %q:\n%s", want, shown)
+		}
+	}
+	for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
+		if status, _ := manager.Status(context.Background(), owner, started.ID); status.State.Terminal() {
+			if status.State != harnessrun.StateCompleted {
+				t.Fatalf("the run ended as %+v", status)
+			}
+			break
+		}
+	}
+	if git("log", "-1", "--format=%s") != "Shout beta" || git("show", "--name-only", "--format=", "HEAD") != "notes.txt" || git("rev-parse", "HEAD^") != start || git("status", "--porcelain") != "" {
+		t.Fatalf("the repository is not as approved:\n%s", git("log", "--stat", "-3"))
+	}
+	if got := e.state(commitID); got.State != harnessapproval.StateConsumed || got.Outcome != "applied" {
+		t.Fatalf("approval = %+v", got)
+	}
+	// There is no saved copy of a commit, so there is nothing to undo here; the person's own Git can.
+	if _, err := e.run("undo\n", "undo", commitID); err == nil || !strings.Contains(err.Error(), "no saved copy") {
+		t.Fatalf("undo of a commit = %v", err)
+	}
+	if audit, err := e.run("", "audit"); err != nil || !strings.Contains(audit, `"verified":true`) {
+		t.Fatalf("audit = %v %s", err, audit)
 	}
 }
