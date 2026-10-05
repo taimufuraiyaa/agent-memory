@@ -28,18 +28,21 @@ type Spec struct {
 	Timeout   time.Duration
 	MaxOutput int
 	Grace     time.Duration
+	Split     bool
 }
 
 type Result struct {
-	Started      bool
-	ExitCode     int
-	Signal       string
-	TimedOut     bool
-	Cancelled    bool
-	Incomplete   bool
-	OmittedBytes int64
-	Output       string
-	Duration     time.Duration
+	Started       bool
+	ExitCode      int
+	Signal        string
+	TimedOut      bool
+	Cancelled     bool
+	Incomplete    bool
+	OmittedBytes  int64
+	Output        string
+	Duration      time.Duration
+	Stdout        []byte
+	StdoutOmitted int64
 }
 
 func Run(context.Context, Spec) (Result, error) { return Result{ExitCode: -1}, ErrUnsupported }

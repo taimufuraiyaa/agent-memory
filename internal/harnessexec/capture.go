@@ -68,7 +68,10 @@ var ansiRE = regexp.MustCompile(`\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:
 // dropped whole, invalid UTF-8 and every other control character are removed, and carriage
 // returns, which programs use to redraw a line, are dropped so a progress bar does not
 // flood the result.
-func sanitize(raw []byte) string {
+func sanitize(raw []byte) string { return Sanitize(raw) }
+
+// Sanitize makes bytes safe to keep and show, as described for sanitize.
+func Sanitize(raw []byte) string {
 	text := ansiRE.ReplaceAllString(strings.ToValidUTF8(string(raw), ""), "")
 	var b strings.Builder
 	b.Grow(len(text))
@@ -84,4 +87,31 @@ func sanitize(raw []byte) string {
 		}
 	}
 	return b.String()
+}
+
+// prefixBuffer keeps the first max bytes of a stream unchanged and counts the rest.
+type prefixBuffer struct {
+	mu      sync.Mutex
+	max     int
+	data    []byte
+	dropped int64
+}
+
+func (b *prefixBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if room := b.max - len(b.data); room > 0 {
+		take := min(room, len(p))
+		b.data = append(b.data, p[:take]...)
+		b.dropped += int64(len(p) - take)
+	} else {
+		b.dropped += int64(len(p))
+	}
+	return len(p), nil
+}
+
+func (b *prefixBuffer) result() ([]byte, int64) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return append([]byte(nil), b.data...), b.dropped
 }

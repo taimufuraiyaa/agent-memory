@@ -126,43 +126,9 @@ func (c CommandConfig) maxOutput() int {
 	return DefaultCommandOutput
 }
 
-// inside reports whether path is dir or below it.
-func inside(dir, path string) bool {
-	rel, err := filepath.Rel(dir, path)
-	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel)
-}
+func inside(dir, path string) bool { return harnessexec.Inside(dir, path) }
 
-// lookup finds a bare program name in the search path. Empty and relative entries are
-// ignored, and so is any entry inside the project, so a program a model writes into the
-// project can never shadow a toolchain. It returns the final path after links are resolved.
-func lookup(name string, dirs []string, realRoot string) (string, error) {
-	for _, dir := range dirs {
-		if dir == "" || !filepath.IsAbs(dir) {
-			continue
-		}
-		resolvedDir, err := filepath.EvalSymlinks(dir)
-		if err != nil || inside(realRoot, resolvedDir) {
-			continue
-		}
-		candidate := filepath.Join(resolvedDir, name)
-		real, err := filepath.EvalSymlinks(candidate)
-		if err != nil || inside(realRoot, real) {
-			continue
-		}
-		if info, err := os.Stat(real); err == nil && info.Mode().IsRegular() && info.Mode().Perm()&0o111 != 0 {
-			return real, nil
-		}
-	}
-	return "", os.ErrNotExist
-}
-
-func identityOf(path string) (string, error) {
-	info, err := os.Stat(path)
-	if err != nil {
-		return "", err
-	}
-	return fmt.Sprintf("%s|%d|%d", path, info.Size(), info.ModTime().UnixNano()), nil
-}
+func identityOf(path string) (string, error) { return harnessexec.Identity(path) }
 
 // planCommand validates a call and resolves everything about it without starting anything.
 func planCommand(project *harnessfs.Root, root string, cfg CommandConfig, raw []byte) (*commandPlan, harness.Outcome, string) {
@@ -218,7 +184,7 @@ func planCommand(project *harnessfs.Root, root string, cfg CommandConfig, raw []
 		if deniedName(name) {
 			return nil, harness.OutcomeDenied, "program_denied"
 		}
-		path, err := lookup(name, cfg.searchPath(), realRoot)
+		path, err := harnessexec.Lookup(name, cfg.searchPath(), realRoot)
 		if err != nil {
 			return nil, harness.OutcomeFailed, "program_not_found"
 		}

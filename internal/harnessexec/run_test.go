@@ -333,11 +333,14 @@ func TestSpecsThatCouldEscapeTheEnvelopeAreRefusedBeforeAnythingStarts(t *testin
 		"a huge output cap":      mutate(func(s *Spec) { s.MaxOutput = MaxOutputCap + 1 }),
 		"too many arguments":     mutate(func(s *Spec) { s.Args = many }),
 		"NUL in an argument":     mutate(func(s *Spec) { s.Args = []string{"a\x00b"} }),
-		"too many env entries":   mutate(func(s *Spec) { s.Env = manyEnv }),
-		"a malformed env entry":  mutate(func(s *Spec) { s.Env = []string{"NOEQUALS"} }),
-		"an env entry with NUL":  mutate(func(s *Spec) { s.Env = []string{"A=b\x00c"} }),
-		"an env entry no name":   mutate(func(s *Spec) { s.Env = []string{"=x"} }),
-		"a huge environment":     mutate(func(s *Spec) { s.Env = []string{"A=" + strings.Repeat("x", maxEnvBytes)} }),
+		"too many bytes of arguments": mutate(func(s *Spec) {
+			s.Args = []string{strings.Repeat("x", maxArgBytes/2+1), strings.Repeat("y", maxArgBytes/2+1)}
+		}),
+		"too many env entries":  mutate(func(s *Spec) { s.Env = manyEnv }),
+		"a malformed env entry": mutate(func(s *Spec) { s.Env = []string{"NOEQUALS"} }),
+		"an env entry with NUL": mutate(func(s *Spec) { s.Env = []string{"A=b\x00c"} }),
+		"an env entry no name":  mutate(func(s *Spec) { s.Env = []string{"=x"} }),
+		"a huge environment":    mutate(func(s *Spec) { s.Env = []string{"A=" + strings.Repeat("x", maxEnvBytes)} }),
 	} {
 		if res, err := Run(context.Background(), s); !errors.Is(err, ErrInvalid) || res.Started {
 			t.Errorf("%s: %+v %v", name, res, err)

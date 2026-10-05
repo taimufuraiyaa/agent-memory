@@ -28,7 +28,8 @@ const (
 	// MinOutput and MaxOutputCap bound the output capture.
 	MinOutput    = 1 << 10
 	MaxOutputCap = 1 << 20
-	maxArgs      = 128
+	maxArgs      = 512
+	maxArgBytes  = 256 << 10
 	maxEnv       = 64
 	maxEnvBytes  = 32 << 10
 )
@@ -51,6 +52,10 @@ type Spec struct {
 	MaxOutput int
 	// Grace overrides how long a terminated group has before it is killed; zero uses the default.
 	Grace time.Duration
+	// Split captures standard output separately and unmodified in Result.Stdout, for a caller
+	// that parses a machine format, and leaves only standard error in Result.Output. Without
+	// it the two are combined and sanitized into Result.Output.
+	Split bool
 }
 
 // Result is what happened. A command that exits non-zero is not an error: it is a result.
@@ -66,6 +71,10 @@ type Result struct {
 	OmittedBytes int64
 	Output       string
 	Duration     time.Duration
+	// Stdout is the raw standard output when Spec.Split was set, cut at MaxOutput bytes;
+	// StdoutOmitted counts what was dropped after the cut.
+	Stdout        []byte
+	StdoutOmitted int64
 }
 
 func (s Spec) validate() error {
@@ -93,10 +102,15 @@ func (s Spec) validate() error {
 	if len(s.Args) > maxArgs {
 		return fmt.Errorf("%w: too many arguments", ErrInvalid)
 	}
+	argBytes := 0
 	for _, a := range s.Args {
 		if strings.ContainsRune(a, 0) {
 			return fmt.Errorf("%w: NUL in an argument", ErrInvalid)
 		}
+		argBytes += len(a)
+	}
+	if argBytes > maxArgBytes {
+		return fmt.Errorf("%w: arguments too large", ErrInvalid)
 	}
 	if len(s.Env) > maxEnv {
 		return fmt.Errorf("%w: too many environment entries", ErrInvalid)
@@ -130,11 +144,17 @@ func Run(ctx context.Context, spec Spec) (Result, error) {
 		grace = DefaultGrace
 	}
 	out := newCapture(spec.MaxOutput)
+	var raw *prefixBuffer
 	cmd := exec.Command(spec.Program, spec.Args...)
 	cmd.Dir = spec.Dir
 	cmd.Env = append([]string(nil), spec.Env...)
 	cmd.Stdin = nil // the null device
-	cmd.Stdout, cmd.Stderr = out, out
+	if spec.Split {
+		raw = &prefixBuffer{max: spec.MaxOutput}
+		cmd.Stdout, cmd.Stderr = raw, out
+	} else {
+		cmd.Stdout, cmd.Stderr = out, out
+	}
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.WaitDelay = grace
 
@@ -177,9 +197,12 @@ func Run(ctx context.Context, spec Spec) (Result, error) {
 	if waitErr != nil && !errors.Is(waitErr, exec.ErrWaitDelay) && !errors.As(waitErr, &exitErr) {
 		return result, fmt.Errorf("%w: %v", ErrStart, waitErr)
 	}
-	raw, omitted := out.result()
+	kept, omitted := out.result()
 	result.OmittedBytes = omitted
-	result.Output = sanitize(raw)
+	result.Output = sanitize(kept)
+	if raw != nil {
+		result.Stdout, result.StdoutOmitted = raw.result()
+	}
 	return result, nil
 }
 
