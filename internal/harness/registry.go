@@ -18,9 +18,19 @@ type registration struct {
 type Registry struct {
 	mu        sync.RWMutex
 	providers map[ProviderID]registration
+	live      map[liveKey]*Session
 }
 
-func NewRegistry() *Registry { return &Registry{providers: make(map[ProviderID]registration)} }
+// liveKey identifies the one open session a provider may have per workspace.
+type liveKey struct {
+	provider  ProviderID
+	workspace string
+	run       string
+}
+
+func NewRegistry() *Registry {
+	return &Registry{providers: make(map[ProviderID]registration), live: make(map[liveKey]*Session)}
+}
 
 func (r *Registry) Register(manifest Manifest, factory Factory) error {
 	if err := manifest.Validate(); err != nil {

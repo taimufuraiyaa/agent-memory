@@ -87,13 +87,16 @@ const (
 
 // Scope binds a live provider session and every operation to one run generation.
 type Scope struct {
-	Workspace  string
+	Workspace string
+	// Run optionally identifies one run so concurrent runs in a workspace keep
+	// independent provider sessions instead of superseding each other.
+	Run        string
 	Generation uint64
 }
 
 func (s Scope) Validate() error {
-	if !identityRE.MatchString(s.Workspace) || s.Generation == 0 {
-		return fmt.Errorf("%w: workspace or generation", ErrInvalid)
+	if !identityRE.MatchString(s.Workspace) || s.Generation == 0 || (s.Run != "" && !identityRE.MatchString(s.Run)) {
+		return fmt.Errorf("%w: workspace, run or generation", ErrInvalid)
 	}
 	return nil
 }
@@ -139,14 +142,23 @@ type Envelope struct {
 }
 
 func (e Envelope) Validate(access LiveAccess) error {
+	if err := e.validateShape(access); err != nil {
+		return err
+	}
+	if access.Capabilities[e.Capability] != AccessAvailable {
+		return fmt.Errorf("%w: capability is not available", ErrInvalid)
+	}
+	return nil
+}
+
+// validateShape checks identity, scope, revision and bounds but not availability,
+// so a session can report a typed unsupported or denied outcome instead of an error.
+func (e Envelope) validateShape(access LiveAccess) error {
 	if e.Version != ContractVersion || e.Provider != access.Provider || e.Scope != access.Scope || e.AccessRevision != access.Revision {
 		return ErrStale
 	}
 	if e.MaxBytes < 1 || e.MaxBytes > MaxPayloadBytes || !identityRE.MatchString(string(e.Capability)) {
 		return fmt.Errorf("%w: operation bounds", ErrInvalid)
-	}
-	if access.Capabilities[e.Capability] != AccessAvailable {
-		return fmt.Errorf("%w: capability is not available", ErrInvalid)
 	}
 	return nil
 }
@@ -216,11 +228,37 @@ func ValidateDecisionAnswer(question DecisionQuestion, answer DecisionAnswer) er
 	return nil
 }
 
+// MaxPromptBytes bounds the assembled prompt a model request may carry.
+const MaxPromptBytes = 256 << 10
+
 type ModelRequest struct {
 	Envelope
 	InputRefs       []EvidenceRef
 	MaxOutputTokens int
 	ToolSchemaIDs   []string
+	// Prompt is the assembled, redacted context to send, within MaxPromptBytes. A
+	// provider sends nothing else from the run.
+	Prompt string
+	// PrefixID is a stable identity for the leading part of the prompt that does not
+	// change between turns (policy, pinned instructions, tool schemas). Empty means no
+	// cache claim is made; it is never a retrieval-query cache key.
+	PrefixID string
+}
+
+// Usage is what a provider reports it consumed. Cached input is evidence of prompt-prefix
+// reuse only when the provider itself reports it.
+type Usage struct {
+	InputTokens       int
+	OutputTokens      int
+	CachedInputTokens int
+}
+
+// MaxUsageTokens bounds a reported token count so accounting arithmetic cannot overflow.
+const MaxUsageTokens = 1 << 31
+
+func (u Usage) validate() bool {
+	return u.InputTokens >= 0 && u.InputTokens <= MaxUsageTokens && u.OutputTokens >= 0 && u.OutputTokens <= MaxUsageTokens &&
+		u.CachedInputTokens >= 0 && u.CachedInputTokens <= u.InputTokens
 }
 
 type ModelAnswer struct {
@@ -228,7 +266,21 @@ type ModelAnswer struct {
 	Outcome Outcome
 	Text    string
 	ToolID  string
+	// ToolArguments accompany ToolID and are bounded with the rest of the reply.
+	ToolArguments []byte
+	// CostMicros is the provider-reported cost of this call in millionths of the
+	// account currency unit; it is kept on every outcome because failed calls can
+	// still cost money.
+	CostMicros int64
+	// Usage and Model are the provider's own report of what ran and how much it used;
+	// they are kept on every outcome because failed calls can still consume tokens.
+	Usage Usage
+	Model string
 }
+
+// MaxCostMicros bounds one reported call cost so a faulty provider cannot overflow
+// spend accounting.
+const MaxCostMicros int64 = 1_000_000_000_000
 
 type ToolRequest struct {
 	Envelope
