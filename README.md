@@ -313,7 +313,17 @@ Enable it with all of: `AGENT_MEMORY_HARNESS_PROVIDERS=openai` and its settings,
 
 **Limits.** The structure of every answer is verified, not the quality of Jev's judgment. The live check of the decision provider against the real service has not been run (`AGENT_MEMORY_LIVE_JEV_TEST=1 go test ./internal/harnessjev -run TestLiveTypeSafeDecision -v` sends a few synthetic questions with your stored token). Tools, risk and sensitivity advice await composing tools into `serve`.
 
-### Real model provider (OpenAI, text-only, opt-in)
+### Tools, workers and the full MCP controls (openai mode, opt-in)
+
+**Project tools in `serve`.** With the openai composition, `AGENT_MEMORY_HARNESS_TOOLS=read,edit,git,commands` (any subset; read is implied) composes the project tools described above into the runtime with the project policy: reads run freely; every edit, stage, commit and command parks the run and waits for you at the terminal (`agent-memory harness approvals ...`), exactly as in the guides above. The OpenAI adapter now offers the composed tools to the model through function calling; a call to a tool that was not offered is a failure and is never passed on, and the model can ask you a question through a built-in `clarify` request. `AGENT_MEMORY_HARNESS_MAX_TOOLS` limits how many tools one call describes (the Jev `tools` decision, if enabled, chooses which). Jev's `tools` and `command_risk` decisions can now be listed in `AGENT_MEMORY_HARNESS_JEV` when tools are composed. Tools are refused in fake mode.
+
+**Workers.** `internal/harnessworker` runs subgoals as child runs: exact repeats are merged (and, with a decision service, near repeats), each worker gets an equal share of what the parent has left so the workers together cannot exceed it, `MaxParallel: 1` serializes them, they stop when the parent stops, and an ownership policy denies an action that changes a file another run owns. A shared snapshot records the first revision read of each file so a change under the workers is noticed. It is a library the runtime uses; a model cannot spawn workers itself yet.
+
+**More MCP tools.** After the four above, a granted adapter also gets `harness_continue` (answer a clarification; it can never approve), `harness_events` (cursor-paged event log), `harness_artifact` (read one bounded result) and `harness_readiness` (what is composed and healthy, with no provider call). HTTP: `GET .../runs/{id}/events`, `POST .../runs/{id}/continue`, `GET .../runs/{id}/artifacts/{aid}` and `GET .../readiness`.
+
+**Limits.** Windows and sandboxing limits of the command tool apply; no hosted path exists; the live coding task against OpenAI has not been run.
+
+### Real model provider (OpenAI, opt-in)
 
 By default the harness composes only fakes. A single real provider is available for text-only runs; it **sends assembled prompts to OpenAI and may incur charges**, so it needs every one of these, and refuses to start if any is missing or unrecognized:
 

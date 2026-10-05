@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -40,6 +41,10 @@ type HarnessGateway struct {
 	// Decisions, when set, reports the content-free health of the Jev decisions: counts per
 	// kind and status, what is paused, and whether the provider is reachable. It does no I/O.
 	Decisions func() map[string]any
+	// Tools lists the tool capabilities composed into the runtime, and Approvals says whether
+	// the trusted local approval store is in use, so readiness can report them.
+	Tools     []string
+	Approvals bool
 }
 
 type harnessBudgetView struct {
@@ -144,6 +149,26 @@ func harnessRouter(g *HarnessGateway) http.HandlerFunc {
 				return
 			}
 			g.status(w, r, parts[1])
+		case rest == "readiness":
+			if !harnessMethod(w, r, http.MethodGet) {
+				return
+			}
+			g.readiness(w, r)
+		case len(parts) == 3 && parts[0] == "runs" && parts[2] == "events" && harnessRunPathRE.MatchString(parts[1]):
+			if !harnessMethod(w, r, http.MethodGet) {
+				return
+			}
+			g.events(w, r, parts[1])
+		case len(parts) == 3 && parts[0] == "runs" && parts[2] == "continue" && harnessRunPathRE.MatchString(parts[1]):
+			if !harnessMethod(w, r, http.MethodPost) {
+				return
+			}
+			g.continueRun(w, r, parts[1])
+		case len(parts) == 4 && parts[0] == "runs" && parts[2] == "artifacts" && harnessRunPathRE.MatchString(parts[1]) && harnessArtifactPathRE.MatchString(parts[3]):
+			if !harnessMethod(w, r, http.MethodGet) {
+				return
+			}
+			g.artifact(w, r, parts[1], parts[3])
 		case len(parts) == 3 && parts[0] == "runs" && parts[2] == "cancel" && harnessRunPathRE.MatchString(parts[1]):
 			if !harnessMethod(w, r, http.MethodPost) {
 				return
@@ -350,4 +375,110 @@ func writeHarnessRunError(w http.ResponseWriter, err error) {
 	default:
 		writeErr(w, http.StatusInternalServerError, "internal_error", "internal error")
 	}
+}
+
+var harnessArtifactPathRE = regexp.MustCompile(`^a[0-9]{1,9}$`)
+
+type harnessContinueRequest struct {
+	Workspace          string `json:"workspace"`
+	IdempotencyKey     string `json:"idempotency_key"`
+	ExpectedGeneration uint64 `json:"expected_generation"`
+	Input              string `json:"input"`
+}
+
+// events pages the content-free event log. It needs the same grant operation as status.
+func (g *HarnessGateway) events(w http.ResponseWriter, r *http.Request, id string) {
+	workspace, ok := queryWorkspace(w, r)
+	if !ok {
+		return
+	}
+	principal, ok := g.authenticate(w, r, workspace, harnessauth.OpStatus)
+	if !ok {
+		return
+	}
+	limit := 0
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < 1 || n > harnessrun.MaxEventPageLimit {
+			writeErr(w, http.StatusBadRequest, "invalid_request", "invalid request")
+			return
+		}
+		limit = n
+	}
+	page, err := g.Runs.Events(r.Context(), harnessOwner(principal), id, r.URL.Query().Get("cursor"), limit)
+	if errors.Is(err, harnessrun.ErrInvalidCursor) {
+		writeErr(w, http.StatusBadRequest, "invalid_cursor", "invalid cursor")
+		return
+	}
+	if err != nil {
+		writeHarnessRunError(w, err)
+		return
+	}
+	writeOK(w, http.StatusOK, map[string]any{"events": page.Events, "next": page.Next, "gap": page.Gap})
+}
+
+// continueRun answers a clarification. It can never satisfy an approval.
+func (g *HarnessGateway) continueRun(w http.ResponseWriter, r *http.Request, id string) {
+	var request harnessContinueRequest
+	if !decodeHarnessBody(w, r, &request) {
+		return
+	}
+	principal, ok := g.authenticate(w, r, request.Workspace, harnessauth.OpContinue)
+	if !ok {
+		return
+	}
+	status, err := g.Runs.Continue(r.Context(), harnessOwner(principal), id, harnessrun.Mutation{IdempotencyKey: request.IdempotencyKey, ExpectedGeneration: request.ExpectedGeneration}, request.Input)
+	if err != nil {
+		writeHarnessRunError(w, err)
+		return
+	}
+	writeOK(w, http.StatusOK, map[string]any{"run": runView(status)})
+}
+
+// artifact returns one bounded result of a run.
+func (g *HarnessGateway) artifact(w http.ResponseWriter, r *http.Request, id, artifactID string) {
+	workspace, ok := queryWorkspace(w, r)
+	if !ok {
+		return
+	}
+	principal, ok := g.authenticate(w, r, workspace, harnessauth.OpArtifact)
+	if !ok {
+		return
+	}
+	content, err := g.Runs.Artifact(r.Context(), harnessOwner(principal), id, artifactID)
+	if err != nil {
+		writeHarnessRunError(w, err)
+		return
+	}
+	writeOK(w, http.StatusOK, map[string]any{"artifact": content})
+}
+
+// readiness says what the runtime can do right now, from local state only: no provider is
+// called. A client can tell a missing capability from a degraded one before starting a run.
+func (g *HarnessGateway) readiness(w http.ResponseWriter, r *http.Request) {
+	workspace, ok := queryWorkspace(w, r)
+	if !ok {
+		return
+	}
+	if _, ok := g.authenticate(w, r, workspace, harnessauth.OpCapabilities); !ok {
+		return
+	}
+	kinds := map[string]int{}
+	for _, manifest := range g.Providers {
+		kinds[string(manifest.Kind)]++
+	}
+	view := map[string]any{
+		"ready":      kinds[string(harness.KindModel)] > 0,
+		"providers":  kinds,
+		"fake":       g.Fake,
+		"tools":      g.Tools,
+		"approvals":  g.Approvals,
+		"decisions":  nil,
+		"hosted":     false,
+		"checked_at": time.Now().UTC().Format(time.RFC3339),
+	}
+	if g.Decisions != nil {
+		view["decisions"] = g.Decisions()
+	}
+	writeOK(w, http.StatusOK, view)
 }

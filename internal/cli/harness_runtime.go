@@ -20,6 +20,7 @@ import (
 	"github.com/taimufuraiyaa/agent-memory/internal/harnessdecide"
 	"github.com/taimufuraiyaa/agent-memory/internal/harnessmodel"
 	"github.com/taimufuraiyaa/agent-memory/internal/harnessrun"
+	"github.com/taimufuraiyaa/agent-memory/internal/openaiapi"
 	"github.com/taimufuraiyaa/agent-memory/internal/workspace"
 )
 
@@ -60,6 +61,9 @@ func buildHarnessGatewayWith(ctx context.Context, svc *api.Service, errOut io.Wr
 	if mode == "" {
 		return nil, func() {}, nil
 	}
+	if mode == "fake" && strings.TrimSpace(os.Getenv(harnessToolsEnv)) != "" {
+		return nil, nil, fmt.Errorf("%s needs the openai composition; the fake model never asks for a tool", harnessToolsEnv)
+	}
 	if mode != "fake" && mode != "openai" {
 		return nil, nil, fmt.Errorf("unsupported %s %q; use \"fake\" or \"openai\"", harnessProvidersEnv, mode)
 	}
@@ -87,6 +91,8 @@ func buildHarnessGatewayWith(ctx context.Context, svc *api.Service, errOut io.Wr
 	fake := mode == "fake"
 	var notice string
 	var decisions *jevComposition
+	var toolNames []string
+	approvalsOn := false
 	switch mode {
 	case "fake":
 		if _, err := harnesstest.Register(registry, harnesstest.Manifest("fake-model", harness.KindModel, "generation"),
@@ -106,6 +112,18 @@ func buildHarnessGatewayWith(ctx context.Context, svc *api.Service, errOut io.Wr
 		}
 		cfg.Model, cfg.Router, cfg.Context, notice = composed.model, composed.router, composed.context, composed.notice
 		decisions = composed.jev
+		tools, err := composeTools(registry, workspaces, svc.BaseDir, decisions)
+		if err != nil {
+			decisions.close()
+			return nil, nil, err
+		}
+		if tools != nil {
+			cfg.Tool, cfg.Policy, cfg.Approvals, cfg.ToolSelector, cfg.MaxOfferedTools = &tools.binding, tools.policy, tools.approvals, tools.selector, tools.maxOffered
+			toolNames, approvalsOn = tools.names, true
+		} else if decisions != nil && (decisions.enabled[harnessdecide.KindTools] || decisions.enabled[harnessdecide.KindCommandRisk]) {
+			decisions.close()
+			return nil, nil, fmt.Errorf("%s lists a decision that needs tools; set %s as well", harnessJevEnv, harnessToolsEnv)
+		}
 	}
 	runs, err := harnessrun.NewManager(cfg)
 	if err != nil {
@@ -150,7 +168,7 @@ func buildHarnessGatewayWith(ctx context.Context, svc *api.Service, errOut io.Wr
 			decisions.close()
 		})
 	}
-	gateway := &api.HarnessGateway{Authority: authority, Runs: runs, Providers: registry.Manifests(), Fake: fake}
+	gateway := &api.HarnessGateway{Authority: authority, Runs: runs, Providers: registry.Manifests(), Fake: fake, Tools: toolNames, Approvals: approvalsOn}
 	if decisions != nil {
 		gateway.Decisions = decisions.snapshot
 	}
@@ -203,7 +221,7 @@ func composeOpenAI(ctx context.Context, registry *harness.Registry, workspaces *
 		window = parsed
 	}
 	provider, err := harnessmodel.NewOpenAIProvider(harnessmodel.OpenAIConfig{Model: model, APIKey: func() string { return key },
-		BaseURL: opts.openAIBaseURL, Pricing: pricing, AllowEgress: true})
+		BaseURL: opts.openAIBaseURL, Pricing: pricing, AllowEgress: true, Tools: offeredToolDescriptions()})
 	if err != nil {
 		return none, err
 	}
@@ -296,4 +314,12 @@ func parseHarnessPricing(raw string) (harnessmodel.Pricing, error) {
 		return harnessmodel.Pricing{}, fmt.Errorf("%s is out of range or inconsistent", harnessOpenAIPriceEnv)
 	}
 	return pricing, nil
+}
+
+// offeredToolDescriptions lets the model be offered tools only when they were composed in.
+func offeredToolDescriptions() func(ids []string) []openaiapi.Tool {
+	if strings.TrimSpace(os.Getenv(harnessToolsEnv)) == "" {
+		return nil
+	}
+	return toolDescriber()
 }

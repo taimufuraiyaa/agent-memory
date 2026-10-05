@@ -2,6 +2,7 @@ package harnessmodel
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -29,6 +30,9 @@ type OpenAIConfig struct {
 	BaseURL string
 	Pricing Pricing
 	Timeout time.Duration
+	// Tools, when set, describes the tools a call may offer, by identifier. An identifier it
+	// does not know is not offered; without it the model is text-only.
+	Tools func(ids []string) []openaiapi.Tool
 	// AllowEgress must be true. The adapter sends the assembled prompt to a third party,
 	// so it refuses to exist unless the operator has opted in.
 	AllowEgress bool
@@ -39,9 +43,9 @@ func OpenAIManifest() harness.Manifest {
 	return harness.Manifest{Version: harness.ContractVersion, ID: OpenAIProviderID, Kind: harness.KindModel, Capabilities: []harness.CapabilityID{OpenAICapability}}
 }
 
-// OpenAIProvider serves harness model calls through the OpenAI Responses API, text only:
-// no tools, no stored conversations, no streaming. Tool calling is not offered to the
-// model, so the loop can only receive text from it.
+// OpenAIProvider serves harness model calls through the OpenAI Responses API: no stored
+// conversations and no streaming. Tools are offered only when OpenAIConfig.Tools describes
+// them, and a call to a tool that was not offered is a failure, never passed on.
 type OpenAIProvider struct {
 	cfg    OpenAIConfig
 	client *openaiapi.Client
@@ -160,7 +164,11 @@ func (s *openAISession) Generate(ctx context.Context, req harness.ModelRequest) 
 	if maxTokens > openaiapi.MaxRespondOutputTokens {
 		maxTokens = openaiapi.MaxRespondOutputTokens
 	}
-	response, err := s.provider.client.Respond(ctx, key, s.provider.cfg.Model, openaiapi.Request{Input: req.Prompt, MaxOutputTokens: maxTokens})
+	request := openaiapi.Request{Input: req.Prompt, MaxOutputTokens: maxTokens}
+	if s.provider.cfg.Tools != nil && len(req.ToolSchemaIDs) > 0 {
+		request.Tools = s.provider.cfg.Tools(req.ToolSchemaIDs)
+	}
+	response, err := s.provider.client.Respond(ctx, key, s.provider.cfg.Model, request)
 	if err != nil {
 		answer.Outcome = outcomeFor(ctx, err)
 		return answer, nil
@@ -174,10 +182,40 @@ func (s *openAISession) Generate(ctx context.Context, req harness.ModelRequest) 
 	answer.Text, answer.Usage, answer.Model = text, usage, response.Model
 	answer.CostMicros = s.provider.cfg.Pricing.Cost(usage)
 	answer.Outcome = harness.OutcomeOK
+	if response.ToolName != "" {
+		if !offered(request.Tools, response.ToolName) {
+			answer.Outcome = harness.OutcomeFailed // a call to something that was not offered is never passed on
+			return answer, nil
+		}
+		answer.ToolID, answer.ToolArguments = response.ToolName, []byte(response.ToolArguments)
+		if response.ToolName == "clarify" { // a question for the person: its text, not a call
+			var ask struct {
+				Question string `json:"question"`
+			}
+			if json.Unmarshal(answer.ToolArguments, &ask) != nil || strings.TrimSpace(ask.Question) == "" {
+				answer.Outcome, answer.ToolID, answer.ToolArguments = harness.OutcomeFailed, "", nil
+				return answer, nil
+			}
+			answer.Text, answer.ToolArguments = ask.Question, nil
+		}
+		if len(answer.ToolArguments) > req.MaxBytes {
+			answer.Outcome, answer.ToolID, answer.ToolArguments = harness.OutcomeFailed, "", nil
+		}
+		return answer, nil
+	}
 	if response.Incomplete || cut {
 		answer.Outcome = harness.OutcomePartial
 	}
 	return answer, nil
+}
+
+func offered(tools []openaiapi.Tool, name string) bool {
+	for _, t := range tools {
+		if t.Name == name {
+			return true
+		}
+	}
+	return false
 }
 
 // boundText cuts text to at most max bytes on a rune boundary.

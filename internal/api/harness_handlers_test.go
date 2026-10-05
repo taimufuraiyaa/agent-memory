@@ -573,6 +573,12 @@ func TestHarnessEachOperationIsScopedToItsOwnEndpoint(t *testing.T) {
 			return e.do(http.MethodPost, "/api/v1/harness/runs/"+id+"/cancel", token, map[string]any{"workspace": "agent-memory", "idempotency_key": "cancel-scope-001", "expected_generation": 999})
 		},
 	}
+	endpoints[harnessauth.OpContinue] = func(token string) harnessResponse {
+		return e.do(http.MethodPost, "/api/v1/harness/runs/"+id+"/continue", token, map[string]any{"workspace": "agent-memory", "input": "an answer", "idempotency_key": "continue-scope-1", "expected_generation": 999})
+	}
+	endpoints[harnessauth.OpArtifact] = func(token string) harnessResponse {
+		return e.do(http.MethodGet, "/api/v1/harness/runs/"+id+"/artifacts/a1?workspace=agent-memory", token, nil)
+	}
 	for granted := range endpoints {
 		token, _ := e.grant("claude-desktop", granted)
 		for operation, call := range endpoints {
@@ -585,9 +591,15 @@ func TestHarnessEachOperationIsScopedToItsOwnEndpoint(t *testing.T) {
 			}
 		}
 	}
-	// Continue and artifact are granted by the authority but have no route yet, and
-	// approval can never be granted at all.
-	for _, path := range []string{"/continue", "/artifact", "/approve", "/events"} {
+	// The event log is read with the status grant and nothing else; approval can never be granted.
+	statusToken, _ := e.grant("claude-desktop", harnessauth.OpStatus)
+	if response := e.do(http.MethodGet, "/api/v1/harness/runs/"+id+"/events?workspace=agent-memory", statusToken, nil); response.status != http.StatusOK {
+		t.Errorf("events with a status grant = %d", response.status)
+	}
+	if response := e.do(http.MethodGet, "/api/v1/harness/runs/"+id+"/events?workspace=agent-memory", full, nil); response.status == http.StatusUnauthorized {
+		t.Error("events were refused to a full grant")
+	}
+	for _, path := range []string{"/artifact", "/approve"} {
 		if response := e.do(http.MethodPost, "/api/v1/harness/runs/"+id+path, full, map[string]any{"workspace": "agent-memory"}); response.status != http.StatusNotFound {
 			t.Errorf("%s = %d", path, response.status)
 		}
@@ -681,13 +693,19 @@ func TestHarnessApprovalsAreNotReachableThroughTheGatewayAndShowOnlyAnIdentifier
 	for _, path := range []string{
 		"/api/v1/harness/approvals", "/api/v1/harness/approvals/" + approvalID, "/api/v1/harness/approvals/" + approvalID + "/approve",
 		"/api/v1/harness/runs/" + id + "/approve", "/api/v1/harness/runs/" + id + "/approvals", "/api/v1/harness/runs/" + id + "/approvals/" + approvalID,
-		"/api/v1/harness/runs/" + id + "/approve?workspace=agent-memory", "/api/v1/harness/runs/" + id + "/decision", "/api/v1/harness/runs/" + id + "/continue",
+		"/api/v1/harness/runs/" + id + "/approve?workspace=agent-memory", "/api/v1/harness/runs/" + id + "/decision",
 	} {
 		for _, method := range []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete} {
 			response := e.do(method, path, token, map[string]any{"workspace": "agent-memory", "approve": true, "approved": true, "code": harnessapproval.Code(record), "approval_id": approvalID})
 			if response.status != http.StatusNotFound && response.status != http.StatusMethodNotAllowed {
 				t.Errorf("%s %s answered %d: %s", method, path, response.status, response.body)
 			}
+		}
+	}
+	// Continue answers clarifications only: whatever it is sent, it cannot touch an approval.
+	for _, body := range []map[string]any{{"workspace": "agent-memory", "approve": true, "code": harnessapproval.Code(record)}, {"workspace": "agent-memory", "input": harnessapproval.Code(record), "expected_generation": 1, "idempotency_key": "continue-attempt-1"}} {
+		if response := e.do(http.MethodPost, "/api/v1/harness/runs/"+id+"/continue", token, body); response.status == http.StatusOK {
+			t.Errorf("continue answered an approval wait: %s", response.body)
 		}
 	}
 	if got, _ := approvals.Get(context.Background(), approvalID); got.State != harnessapproval.StatePending {

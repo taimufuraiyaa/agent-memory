@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -28,10 +29,24 @@ func (e StatusError) Error() string { return "OpenAI API returned an error statu
 // ErrUnavailable covers transport failures: no response was received.
 var ErrUnavailable = errors.New("OpenAI API unavailable")
 
-// Request is one stateless text request. There is no tool, file, store or stream option.
+// Tool is one function the model may ask to have called. The caller runs nothing here: a call
+// comes back as a name and arguments for the harness to prepare, policy to judge and, where it
+// changes anything, a person to approve.
+type Tool struct {
+	Name        string
+	Description string
+	Parameters  map[string]any
+}
+
+// MaxToolArgumentBytes bounds the arguments of one call.
+const MaxToolArgumentBytes = 16 << 10
+
+// Request is one stateless request. There is no file, store or stream option; tools are
+// offered only when listed.
 type Request struct {
 	Input           string
 	MaxOutputTokens int
+	Tools           []Tool
 }
 
 // Response is the validated result of one call. Incomplete means the output cap was hit.
@@ -44,6 +59,9 @@ type Response struct {
 	CachedInputTokens int
 	// UsageReported is false when the service sent no usage, so a caller must estimate.
 	UsageReported bool
+	// ToolName and ToolArguments are the first function call the model made, if any.
+	ToolName      string
+	ToolArguments string
 }
 
 // NewHarnessClient builds a client for the coding harness. The per-call deadline is the
@@ -87,9 +105,21 @@ func (c *Client) Respond(ctx context.Context, key, model string, req Request) (R
 		req.MaxOutputTokens < 1 || req.MaxOutputTokens > MaxRespondOutputTokens {
 		return Response{}, errors.New("invalid OpenAI request bounds")
 	}
-	payload, _ := json.Marshal(map[string]any{
-		"model": model, "input": req.Input, "max_output_tokens": req.MaxOutputTokens, "store": false, "stream": false,
-	})
+	sent := map[string]any{"model": model, "input": req.Input, "max_output_tokens": req.MaxOutputTokens, "store": false, "stream": false}
+	if len(req.Tools) > 0 {
+		if len(req.Tools) > 64 {
+			return Response{}, errors.New("invalid OpenAI request bounds")
+		}
+		tools := make([]map[string]any, len(req.Tools))
+		for i, t := range req.Tools {
+			if !toolNameRE.MatchString(t.Name) || t.Parameters == nil {
+				return Response{}, errors.New("invalid OpenAI request bounds")
+			}
+			tools[i] = map[string]any{"type": "function", "name": t.Name, "description": t.Description, "parameters": t.Parameters, "strict": false}
+		}
+		sent["tools"], sent["tool_choice"], sent["parallel_tool_calls"] = tools, "auto", false
+	}
+	payload, _ := json.Marshal(sent)
 	body, err := c.send(ctx, key, http.MethodPost, "/v1/responses", payload, maxRespondBody)
 	if err != nil {
 		return Response{}, err
@@ -102,7 +132,10 @@ func (c *Client) Respond(ctx context.Context, key, model string, req Request) (R
 			Reason string `json:"reason"`
 		} `json:"incomplete_details"`
 		Output []struct {
-			Content []struct {
+			Type      string `json:"type"`
+			Name      string `json:"name"`
+			Arguments string `json:"arguments"`
+			Content   []struct {
 				Type string `json:"type"`
 				Text string `json:"text"`
 			} `json:"content"`
@@ -140,10 +173,20 @@ func (c *Client) Respond(ctx context.Context, key, model string, req Request) (R
 			}
 		}
 	}
-	if strings.TrimSpace(text) == "" {
+	toolName, toolArgs := "", ""
+	for _, item := range raw.Output {
+		if item.Type == "function_call" {
+			if !toolNameRE.MatchString(item.Name) || len(item.Arguments) > MaxToolArgumentBytes || !json.Valid([]byte(item.Arguments)) {
+				return Response{}, errors.New("OpenAI function call is invalid")
+			}
+			toolName, toolArgs = item.Name, item.Arguments
+			break
+		}
+	}
+	if strings.TrimSpace(text) == "" && toolName == "" {
 		return Response{}, errors.New("OpenAI response text is empty")
 	}
-	result := Response{Model: raw.Model, Text: text, Incomplete: incomplete}
+	result := Response{Model: raw.Model, Text: text, Incomplete: incomplete, ToolName: toolName, ToolArguments: toolArgs}
 	if raw.Usage != nil {
 		cached := 0
 		if raw.Usage.InputTokensDetails != nil {
@@ -193,3 +236,5 @@ func (c *Client) send(ctx context.Context, key, method, path string, payload []b
 	}
 	return content, nil
 }
+
+var toolNameRE = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_-]{0,63}$`)

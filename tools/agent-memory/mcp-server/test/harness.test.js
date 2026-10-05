@@ -84,7 +84,7 @@ function adapter(t, env) {
   return instance;
 }
 
-const harnessNames = ["harness_capabilities", "harness_start", "harness_status", "harness_cancel"];
+const harnessNames = ["harness_capabilities", "harness_start", "harness_status", "harness_cancel", "harness_continue", "harness_events", "harness_artifact", "harness_readiness"];
 const defaultNames = [
   "memory_write", "memory_search", "memory_recall", "memory_feedback", "memory_session_end",
   "solution_start", "solution_step", "solution_checkpoint", "solution_state", "solution_transition",
@@ -105,13 +105,13 @@ test("harness tools are absent without a grant and cannot be called", async (t) 
   assert.equal(service.requests.length, 0, "an unavailable tool still reached the service");
 });
 
-test("a configured grant adds exactly the four harness tools after the profile tools", async (t) => {
+test("a configured grant adds exactly the eight harness tools after the profile tools", async (t) => {
   const service = await stub(t, ok({}));
   const withDefault = adapter(t, { AGENT_MEMORY_API_URL: service.url, AGENT_MEMORY_HARNESS_TOKEN: token });
   assert.deepEqual(await withDefault.toolNames(), [...defaultNames, ...harnessNames]);
   const expanded = adapter(t, { AGENT_MEMORY_API_URL: service.url, AGENT_MEMORY_HARNESS_TOKEN: token, AGENT_MEMORY_MCP_PROFILE: "expanded" });
   const names = await expanded.toolNames();
-  assert.deepEqual(names.slice(-4), harnessNames);
+  assert.deepEqual(names.slice(-harnessNames.length), harnessNames);
   assert.ok(!names.includes("harness_approve") && !names.some((name) => /approve|approval/.test(name) && name.startsWith("harness")), "approval must not be an MCP tool");
 
   const listed = (await withDefault.request("tools/list")).result.tools.filter((tool) => tool.name.startsWith("harness_"));

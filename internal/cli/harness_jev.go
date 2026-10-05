@@ -30,6 +30,9 @@ var jevKinds = map[string]harnessdecide.Kind{
 	"model":      harnessdecide.KindModel,
 	"visibility": harnessdecide.KindVisibility,
 	"cache":      harnessdecide.KindCache,
+	// These two need tools composed in (AGENT_MEMORY_HARNESS_TOOLS) to have anything to advise.
+	"tools":        harnessdecide.KindTools,
+	"command_risk": harnessdecide.KindCommandRisk,
 }
 
 type jevComposition struct {
@@ -78,7 +81,7 @@ func composeJev(ctx context.Context, registry *harness.Registry, baseDir string,
 		kind, ok := jevKinds[name]
 		switch {
 		case !ok:
-			return nil, fmt.Errorf("%s: %q is not a decision this harness can use; choose from model, visibility, cache", harnessJevEnv, name)
+			return nil, fmt.Errorf("%s: %q is not a decision this harness can use; choose from model, visibility, cache, tools, command_risk", harnessJevEnv, name)
 		case enabled[kind]:
 			return nil, fmt.Errorf("%s: %q is listed twice", harnessJevEnv, name)
 		}

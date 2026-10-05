@@ -647,6 +647,31 @@ func (m *Manager) Events(_ context.Context, owner Owner, id, cursor string, limi
 	return page, nil
 }
 
+// ArtifactContent is one bounded result with its text.
+type ArtifactContent struct {
+	ID     string `json:"id"`
+	Kind   string `json:"kind"`
+	Turn   int    `json:"turn"`
+	Bytes  int    `json:"bytes"`
+	SHA256 string `json:"sha256"`
+	Text   string `json:"text"`
+}
+
+// Artifact returns one artifact of a run the owner started. Text was bounded and redacted
+// when it was kept; a run another client started is indistinguishable from none.
+func (m *Manager) Artifact(_ context.Context, owner Owner, id, artifactID string) (ArtifactContent, error) {
+	run, err := m.load(owner, id)
+	if err != nil {
+		return ArtifactContent{}, err
+	}
+	for _, a := range run.Artifacts {
+		if a.ID == artifactID {
+			return ArtifactContent{ID: a.ID, Kind: a.Kind, Turn: a.Turn, Bytes: a.Bytes, SHA256: a.SHA256, Text: a.Text}, nil
+		}
+	}
+	return ArtifactContent{}, ErrNotFound
+}
+
 // Cancel asks a run to stop. A queued or waiting run is cancelled at once; a running
 // run moves to cancelling and its providers are cancelled, then the worker finishes
 // the transition.

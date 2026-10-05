@@ -62,6 +62,9 @@ type Config struct {
 	Command CommandConfig
 	// Git turns on the Git tools; the zero value does not offer them.
 	Git GitConfig
+	// OnRead, when set, is told the revision of every file read_file returns, so runs that
+	// share a project can notice that a file changed under them. It must not block.
+	OnRead func(workspace, path, revision string)
 }
 
 type Provider struct{ cfg Config }

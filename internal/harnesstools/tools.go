@@ -62,6 +62,9 @@ func (s *session) read(project *harnessfs.Root, a readArgs, maxBytes int) ([]byt
 	if err != nil {
 		return nil, outcomeFor(err)
 	}
+	if s.provider.cfg.OnRead != nil {
+		s.provider.cfg.OnRead(s.scope.Workspace, a.Path, file.Revision)
+	}
 	lines := splitLines(file.Data)
 	from := a.StartLine - 1
 	if from > len(lines) {

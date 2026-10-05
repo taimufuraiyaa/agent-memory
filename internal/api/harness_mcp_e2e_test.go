@@ -169,7 +169,7 @@ func TestHarnessThroughTheRealMCPAdapter(t *testing.T) {
 			harnessCount++
 		}
 	}
-	if harnessCount != 4 {
+	if harnessCount != 8 {
 		t.Fatalf("tools = %v", names)
 	}
 

@@ -243,6 +243,27 @@ const harnessTools = [
     expected_generation: { type: "integer", minimum: 1 },
     idempotency_key: { type: "string", minLength: 8, maxLength: 64 },
   }, ["workspace", "run_id", "expected_generation"]),
+  tool("harness_continue", "Answer a clarification a run asked for and requeue it. It can never approve an action", {
+    workspace: { type: "string", maxLength: 64 },
+    run_id: { type: "string", maxLength: 36 },
+    input: { type: "string", minLength: 1, maxLength: 4096 },
+    expected_generation: { type: "integer", minimum: 1 },
+    idempotency_key: { type: "string", minLength: 8, maxLength: 64 },
+  }, ["workspace", "run_id", "input", "expected_generation"]),
+  tool("harness_events", "Page the content-free event log of a run with the cursor from the previous page", {
+    workspace: { type: "string", maxLength: 64 },
+    run_id: { type: "string", maxLength: 36 },
+    cursor: { type: "string", maxLength: 256 },
+    limit: { type: "integer", minimum: 1, maximum: 100 },
+  }, ["workspace", "run_id"]),
+  tool("harness_artifact", "Read one bounded result of a run by its artifact id from the run status", {
+    workspace: { type: "string", maxLength: 64 },
+    run_id: { type: "string", maxLength: 36 },
+    artifact_id: { type: "string", pattern: "^a[0-9]{1,9}$" },
+  }, ["workspace", "run_id", "artifact_id"]),
+  tool("harness_readiness", "Report what the harness can do right now (providers, tools, approvals, decisions) without calling any provider", {
+    workspace: { type: "string", maxLength: 64 },
+  }, ["workspace"]),
 ];
 const tools = [
   ...(profile === "expanded" ? allTools : allTools.filter((definition) => defaultToolNames.has(definition.name))),
@@ -496,6 +517,28 @@ async function callTool(name, args) {
       return requestHarness(`/api/v1/harness/runs/${args.run_id}/cancel`, { method: "POST", body: {
         workspace: args.workspace, expected_generation: args.expected_generation, idempotency_key: args.idempotency_key || randomUUID(),
       } });
+    case "harness_continue":
+      requireHarnessArguments(args);
+      return requestHarness(`/api/v1/harness/runs/${args.run_id}/continue`, { method: "POST", body: {
+        workspace: args.workspace, input: args.input, expected_generation: args.expected_generation, idempotency_key: args.idempotency_key || randomUUID(),
+      } });
+    case "harness_events": {
+      requireHarnessArguments(args);
+      const query = new URLSearchParams({ workspace: args.workspace });
+      if (args.cursor !== undefined) query.set("cursor", String(args.cursor));
+      if (args.limit !== undefined) {
+        if (!Number.isInteger(args.limit) || args.limit < 1 || args.limit > 100) throw new Error("limit is out of range");
+        query.set("limit", String(args.limit));
+      }
+      return requestHarness(`/api/v1/harness/runs/${args.run_id}/events?${query}`);
+    }
+    case "harness_artifact":
+      requireHarnessArguments(args);
+      if (!/^a[0-9]{1,9}$/.test(String(args.artifact_id ?? ""))) throw new Error("artifact_id is invalid");
+      return requestHarness(`/api/v1/harness/runs/${args.run_id}/artifacts/${args.artifact_id}?workspace=${encodeURIComponent(args.workspace)}`);
+    case "harness_readiness":
+      requireHarnessArguments(args);
+      return requestHarness(`/api/v1/harness/readiness?workspace=${encodeURIComponent(args.workspace)}`);
     default:
       throw new Error(`tool execution is not available for ${name}`);
   }
