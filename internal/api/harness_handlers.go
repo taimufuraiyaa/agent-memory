@@ -56,7 +56,10 @@ func budgetView(b harnessrun.Budget) harnessBudgetView {
 type harnessAttentionView struct {
 	Kind   string `json:"kind"`
 	Prompt string `json:"prompt,omitempty"`
-	Turn   int    `json:"turn"`
+	// ApprovalID lets the person find the approval at their terminal. It is an opaque
+	// identifier and grants nothing; the action digest is withheld.
+	ApprovalID string `json:"approval_id,omitempty"`
+	Turn       int    `json:"turn"`
 }
 
 type harnessRunView struct {
@@ -82,7 +85,7 @@ func runView(s harnessrun.Status) harnessRunView {
 	view := harnessRunView{ID: s.ID, State: s.State, Generation: s.Generation, Turn: s.Turn, Code: s.Code, Depth: s.Depth, Usage: s.Usage,
 		Budget: budgetView(s.Budget), Artifacts: s.Artifacts, CreatedAt: s.CreatedAt, UpdatedAt: s.UpdatedAt, ExpiresAt: s.ExpiresAt, Deduplicated: s.Deduplicated}
 	if s.Attention != nil {
-		view.Attention = &harnessAttentionView{Kind: s.Attention.Kind, Prompt: s.Attention.Prompt, Turn: s.Attention.Turn}
+		view.Attention = &harnessAttentionView{Kind: s.Attention.Kind, Prompt: s.Attention.Prompt, ApprovalID: s.Attention.ApprovalID, Turn: s.Attention.Turn}
 	}
 	return view
 }

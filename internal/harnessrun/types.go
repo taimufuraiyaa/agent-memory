@@ -78,6 +78,7 @@ var (
 	grantIDRE     = regexp.MustCompile(`^[a-f0-9]{32}$`)
 	idempotencyRE = regexp.MustCompile(`^[A-Za-z0-9._:-]{8,64}$`)
 	codeRE        = regexp.MustCompile(`^[a-z][a-z0-9_]{0,47}$`)
+	approvalIDRE  = regexp.MustCompile(`^apr_[0-9a-f]{32}$`)
 )
 
 func errStorage(detail string) error { return fmt.Errorf("%w: %s", ErrStorage, detail) }
@@ -208,7 +209,18 @@ type Attention struct {
 	Kind         string `json:"kind"`
 	Prompt       string `json:"prompt,omitempty"`
 	ActionDigest string `json:"action_digest,omitempty"`
-	Turn         int    `json:"turn"`
+	// ApprovalID names the approval a person must decide through the trusted local
+	// channel. It is an opaque identifier: knowing it grants nothing.
+	ApprovalID string `json:"approval_id,omitempty"`
+	Turn       int    `json:"turn"`
+}
+
+// PendingAction is an approved call waiting to be replayed the next time the run runs. The
+// run holds only identifiers; the arguments stay in the approval record until the approval
+// is consumed, so an approved action cannot be altered by editing the run.
+type PendingAction struct {
+	ApprovalID string `json:"approval_id"`
+	Digest     string `json:"digest"`
 }
 
 const (
@@ -245,6 +257,7 @@ type Run struct {
 	Usage         Usage                 `json:"usage"`
 	Checkpoint    checkpoint            `json:"checkpoint"`
 	Attention     *Attention            `json:"attention,omitempty"`
+	Pending       *PendingAction        `json:"pending,omitempty"`
 	Chunks        []Chunk               `json:"chunks"`
 	Artifacts     []Artifact            `json:"artifacts"`
 	Events        []Event               `json:"events"`
@@ -331,6 +344,13 @@ func (r Run) validate() error {
 	}
 	if (r.State == StateNeedsAttention) != (r.Attention != nil) {
 		return errStorage("attention does not match state")
+	}
+	if r.Attention != nil && r.Attention.ApprovalID != "" && !approvalIDRE.MatchString(r.Attention.ApprovalID) {
+		return errStorage("invalid approval identifier")
+	}
+	if r.Pending != nil && ((r.State != StateQueued && r.State != StateRunning) || !approvalIDRE.MatchString(r.Pending.ApprovalID) ||
+		r.Pending.Digest == "" || len(r.Pending.Digest) > 128) {
+		return errStorage("invalid pending action")
 	}
 	return nil
 }

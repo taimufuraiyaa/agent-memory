@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"crypto/subtle"
-	"encoding/json"
 	"fmt"
 	"strings"
 )
@@ -142,7 +141,7 @@ func (s *Store) Consume(ctx context.Context, id, runID, digest string) (Record, 
 			return nil
 		}
 		replay := record
-		replay.Arguments = append(json.RawMessage(nil), record.Arguments...)
+		replay.Arguments = append([]byte(nil), record.Arguments...)
 		record.State, record.ConsumedAt = StateConsumed, s.now().UTC()
 		record.clearContent()
 		if err := s.write(dir, record); err != nil {

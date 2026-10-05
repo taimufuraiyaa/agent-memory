@@ -32,7 +32,7 @@ const (
 	dirName       = "approvals"
 	lockName      = ".lock"
 	auditName     = "audit.jsonl"
-	maxRecord     = 256 << 10
+	maxRecord     = 512 << 10
 	lockStaleAge  = 30 * time.Second
 	lockWait      = 3 * time.Second
 
@@ -137,30 +137,32 @@ type Request struct {
 
 // Record is one approval as stored. Preview and Arguments exist only while it is live.
 type Record struct {
-	SchemaVersion int             `json:"schema_version"`
-	ID            string          `json:"id"`
-	RunID         string          `json:"run_id"`
-	RunGeneration uint64          `json:"run_generation"`
-	Owner         Owner           `json:"owner"`
-	Tool          string          `json:"tool"`
-	Digest        string          `json:"digest"`
-	Summary       string          `json:"summary"`
-	Paths         []string        `json:"paths"`
-	Friction      Friction        `json:"friction"`
-	Reasons       []string        `json:"reasons,omitempty"`
-	Preview       string          `json:"preview,omitempty"`
-	Arguments     json.RawMessage `json:"arguments,omitempty"`
-	State         State           `json:"state"`
-	Stop          bool            `json:"stop,omitempty"`
-	CodeFailures  int             `json:"code_failures,omitempty"`
-	Reason        string          `json:"reason,omitempty"`
-	Outcome       string          `json:"outcome,omitempty"`
-	DecidedVia    string          `json:"decided_via,omitempty"`
-	CreatedAt     time.Time       `json:"created_at"`
-	ExpiresAt     time.Time       `json:"expires_at"`
-	DecidedAt     time.Time       `json:"decided_at,omitzero"`
-	ConsumedAt    time.Time       `json:"consumed_at,omitzero"`
-	UpdatedAt     time.Time       `json:"updated_at"`
+	SchemaVersion int      `json:"schema_version"`
+	ID            string   `json:"id"`
+	RunID         string   `json:"run_id"`
+	RunGeneration uint64   `json:"run_generation"`
+	Owner         Owner    `json:"owner"`
+	Tool          string   `json:"tool"`
+	Digest        string   `json:"digest"`
+	Summary       string   `json:"summary"`
+	Paths         []string `json:"paths"`
+	Friction      Friction `json:"friction"`
+	Reasons       []string `json:"reasons,omitempty"`
+	Preview       string   `json:"preview,omitempty"`
+	// Arguments are the exact bytes the model sent, kept as bytes so they are replayed
+	// unchanged: re-encoding them could alter a digest computed from them.
+	Arguments    []byte    `json:"arguments,omitempty"`
+	State        State     `json:"state"`
+	Stop         bool      `json:"stop,omitempty"`
+	CodeFailures int       `json:"code_failures,omitempty"`
+	Reason       string    `json:"reason,omitempty"`
+	Outcome      string    `json:"outcome,omitempty"`
+	DecidedVia   string    `json:"decided_via,omitempty"`
+	CreatedAt    time.Time `json:"created_at"`
+	ExpiresAt    time.Time `json:"expires_at"`
+	DecidedAt    time.Time `json:"decided_at,omitzero"`
+	ConsumedAt   time.Time `json:"consumed_at,omitzero"`
+	UpdatedAt    time.Time `json:"updated_at"`
 }
 
 func (r Record) validate() error {
@@ -519,7 +521,7 @@ func (s *Store) Request(ctx context.Context, req Request) (Record, error) {
 		}
 		record := Record{ID: id, RunID: req.RunID, RunGeneration: req.RunGeneration, Owner: req.Owner, Tool: req.Tool, Digest: req.Digest,
 			Summary: req.Summary, Paths: append([]string(nil), req.Paths...), Friction: req.Friction, Reasons: append([]string(nil), req.Reasons...),
-			Preview: req.Preview, Arguments: append(json.RawMessage(nil), req.Arguments...), State: StatePending, CreatedAt: now, ExpiresAt: now.Add(s.ttl)}
+			Preview: req.Preview, Arguments: append([]byte(nil), req.Arguments...), State: StatePending, CreatedAt: now, ExpiresAt: now.Add(s.ttl)}
 		if err := s.write(dir, record); err != nil {
 			return err
 		}
@@ -634,8 +636,8 @@ func (s *Store) List(ctx context.Context, opts ListOptions) ([]Record, error) {
 			return err
 		}
 		limit := opts.Limit
-		if limit < 1 || limit > 200 {
-			limit = 200
+		if limit < 1 || limit > MaxRecords {
+			limit = MaxRecords
 		}
 		for _, record := range records {
 			record, err = s.expireIfDue(dir, record)

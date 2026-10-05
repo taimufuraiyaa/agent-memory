@@ -109,6 +109,13 @@ func (m *Manager) drive(ctx context.Context, run Run) {
 			m.finishBudget(ctx, id, code)
 			return
 		}
+		if current.Pending != nil {
+			// A person approved a call: replay exactly that call before asking the model for more.
+			if !m.runApproved(ctx, current, tool) {
+				return
+			}
+			continue
+		}
 		if !m.turn(ctx, current, models, tool) {
 			return
 		}
@@ -404,12 +411,10 @@ func (m *Manager) runTool(ctx context.Context, run Run, answer harness.ModelAnsw
 		m.recordTool(id, code, detail, len(detail), run.Usage.Turns)
 		return true
 	}
-	switch m.cfg.Policy.Decide(ctx, run.Owner, prepared) {
+	switch decision := m.cfg.Policy.Decide(ctx, run.Owner, prepared); decision {
 	case DecisionAllow:
-	case DecisionAsk:
-		tool.Discard(prepared)
-		m.park(ctx, id, Attention{Kind: AttentionApproval, ActionDigest: prepared.Digest, Turn: run.Usage.Turns}, "approval_required")
-		return false
+	case DecisionAsk, DecisionAskStrict:
+		return m.awaitApproval(ctx, run, answer, prepared, decision == DecisionAskStrict, tool)
 	default:
 		tool.Discard(prepared)
 		m.recordTool(id, "tool_denied", "", 0, run.Usage.Turns)
@@ -424,16 +429,7 @@ func (m *Manager) runTool(ctx context.Context, run Run, answer harness.ModelAnsw
 		m.recordTool(id, "tool_failed", "", 0, run.Usage.Turns)
 		return true
 	}
-	if result.Outcome == harness.OutcomeOK || result.Outcome == harness.OutcomePartial {
-		updated := m.recordTool(id, "tool_"+string(result.Outcome), string(result.Output), len(result.Output), run.Usage.Turns)
-		if updated != nil && budgetStop(*updated) == "budget_output" {
-			m.finishBudget(ctx, id, "budget_output")
-			return false
-		}
-		return true
-	}
-	m.recordTool(id, "tool_"+string(result.Outcome), "", 0, run.Usage.Turns)
-	return true
+	return m.finishToolCall(ctx, id, run.Usage.Turns, result)
 }
 
 // recordTool counts one tool attempt and keeps a bounded, content-minimized result.

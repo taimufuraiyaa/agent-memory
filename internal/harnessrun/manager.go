@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/taimufuraiyaa/agent-memory/internal/harness"
+	"github.com/taimufuraiyaa/agent-memory/internal/harnessapproval"
 )
 
 // Decision is a policy verdict on one prepared tool action.
@@ -25,12 +26,22 @@ const (
 	// DecisionAsk parks the run until a trusted local approval; MCP continuation
 	// can never supply it.
 	DecisionAsk
+	// DecisionAskStrict parks the run like DecisionAsk, with extra friction: a longer code,
+	// the reasons shown, and never batched. It is for changes to files that steer how the
+	// project is built or run, deletions, and anything unusually large.
+	DecisionAskStrict
 )
 
 // ToolPolicy decides whether a prepared action may run. It is deterministic local
 // policy: a Jev recommendation can inform it but never replaces it.
 type ToolPolicy interface {
 	Decide(ctx context.Context, owner Owner, action harness.PreparedAction) Decision
+}
+
+// StrictReasoner is implemented by a policy that can say, as fixed codes, why an action
+// asks with extra friction. The reasons are shown to the person deciding.
+type StrictReasoner interface {
+	Reasons(action harness.PreparedAction) []string
 }
 
 type denyAll struct{}
@@ -70,6 +81,13 @@ type Config struct {
 	StillAuthorized func(Owner) bool
 	// Redact removes secrets from untrusted text before it is kept.
 	Redact func(string) string
+	// Approvals is the trusted local approval store. With it, an action that policy says
+	// must ask is recorded there for a person to decide at a terminal, and the manager
+	// applies the recorded decisions. Without it such an action parks the run with no way
+	// to approve, which is the safe default.
+	Approvals *harnessapproval.Store
+	// ApprovalPoll is how often recorded decisions are applied; the default is one second.
+	ApprovalPoll time.Duration
 
 	Now    func() time.Time
 	Random io.Reader
@@ -219,6 +237,14 @@ func NewManager(cfg Config) (*Manager, error) {
 	for i := 0; i < cfg.MaxActive; i++ {
 		m.wg.Add(1)
 		go m.dispatch()
+	}
+	if cfg.Approvals != nil {
+		if cfg.ApprovalPoll <= 0 {
+			cfg.ApprovalPoll = time.Second
+		}
+		m.cfg.ApprovalPoll = cfg.ApprovalPoll
+		m.wg.Add(1)
+		go m.watchApprovals()
 	}
 	return m, nil
 }
@@ -610,6 +636,7 @@ func (m *Manager) Cancel(ctx context.Context, owner Owner, id string, mutation M
 	digest := requestDigest("cancel", id)
 	signal := false
 	var announce *Run
+	endedApproval := ""
 	run, err := m.mutate(id, func(r *Run) (bool, error) {
 		if !r.Owner.sameScope(owner) {
 			return false, ErrNotFound
@@ -626,6 +653,11 @@ func (m *Manager) Cancel(ctx context.Context, owner Owner, id string, mutation M
 		now := m.now().UTC()
 		switch r.State {
 		case StateQueued, StateNeedsAttention:
+			if r.Attention != nil && r.Attention.Kind == AttentionApproval {
+				endedApproval = r.Attention.ApprovalID
+			} else if r.Pending != nil {
+				endedApproval = r.Pending.ApprovalID
+			}
 			if err := r.move(StateCancelled, "cancelled_by_client", now); err != nil {
 				return false, err
 			}
@@ -649,6 +681,10 @@ func (m *Manager) Cancel(ctx context.Context, owner Owner, id string, mutation M
 	}
 	if signal {
 		m.signal(id)
+	}
+	if endedApproval != "" && m.cfg.Approvals != nil {
+		// The run no longer waits for this approval, so it can no longer be approved.
+		_, _ = m.cfg.Approvals.Resolve(ctx, endedApproval, harnessapproval.StateSuperseded, "run_cancelled")
 	}
 	if announce != nil {
 		m.step(ctx, *announce, "result", "completed", "run cancelled")

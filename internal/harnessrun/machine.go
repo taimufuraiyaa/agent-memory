@@ -37,6 +37,9 @@ func (r *Run) move(to State, code string, now time.Time) error {
 	if to != StateNeedsAttention {
 		r.Attention = nil
 	}
+	if to.Terminal() {
+		r.Pending = nil
+	}
 	r.Code = code
 	r.touch(now)
 	r.addEvent("state", code, now)

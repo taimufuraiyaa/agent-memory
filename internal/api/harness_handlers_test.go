@@ -17,6 +17,7 @@ import (
 	"github.com/taimufuraiyaa/agent-memory/internal/clientprofile"
 	"github.com/taimufuraiyaa/agent-memory/internal/harness"
 	"github.com/taimufuraiyaa/agent-memory/internal/harness/harnesstest"
+	"github.com/taimufuraiyaa/agent-memory/internal/harnessapproval"
 	"github.com/taimufuraiyaa/agent-memory/internal/harnessauth"
 	"github.com/taimufuraiyaa/agent-memory/internal/harnessrun"
 )
@@ -63,6 +64,7 @@ type harnessEnv struct {
 
 type harnessOpts struct {
 	model harnesstest.Behavior
+	tool  harnesstest.Behavior
 	edit  func(*harnessrun.Config)
 	noGW  bool
 }
@@ -90,7 +92,7 @@ func newHarnessEnv(t *testing.T, o harnessOpts) *harnessEnv {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := harnesstest.Register(registry, harnesstest.Manifest("fake-tool", harness.KindTool, "read"), harnesstest.Behavior{}); err != nil {
+	if _, err := harnesstest.Register(registry, harnesstest.Manifest("fake-tool", harness.KindTool, "read"), o.tool); err != nil {
 		t.Fatal(err)
 	}
 	cfg := harnessrun.Config{DataDir: dir, Registry: registry, Model: harnessrun.Binding{Provider: "fake-model", Capability: "generation"},
@@ -634,5 +636,64 @@ func TestHarnessStorageFaultsAreAnOpaqueInternalError(t *testing.T) {
 		if bytes.Contains(response.body, []byte(leak)) {
 			t.Fatalf("an internal error leaked %q: %s", leak, response.body)
 		}
+	}
+}
+
+// A person approves at a terminal, through the approval store. There is no route on the
+// gateway that approves, lists or reads an approval, whatever the credential; the client
+// sees only that an approval exists and its opaque identifier.
+func TestHarnessApprovalsAreNotReachableThroughTheGatewayAndShowOnlyAnIdentifier(t *testing.T) {
+	var approvals *harnessapproval.Store
+	e := newHarnessEnv(t, harnessOpts{
+		model: harnesstest.Behavior{Script: []harnesstest.Step{{ToolID: "read", Arguments: "{}"}}},
+		tool:  harnesstest.Behavior{Digest: "sha256:" + strings.Repeat("c", 64), Paths: []string{"secret/path.txt"}, Preview: "+PREVIEW-CONTENT\n"},
+		edit: func(c *harnessrun.Config) {
+			c.Policy = harnessAskAll{}
+			approvals = harnessapproval.Open(c.DataDir)
+			c.Approvals = approvals
+			c.ApprovalPoll = time.Hour
+		},
+	})
+	token, _ := e.grant("claude-desktop")
+	id := runID(e.start(token, "key-00000001", "needs approval"))
+	parked := e.waitRun(token, id, "needs_attention")
+	attention := parked["attention"].(map[string]any)
+	approvalID, _ := attention["approval_id"].(string)
+	if attention["kind"] != "approval" || !strings.HasPrefix(approvalID, "apr_") || len(approvalID) != 36 {
+		t.Fatalf("attention = %v", attention)
+	}
+	encoded, _ := json.Marshal(parked)
+	for _, leak := range []string{"digest", "PREVIEW-CONTENT", "secret/path.txt", "arguments", "code"} {
+		if leak == "code" {
+			continue // "code" is the run's own reason code field
+		}
+		if bytes.Contains(encoded, []byte(leak)) {
+			t.Fatalf("the client view carries %q: %s", leak, encoded)
+		}
+	}
+	record, err := approvals.Get(context.Background(), approvalID)
+	if err != nil || record.State != harnessapproval.StatePending || !strings.Contains(record.Preview, "PREVIEW-CONTENT") {
+		t.Fatalf("the approval store has %+v (%v)", record, err)
+	}
+
+	// Nothing on the gateway can approve, with any method, path or body, and none of these
+	// attempts changes the approval.
+	for _, path := range []string{
+		"/api/v1/harness/approvals", "/api/v1/harness/approvals/" + approvalID, "/api/v1/harness/approvals/" + approvalID + "/approve",
+		"/api/v1/harness/runs/" + id + "/approve", "/api/v1/harness/runs/" + id + "/approvals", "/api/v1/harness/runs/" + id + "/approvals/" + approvalID,
+		"/api/v1/harness/runs/" + id + "/approve?workspace=agent-memory", "/api/v1/harness/runs/" + id + "/decision", "/api/v1/harness/runs/" + id + "/continue",
+	} {
+		for _, method := range []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete} {
+			response := e.do(method, path, token, map[string]any{"workspace": "agent-memory", "approve": true, "approved": true, "code": harnessapproval.Code(record), "approval_id": approvalID})
+			if response.status != http.StatusNotFound && response.status != http.StatusMethodNotAllowed {
+				t.Errorf("%s %s answered %d: %s", method, path, response.status, response.body)
+			}
+		}
+	}
+	if got, _ := approvals.Get(context.Background(), approvalID); got.State != harnessapproval.StatePending {
+		t.Fatalf("a gateway request changed the approval: %+v", got)
+	}
+	if status := e.run(token, id); status["state"] != "needs_attention" {
+		t.Fatalf("the run moved: %v", status)
 	}
 }
