@@ -368,3 +368,18 @@ func TestARunSourceUsesValidOrderingAdviceAndOtherwiseTheRelevanceOrder(t *testi
 		t.Errorf("a slow advisor changed the prompt or held the turn for %v", time.Since(begin))
 	}
 }
+
+func TestTheVisibilityAdvisorNeedsAServiceAndClampsWhatItDescribes(t *testing.T) {
+	if _, _, err := (ServiceAdvisor{}).Promote(context.Background(), []Candidate{{ID: "a"}, {ID: "b"}}); err == nil {
+		t.Fatal("no service gave advice")
+	}
+	p := &positional{positions: []int{0}, conf: 0.9}
+	_, _, err := ServiceAdvisor{Service: decisionService(t, p)}.Promote(context.Background(), []Candidate{
+		{ID: "a", Source: SourceMemory, Tokens: -50, Relevance: 0.5}, {ID: "b", Source: SourceMemory, Tokens: 10, Relevance: 2}})
+	if err != nil || len(p.questions) != 1 {
+		t.Fatalf("%v %d", err, len(p.questions))
+	}
+	if ev := p.questions[0].Evidence; ev[0].Revision != "r=50;t=0" || ev[1].Revision != "r=100;t=10" {
+		t.Fatalf("evidence = %+v", ev)
+	}
+}

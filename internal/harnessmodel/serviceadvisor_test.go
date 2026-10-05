@@ -121,3 +121,18 @@ func TestAnAdvisorBehindTheServiceStillCannotWidenTheEligibleSet(t *testing.T) {
 		}
 	}
 }
+
+func TestTheAdvisorReturnsTheConfidenceTheProviderGaveAndErrorsOtherwise(t *testing.T) {
+	p := &picker{selected: []string{"b-mid"}, conf: 0.83}
+	id, conf, err := ServiceAdvisor{Service: decisionService(t, p)}.Prefer(context.Background(), []harness.ProviderID{"a-cheap", "b-mid"})
+	if err != nil || id != "b-mid" || conf != 0.83 {
+		t.Fatalf("%q %v %v", id, conf, err)
+	}
+	if _, _, err := (ServiceAdvisor{}).Prefer(context.Background(), []harness.ProviderID{"a-cheap", "b-mid"}); err == nil {
+		t.Fatal("no service gave advice")
+	}
+	unsure := &picker{selected: []string{"b-mid"}, conf: 0.1}
+	if id, _, err := (ServiceAdvisor{Service: decisionService(t, unsure)}).Prefer(context.Background(), []harness.ProviderID{"a-cheap", "b-mid"}); err == nil || id != "" {
+		t.Fatalf("low confidence was passed on: %q %v", id, err)
+	}
+}

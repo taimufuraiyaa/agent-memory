@@ -145,3 +145,80 @@ func TestJevDecisionsAreComposedAndTheirHealthIsReportedWithoutContent(t *testin
 		t.Fatalf("status = %s", raw)
 	}
 }
+
+func TestProjectToolsDemandAKnownGroupAndTheOpenAIComposition(t *testing.T) {
+	for name, setup := range map[string]func(*testing.T){
+		"an unknown group":       func(t *testing.T) { t.Setenv(harnessToolsEnv, "read,teleport") },
+		"fake mode":              func(t *testing.T) { t.Setenv(harnessProvidersEnv, "fake"); t.Setenv(harnessToolsEnv, "read") },
+		"a limit of one":         func(t *testing.T) { t.Setenv(harnessToolsEnv, "read"); t.Setenv(harnessToolLimitEnv, "1") },
+		"a limit that is a word": func(t *testing.T) { t.Setenv(harnessToolsEnv, "read"); t.Setenv(harnessToolLimitEnv, "lots") },
+		"a limit over the bound": func(t *testing.T) { t.Setenv(harnessToolsEnv, "read"); t.Setenv(harnessToolLimitEnv, "33") },
+		"tool advice without tools": func(t *testing.T) {
+			svc, dir := harnessService(t)
+			_ = svc
+			_ = jevconfig.NewTokenStore(dir).Save(context.Background(), jevTestToken)
+			jevEnv(t, "tools")
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			svc, dir := harnessService(t)
+			_ = jevconfig.NewTokenStore(dir).Save(context.Background(), jevTestToken)
+			openAIEnv(t)
+			t.Setenv(harnessToolsEnv, "")
+			t.Setenv(harnessToolLimitEnv, "")
+			t.Setenv(harnessJevEgressEnv, "typesafe")
+			setup(t)
+			typesafe := newFakeTypeSafe(t)
+			gateway, closeHarness, err := buildHarnessGatewayWith(context.Background(), svc, &bytes.Buffer{}, harnessBuildOptions{jevBaseURL: typesafe.server.URL})
+			if err == nil || gateway != nil || closeHarness != nil {
+				t.Fatalf("composed anyway: %v %v", gateway, err)
+			}
+		})
+	}
+}
+
+func TestComposedToolsAreReportedAndAskedAboutWithApprovals(t *testing.T) {
+	svc, dir := harnessService(t)
+	_ = jevconfig.NewTokenStore(dir).Save(context.Background(), jevTestToken)
+	typesafe := newFakeTypeSafe(t)
+	upstream := newRecordingOpenAI(t)
+	jevEnv(t, "model,tools,command_risk")
+	t.Setenv(harnessToolsEnv, "read, edit")
+	var stderr bytes.Buffer
+	gateway, closeHarness, err := buildHarnessGatewayWith(context.Background(), svc, &stderr, harnessBuildOptions{openAIBaseURL: upstream.server.URL, jevBaseURL: typesafe.server.URL})
+	if err != nil || gateway == nil {
+		t.Fatalf("%v %v", gateway, err)
+	}
+	t.Cleanup(closeHarness)
+	if !gateway.Approvals || len(gateway.Tools) == 0 {
+		t.Fatalf("tools %v approvals %v", gateway.Tools, gateway.Approvals)
+	}
+	have := map[string]bool{}
+	for _, name := range gateway.Tools {
+		have[name] = true
+	}
+	for _, want := range []string{"read_file", "list_dir", "search", "edit_file", "create_file", "delete_file"} {
+		if !have[want] {
+			t.Errorf("%s is not composed: %v", want, gateway.Tools)
+		}
+	}
+	for _, off := range []string{"run_command", "git_commit", "git_stage"} {
+		if have[off] {
+			t.Errorf("%s was composed although it was not asked for", off)
+		}
+	}
+}
+
+func TestToolDescriptionsCoverEveryComposedToolAndClarify(t *testing.T) {
+	describe := toolDescriber()
+	ids := []string{"clarify", "read_file", "edit_file", "run_command", "git_commit", "not_a_tool"}
+	got := describe(ids)
+	if len(got) != 5 {
+		t.Fatalf("%d descriptions for %v", len(got), ids)
+	}
+	for _, tool := range got {
+		if tool.Name == "" || tool.Parameters == nil || tool.Parameters["additionalProperties"] != false {
+			t.Errorf("%s: %+v", tool.Name, tool)
+		}
+	}
+}

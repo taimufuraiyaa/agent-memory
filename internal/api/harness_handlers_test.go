@@ -60,6 +60,7 @@ type harnessEnv struct {
 	clients *clientprofile.Store
 	clock   *harnessClock
 	model   *harnesstest.Counters
+	gateway *HarnessGateway
 }
 
 type harnessOpts struct {
@@ -107,12 +108,14 @@ func newHarnessEnv(t *testing.T, o harnessOpts) *harnessEnv {
 	}
 	t.Cleanup(func() { _ = runs.Close() })
 	svc := &Service{}
+	var gateway *HarnessGateway
 	if !o.noGW {
-		svc.Harness = &HarnessGateway{Authority: auth, Runs: runs, Providers: registry.Manifests(), Fake: true}
+		gateway = &HarnessGateway{Authority: auth, Runs: runs, Providers: registry.Manifests(), Fake: true}
+		svc.Harness = gateway
 	}
 	server := httptest.NewServer(LocalRequestBoundary(NewMux(svc)))
 	t.Cleanup(server.Close)
-	return &harnessEnv{t: t, dir: dir, auth: auth, runs: runs, server: server, clients: clients, clock: clk, model: model}
+	return &harnessEnv{t: t, dir: dir, auth: auth, runs: runs, server: server, clients: clients, clock: clk, model: model, gateway: gateway}
 }
 
 func (e *harnessEnv) grant(client string, ops ...harnessauth.Operation) (string, harnessauth.GrantInfo) {

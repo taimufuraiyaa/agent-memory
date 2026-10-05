@@ -517,7 +517,7 @@ func TestTheManagerHasNoMethodThatCouldTakeAnApproval(t *testing.T) {
 	}
 	sort.Strings(names)
 	// MutateForTest exists only in test builds (export_test.go) and takes no approval.
-	want := []string{"Cancel", "Close", "Continue", "Events", "MutateForTest", "ReconcileApprovals", "Recover", "Start", "StartChild", "Status", "Sweep"}
+	want := []string{"Artifact", "Cancel", "Close", "Continue", "Events", "MutateForTest", "ReconcileApprovals", "Recover", "Start", "StartChild", "Status", "Sweep"}
 	if !reflect.DeepEqual(names, want) {
 		t.Fatalf("the manager's exported methods are %v, want %v: a new one needs review as a possible way to approve", names, want)
 	}

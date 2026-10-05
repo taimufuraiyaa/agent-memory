@@ -32,9 +32,18 @@ type Result struct {
 	Merged string
 }
 
+// Runs is the part of the run manager the coordinator uses.
+type Runs interface {
+	Status(ctx context.Context, owner harnessrun.Owner, id string) (harnessrun.Status, error)
+	StartChild(ctx context.Context, owner harnessrun.Owner, parentID string, request harnessrun.StartRequest) (harnessrun.Status, error)
+	Cancel(ctx context.Context, owner harnessrun.Owner, id string, mutation harnessrun.Mutation) (harnessrun.Status, error)
+}
+
+var _ Runs = (*harnessrun.Manager)(nil)
+
 // Config describes a coordinator.
 type Config struct {
-	Runs *harnessrun.Manager
+	Runs Runs
 	// MaxParallel is how many workers run at once. One serializes the work, which is also the
 	// rollback: nothing else about the behavior changes.
 	MaxParallel int
