@@ -400,7 +400,9 @@ func TestAFileChangedAfterReviewMakesTheApprovalStale(t *testing.T) {
 }
 
 func TestCancellingAWaitingRunEndsItsApproval(t *testing.T) {
-	a := newApprovalFixture(t, approvalOpts{})
+	// The background poll is off so this exercises Cancel's own handling; a poll that got there
+	// first would end the approval too, for the reason "run_changed".
+	a := newApprovalFixture(t, approvalOpts{poll: time.Hour})
 	started := a.start("key-00000001", "change the notes", harnessrun.Budget{})
 	status, record := a.parked(started.ID)
 	if _, err := a.m.Cancel(context.Background(), a.owner, started.ID, harnessrun.Mutation{IdempotencyKey: "cancel-00001", ExpectedGeneration: status.Generation}); err != nil {

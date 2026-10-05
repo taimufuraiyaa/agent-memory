@@ -42,8 +42,9 @@ func openHarnessAuthority(dataDir string) (*harnessauth.Authority, error) {
 }
 
 // newHarnessCommand manages client authority for the local coding harness. These are
-// trusted local operations: a credential is minted here and never through MCP, and
-// there is deliberately no way to grant approval of a mutation.
+// trusted local operations: a credential is minted here and never through MCP, and a
+// grant can never approve a change. Approving is a separate act, done at a terminal with
+// "harness approvals".
 func newHarnessCommand() *cobra.Command {
 	var dataDir string
 	cmd := &cobra.Command{
@@ -54,7 +55,7 @@ func newHarnessCommand() *cobra.Command {
 			"Run these from a trusted local terminal.",
 	}
 	cmd.PersistentFlags().StringVar(&dataDir, "data-dir", "", "Agent Memory data directory")
-	cmd.AddCommand(newHarnessAuthorityCommand(&dataDir), newHarnessGrantCommand(&dataDir))
+	cmd.AddCommand(newHarnessAuthorityCommand(&dataDir), newHarnessGrantCommand(&dataDir), newHarnessApprovalsCommand(&dataDir))
 	return cmd
 }
 

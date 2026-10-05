@@ -250,6 +250,29 @@ The HTTP routes are `GET /api/v1/harness/capabilities`, `POST /api/v1/harness/ru
 
 The harness has three read-only project tools: `read_file` (line windows with numbers and a revision), `list_dir` and `search` (literal or regular expression, with context lines, a file glob and a path scope). They are confined to the registered project root by the operating system, so a symlink or `..` cannot leave it; hidden entries (`.env`, `.git`, `.ssh`) and credential-like names (`id_rsa`, `*.pem`, `*.key`, `credentials*`, `secrets*`) are refused; only regular text files are opened; every result is size-bounded, redacted for secrets and personal data, and returned in a fixed order. The default policy denies every tool, and the read tools are allowed only when explicitly configured. Git is deliberately absent, because even `git status` can run programs named in a repository's own configuration. A real model cannot call these yet: the OpenAI provider is text-only until tool schemas and function calling are added, so today only the scripted test model exercises them.
 
+### Guarded edits and approvals (built, not yet reachable by a real model)
+
+The harness can also change files, behind its own switch: with editing off the provider offers only the three read tools. Three tools exist. `edit_file` makes one to twenty exact-text replacements (each old text must appear exactly once in the file as it is now, and edits must not overlap), `create_file` makes a new file and any missing directories, and `delete_file` removes one text file. There is no rename; it is a create plus a delete, and each is reviewed. Hidden locations (`.github`, `.gitignore`, `.kiro`, `.claude`, `.git*`), credential-like names, links, binary or non-UTF-8 files, and anything outside the project root are refused before anyone is asked.
+
+A run that wants to change something **stops and asks**. The change is recorded with its exact arguments, a unified diff built from the edit ranges (control, bidirectional and zero-width characters are shown as `⟨U+XXXX⟩` markers so nothing is hidden from you), and a digest that covers the file's current revision, so you can only ever approve the change to the file as you saw it. Review and decide in a terminal:
+
+```
+agent-memory harness approvals list [--all] [--workspace NAME]
+agent-memory harness approvals show APPROVAL_ID
+agent-memory harness approvals approve APPROVAL_ID
+agent-memory harness approvals deny APPROVAL_ID [--stop]
+agent-memory harness approvals undo APPROVAL_ID
+agent-memory harness approvals audit
+```
+
+`approve` needs an interactive terminal on both input and output, prints the change, then asks you to **type the short code printed beneath it**; there is no flag, environment variable or pipe that supplies it, and one approval covers exactly one action. Edits, creates and ordinary changes ask for a four-character code. Deletions, dependency manifests and lockfiles, build and CI definitions, Dockerfiles and Makefiles, shell scripts, migrations and schemas, instruction files (`CLAUDE.md`, `AGENTS.md`), executables, new directories and unusually large changes ask with extra friction: the reasons are printed, a second warning is shown, and the code is nine characters. Five wrong codes deny the approval, an approval lapses after thirty minutes, and a change that cannot be shown in full (a 48 KB preview) is not offered at all, so the model must split it.
+
+If the file changed after you reviewed it, nothing is written: the replay prepares the stored call again, requires the same digest, asks policy once more, and only then runs. Before any change a private copy of the original is saved, the replacement is atomic and rechecked immediately beforehand, and a result that does not read back correctly is rolled back. `undo` restores the file only if it is still exactly as the change left it, and refuses if anything touched it since. Every request, decision, application and undo is appended to a hash-chained log; a log that cannot be written or no longer verifies stops further approvals, and `audit` reports whether it still verifies.
+
+A deny returns a message to the model so it can try something else; `--stop` ends the run. Revoking the client's grant ends its pending approvals and cancels the run. An MCP client sees only that a run `needs_attention` and an opaque approval identifier. It never sees the digest, the preview or the paths, and there is no route, tool, grant operation or run-manager method that approves anything: the manager only applies decisions recorded here.
+
+**Limits.** Nothing composes the project tools into `serve` yet, because the only real provider is text-only and cannot call tools; the whole path is verified with a scripted model, the real manager, the real tools and the real command. The boundary is between callers reachable through MCP and the person at the terminal: a process running as your own user can edit the approval files directly, just as it can edit your project. The recheck and the replacement are not one atomic step, so a local process racing the write can win the gap. Ownership, extended attributes and permissions beyond the mode bits are not preserved on replacement. A run interrupted after its approval was consumed but before the change ran loses that result and never replays it. Windows is untested.
+
 ### Real model provider (OpenAI, text-only, opt-in)
 
 By default the harness composes only fakes. A single real provider is available for text-only runs; it **sends assembled prompts to OpenAI and may incur charges**, so it needs every one of these, and refuses to start if any is missing or unrecognized:
