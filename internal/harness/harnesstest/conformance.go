@@ -123,3 +123,103 @@ func ModelConformance(t *testing.T, open func(t *testing.T) *harness.Session, sp
 		}
 	})
 }
+
+// DecisionSpec describes how to exercise one decision provider family.
+type DecisionSpec struct {
+	Capability harness.CapabilityID
+	// Kind is a decision kind the provider understands.
+	Kind string
+	// Candidates are valid candidates for it, each a single byte long so that a one-byte
+	// reply bound can still hold an answer.
+	Candidates []string
+	Evidence   []harness.EvidenceRef
+}
+
+// DecisionConformance checks the contract every decision provider must meet, whatever it
+// talks to: a live capability, advice that is a subset of the candidates it was given with a
+// confidence in range, a typed outcome rather than a contract error when its reply bound is
+// too small, prompt typed cancellation, and disposal that makes later use stale.
+func DecisionConformance(t *testing.T, open func(t *testing.T) *harness.Session, spec DecisionSpec) {
+	t.Helper()
+	question := func(t *testing.T, s *harness.Session, maxBytes int) harness.DecisionQuestion {
+		t.Helper()
+		envelope, err := s.Envelope(spec.Capability, maxBytes)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return harness.DecisionQuestion{Envelope: envelope, Kind: spec.Kind, Candidates: spec.Candidates, Evidence: spec.Evidence}
+	}
+
+	t.Run("capability is live", func(t *testing.T) {
+		s := open(t)
+		if s.State(spec.Capability) != harness.AccessAvailable {
+			t.Fatalf("state = %s", s.State(spec.Capability))
+		}
+		if err := s.Access().Validate(s.Manifest(), s.Scope()); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("advises within the contract", func(t *testing.T) {
+		s := open(t)
+		answer, err := s.Decide(context.Background(), question(t, s, 4096))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if answer.Outcome != harness.OutcomeOK || len(answer.Selected) == 0 {
+			t.Fatalf("answer = %+v", answer)
+		}
+		if answer.Confidence < 0 || answer.Confidence > 1 {
+			t.Fatalf("confidence = %v", answer.Confidence)
+		}
+		offered := map[string]bool{}
+		for _, c := range spec.Candidates {
+			offered[c] = true
+		}
+		for _, selected := range answer.Selected {
+			if !offered[selected] {
+				t.Fatalf("selected %q, which was not offered", selected)
+			}
+		}
+	})
+
+	t.Run("respects a small reply bound", func(t *testing.T) {
+		s := open(t)
+		answer, err := s.Decide(context.Background(), question(t, s, 1))
+		if err != nil {
+			t.Fatalf("a provider must fit its reply to the envelope or fail with a typed outcome, not violate the contract: %v", err)
+		}
+		total := 0
+		for _, selected := range answer.Selected {
+			total += len(selected)
+		}
+		if total > 1 {
+			t.Fatalf("a reply of %d bytes exceeds the 1-byte bound", total)
+		}
+	})
+
+	t.Run("cancellation is prompt and typed", func(t *testing.T) {
+		s := open(t)
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		started := time.Now()
+		answer, err := s.Decide(ctx, question(t, s, 4096))
+		if err != nil || answer.Outcome != harness.OutcomeCancelled || time.Since(started) > time.Second {
+			t.Fatalf("answer=%+v err=%v after %v", answer, err, time.Since(started))
+		}
+	})
+
+	t.Run("disposal makes later use stale and is idempotent", func(t *testing.T) {
+		s := open(t)
+		q := question(t, s, 4096)
+		if err := s.Close(); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.Close(); err != nil {
+			t.Fatalf("second close = %v", err)
+		}
+		if _, err := s.Decide(context.Background(), q); !errors.Is(err, harness.ErrStale) {
+			t.Fatalf("use after close = %v", err)
+		}
+	})
+}
