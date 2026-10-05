@@ -44,10 +44,13 @@ func EditPolicy() Policy {
 		ToolEditFile: TierAsk, ToolCreateFile: TierAsk, ToolDeleteFile: TierAsk})
 }
 
-// ProjectPolicy is EditPolicy plus running commands, which always ask.
+// ProjectPolicy is EditPolicy plus running commands and the Git tools: the Git reads are
+// allowed once the repository has passed its checks, and staging, committing and running
+// commands always ask.
 func ProjectPolicy() Policy {
 	return NewPolicy(map[harness.CapabilityID]Tier{ToolReadFile: TierAllow, ToolListDir: TierAllow, ToolSearch: TierAllow,
-		ToolEditFile: TierAsk, ToolCreateFile: TierAsk, ToolDeleteFile: TierAsk, ToolRunCommand: TierAsk})
+		ToolEditFile: TierAsk, ToolCreateFile: TierAsk, ToolDeleteFile: TierAsk, ToolRunCommand: TierAsk,
+		ToolGitStatus: TierAllow, ToolGitDiff: TierAllow, ToolGitLog: TierAllow, ToolGitStage: TierAsk, ToolGitCommit: TierAsk})
 }
 
 var (

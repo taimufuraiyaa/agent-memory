@@ -34,7 +34,7 @@ const (
 // without a person's approval, whatever its table says.
 func Mutating(capability harness.CapabilityID) bool {
 	switch capability {
-	case ToolEditFile, ToolCreateFile, ToolDeleteFile, ToolRunCommand:
+	case ToolEditFile, ToolCreateFile, ToolDeleteFile, ToolRunCommand, ToolGitStage, ToolGitCommit:
 		return true
 	}
 	return false

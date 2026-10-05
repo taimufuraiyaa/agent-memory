@@ -343,3 +343,48 @@ func TestACreateNeverTruncatesAFileThatAppearsInTheGap(t *testing.T) {
 		t.Fatal("a file that appeared in the gap was overwritten")
 	}
 }
+
+func TestDigestIdentifiesAnyRegularFileWithinItsLimitAndNothingElse(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "text.txt", "hello\n", 0o644)
+	writeFile(t, dir, "blob.bin", "a\x00b\x01c", 0o644)
+	writeFile(t, dir, "big.dat", strings.Repeat("x", 5000), 0o644)
+	writeFile(t, dir, ".env", "S=1\n", 0o600)
+	if err := os.Mkdir(filepath.Join(dir, "adir"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	_ = os.Symlink("text.txt", filepath.Join(dir, "alias"))
+	root := open(t, dir)
+	first, size, err := root.Digest("text.txt", 1000)
+	again, _, _ := root.Digest("text.txt", 1000)
+	if err != nil || size != 6 || first != again || !strings.HasSuffix(first, "-6") || len(first) != 34 {
+		t.Fatalf("%q %d %v", first, size, err)
+	}
+	if bin, n, err := root.Digest("blob.bin", 1000); err != nil || n != 5 || bin == first {
+		t.Fatalf("a binary file: %q %d %v", bin, n, err)
+	}
+	writeFile(t, dir, "text.txt", "hello!\n", 0o644)
+	if changed, _, _ := root.Digest("text.txt", 1000); changed == first {
+		t.Fatal("the digest ignores content")
+	}
+	for name, tc := range map[string]struct {
+		path  string
+		limit int64
+		want  error
+	}{
+		"over the limit":  {"big.dat", 4999, ErrTooLarge},
+		"at the limit":    {"big.dat", 5000, nil},
+		"hidden":          {".env", 1000, ErrDenied},
+		"a link":          {"alias", 1000, ErrDenied},
+		"a directory":     {"adir", 1000, ErrUnreadable},
+		"missing":         {"nope", 1000, ErrUnreadable},
+		"traversal":       {"../x", 1000, ErrInvalidPath},
+		"the root":        {".", 1000, ErrInvalidPath},
+		"no limit":        {"text.txt", 0, ErrInvalidPath},
+		"a limit too big": {"text.txt", MaxDigestBytes + 1, ErrInvalidPath},
+	} {
+		if _, _, err := root.Digest(tc.path, tc.limit); !errors.Is(err, tc.want) && !(tc.want == nil && err == nil) {
+			t.Errorf("%s: %v, want %v", name, err, tc.want)
+		}
+	}
+}

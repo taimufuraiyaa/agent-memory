@@ -2,6 +2,8 @@ package harnessgit
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -270,22 +272,136 @@ func (g *Git) Diff(ctx context.Context, opts DiffOptions) (Diff, error) {
 	if len(paths) == 0 {
 		return d, nil
 	}
+	text, cut, err := g.diffPaths(ctx, opts.Staged, paths)
+	if err != nil {
+		return Diff{}, err
+	}
+	d.Text, d.Truncated = text, d.Truncated || cut
+	return d, nil
+}
+
+// DiffPaths returns the unified diff of exactly the named paths, staged or not, and says whether
+// it was cut at the output bound. Every path is validated here.
+func (g *Git) DiffPaths(ctx context.Context, staged bool, paths []string) (string, bool, error) {
+	for _, p := range paths {
+		if err := validRel(p); err != nil {
+			return "", false, err
+		}
+	}
+	return g.diffPaths(ctx, staged, paths)
+}
+
+// diffPaths returns the unified diff of exactly the named paths, without external diff
+// programs or text conversion, and says whether it was cut at the output bound. The paths
+// must already have passed validRel.
+func (g *Git) diffPaths(ctx context.Context, staged bool, paths []string) (string, bool, error) {
+	if len(paths) == 0 {
+		return "", false, nil
+	}
 	args := []string{"diff", "--no-ext-diff", "--no-textconv", "--no-color", "--no-renames", "--ignore-submodules=all", "-U3"}
-	if opts.Staged {
+	if staged {
 		args = append(args, "--cached")
 	}
 	args = append(args, "--")
 	args = append(args, paths...)
 	res, err := g.Run(ctx, DefaultReadTimeout, args...)
 	if err != nil {
-		return Diff{}, err
+		return "", false, err
 	}
 	if res.TimedOut || res.Cancelled || res.ExitCode != 0 {
-		return Diff{}, failed(res)
+		return "", false, failed(res)
 	}
-	d.Text = harnessexec.Sanitize(res.Stdout)
-	d.Truncated = d.Truncated || res.StdoutOmitted > 0
-	return d, nil
+	return harnessexec.Sanitize(res.Stdout), res.StdoutOmitted > 0, nil
+}
+
+// PathState is what Git says about one named path.
+type PathState struct {
+	Path string
+	// Kind is new (untracked), modified, deleted or conflicted; a path Git reports nothing
+	// about is unchanged or ignored and is absent from the result.
+	Kind     string
+	Staged   string
+	Unstaged string
+}
+
+// PathStates reports the state of exactly the named paths. Every path must be a project-relative,
+// unprotected path; the result holds only paths with something to stage or already staged.
+func (g *Git) PathStates(ctx context.Context, paths []string) (map[string]PathState, error) {
+	args := []string{"status", "--porcelain=v2", "-z", "--untracked-files=all", "--ignore-submodules=all", "--"}
+	for _, p := range paths {
+		if err := validRel(p); err != nil {
+			return nil, err
+		}
+		args = append(args, p)
+	}
+	out, err := g.ok(ctx, DefaultReadTimeout, args...)
+	if err != nil {
+		return nil, err
+	}
+	states := map[string]PathState{}
+	for _, e := range parseStatus(out).Entries {
+		kind := e.Kind
+		if kind == "untracked" {
+			kind = "new"
+		}
+		states[e.Path] = PathState{Path: e.Path, Kind: kind, Staged: e.Staged, Unstaged: e.Unstaged}
+	}
+	return states, nil
+}
+
+// StagedFingerprint identifies exactly what the index would record, as a hash of Git's raw
+// listing of the staged differences: modes, object names and paths. Unlike the tree of the
+// index, computing it writes nothing to the repository.
+func (g *Git) StagedFingerprint(ctx context.Context) (string, error) {
+	out, err := g.ok(ctx, DefaultReadTimeout, "diff", "--cached", "--raw", "-z", "--no-renames", "--no-abbrev")
+	if err != nil {
+		return "", err
+	}
+	return fingerprint(out), nil
+}
+
+// CommitFingerprint is the same identification for what an existing commit recorded
+// relative to its parent (or to nothing, for a first commit). A commit made from an index
+// has the same fingerprint as that index had.
+func (g *Git) CommitFingerprint(ctx context.Context, commit string) (string, error) {
+	if !hashRE.MatchString(commit) {
+		return "", ErrInvalid
+	}
+	out, err := g.ok(ctx, DefaultReadTimeout, "diff-tree", "--root", "-r", "--raw", "-z", "--no-renames", "--no-abbrev", "--no-commit-id", commit)
+	if err != nil {
+		return "", err
+	}
+	return fingerprint(out), nil
+}
+
+func fingerprint(raw []byte) string {
+	sum := sha256.Sum256(raw)
+	return hex.EncodeToString(sum[:])
+}
+
+// Branch returns the current branch name, or "(detached)".
+func (g *Git) Branch(ctx context.Context) (string, error) {
+	out, err := g.ok(ctx, DefaultReadTimeout, "symbolic-ref", "--short", "-q", "HEAD")
+	if err != nil {
+		res, rerr := g.Run(ctx, DefaultReadTimeout, "symbolic-ref", "--short", "-q", "HEAD")
+		if rerr == nil && res.ExitCode == 1 {
+			return "(detached)", nil
+		}
+		return "", err
+	}
+	return harnessexec.Sanitize([]byte(strings.TrimSpace(string(out)))), nil
+}
+
+// Subject returns the first line of a commit's message.
+func (g *Git) Subject(ctx context.Context, commit string) (string, error) {
+	if !hashRE.MatchString(commit) {
+		return "", ErrInvalid
+	}
+	out, err := g.ok(ctx, DefaultReadTimeout, "show", "-s", "--format=%s", "--no-show-signature", commit)
+	if err != nil {
+		return "", err
+	}
+	return harnessexec.Sanitize([]byte(strings.TrimSpace(string(out)))), nil
 }
 
 // ---- log ----

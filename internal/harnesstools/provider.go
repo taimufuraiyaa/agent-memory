@@ -11,12 +11,15 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/taimufuraiyaa/agent-memory/internal/harness"
+	"github.com/taimufuraiyaa/agent-memory/internal/harnessexec"
 	"github.com/taimufuraiyaa/agent-memory/internal/harnessfs"
 )
 
@@ -57,6 +60,8 @@ type Config struct {
 	Edit EditConfig
 	// Command turns on run_command; the zero value does not offer it.
 	Command CommandConfig
+	// Git turns on the Git tools; the zero value does not offer them.
+	Git GitConfig
 }
 
 type Provider struct{ cfg Config }
@@ -77,6 +82,9 @@ func NewProvider(cfg Config) (*Provider, error) {
 	if cfg.Command.Enabled && cfg.Command.TempRoot == "" {
 		return nil, errors.New("running commands needs a private directory for temporary files")
 	}
+	if cfg.Git.Enabled && cfg.Git.TempRoot == "" {
+		return nil, errors.New("the git tools need a private directory for temporary files")
+	}
 	return &Provider{cfg: cfg}, nil
 }
 
@@ -95,6 +103,9 @@ func (p *Provider) Manifest() harness.Manifest {
 	}
 	if p.cfg.Command.Enabled {
 		m.Capabilities = append(m.Capabilities, ToolRunCommand)
+	}
+	if p.cfg.Git.Enabled {
+		m.Capabilities = append(m.Capabilities, ToolGitCommit, ToolGitDiff, ToolGitLog, ToolGitStage, ToolGitStatus)
 	}
 	sort.Slice(m.Capabilities, func(i, j int) bool { return m.Capabilities[i] < m.Capabilities[j] })
 	return m
@@ -115,6 +126,8 @@ type call struct {
 	plan *plan
 	// command is the fully resolved command for run_command.
 	command *commandPlan
+	// git is a prepared Git call.
+	git *gitCall
 }
 
 type session struct {
@@ -126,6 +139,33 @@ type session struct {
 }
 
 func (s *session) Close() error { return nil }
+
+// runnable reports whether the program a capability needs exists on this machine and platform.
+func (p *Provider) runnable(c harness.CapabilityID, workspace string) bool {
+	switch c {
+	case ToolRunCommand:
+		return harnessexec.Supported()
+	case ToolGitStatus, ToolGitDiff, ToolGitLog, ToolGitStage, ToolGitCommit:
+		if !harnessexec.Supported() {
+			return false
+		}
+		root, err := p.cfg.Root(workspace)
+		if err != nil {
+			return false
+		}
+		real, err := filepath.EvalSymlinks(root)
+		if err != nil {
+			return false
+		}
+		dirs := p.cfg.Git.SearchPath
+		if len(dirs) == 0 {
+			dirs = filepath.SplitList(os.Getenv("PATH"))
+		}
+		_, err = harnessexec.Lookup("git", dirs, real)
+		return err == nil
+	}
+	return true
+}
 
 // Release forgets a prepared call that policy or approval declined, so declined calls
 // cannot fill the session's bounded table of pending work.
@@ -149,6 +189,10 @@ func (s *session) Probe(_ context.Context, scope harness.Scope) (harness.LiveAcc
 		Capabilities: map[harness.CapabilityID]harness.AccessState{}}
 	for _, c := range s.provider.Manifest().Capabilities {
 		access.Capabilities[c] = state
+		// A tool that runs a program is offered only when that program can run here.
+		if state == harness.AccessAvailable && !s.provider.runnable(c, scope.Workspace) {
+			access.Capabilities[c] = harness.AccessUnavailable
+		}
 	}
 	return access, nil
 }
@@ -192,7 +236,7 @@ func decodeStrict(raw []byte, into any) error {
 // Prepare validates one call and has no side effects: it reads no file and touches no
 // state beyond remembering the normalized call for Invoke. Invalid arguments are a typed
 // failure and a protected path is a typed denial, neither carrying detail.
-func (s *session) Prepare(_ context.Context, q harness.ToolRequest) (harness.PreparedAction, error) {
+func (s *session) Prepare(ctx context.Context, q harness.ToolRequest) (harness.PreparedAction, error) {
 	action := harness.PreparedAction{Envelope: q.Envelope}
 	if harness.CapabilityID(q.ToolID) != q.Capability {
 		action.Outcome = harness.OutcomeFailed
@@ -210,6 +254,8 @@ func (s *session) Prepare(_ context.Context, q harness.ToolRequest) (harness.Pre
 		return s.prepareMutation(q, root, action), nil
 	case ToolRunCommand:
 		return s.prepareCommand(q, root, action), nil
+	case ToolGitStatus, ToolGitDiff, ToolGitLog, ToolGitStage, ToolGitCommit:
+		return s.prepareGit(ctx, q, root, action), nil
 	case ToolReadFile:
 		var a readArgs
 		if decodeStrict(q.Arguments, &a) != nil {
@@ -333,6 +379,14 @@ func (s *session) Invoke(ctx context.Context, action harness.PreparedAction) (ha
 	defer project.Close()
 	var body []byte
 	var outcome harness.Outcome
+	if prepared.git != nil {
+		body, outcome, audit := s.executeGit(ctx, prepared, action)
+		answer.Outcome = outcome
+		if outcome == harness.OutcomeOK || outcome == harness.OutcomePartial {
+			answer.Output, answer.Audit = body, audit
+		}
+		return answer, nil
+	}
 	if prepared.command != nil {
 		var audit []string
 		body, outcome, audit = s.execute(ctx, project, prepared, action)

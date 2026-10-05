@@ -1,6 +1,10 @@
 package harnesstools
 
-import "time"
+import (
+	"time"
+
+	"github.com/taimufuraiyaa/agent-memory/internal/harnessgit"
+)
 
 // Schema describes one tool for a model: its name, purpose and argument schema. The
 // argument schemas are strict and carry the same bounds the provider enforces.
@@ -78,4 +82,21 @@ func CommandSchemas() []Schema {
 			"cwd":             map[string]any{"type": "string", "maxLength": 512, "description": "Directory relative to the project root; default is the root"},
 			"timeout_seconds": map[string]any{"type": "integer", "minimum": 1, "maximum": int(MaxCommandTimeout / time.Second), "description": "Default 60"},
 		}, "argv")}}
+}
+
+// GitSchemas returns the Git tool descriptions, offered only when Git is enabled.
+func GitSchemas() []Schema {
+	pathProp := map[string]any{"type": "string", "maxLength": 512, "description": "Path relative to the project root"}
+	return []Schema{
+		{Name: ToolGitStatus, Description: "Show the current branch and the changed paths of the project's Git repository, without file content.",
+			Parameters: object(map[string]any{})},
+		{Name: ToolGitDiff, Description: "Show the unified diff of staged or unstaged changes, optionally for one path. Hidden and credential-like files are left out.",
+			Parameters: object(map[string]any{"staged": map[string]any{"type": "boolean"}, "path": pathProp})},
+		{Name: ToolGitLog, Description: "List recent commits (hash, author name, date, subject), newest first, optionally for one path.",
+			Parameters: object(map[string]any{"count": map[string]any{"type": "integer", "minimum": 1, "maximum": harnessgit.MaxLogEntries}, "path": pathProp})},
+		{Name: ToolGitStage, Description: "Stage named files for a commit. Only regular, visible files; nothing is committed. A person must approve each call.",
+			Parameters: object(map[string]any{"paths": map[string]any{"type": "array", "minItems": 1, "maxItems": MaxGitStagePaths, "items": pathProp}}, "paths")},
+		{Name: ToolGitCommit, Description: "Commit exactly what is staged, on the current branch, with the given message. It never stages, amends, commits all files, pushes or switches branches, and repository hooks are not run. A person must approve each call.",
+			Parameters: object(map[string]any{"message": map[string]any{"type": "string", "minLength": 1, "maxLength": harnessgit.MaxMessageBytes}}, "message")},
+	}
 }

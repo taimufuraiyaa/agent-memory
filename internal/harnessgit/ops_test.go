@@ -599,3 +599,139 @@ func TestCommitNeverTakesAChangeThatWasNotStaged(t *testing.T) {
 		t.Fatalf("the commit holds %q", changed)
 	}
 }
+
+func objectCount(t *testing.T, root string) int {
+	t.Helper()
+	n := 0
+	_ = filepath.WalkDir(filepath.Join(root, ".git", "objects"), func(path string, d os.DirEntry, err error) error {
+		if err == nil && !d.IsDir() {
+			n++
+		}
+		return nil
+	})
+	return n
+}
+
+func TestPathStatesReportOnlyTheNamedPathsAndOnlyWhatHasSomethingToStage(t *testing.T) {
+	e := newRepo(t)
+	e.write("src/app.go", "package app\n\n// edited\n")
+	e.write("fresh.txt", "new\n")
+	e.write("untouched.txt", "same\n")
+	e.git("add", "untouched.txt")
+	e.git("commit", "-q", "-m", "untouched")
+	e.write(".gitignore", "ignored.log\n")
+	e.write("ignored.log", "x\n")
+	if err := os.Remove(filepath.Join(e.root, "README.md")); err != nil {
+		t.Fatal(err)
+	}
+	g := e.open()
+	got, err := g.PathStates(bg, []string{"src/app.go", "fresh.txt", "untouched.txt", "ignored.log", "never-existed.txt", "README.md"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	kinds := map[string]string{}
+	for p, s := range got {
+		kinds[p] = s.Kind
+	}
+	want := map[string]string{"src/app.go": "modified", "fresh.txt": "new", "README.md": "deleted"}
+	if !reflect.DeepEqual(kinds, want) {
+		t.Fatalf("states = %v, want %v", kinds, want)
+	}
+	// Only what was asked about is reported, and a protected path is refused outright.
+	only, _ := g.PathStates(bg, []string{"fresh.txt"})
+	if len(only) != 1 {
+		t.Fatalf("only = %v", only)
+	}
+	for _, bad := range []string{".env", "../x", "-x", ":(top)x", ""} {
+		if _, err := g.PathStates(bg, []string{bad}); err == nil {
+			t.Errorf("PathStates accepted %q", bad)
+		}
+	}
+}
+
+// What a commit records is identified without writing anything, and the commit that results
+// has the same identity as the index it came from.
+func TestTheStagedFingerprintNeedsNoWritesAndMatchesTheCommitItBecomes(t *testing.T) {
+	e := newRepo(t)
+	g := e.open()
+	e.write("src/app.go", "package app\n\n// one\n")
+	e.write("new.txt", "n\n")
+	if err := g.Add(bg, []string{"src/app.go", "new.txt"}); err != nil {
+		t.Fatal(err)
+	}
+	before := objectCount(t, e.root)
+	first, err := g.StagedFingerprint(bg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	again, _ := g.StagedFingerprint(bg)
+	if first != again || len(first) != 64 || objectCount(t, e.root) != before {
+		t.Fatalf("not stable or wrote objects: %s %s (objects %d -> %d)", first, again, before, objectCount(t, e.root))
+	}
+	e.write("src/app.go", "package app\n\n// two\n")
+	if err := g.Add(bg, []string{"src/app.go"}); err != nil {
+		t.Fatal(err)
+	}
+	if changed, _ := g.StagedFingerprint(bg); changed == first {
+		t.Fatal("the fingerprint ignores staged content")
+	}
+	staged, _ := g.StagedFingerprint(bg)
+	done, err := g.Commit(bg, "record exactly that")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := g.CommitFingerprint(bg, done.Commit); err != nil || got != staged {
+		t.Fatalf("the commit's fingerprint %s differs from the index's %s (%v)", got, staged, err)
+	}
+	if empty, _ := g.StagedFingerprint(bg); empty == staged {
+		t.Fatal("an empty index has the same fingerprint")
+	}
+	if _, err := g.CommitFingerprint(bg, "HEAD"); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("a non-hash = %v", err)
+	}
+}
+
+func TestAFirstCommitHasTheFingerprintOfItsIndexToo(t *testing.T) {
+	gitPath := needGit(t)
+	e := &repoEnv{t: t, root: realTemp(t), home: realTemp(t), temp: filepath.Join(realTemp(t), "tmp")}
+	e.cfg = Config{SearchPath: []string{filepath.Dir(gitPath)}, Home: e.home, TempRoot: e.temp}
+	e.setup = []string{"PATH=" + filepath.Dir(gitPath) + ":/usr/bin:/bin", "HOME=" + e.home, "GIT_CONFIG_NOSYSTEM=1", "LC_ALL=C"}
+	e.git("init", "-q", "-b", "main")
+	e.git("config", "user.name", "T")
+	e.git("config", "user.email", "t@example.com")
+	e.write("first.txt", "x\n")
+	g := e.open()
+	if err := g.Add(bg, []string{"first.txt"}); err != nil {
+		t.Fatal(err)
+	}
+	staged, err := g.StagedFingerprint(bg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	done, err := g.Commit(bg, "root")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := g.CommitFingerprint(bg, done.Commit); got != staged {
+		t.Fatalf("a first commit's fingerprint %s differs from its index's %s", got, staged)
+	}
+}
+
+func TestBranchAndSubjectAreReadFromTheRepository(t *testing.T) {
+	e := newRepo(t)
+	g := e.open()
+	if b, err := g.Branch(bg); err != nil || b != "main" {
+		t.Fatalf("branch = %q %v", b, err)
+	}
+	head, _ := g.Head(bg)
+	if s, err := g.Subject(bg, head); err != nil || s != "initial commit" {
+		t.Fatalf("subject = %q %v", s, err)
+	}
+	e.git("checkout", "-q", "--detach", "HEAD")
+	if b, err := g.Branch(bg); err != nil || b != "(detached)" {
+		t.Fatalf("detached = %q %v", b, err)
+	}
+	if _, err := g.Subject(bg, "not-a-hash"); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("%v", err)
+	}
+}

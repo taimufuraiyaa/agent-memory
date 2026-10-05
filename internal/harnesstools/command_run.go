@@ -112,7 +112,7 @@ func (s *session) prepareCommand(q harness.ToolRequest, root string, action harn
 func (s *session) pendingMutations() int {
 	n := 0
 	for _, c := range s.pending {
-		if c.plan != nil || c.command != nil {
+		if c.plan != nil || c.command != nil || (c.git != nil && c.git.mutating) {
 			n++
 		}
 	}

@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path"
@@ -334,4 +335,41 @@ func (r *Root) RemoveFile(rel, expect string) error {
 		return ErrUnreadable
 	}
 	return nil
+}
+
+// MaxDigestBytes bounds the file Digest will hash.
+const MaxDigestBytes = 8 << 20
+
+// Digest identifies the content of one regular file of any kind, binary included, up to
+// limit bytes, without keeping it. It refuses what the read tools refuse (hidden and
+// credential-like names, links, paths outside the root) and a file larger than limit.
+func (r *Root) Digest(rel string, limit int64) (revision string, size int64, err error) {
+	cleaned, err := r.check(rel)
+	if err != nil {
+		return "", 0, err
+	}
+	if cleaned == "." || limit < 1 || limit > MaxDigestBytes {
+		return "", 0, ErrInvalidPath
+	}
+	info, err := r.root.Lstat(cleaned)
+	if err != nil || !info.Mode().IsRegular() {
+		return "", 0, ErrUnreadable
+	}
+	if info.Size() > limit {
+		return "", 0, ErrTooLarge
+	}
+	file, err := r.root.Open(cleaned)
+	if err != nil {
+		return "", 0, ErrUnreadable
+	}
+	defer file.Close()
+	hash := sha256.New()
+	n, err := io.Copy(hash, io.LimitReader(file, limit+1))
+	if err != nil {
+		return "", 0, ErrUnreadable
+	}
+	if n > limit {
+		return "", 0, ErrTooLarge
+	}
+	return hex.EncodeToString(hash.Sum(nil))[:32] + fmt.Sprintf("-%d", n), n, nil
 }
