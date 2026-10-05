@@ -232,3 +232,44 @@ func TestAnOpaqueProviderIsNeverToldAFilesNameAndARequiredOneIsCautious(t *testi
 		t.Fatal("a missing advisor judged a file")
 	}
 }
+
+func TestOnlyChunksThatCouldStillBeSharedAreAskedAboutAndAdviceOnlyRaises(t *testing.T) {
+	stub := &sensitivityStub{verdict: map[string]Sensitivity{"low": SensitivityPublic, "mid": SensitivitySensitive, "pub": SensitivitySensitive, "top": SensitivityRestricted}}
+	chunks := []Chunk{repoChunk("low", SensitivityInternal), repoChunk("mid", SensitivityInternal), repoChunk("pub", SensitivityPublic), repoChunk("top", SensitivityRestricted)}
+	got := raiseSensitivity(context.Background(), stub, SensitivityInternal, chunks)
+	levels := map[string]Sensitivity{}
+	for _, c := range got {
+		levels[c.ID] = c.Sensitivity
+	}
+	if levels["low"] != SensitivityInternal || levels["mid"] != SensitivitySensitive || levels["pub"] != SensitivitySensitive || levels["top"] != SensitivityRestricted {
+		t.Fatalf("levels = %v", levels)
+	}
+	if has(stub.seen, "top") || len(stub.seen) != 3 {
+		t.Fatalf("a chunk above the ceiling was asked about: %v", stub.seen)
+	}
+	if chunks[1].Sensitivity != SensitivityInternal {
+		t.Fatal("the caller's chunks were changed in place")
+	}
+	gone, cancel := context.WithCancel(context.Background())
+	cancel()
+	idle := &sensitivityStub{}
+	raiseSensitivity(gone, idle, SensitivityRestricted, chunks)
+	time.Sleep(30 * time.Millisecond) // a question asked in the background would have arrived by now
+	if idle.asked.Load() != 0 {
+		t.Fatal("a cancelled assembly asked the advisor")
+	}
+}
+
+func TestTheEligibilityCeilingKeepsAChunkThatCouldNeverBeSharedFromBeingAskedAbout(t *testing.T) {
+	stub := &sensitivityStub{verdict: map[string]Sensitivity{"internal": SensitivitySensitive}}
+	raiseSensitivity(context.Background(), stub, SensitivityPublic, []Chunk{repoChunk("internal", SensitivityInternal)})
+	if stub.asked.Load() != 0 {
+		t.Fatal("a chunk already above what the provider may see was sent for advice")
+	}
+	source := sensitivitySource([]Chunk{repoChunk("internal", SensitivityInternal)}, stub)
+	source.Eligibility.MaxSensitivity = SensitivityPublic
+	includedIDs(t, source)
+	if stub.asked.Load() != 0 {
+		t.Fatal("the run source did not pass its eligibility ceiling to the hook")
+	}
+}

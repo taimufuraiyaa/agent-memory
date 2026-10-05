@@ -341,3 +341,48 @@ func TestAnAdvisoryServiceThatCannotAnswerChangesNothingAndARequiredOneAddsCauti
 		t.Fatalf("a routine verdict lowered an ordinary ask: %v", got)
 	}
 }
+
+func TestAnActionWithoutADigestIsAskedAboutEveryTimeAndNothingIsRemembered(t *testing.T) {
+	stub := &stubRisk{risk: harnessdecide.RiskCareful, out: harnessdecide.Outcome{Status: harnessdecide.StatusApplied}}
+	p := NewAdvisedPolicy(ProjectPolicy(), stub)
+	a := act("edit_file", "ff", []string{"a.go"})
+	a.Digest = ""
+	for i := 0; i < 2; i++ {
+		p.Decide(context.Background(), harnessrunOwner(), a)
+	}
+	if len(p.advice) != 0 || len(p.order) != 0 {
+		t.Fatalf("remembered %d for an action with no digest", len(p.advice))
+	}
+	if _, ok := p.recall(""); ok || len(p.Reasons(a)) != 0 {
+		t.Fatal("advice was recalled for no digest")
+	}
+	p.remember("sha256:x", ReasonJevCareful)
+	p.remember("sha256:x", ReasonJevHazardous)
+	if len(p.order) != 1 {
+		t.Fatalf("one action was listed %d times", len(p.order))
+	}
+}
+
+func TestTheAdvisorIsAskedForTheRunTheActionBelongsTo(t *testing.T) {
+	var asked []string
+	advisor := ServiceRiskAdvisor{For: func(run string) *harnessdecide.Service { asked = append(asked, run); return nil }}
+	advisor.Risk(context.Background(), act("edit_file", "ee", []string{"a.go"}))
+	if !reflect.DeepEqual(asked, []string{"run-1"}) {
+		t.Fatalf("asked for %v", asked)
+	}
+	if got := riskFacts(act("run_command", "dd", []string{"go.mod"})); got["cp"] != 0 {
+		t.Fatalf("a command's folder was treated as a changed control-plane file: %v", got)
+	}
+}
+
+func TestNoAdviceIsKeptOrFoundUnderAnEmptyDigest(t *testing.T) {
+	p := NewAdvisedPolicy(ProjectPolicy(), nil)
+	p.remember("", ReasonJevCareful)
+	if len(p.advice) != 0 || len(p.order) != 0 {
+		t.Fatal("advice was kept under an empty digest")
+	}
+	p.advice[""] = ReasonJevHazardous
+	if reason, ok := p.recall(""); ok || reason != "" {
+		t.Fatalf("advice was found under an empty digest: %q", reason)
+	}
+}

@@ -265,3 +265,11 @@ func TestTheDecisionServiceChoosesToolsThroughTheLoop(t *testing.T) {
 		t.Error("a selector without a service chose tools")
 	}
 }
+
+func TestAChoiceThatRepeatsTheFixedOrderIsNotOfferedTwice(t *testing.T) {
+	f := toolFixture(t, 4, &scriptedSelector{fn: pick("tool_a")})
+	got := f.offered()
+	if !reflect.DeepEqual(got, sorted("clarify", "tool_a", "tool_b", "tool_c")) {
+		t.Fatalf("offered %v", got)
+	}
+}

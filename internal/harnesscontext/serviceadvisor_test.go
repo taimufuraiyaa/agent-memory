@@ -383,3 +383,16 @@ func TestTheVisibilityAdvisorNeedsAServiceAndClampsWhatItDescribes(t *testing.T)
 		t.Fatalf("evidence = %+v", ev)
 	}
 }
+
+func TestAStableOrderLeavesTheOrderOfPinnedInstructionsAlone(t *testing.T) {
+	first := chunk("z-rule", 0.5, "rule one")
+	first.Pinned, first.Source, first.Trust, first.Sensitivity = true, SourceInstruction, TrustProject, SensitivityPublic
+	second := chunk("a-note", 0.5, "rule two")
+	second.Pinned, second.Trust, second.Sensitivity = true, TrustProject, SensitivityPublic
+	req := adviceRequest()
+	req.Order = OrderStable
+	got := ids(mustAssemble(t, fixedAssembler(Config{}), req, []Chunk{second, first, chunk("m-evidence", 0.4, "x")}, nil).Items)
+	if got[0] != "z-rule" || got[1] != "a-note" {
+		t.Fatalf("pinned instructions were reordered: %v", got)
+	}
+}
