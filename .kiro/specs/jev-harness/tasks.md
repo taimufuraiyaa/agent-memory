@@ -33,3 +33,5 @@ The complete target and gate criteria are in this spec's requirements and design
 
 
 - [~] **12. Add an Anthropic model provider.** A harness model provider on the Anthropic Messages API (official Go SDK) with tools, typed outcomes, an explicit composition mode and the same egress, key and price rules as OpenAI; verified against a recording fake service (outcome per HTTP status, tool_use, unoffered tool, clarify, refusal, max_tokens, usage and cache, redirects, deadlines, key and prompt never echoed, fail-closed composition, end-to-end run) with a mutation sweep closed. The live coding run on Claude is still pending: it needs the user's `ANTHROPIC_API_KEY`, a model and prices. Rollback: do not compose it.
+
+- [x] **20. Add direct Jev decisions for a connected client.** Grantable `decide` operation, `POST /api/v1/harness/decide`, MCP `harness_decide`, opaque kinds only, per-client budget, README. Verify grant scoping, strict body, each kind's typed result, disabled and no-decisions behavior, no secret or content in replies, and the MCP schema. Rollback: remove the route and tool; runs are unchanged.

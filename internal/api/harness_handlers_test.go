@@ -249,7 +249,7 @@ func TestHarnessEndToEndRunThroughHTTP(t *testing.T) {
 	ops, _ := caps.data["operations"].([]any)
 	providers, _ := caps.data["providers"].([]any)
 	features, _ := caps.data["features"].(map[string]any)
-	if len(ops) != 6 || len(providers) != 2 || features["approval_over_mcp"] != false || caps.header.Get("Cache-Control") != "no-store" {
+	if len(ops) != 7 || len(providers) != 2 || features["approval_over_mcp"] != false || caps.header.Get("Cache-Control") != "no-store" {
 		t.Fatalf("capabilities = %s", caps.body)
 	}
 	for _, provider := range providers {

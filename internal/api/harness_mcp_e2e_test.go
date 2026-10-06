@@ -169,12 +169,12 @@ func TestHarnessThroughTheRealMCPAdapter(t *testing.T) {
 			harnessCount++
 		}
 	}
-	if harnessCount != 8 {
+	if harnessCount != 9 {
 		t.Fatalf("tools = %v", names)
 	}
 
 	caps, failure := a.call("harness_capabilities", map[string]any{"workspace": "agent-memory"})
-	if failure != "" || len(caps["operations"].([]any)) != 6 || caps["features"].(map[string]any)["fake_providers"] != true {
+	if failure != "" || len(caps["operations"].([]any)) != 7 || caps["features"].(map[string]any)["fake_providers"] != true {
 		t.Fatalf("capabilities = %v %s", caps, failure)
 	}
 

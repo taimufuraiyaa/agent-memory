@@ -12,6 +12,7 @@ import (
 
 	"github.com/taimufuraiyaa/agent-memory/internal/harness"
 	"github.com/taimufuraiyaa/agent-memory/internal/harnessauth"
+	"github.com/taimufuraiyaa/agent-memory/internal/harnessdecide"
 	"github.com/taimufuraiyaa/agent-memory/internal/harnessrun"
 )
 
@@ -45,6 +46,9 @@ type HarnessGateway struct {
 	// the trusted local approval store is in use, so readiness can report them.
 	Tools     []string
 	Approvals bool
+	// Decide returns the decision service for one caller key, so a granted client can ask
+	// opaque decisions directly. Nil means no decisions are composed.
+	Decide func(key string) *harnessdecide.Service
 }
 
 type harnessBudgetView struct {
@@ -149,6 +153,11 @@ func harnessRouter(g *HarnessGateway) http.HandlerFunc {
 				return
 			}
 			g.status(w, r, parts[1])
+		case rest == "decide":
+			if !harnessMethod(w, r, http.MethodPost) {
+				return
+			}
+			g.decide(w, r)
 		case rest == "readiness":
 			if !harnessMethod(w, r, http.MethodGet) {
 				return

@@ -91,7 +91,7 @@ func TestJevDecisionsDemandEveryOptInAndFailClosed(t *testing.T) {
 		jevEnv(t, "model")
 		t.Setenv(harnessProvidersEnv, "fake")
 		gateway, closeHarness, err := buildHarnessGatewayWith(context.Background(), svc, &bytes.Buffer{}, harnessBuildOptions{})
-		if err != nil || gateway.Decisions != nil {
+		if err != nil || gateway.Decisions != nil || gateway.Decide != nil {
 			t.Fatalf("%v %v", gateway, err)
 		}
 		closeHarness()
@@ -105,7 +105,7 @@ func TestWithoutTheOptInNothingIsComposedOrSent(t *testing.T) {
 	openAIEnv(t)
 	upstream := newRecordingOpenAI(t)
 	gateway, closeHarness, err := buildHarnessGatewayWith(context.Background(), svc, &bytes.Buffer{}, harnessBuildOptions{openAIBaseURL: upstream.server.URL, jevBaseURL: typesafe.server.URL})
-	if err != nil || gateway.Decisions != nil || len(gateway.Providers) != 1 {
+	if err != nil || gateway.Decisions != nil || gateway.Decide != nil || len(gateway.Providers) != 1 {
 		t.Fatalf("%v %v", gateway, err)
 	}
 	closeHarness()
@@ -124,7 +124,7 @@ func TestJevDecisionsAreComposedAndTheirHealthIsReportedWithoutContent(t *testin
 	jevEnv(t, "model, visibility, cache")
 	var stderr bytes.Buffer
 	gateway, closeHarness, err := buildHarnessGatewayWith(context.Background(), svc, &stderr, harnessBuildOptions{openAIBaseURL: upstream.server.URL, jevBaseURL: typesafe.server.URL})
-	if err != nil || gateway == nil || gateway.Decisions == nil {
+	if err != nil || gateway == nil || gateway.Decisions == nil || gateway.Decide == nil || gateway.Decide("client:x|ws") == nil {
 		t.Fatalf("%v %v", gateway, err)
 	}
 	t.Cleanup(closeHarness)

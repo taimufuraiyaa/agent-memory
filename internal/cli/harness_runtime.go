@@ -176,6 +176,7 @@ func buildHarnessGatewayWith(ctx context.Context, svc *api.Service, errOut io.Wr
 	gateway := &api.HarnessGateway{Authority: authority, Runs: runs, Providers: registry.Manifests(), Fake: fake, Tools: toolNames, Approvals: approvalsOn}
 	if decisions != nil {
 		gateway.Decisions = decisions.snapshot
+		gateway.Decide = func(key string) *harnessdecide.Service { return decisions.hub.Service(key) }
 	}
 	return gateway, closeAll, nil
 }

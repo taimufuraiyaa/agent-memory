@@ -84,7 +84,7 @@ function adapter(t, env) {
   return instance;
 }
 
-const harnessNames = ["harness_capabilities", "harness_start", "harness_status", "harness_cancel", "harness_continue", "harness_events", "harness_artifact", "harness_readiness"];
+const harnessNames = ["harness_capabilities", "harness_start", "harness_status", "harness_cancel", "harness_continue", "harness_events", "harness_artifact", "harness_decide", "harness_readiness"];
 const defaultNames = [
   "memory_write", "memory_search", "memory_recall", "memory_feedback", "memory_session_end",
   "solution_start", "solution_step", "solution_checkpoint", "solution_state", "solution_transition",
@@ -105,7 +105,7 @@ test("harness tools are absent without a grant and cannot be called", async (t) 
   assert.equal(service.requests.length, 0, "an unavailable tool still reached the service");
 });
 
-test("a configured grant adds exactly the eight harness tools after the profile tools", async (t) => {
+test("a configured grant adds exactly the nine harness tools after the profile tools", async (t) => {
   const service = await stub(t, ok({}));
   const withDefault = adapter(t, { AGENT_MEMORY_API_URL: service.url, AGENT_MEMORY_HARNESS_TOKEN: token });
   assert.deepEqual(await withDefault.toolNames(), [...defaultNames, ...harnessNames]);
@@ -298,4 +298,34 @@ test("a reconnecting adapter with the same grant sees the same run", async (t) =
   // Retrying the start after the reconnect with the same key is the same run.
   const retry = await second.call("harness_start", { workspace: "agent-memory", goal: "survive a reconnect", idempotency_key: "reconnect-key-1" });
   assert.equal(retry.structuredContent.run.id, id);
+});
+
+test("decide forwards only aliases, classes and integer facts to a fixed route", async (t) => {
+  const service = await stub(t, ok({ kind: "model.v1", status: "applied", advisory: true, selected: ["a"], label: "" }));
+  const instance = adapter(t, { AGENT_MEMORY_API_URL: service.url, AGENT_MEMORY_HARNESS_TOKEN: token });
+  const result = await instance.call("harness_decide", { workspace: "agent-memory", kind: "model", items: [{ id: "fast", facts: { c: 1 } }, { id: "deep" }] });
+  assert.equal(result.isError, undefined);
+  assert.equal(result.structuredContent.advisory, true);
+  const sent = service.requests[0];
+  assert.equal(sent.method, "POST");
+  assert.equal(sent.url, "/api/v1/harness/decide");
+  assert.equal(sent.headers.authorization, `Bearer ${token}`);
+  assert.deepEqual(sent.body, { workspace: "agent-memory", kind: "model", items: [{ id: "fast", class: "", facts: { c: 1 } }, { id: "deep", class: "", facts: {} }], keep: 0, capability: "", facts: {} });
+  assert.ok(!sent.raw.includes(token));
+
+  const bad = [
+    { workspace: "agent-memory", kind: "file_sensitivity", items: [] },
+    { workspace: "agent-memory", kind: "model", items: [{ id: "x", note: "free text" }] },
+    { workspace: "agent-memory", kind: "model", items: [{ id: "x", facts: { c: "1" } }] },
+    { workspace: "agent-memory", kind: "model", items: [{ id: "x", facts: { c: -1 } }] },
+    { workspace: "agent-memory", kind: "command_risk", facts: { n: 1.5 } },
+    { workspace: "agent-memory", kind: "model", items: "x" },
+    { workspace: "../x", kind: "model" },
+  ];
+  for (const args of bad) {
+    const before = service.requests.length;
+    const outcome = await instance.call("harness_decide", args);
+    assert.equal(outcome.isError, true, JSON.stringify(args));
+    assert.equal(service.requests.length, before, "an invalid decide reached the service");
+  }
 });

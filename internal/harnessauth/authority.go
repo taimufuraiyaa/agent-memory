@@ -54,9 +54,10 @@ const (
 	OpContinue     Operation = "continue"
 	OpArtifact     Operation = "artifact"
 	OpCancel       Operation = "cancel"
+	OpDecide       Operation = "decide"
 )
 
-var operations = []Operation{OpCapabilities, OpStart, OpStatus, OpContinue, OpArtifact, OpCancel}
+var operations = []Operation{OpCapabilities, OpStart, OpStatus, OpContinue, OpArtifact, OpCancel, OpDecide}
 
 // AllOperations lists every grantable operation.
 func AllOperations() []Operation { return append([]Operation(nil), operations...) }

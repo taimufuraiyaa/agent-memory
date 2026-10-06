@@ -323,6 +323,8 @@ Enable it with all of: `AGENT_MEMORY_HARNESS_PROVIDERS=openai` and its settings,
 
 **Limits.** Windows and sandboxing limits of the command tool apply; no hosted path exists; the live coding task has not been run against OpenAI or Claude.
 
+**Ask Jev directly.** A granted client can use the Jev decisions without starting a run: MCP `harness_decide`, or `POST /api/v1/harness/decide`. It needs the grantable `decide` operation (a token minted with all operations has it; older explicit grants do not) and the decision kind listed in `AGENT_MEMORY_HARNESS_JEV`. The kinds are `visibility`, `model`, `tools`, `cache` and `command_risk`, asked from identifiers you choose, a short class word and integer facts only; there is no field for text, a path or a note, and the two kinds that carry project text are not offered. The reply is a status plus advice (the identifiers it picked, or one label) marked `advisory`: it approves nothing, and your own rules still decide. Each client has its own decision budget.
+
 ### Real model provider (OpenAI, opt-in)
 
 By default the harness composes only fakes. A single real provider is available for text-only runs; it **sends assembled prompts to OpenAI and may incur charges**, so it needs every one of these, and refuses to start if any is missing or unrecognized:

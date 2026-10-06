@@ -261,6 +261,18 @@ const harnessTools = [
     run_id: { type: "string", maxLength: 36 },
     artifact_id: { type: "string", pattern: "^a[0-9]{1,9}$" },
   }, ["workspace", "run_id", "artifact_id"]),
+  tool("harness_decide", "Ask Jev for advice on one opaque decision (visibility, model, tools, cache or command_risk) from aliases, classes and integer facts only. The reply is advisory: it approves nothing and the caller's own rules still decide", {
+    workspace: { type: "string", maxLength: 64 },
+    kind: { type: "string", enum: ["visibility", "model", "tools", "cache", "command_risk"] },
+    items: { type: "array", maxItems: 32, items: { type: "object", additionalProperties: false, properties: {
+      id: { type: "string", maxLength: 128 },
+      class: { type: "string", maxLength: 24, pattern: "^[a-z0-9_]{0,24}$" },
+      facts: { type: "object", additionalProperties: { type: "integer", minimum: 0, maximum: 1000000000 } },
+    }, required: ["id"] } },
+    keep: { type: "integer", minimum: 1, maximum: 32 },
+    capability: { type: "string", maxLength: 24, pattern: "^[a-z0-9_]{0,24}$" },
+    facts: { type: "object", additionalProperties: { type: "integer", minimum: 0, maximum: 1000000000 } },
+  }, ["workspace", "kind"]),
   tool("harness_readiness", "Report what the harness can do right now (providers, tools, approvals, decisions) without calling any provider", {
     workspace: { type: "string", maxLength: 64 },
   }, ["workspace"]),
@@ -536,6 +548,22 @@ async function callTool(name, args) {
       requireHarnessArguments(args);
       if (!/^a[0-9]{1,9}$/.test(String(args.artifact_id ?? ""))) throw new Error("artifact_id is invalid");
       return requestHarness(`/api/v1/harness/runs/${args.run_id}/artifacts/${args.artifact_id}?workspace=${encodeURIComponent(args.workspace)}`);
+    case "harness_decide": {
+      requireHarnessArguments(args);
+      if (!new Set(["visibility", "model", "tools", "cache", "command_risk"]).has(args.kind)) throw new Error("kind is invalid");
+      const integerFacts = (facts) => facts === undefined || (facts !== null && typeof facts === "object" && !Array.isArray(facts)
+        && Object.values(facts).every((v) => Number.isInteger(v) && v >= 0 && v <= 1000000000));
+      if (args.items !== undefined && (!Array.isArray(args.items) || args.items.length > 32)) throw new Error("items is invalid");
+      for (const item of args.items ?? []) {
+        if (item === null || typeof item !== "object" || typeof item.id !== "string" || !integerFacts(item.facts)
+          || Object.keys(item).some((key) => !["id", "class", "facts"].includes(key))) throw new Error("items is invalid");
+      }
+      if (!integerFacts(args.facts)) throw new Error("facts is invalid");
+      return requestHarness("/api/v1/harness/decide", { method: "POST", body: {
+        workspace: args.workspace, kind: args.kind, items: (args.items ?? []).map((i) => ({ id: i.id, class: i.class ?? "", facts: i.facts ?? {} })),
+        keep: args.keep ?? 0, capability: args.capability ?? "", facts: args.facts ?? {},
+      } });
+    }
     case "harness_readiness":
       requireHarnessArguments(args);
       return requestHarness(`/api/v1/harness/readiness?workspace=${encodeURIComponent(args.workspace)}`);
