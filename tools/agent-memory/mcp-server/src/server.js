@@ -3,7 +3,7 @@ import readline from "node:readline";
 import { randomUUID } from "node:crypto";
 
 const protocolVersion = "2025-03-26";
-const serviceURL = (process.env.AGENT_MEMORY_API_URL || process.env.AGENT_MEMORY_URL || "http://127.0.0.1:3210").replace(/\/$/, "");
+const serviceURL = (process.env.AGENT_MEMORY_API_URL || process.env.AGENT_MEMORY_URL || "http://127.0.0.1:3211").replace(/\/$/, "");
 const serviceMode = process.env.AGENT_MEMORY_MODE || "local";
 const maxResponseBytes = Number(process.env.AGENT_MEMORY_MCP_MAX_RESPONSE_BYTES || 262144);
 const clientID = process.env.AGENT_MEMORY_CLIENT_ID || "";

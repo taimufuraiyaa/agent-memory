@@ -253,3 +253,10 @@ func TestHookCommandReportsBudgetedOptInInjection(t *testing.T) {
 		t.Fatalf("missing injection provenance: %+v", data)
 	}
 }
+
+func TestHookDefaultsToTheServiceThatServesObservations(t *testing.T) {
+	flag := newHookCommand().Flags().Lookup("service-url")
+	if flag == nil || flag.DefValue != "http://"+defaultServeAddr {
+		t.Fatalf("the hook would post observations somewhere serve does not listen: %+v", flag)
+	}
+}

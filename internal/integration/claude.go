@@ -50,7 +50,7 @@ func (ClaudeAdapter) Connect(_ context.Context, options Options) (Result, error)
 	servers["agent-memory"] = map[string]any{
 		"command": "agent-memory-mcp",
 		"env": map[string]any{
-			"AGENT_MEMORY_URL": "http://127.0.0.1:3210",
+			"AGENT_MEMORY_URL": "http://127.0.0.1:3211",
 		},
 	}
 	if err := writeJSONObject(path, root); err != nil {

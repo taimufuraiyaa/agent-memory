@@ -135,7 +135,7 @@ func newHookCommand() *cobra.Command {
 	cmd.Flags().StringVar(&event, "event", "", "Host lifecycle event")
 	cmd.Flags().StringVar(&agent, "agent", "", "Source coding agent")
 	cmd.Flags().StringVarP(&workspaceName, "workspace", "w", "", "Workspace name")
-	cmd.Flags().StringVar(&serviceURL, "service-url", "http://127.0.0.1:3210", "Local agent-memory service URL")
+	cmd.Flags().StringVar(&serviceURL, "service-url", defaultServiceURL, "Local agent-memory service URL")
 	cmd.Flags().StringVar(&sessionID, "session-id", "", "Session identifier override")
 	cmd.Flags().StringVar(&dataDir, "data-dir", "", "Agent Memory data directory for Claude listen state")
 	return cmd

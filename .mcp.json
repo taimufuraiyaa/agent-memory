@@ -3,7 +3,7 @@
     "agent-memory": {
       "command": "agent-memory-mcp",
       "env": {
-        "AGENT_MEMORY_URL": "http://127.0.0.1:3210"
+        "AGENT_MEMORY_URL": "http://127.0.0.1:3211"
       }
     }
   }
