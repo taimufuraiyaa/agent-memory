@@ -5,6 +5,7 @@ import (
 
 	"github.com/taimufuraiyaa/agent-memory/internal/application"
 	"github.com/taimufuraiyaa/agent-memory/internal/engine"
+	graphretrieval "github.com/taimufuraiyaa/agent-memory/internal/retrieval"
 )
 
 // recallParams are the inputs shared by /api/v1/memories/recall and
@@ -18,6 +19,9 @@ type recallParams struct {
 	includeObservations bool
 	observationSession  string
 	observationLimit    int
+	graphMode           graphretrieval.GraphQueryMode
+	graphRequired       bool
+	graphAllowStale     bool
 }
 
 // recallResult bundles the outputs of the shared recall pipeline (see
@@ -41,6 +45,8 @@ type recallResult struct {
 	included       []engine.RetrievalHit
 	clip           engine.ClipMetadata
 	contextBlock   string
+	graphRoute     graphretrieval.GraphRouteDecision
+	graphContext   *application.RecallGraphContext
 }
 
 // runRecallPipeline runs the recall pipeline shared by
@@ -66,6 +72,12 @@ func runRecallPipeline(ctx context.Context, assets *workspaceAssets, p recallPar
 		IncludeObservations: p.includeObservations && observeEnabled(),
 		ObservationSession:  p.observationSession,
 		ObservationLimit:    p.observationLimit,
+		GraphMode:           p.graphMode,
+		GraphRequired:       p.graphRequired,
+		GraphPolicy: graphretrieval.GraphRoutePolicy{
+			GraphEnabled: p.graphMode != "" && p.graphMode != graphretrieval.GraphQueryBasic,
+			AllowLocal:   true, AllowGlobal: true, AllowStale: p.graphAllowStale,
+		},
 	})
 	if err != nil {
 		return nil, err
@@ -87,5 +99,7 @@ func runRecallPipeline(ctx context.Context, assets *workspaceAssets, p recallPar
 		included:             shared.Included,
 		clip:                 shared.Clip,
 		contextBlock:         shared.ContextBlock,
+		graphRoute:           shared.GraphRoute,
+		graphContext:         shared.GraphContext,
 	}, nil
 }

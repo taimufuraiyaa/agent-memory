@@ -1,4 +1,4 @@
-import { StrictMode } from 'react'
+import { StrictMode, useEffect, useState } from 'react'
 import ReactDOM from 'react-dom/client'
 import { MantineProvider } from '@mantine/core'
 import '@mantine/core/styles.css'
@@ -6,10 +6,9 @@ import { RightsAttestationGate } from './ui/RightsAttestationGate'
 import { loadDashboardRuntime } from './lib/runtime'
 import { createStandaloneKnowledgeGateway } from './lib/adapters/standaloneKnowledgeGateway'
 import { WorkspaceApp } from './ui/WorkspaceApp'
-import { HostedWorkspaceBootstrap } from './ui/HostedWorkspaceBootstrap'
 import { agentMemoryTheme } from './ui/theme'
+import type { DashboardColorScheme, DashboardVisualTheme } from './ui/WorkspaceApp'
 import './ui/styles.css'
-import './ui/connection.css'
 
 type PreloadRecoveryState = {
   attempted: boolean
@@ -26,6 +25,61 @@ const PRELOAD_RECOVERY_OVERLAY_ID = 'agent-memory-preload-recovery'
 const PRELOAD_RECOVERY_TOAST_ID = 'agent-memory-preload-toast'
 const PRELOAD_RECOVERY_TTL_MS = 30 * 60 * 1000
 const PRELOAD_RECOVERY_RELOAD_DELAY_MS = 1200
+const COLOR_SCHEME_KEY = 'agent-memory:color-scheme'
+const VISUAL_THEME_KEY = 'agent-memory:visual-theme'
+
+type ColorScheme = DashboardColorScheme
+type VisualTheme = DashboardVisualTheme
+
+function readColorScheme(): ColorScheme {
+  try {
+    const value = window.localStorage.getItem(COLOR_SCHEME_KEY)
+    return value === 'light' || value === 'dark' ? value : 'dark'
+  } catch {
+    return 'dark'
+  }
+}
+
+function applyColorScheme(value: ColorScheme): void {
+  document.body.classList.toggle('dark', value === 'dark')
+  document.body.classList.toggle('light', value === 'light')
+  document.body.dataset.mantineColorScheme = value
+}
+
+function readVisualTheme(): VisualTheme {
+  try {
+    const value = window.localStorage.getItem(VISUAL_THEME_KEY)
+    return value === 'atlas' || value === 'classic' ? value : 'atlas'
+  } catch {
+    return 'atlas'
+  }
+}
+
+function DashboardRoot({ children }: { children: (colorScheme: ColorScheme, onColorSchemeChange: (value: ColorScheme) => void, visualTheme: VisualTheme, onVisualThemeChange: (value: VisualTheme) => void) => React.ReactNode }) {
+  const [colorScheme, setColorScheme] = useState<ColorScheme>(readColorScheme)
+  const [visualTheme, setVisualTheme] = useState<VisualTheme>(readVisualTheme)
+
+  useEffect(() => {
+    applyColorScheme(colorScheme)
+    try {
+      window.localStorage.setItem(COLOR_SCHEME_KEY, colorScheme)
+    } catch {
+      // The current session can still switch themes when storage is unavailable.
+    }
+  }, [colorScheme])
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(VISUAL_THEME_KEY, visualTheme)
+    } catch {
+      // The current session can still switch visual themes when storage is unavailable.
+    }
+  }, [visualTheme])
+
+  return <MantineProvider theme={agentMemoryTheme} defaultColorScheme="dark" forceColorScheme={colorScheme}>
+    {children(colorScheme, setColorScheme, visualTheme, setVisualTheme)}
+  </MantineProvider>
+}
 
 let preloadRecoveryAttemptedInMemory = false
 
@@ -262,30 +316,22 @@ function RuntimeUnavailable({ message }: { message: string }) {
 
 async function bootstrap(): Promise<void> {
   const root = ReactDOM.createRoot(document.getElementById('root')!)
-  const render = (content: React.ReactNode) => root.render(
+  const render = (content: (colorScheme: ColorScheme, onColorSchemeChange: (value: ColorScheme) => void, visualTheme: VisualTheme, onVisualThemeChange: (value: VisualTheme) => void) => React.ReactNode) => root.render(
     <StrictMode>
-      <MantineProvider theme={agentMemoryTheme} forceColorScheme="dark">
-        {content}
-      </MantineProvider>
+      <DashboardRoot>{content}</DashboardRoot>
     </StrictMode>,
   )
   try {
     const runtime = await loadDashboardRuntime()
-    const gateway = runtime.mode === 'standalone' ? createStandaloneKnowledgeGateway() : null
-    render(
-      runtime.mode === 'hosted' ? (
-        <HostedWorkspaceBootstrap runtime={runtime} />
-      ) : gateway ? (
-        <RightsAttestationGate>
-          <WorkspaceApp runtime={runtime} gateway={gateway} />
-        </RightsAttestationGate>
-      ) : (
-        <RuntimeUnavailable message="No knowledge gateway is available for this runtime." />
-      ),
+    const gateway = createStandaloneKnowledgeGateway()
+    render((colorScheme, setColorScheme, visualTheme, setVisualTheme) =>
+      <RightsAttestationGate>
+        <WorkspaceApp runtime={runtime} gateway={gateway} colorScheme={colorScheme} onColorSchemeChange={setColorScheme} visualTheme={visualTheme} onVisualThemeChange={setVisualTheme} />
+      </RightsAttestationGate>,
     )
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Runtime discovery failed.'
-    render(<RuntimeUnavailable message={message} />)
+    render(() => <RuntimeUnavailable message={message} />)
   }
 }
 

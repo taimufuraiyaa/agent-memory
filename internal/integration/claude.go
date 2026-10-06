@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/taimufuraiyaa/agent-memory/internal/workspace"
 )
 
 type ClaudeAdapter struct{}
@@ -53,6 +55,9 @@ func (ClaudeAdapter) Connect(_ context.Context, options Options) (Result, error)
 	if err := writeClaudeHooks(settingsPath, options.Workspace); err != nil {
 		return Result{}, err
 	}
+	if err := workspace.WriteManagedProjectRule(filepath.Join(options.Root, "CLAUDE.md"), options.Workspace, options.Force); err != nil {
+		return Result{}, err
+	}
 	verified, err := verifyClaude(options.Root, true)
 	return Result{Agent: "claude-code", Applied: claudePaths(options.Root), Verified: verified}, err
 }
@@ -71,6 +76,9 @@ func (ClaudeAdapter) Disconnect(_ context.Context, options Options) (Result, err
 	}
 	settingsPath := filepath.Join(options.Root, ".claude", "settings.json")
 	if err := removeClaudeHooks(settingsPath); err != nil {
+		return Result{}, err
+	}
+	if err := workspace.RemoveManagedProjectRule(filepath.Join(options.Root, "CLAUDE.md")); err != nil {
 		return Result{}, err
 	}
 	verified, err := verifyClaude(options.Root, false)
@@ -124,11 +132,13 @@ func verifyClaude(rootPath string, connected bool) (bool, error) {
 		return false, err
 	}
 	hasHooks := strings.Contains(fmt.Sprint(settings["hooks"]), claudeHookMarker)
-	return exists == connected && hasHooks == connected, nil
+	rules, readErr := os.ReadFile(filepath.Join(rootPath, "CLAUDE.md"))
+	hasContract := readErr == nil && strings.Contains(string(rules), workspace.MemoryContractMarker)
+	return exists == connected && hasHooks == connected && hasContract == connected, nil
 }
 
 func claudePaths(root string) []string {
-	return []string{filepath.Join(root, ".mcp.json"), filepath.Join(root, ".claude", "settings.json")}
+	return []string{filepath.Join(root, ".mcp.json"), filepath.Join(root, ".claude", "settings.json"), filepath.Join(root, "CLAUDE.md")}
 }
 
 func writeClaudeHooks(path, workspaceName string) error {
@@ -149,7 +159,7 @@ func writeClaudeHooks(path, workspaceName string) error {
 				kept = append(kept, group)
 			}
 		}
-		command := fmt.Sprintf("agent-memory hook --event %s --agent claude-code --workspace %s # %s", event, workspaceName, claudeHookMarker)
+		command := fmt.Sprintf("agent-memory hook --event %s --agent claude-code --workspace %s # %s | %s", event, workspaceName, claudeHookMarker, workspace.MemoryContractMarker)
 		kept = append(kept, map[string]any{"hooks": []any{map[string]any{"type": "command", "command": command, "timeout": 2}}})
 		hooksMap[event] = kept
 	}

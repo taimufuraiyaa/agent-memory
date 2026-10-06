@@ -72,9 +72,9 @@ func CheckModelVersion(ctx context.Context, workspace string, store *sqlite.Stor
 	if !hasMismatch {
 		recommendedAction = "No action required - all vectors use current provider and model version"
 	} else if reembedRequired {
-		recommendedAction = fmt.Sprintf("Run: agent-memory reembed --workspace %s", workspace)
+		recommendedAction = fmt.Sprintf("Run: agent-memory re-embed --workspace %s", workspace)
 	} else {
-		recommendedAction = fmt.Sprintf("Optional: %d/%d vectors use outdated provider/version. Run reembed to update.", mismatchedVectors, totalVectors)
+		recommendedAction = fmt.Sprintf("Optional: %d/%d vectors use outdated provider/version. Run agent-memory re-embed --workspace %s to update.", mismatchedVectors, totalVectors, workspace)
 	}
 
 	return &ModelVersionCheck{

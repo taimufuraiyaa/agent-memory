@@ -8,6 +8,23 @@ import (
 	"testing"
 )
 
+func TestModelLifecycleOptionsFromEnv(t *testing.T) {
+	t.Setenv("AGENT_MEMORY_MODEL_AUTODOWNLOAD", " yes ")
+	t.Setenv("AGENT_MEMORY_MINILM_ONNX_URL", " https://models.example/model.onnx ")
+	t.Setenv("AGENT_MEMORY_MINILM_TOKENIZER_URL", " https://models.example/tokenizer.json ")
+
+	got := modelLifecycleOptionsFromEnv()
+	if !got.AutoDownload {
+		t.Fatal("expected auto-download to be enabled")
+	}
+	if got.URLs["model.onnx"] != "https://models.example/model.onnx" {
+		t.Fatalf("unexpected model URL: %q", got.URLs["model.onnx"])
+	}
+	if got.URLs["tokenizer.json"] != "https://models.example/tokenizer.json" {
+		t.Fatalf("unexpected tokenizer URL: %q", got.URLs["tokenizer.json"])
+	}
+}
+
 func TestEnsureModelFiles(t *testing.T) {
 	modelDir := filepath.Join(t.TempDir(), "all-MiniLM-L6-v2")
 	if err := os.MkdirAll(modelDir, 0o755); err != nil {

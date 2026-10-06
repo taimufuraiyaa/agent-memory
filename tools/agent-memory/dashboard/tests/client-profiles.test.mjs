@@ -10,7 +10,7 @@ const stylesSource = await readFile(new URL('../src/ui/clients.css', import.meta
 test('clients surface is installation-scoped and reachable from shared navigation', () => {
   assert.match(appSource, /label: 'Clients'/)
   assert.match(appSource, /id: 'clients'/)
-  assert.match(appSource, /<ClientsPanel \/>/)
+  assert.match(appSource, /<ClientsPanel clientProfiles=\{gateway\}/)
   assert.match(panelSource, /across every workspace/)
   assert.doesNotMatch(panelSource, /workspace=/)
 })
@@ -18,7 +18,7 @@ test('clients surface is installation-scoped and reachable from shared navigatio
 test('client profile API supports revision-safe lifecycle operations', () => {
   for (const name of ['listClientProfiles', 'createClientProfile', 'updateClientProfile', 'deleteClientProfile']) {
     assert.match(apiSource, new RegExp(`export function ${name}`))
-    assert.match(panelSource, new RegExp(name))
+    assert.match(panelSource, new RegExp(`clientProfiles\.${name}`))
   }
   assert.match(apiSource, /expected_revision/)
   assert.match(panelSource, /profile\.revision/)
@@ -27,8 +27,9 @@ test('client profile API supports revision-safe lifecycle operations', () => {
 test('profile selection explains tool membership, connection id, and restart behavior', () => {
   assert.match(panelSource, /Default/)
   assert.match(panelSource, /Expanded/)
-  assert.match(panelSource, /5 workflow tools/)
-  assert.match(panelSource, /7 tools/)
+	assert.match(panelSource, /13 workflow tools/)
+	assert.match(panelSource, /15 tools/)
+	assert.match(panelSource, /value: 'kiro'/)
   assert.match(panelSource, /AGENT_MEMORY_CLIENT_ID=/)
   assert.match(panelSource, /reconnects or restarts/)
   assert.match(panelSource, /navigator\.clipboard\.writeText/)

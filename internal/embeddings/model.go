@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -20,6 +21,16 @@ var MiniLMFiles = []string{
 type ModelLifecycleOptions struct {
 	AutoDownload bool
 	URLs         map[string]string
+}
+
+func modelLifecycleOptionsFromEnv() ModelLifecycleOptions {
+	return ModelLifecycleOptions{
+		AutoDownload: parseBoolEnv(os.Getenv("AGENT_MEMORY_MODEL_AUTODOWNLOAD")),
+		URLs: map[string]string{
+			"model.onnx":     strings.TrimSpace(os.Getenv("AGENT_MEMORY_MINILM_ONNX_URL")),
+			"tokenizer.json": strings.TrimSpace(os.Getenv("AGENT_MEMORY_MINILM_TOKENIZER_URL")),
+		},
+	}
 }
 
 // EnsureModelFiles checks that required model files exist.

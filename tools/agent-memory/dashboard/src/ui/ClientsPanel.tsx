@@ -1,19 +1,14 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import {
-  createClientProfile,
-  deleteClientProfile,
-  listClientProfiles,
-  updateClientProfile,
-  type ClientKind,
-  type ClientProfile,
-  type ClientToolProfile,
-} from '../lib/api'
+import type { ClientKind, ClientProfile, ClientToolProfile } from '../lib/api'
+import type { KnowledgeGateway } from '../lib/knowledgeGateway'
+import { ListPagination, paginateRecords } from './workspace/ListPagination'
 import './clients.css'
 
 const clientKinds: Array<{ value: ClientKind; label: string }> = [
   { value: 'codex', label: 'Codex' },
   { value: 'claude', label: 'Claude' },
   { value: 'cursor', label: 'Cursor' },
+	{ value: 'kiro', label: 'Kiro' },
   { value: 'other', label: 'Other' },
 ]
 
@@ -24,17 +19,22 @@ const emptyForm = {
   tool_profile: 'default' as ClientToolProfile,
 }
 
-export function ClientsPanel() {
+type ClientProfileOperations = Pick<KnowledgeGateway, 'listClientProfiles' | 'createClientProfile' | 'updateClientProfile' | 'deleteClientProfile'>
+
+export function ClientsPanel({ clientProfiles }: { clientProfiles: ClientProfileOperations }) {
   const [profiles, setProfiles] = useState<ClientProfile[]>([])
   const [form, setForm] = useState(emptyForm)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [profilePage, setProfilePage] = useState(1)
+  const pagedProfiles = paginateRecords(profiles, profilePage)
 
   async function refresh() {
     setBusy(true)
     try {
-      const response = await listClientProfiles()
+      const response = await clientProfiles.listClientProfiles()
       setProfiles(response.profiles ?? [])
+      setProfilePage(1)
       setError('')
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause))
@@ -51,7 +51,7 @@ export function ClientsPanel() {
     event.preventDefault()
     setBusy(true)
     try {
-      const response = await createClientProfile(form)
+      const response = await clientProfiles.createClientProfile(form)
       setProfiles((current) => [...current, response.profile].sort((a, b) => a.id.localeCompare(b.id)))
       setForm(emptyForm)
       setError('')
@@ -65,7 +65,7 @@ export function ClientsPanel() {
   async function saveProfile(profile: ClientProfile) {
     setBusy(true)
     try {
-      const response = await updateClientProfile({
+      const response = await clientProfiles.updateClientProfile({
         id: profile.id,
         display_name: profile.display_name,
         client_kind: profile.client_kind,
@@ -85,7 +85,7 @@ export function ClientsPanel() {
     if (!window.confirm(`Delete client profile “${profile.display_name}”? Its next MCP startup will fail until reconfigured.`)) return
     setBusy(true)
     try {
-      await deleteClientProfile({ id: profile.id, expected_revision: profile.revision })
+      await clientProfiles.deleteClientProfile({ id: profile.id, expected_revision: profile.revision })
       setProfiles((current) => current.filter((item) => item.id !== profile.id))
       setError('')
     } catch (cause) {
@@ -113,12 +113,12 @@ export function ClientsPanel() {
       <section className="profileExplainer" aria-label="Tool profile comparison">
         <article>
           <span className="profileLabel">Default</span>
-          <strong>5 workflow tools</strong>
-          <p>Write, search, recall, feedback, and session finalization. Recommended for normal agent work.</p>
+		  <strong>13 workflow tools</strong>
+		  <p>Memory plus complete How capture, checkpoint, handoff, recall, and promotion. Recommended for normal agent work.</p>
         </article>
         <article>
           <span className="profileLabel profileLabelExpanded">Expanded</span>
-          <strong>7 tools</strong>
+		  <strong>15 tools</strong>
           <p>Adds health diagnostics and session browsing for operators and troubleshooting clients.</p>
         </article>
         <div className="reconnectNotice"><span aria-hidden="true">↻</span> Saved changes apply after that client reconnects or restarts.</div>
@@ -148,8 +148,8 @@ export function ClientsPanel() {
         <label>
           <span>Tool profile</span>
           <select value={form.tool_profile} onChange={(event) => setForm({ ...form, tool_profile: event.target.value as ClientToolProfile })}>
-            <option value="default">Default · 5 tools</option>
-            <option value="expanded">Expanded · 7 tools</option>
+			<option value="default">Default · 13 tools</option>
+			<option value="expanded">Expanded · 15 tools</option>
           </select>
         </label>
         <button className="clientPrimaryAction" type="submit" disabled={busy}>Add client</button>
@@ -162,7 +162,7 @@ export function ClientsPanel() {
         </div>
         {busy && profiles.length === 0 ? <div className="clientEmpty">Loading client profiles…</div> : null}
         {!busy && profiles.length === 0 ? <div className="clientEmpty">No clients registered yet. Add the first local MCP client above.</div> : null}
-        {profiles.map((profile) => (
+        {pagedProfiles.items.map((profile) => (
           <ClientProfileRow
             key={`${profile.id}:${profile.revision}`}
             profile={profile}
@@ -172,6 +172,7 @@ export function ClientsPanel() {
             onDelete={() => void removeProfile(profile)}
           />
         ))}
+        <ListPagination page={pagedProfiles.page} total={profiles.length} onChange={setProfilePage} label="Client profiles" />
       </section>
     </div>
   )
@@ -217,8 +218,8 @@ function ClientProfileRow({
       <label className="clientField">
         <span>Tool profile</span>
         <select value={profile.tool_profile} onChange={(event) => onChange({ tool_profile: event.target.value as ClientToolProfile })}>
-          <option value="default">Default · 5</option>
-          <option value="expanded">Expanded · 7</option>
+		  <option value="default">Default · 13</option>
+		  <option value="expanded">Expanded · 15</option>
         </select>
       </label>
       <button className="connectionValue" type="button" onClick={() => void copyConnectionValue()} title="Copy connection value">

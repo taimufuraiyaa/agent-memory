@@ -48,6 +48,7 @@ func isUsageError(err error) bool {
 	msg := err.Error()
 	switch {
 	case containsFold(msg, "required flag"),
+		containsFold(msg, "explicit --workspace is required"),
 		containsFold(msg, "unknown command"),
 		containsFold(msg, "flag needs an argument"),
 		containsFold(msg, "unknown flag"):

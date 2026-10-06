@@ -6,8 +6,10 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/taimufuraiyaa/agent-memory/internal/core"
 	"github.com/taimufuraiyaa/agent-memory/internal/engine"
+	graphretrieval "github.com/taimufuraiyaa/agent-memory/internal/retrieval"
 )
 
 // memoriesRecentHandler implements GET /api/v1/memories/recent: returns the
@@ -48,6 +50,20 @@ func memoriesRecentHandler(svc *Service) http.HandlerFunc {
 			writeErr(w, http.StatusInternalServerError, "runtime", err.Error())
 			return
 		}
+		if r.URL.Query().Get("ungrouped") == "true" {
+			grouped, groupErr := assets.Store.ListPublishedSolutionPromotionMemoryIDs(r.Context(), ws)
+			if groupErr != nil {
+				writeErr(w, http.StatusInternalServerError, "runtime", groupErr.Error())
+				return
+			}
+			filtered := results[:0]
+			for _, memory := range results {
+				if _, linked := grouped[memory.ID]; !linked {
+					filtered = append(filtered, memory)
+				}
+			}
+			results = filtered
+		}
 		writeOK(w, http.StatusOK, map[string]any{
 			"results":   results,
 			"workspace": ws,
@@ -79,6 +95,9 @@ func memoriesRecallHandler(svc *Service) http.HandlerFunc {
 			IncludeObservations bool   `json:"include_observations"`
 			ObservationLimit    int    `json:"observation_limit"`
 			ObservationSession  string `json:"observation_session_id"`
+			GraphMode           string `json:"graph_mode"`
+			GraphRequired       bool   `json:"graph_required"`
+			GraphAllowStale     bool   `json:"graph_allow_stale"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
@@ -135,10 +154,25 @@ func memoriesRecallHandler(svc *Service) http.HandlerFunc {
 			includeObservations: req.IncludeObservations,
 			observationSession:  req.ObservationSession,
 			observationLimit:    req.ObservationLimit,
+			graphMode:           graphretrieval.GraphQueryMode(strings.ToLower(strings.TrimSpace(req.GraphMode))),
+			graphRequired:       req.GraphRequired,
+			graphAllowStale:     req.GraphAllowStale,
 		})
 		if err != nil {
 			writeErr(w, http.StatusBadRequest, "runtime", err.Error())
 			return
+		}
+		var howResult *engine.HowRecallResult
+		if engine.IsHowOrientedTask(task) {
+			how, howErr := engine.NewHowRecallService(assets.Store).Recall(r.Context(), engine.HowRecallInput{
+				Workspace: ws, SessionID: req.ObservationSession, Task: task, TokenBudget: budget,
+			})
+			if howErr != nil {
+				writeErr(w, http.StatusBadRequest, "runtime", howErr.Error())
+				return
+			}
+			result.contextBlock = engine.AppendHowRecallContext(result.contextBlock, how)
+			howResult = &how
 		}
 		data := map[string]any{
 			"request_id":             result.requestID,
@@ -165,9 +199,16 @@ func memoriesRecallHandler(svc *Service) http.HandlerFunc {
 			"search_probe":           result.decision.Probe,
 			"deep_recall_used":       result.decision.Strategy != engine.RecallStrategySearchSatisfied,
 			"reconstruction":         result.reconstruction,
+			"graph_route":            result.graphRoute,
+			"graph_context":          result.graphContext,
+			"graph_request_id":       uuid.NewString(),
 		}
 		if strings.EqualFold(strings.TrimSpace(req.Format), "raw") {
 			data["text"] = result.contextBlock
+		}
+		if howResult != nil {
+			data["how_recall"] = howResult
+			data["how_request_id"] = howResult.RequestID
 		}
 		writeOK(w, http.StatusOK, data)
 	}
@@ -198,6 +239,9 @@ func memoriesRecallPreviewHandler(svc *Service) http.HandlerFunc {
 			IncludeObservations bool   `json:"include_observations"`
 			ObservationLimit    int    `json:"observation_limit"`
 			ObservationSession  string `json:"observation_session_id"`
+			GraphMode           string `json:"graph_mode"`
+			GraphRequired       bool   `json:"graph_required"`
+			GraphAllowStale     bool   `json:"graph_allow_stale"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
@@ -245,10 +289,25 @@ func memoriesRecallPreviewHandler(svc *Service) http.HandlerFunc {
 			includeObservations: req.IncludeObservations,
 			observationSession:  req.ObservationSession,
 			observationLimit:    req.ObservationLimit,
+			graphMode:           graphretrieval.GraphQueryMode(strings.ToLower(strings.TrimSpace(req.GraphMode))),
+			graphRequired:       req.GraphRequired,
+			graphAllowStale:     req.GraphAllowStale,
 		})
 		if err != nil {
 			writeErr(w, http.StatusBadRequest, "runtime", err.Error())
 			return
+		}
+		var howResult *engine.HowRecallResult
+		if engine.IsHowOrientedTask(task) {
+			how, howErr := engine.NewHowRecallService(assets.Store).Recall(r.Context(), engine.HowRecallInput{
+				Workspace: ws, SessionID: req.ObservationSession, Task: task, TokenBudget: budget,
+			})
+			if howErr != nil {
+				writeErr(w, http.StatusBadRequest, "runtime", howErr.Error())
+				return
+			}
+			result.contextBlock = engine.AppendHowRecallContext(result.contextBlock, how)
+			howResult = &how
 		}
 		tierDist := make(map[string]int)
 		mems := make([]map[string]any, 0, len(result.included))
@@ -303,9 +362,16 @@ func memoriesRecallPreviewHandler(svc *Service) http.HandlerFunc {
 			"search_probe":           result.decision.Probe,
 			"deep_recall_used":       result.decision.Strategy != engine.RecallStrategySearchSatisfied,
 			"reconstruction":         result.reconstruction,
+			"graph_route":            result.graphRoute,
+			"graph_context":          result.graphContext,
+			"graph_request_id":       uuid.NewString(),
 		}
 		if req.IncludeMemories {
 			out["memories_included_full"] = fullMems
+		}
+		if howResult != nil {
+			out["how_recall"] = howResult
+			out["how_request_id"] = howResult.RequestID
 		}
 		writeOK(w, http.StatusOK, out)
 	}

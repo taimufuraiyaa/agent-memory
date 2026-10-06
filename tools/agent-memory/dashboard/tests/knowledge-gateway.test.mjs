@@ -5,11 +5,12 @@ import test from 'node:test'
 const source = await readFile(new URL('../src/lib/knowledgeGateway.ts', import.meta.url), 'utf8').catch(() => '')
 
 test('knowledge gateway exposes every unified workspace capability', () => {
-  for (const capability of ['workspace', 'ask', 'search', 'browse', 'source', 'study', 'note', 'activity', 'settings']) {
+  for (const capability of ['workspace', 'ask', 'search', 'browse', 'source', 'study', 'note', 'activity', 'settings', 'lifecycle', 'clients', 'skills']) {
     assert.match(source, new RegExp(`'${capability}'`))
   }
   assert.match(source, /export interface KnowledgeGateway/)
   assert.match(source, /capabilities: ReadonlySet<KnowledgeCapability>/)
+  for (const operation of ['listLifecycle', 'listSkills', 'listClientProfiles', 'createClientProfile', 'updateClientProfile', 'deleteClientProfile']) assert.match(source, new RegExp(`${operation}\\(`))
 })
 
 test('unsupported capabilities fail explicitly', () => {

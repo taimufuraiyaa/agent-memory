@@ -1,0 +1,49 @@
+import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
+import test from 'node:test'
+
+const panel = await readFile(new URL('../src/ui/SkillsPanel.tsx', import.meta.url), 'utf8')
+const settings = await readFile(new URL('../src/ui/workspace/SettingsView.tsx', import.meta.url), 'utf8')
+const css = await readFile(new URL('../src/ui/workspace/workspace.css', import.meta.url), 'utf8')
+const api = await readFile(new URL('../src/lib/api.ts', import.meta.url), 'utf8')
+
+test('skills UI distinguishes immutable revision roles and provenance', () => {
+  for (const label of ['Latest', 'Active', 'Canary', 'Last known good', 'Provenance', 'Evaluation']) assert.match(panel, new RegExp(label))
+  assert.match(panel, /source_memory_ids/)
+  assert.match(panel, /source_tool_lesson_ids/)
+  assert.match(panel, /source_episode_ids/)
+  assert.match(panel, /\|\| 'N\/A'/)
+})
+
+test('approval and rollback are explicit guarded operations', () => {
+  assert.match(panel, /Approve latest/)
+  assert.match(panel, /Rollback to last known good/)
+  assert.match(panel, /disabled=\{acting/)
+  assert.match(settings, /approval-required policy decision/)
+  assert.match(settings, /expected_generation: activation\.generation/)
+  assert.match(settings, /idempotency_key: crypto\.randomUUID\(\)/)
+})
+
+test('local transport exposes skill lifecycle and orchestration routes', () => {
+  for (const route of ['/api/v1/skills/lifecycle/list', '/api/v1/skills/inspect', '/api/v1/skills/lifecycle', '/api/v1/skills/orchestration/status', '/api/v1/skills/orchestration/control']) assert.ok(api.includes(route))
+})
+
+test('skills lifecycle remains keyboard and narrow-screen accessible', () => {
+  assert.match(panel, /aria-label="Revision-managed skills"/)
+  assert.match(panel, /aria-live="polite"/)
+  assert.match(css, /\.skillDirectoryItem:focus-visible/)
+  assert.match(css, /@media \(max-width: 760px\)[\s\S]*\.skillStateGrid/)
+  assert.match(css, /\.skillLifecycleActions button \{ width: 100%; \}/)
+})
+
+test('skills orchestration shows bounded operational state without implying approval', () => {
+  for (const label of ['Automatic revision workflow', 'Stage', 'Generation', 'Configuration', 'Policy', 'Jobs and safe reasons', 'Canary check:', 'Reason:']) assert.match(panel, new RegExp(label))
+  for (const state of ['queued', 'blocked', 'running', 'retry_wait', 'dead_lettered']) assert.match(panel, new RegExp(state))
+  for (const control of ['Pause workflow', 'Resume workflow', 'Reconcile blocked work', 'Cancel', 'Retry']) assert.match(panel, new RegExp(control))
+  assert.match(panel, /do not approve a revision or bypass policy gates/)
+  assert.match(panel, /AbortController/)
+  assert.match(panel, /clearInterval/)
+  assert.match(panel, /expected_generation: orchestration\.workflow\.generation/)
+  assert.match(panel, /inspectOrchestration\(selectedId\)\.then\(setOrchestration\)/)
+  assert.match(panel, /\|\| 'N\/A'/)
+})

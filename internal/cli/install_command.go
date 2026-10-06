@@ -36,6 +36,7 @@ func newInstallCommand() *cobra.Command {
 	var noTUI bool
 	var withLocalLLM bool
 	var localLLMModel string
+	var localGraphModel string
 
 	cmd := &cobra.Command{
 		Use:   "install",
@@ -66,7 +67,12 @@ configure environment variables, and initialize the current directory as a proje
 			if err != nil {
 				return err
 			}
-			explicitSelection := cmd.Flags().Changed("no-model") || cmd.Flags().Changed("skip-onnx-runtime") || cmd.Flags().Changed("no-dashboard") || cmd.Flags().Changed("no-init") || cmd.Flags().Changed("with-local-llm") || cmd.Flags().Changed("local-llm-model")
+			graphCompletionModel, err := resolveHeadlessGraphModel(localGraphModel)
+			if err != nil {
+				return err
+			}
+			installGraphModels := graphCompletionModel != ""
+			explicitSelection := cmd.Flags().Changed("no-model") || cmd.Flags().Changed("skip-onnx-runtime") || cmd.Flags().Changed("no-dashboard") || cmd.Flags().Changed("no-init") || cmd.Flags().Changed("with-local-llm") || cmd.Flags().Changed("local-llm-model") || cmd.Flags().Changed("local-graph-model")
 			inputFile, inputIsFile := cmd.InOrStdin().(*os.File)
 			outputFile, outputIsFile := errOut.(*os.File)
 			inputTerminal := inputIsFile && term.IsTerminal(inputFile.Fd())
@@ -82,11 +88,13 @@ configure environment variables, and initialize the current directory as a proje
 				if _, err := exec.LookPath("ollama"); err == nil {
 					detected.Ollama = true
 					statusContext, cancel := context.WithTimeout(cmd.Context(), time.Second)
-					detected.PlannerModels, _ = bootstrap.OllamaAvailableModels(statusContext, bootstrap.DefaultOllamaEndpoint, localLLMModelIDs())
+					inventory, _ := bootstrap.OllamaAvailableModels(statusContext, bootstrap.DefaultOllamaEndpoint, localOllamaModelIDs())
+					detected.PlannerModels = filterModelInventory(inventory, localLLMModelIDs())
+					detected.GraphModels = filterModelInventory(inventory, graphModelIDs())
 					detected.QwenPlanner = detected.PlannerModels[bootstrap.DefaultPlannerModel]
 					cancel()
 				}
-				selection, cancelled, err := runInstallSelectionTUI(cmd.Context(), cmd.InOrStdin(), errOut, defaultInstallComponents(detected), defaultLocalLLMOptions(detected.PlannerModels))
+				selection, cancelled, err := runInstallSelectionTUI(cmd.Context(), cmd.InOrStdin(), errOut, defaultInstallComponents(detected), defaultLocalLLMOptions(detected.PlannerModels), defaultGraphModelOptions(detected.GraphModels))
 				if err != nil {
 					return fmt.Errorf("interactive installer: %w", err)
 				}
@@ -100,13 +108,15 @@ configure environment variables, and initialize the current directory as a proje
 				installPlanner = selection.InstallPlanner
 				plannerModel = selection.PlannerModel
 				plannerSelectionExplicit = true
+				installGraphModels = selection.InstallGraphModels
+				graphCompletionModel = selection.GraphCompletionModel
 				noInit = selection.NoInit
 			}
 
 			fmt.Fprintln(errOut, "— agent-memory installer —")
 
 			// Step 1: Data directories
-			fmt.Fprintln(errOut, "\n▶ 1/6 data directories")
+			fmt.Fprintln(errOut, "\n▶ 1/7 data directories")
 			for _, sub := range []string{"", "models", "logs", "onnxruntime"} {
 				if err := os.MkdirAll(filepath.Join(dataDir, sub), 0o755); err != nil {
 					return fmt.Errorf("failed to create data dir %s: %w", sub, err)
@@ -115,7 +125,7 @@ configure environment variables, and initialize the current directory as a proje
 			fmt.Fprintf(errOut, "  ✓ ready at %s\n", dataDir)
 
 			// Step 2: Binary installation / copy
-			fmt.Fprintln(errOut, "\n▶ 2/6 binary")
+			fmt.Fprintln(errOut, "\n▶ 2/7 binary")
 			installed, err := installOrCopyBinary(out, errOut, binDir, src)
 			if err != nil {
 				return err
@@ -124,7 +134,7 @@ configure environment variables, and initialize the current directory as a proje
 			checkPATHAdvice(errOut, filepath.Dir(installed))
 
 			// Step 3: ONNX runtime
-			fmt.Fprintln(errOut, "\n▶ 3/6 onnx runtime")
+			fmt.Fprintln(errOut, "\n▶ 3/7 onnx runtime")
 			runtimePath := ""
 			if skipONNXRuntime {
 				fmt.Fprintln(errOut, "    skipped (--skip-onnx-runtime)")
@@ -140,7 +150,7 @@ configure environment variables, and initialize the current directory as a proje
 			}
 
 			// Step 4: Model download
-			fmt.Fprintln(errOut, "\n▶ 4/6 local embedding model")
+			fmt.Fprintln(errOut, "\n▶ 4/7 local embedding model")
 			if skipModel {
 				fmt.Fprintln(errOut, "    skipped (--no-model)")
 			} else {
@@ -153,7 +163,7 @@ configure environment variables, and initialize the current directory as a proje
 			}
 
 			// Step 5: Dashboard
-			fmt.Fprintln(errOut, "\n▶ 5/6 dashboard (React + TypeScript)")
+			fmt.Fprintln(errOut, "\n▶ 5/7 dashboard (React + TypeScript)")
 			dashInstalled := ""
 			if noDashboard {
 				fmt.Fprintln(errOut, "    skipped (--no-dashboard)")
@@ -176,7 +186,7 @@ configure environment variables, and initialize the current directory as a proje
 				}
 			}
 
-			fmt.Fprintln(errOut, "\n▶ 6/6 local question planner")
+			fmt.Fprintln(errOut, "\n▶ 6/7 local question planner")
 			plannerReady := false
 			if !installPlanner {
 				fmt.Fprintln(errOut, "    skipped (not selected)")
@@ -192,6 +202,38 @@ configure environment variables, and initialize the current directory as a proje
 				} else {
 					plannerReady = result.ModelAvailable
 					fmt.Fprintf(errOut, "  ✓ ready: %s at %s\n", result.Model, result.Endpoint)
+				}
+			}
+
+			fmt.Fprintln(errOut, "\n▶ 7/7 optional local GraphRAG models")
+			graphModelsReady, graphAdapterReady := false, false
+			graphAdapterPath := ""
+			if !installGraphModels {
+				fmt.Fprintln(errOut, "    skipped (not selected)")
+			} else {
+				graphEmbeddingModel := localGraphEmbeddingModel
+				fmt.Fprintf(errOut, "    selected: Ollama + %s + %s\n", graphCompletionModel, graphEmbeddingModel)
+				adapterPath, err := checkLocalGraphAdapter(cmd.Context())
+				if err != nil {
+					fmt.Fprintf(errOut, "  ! GraphRAG adapter is not ready: %v; models were not downloaded\n", err)
+				} else {
+					graphAdapterReady = true
+					graphAdapterPath = adapterPath
+					graphModelsReady = true
+					for _, model := range []string{graphCompletionModel, graphEmbeddingModel} {
+						result, err := ensureOllamaGraphModel(cmd.Context(), bootstrap.OllamaPlannerOptions{
+							Endpoint: bootstrap.DefaultOllamaEndpoint, Model: model,
+							DataDir: dataDir, Stdout: out, Stderr: errOut,
+						})
+						if err != nil || !result.ModelAvailable {
+							graphModelsReady = false
+							fmt.Fprintf(errOut, "  ! local GraphRAG model %s is unavailable\n", model)
+							break
+						}
+					}
+					if graphModelsReady {
+						fmt.Fprintln(errOut, "  ✓ local model inventory and GraphRAG adapter are ready")
+					}
 				}
 			}
 
@@ -213,11 +255,16 @@ configure environment variables, and initialize the current directory as a proje
 				for key, value := range plannerEnvironment(plannerReady, plannerSelectionExplicit, plannerModel) {
 					vars[key] = value
 				}
+				for key, value := range localGraphEnvironment(graphModelsReady, graphAdapterReady, graphCompletionModel, graphAdapterPath) {
+					vars[key] = value
+				}
 
 				envPath := filepath.Join(dataDir, "agent-memory.env")
 				_, err := upsertEnvFile(envPath, vars)
 				if err != nil {
 					fmt.Fprintf(errOut, "  ! env file write failed: %v\n", err)
+				} else if installGraphModels && graphModelsReady && graphAdapterReady {
+					fmt.Fprintln(errOut, "  ✓ local GraphRAG configured; project Reindex remains a manual Settings action")
 				}
 				if _, err := ensureEnvVarAtPath(envPath, "AGENT_MEMORY_TERM_BLOOM_MODE", "shadow"); err != nil {
 					fmt.Fprintf(errOut, "  ! term Bloom env setup failed: %v\n", err)
@@ -225,6 +272,8 @@ configure environment variables, and initialize the current directory as a proje
 				if err := ensureShellAutoload(envPath); err != nil {
 					fmt.Fprintf(errOut, "  ! shell setup skipped: %v\n", err)
 				}
+			} else if installGraphModels && graphModelsReady && graphAdapterReady {
+				fmt.Fprintln(errOut, "  ! local GraphRAG models are ready, but routes were not saved (--write-env=false)")
 			}
 
 			if installTargetSelected(ideTargets, "codex") {
@@ -315,12 +364,13 @@ configure environment variables, and initialize the current directory as a proje
 	cmd.Flags().StringVar(&dashboardDir, "dashboard-dir", "", "dashboard install directory")
 	cmd.Flags().BoolVar(&writeEnvFile, "write-env", true, "write an env file with environment settings")
 	cmd.Flags().StringVarP(&projectName, "project-name", "n", "", "project name for workspace setup (default: cwd basename)")
-	cmd.Flags().StringSliceVar(&ideTargets, "ide", nil, "IDE rule targets (repeatable, default: all): cursor|antigravity|claude|zcode|codex|aierules|cursorrules|trae|windsurfrules|generic|all")
+	cmd.Flags().StringSliceVar(&ideTargets, "ide", nil, "IDE rule targets (repeatable, default: all): kiro|cursor|antigravity|claude|zcode|codex|aierules|cursorrules|trae|windsurfrules|generic|all")
 	cmd.Flags().BoolVar(&noInit, "no-init", false, "skip workspace project auto-initialization")
 	cmd.Flags().BoolVar(&force, "force", false, "force recreate project workspace if it already exists")
 	cmd.Flags().BoolVar(&noTUI, "no-tui", false, "disable the interactive component checklist")
 	cmd.Flags().BoolVar(&withLocalLLM, "with-local-llm", false, "install and verify Ollama with the qwen3:8b local query planner")
 	cmd.Flags().StringVar(&localLLMModel, "local-llm-model", "", "select local planner model: none|qwen3:4b|qwen3:8b|qwen3:14b")
+	cmd.Flags().StringVar(&localGraphModel, "local-graph-model", "", "opt into local GraphRAG models: none|qwen3:8b|qwen3:14b (embedding: qwen3-embedding:0.6b)")
 
 	return cmd
 }

@@ -15,6 +15,7 @@ func newDistillCommand() *cobra.Command {
 	var dataDir string
 	var force bool
 	var format string
+	var sourceMemoryIDs, sourceToolLessonIDs []string
 
 	cmd := &cobra.Command{
 		Use:   "distill",
@@ -46,10 +47,12 @@ memories into an Antigravity-compatible Custom Agent Skill (.agents/skills/<name
 			}
 
 			res, err := mgr.Distill(cmd.Context(), cwd, workspace.DistillOptions{
-				Workspace:   targetWorkspace,
-				SkillName:   skillName,
-				Description: description,
-				Force:       force,
+				Workspace:           targetWorkspace,
+				SkillName:           skillName,
+				Description:         description,
+				Force:               force,
+				SourceMemoryIDs:     sourceMemoryIDs,
+				SourceToolLessonIDs: sourceToolLessonIDs,
 			})
 			if err != nil {
 				return err
@@ -59,8 +62,9 @@ memories into an Antigravity-compatible Custom Agent Skill (.agents/skills/<name
 				return writeSuccessEnvelope(cmd.OutOrStdout(), "distill", res)
 			}
 
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "✓ Distilled skill %s successfully!\n", res.SkillName)
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  Written to: %s\n", res.SkillPath)
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "✓ Created immutable draft %s revision %d.\n", res.SkillName, res.RevisionNumber)
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  Draft: %s\n", res.SkillPath)
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  %s\n", res.CompatibilityMessage)
 			return nil
 		},
 	}
@@ -69,8 +73,10 @@ memories into an Antigravity-compatible Custom Agent Skill (.agents/skills/<name
 	cmd.Flags().StringVar(&description, "description", "", "Description of the custom skill")
 	cmd.Flags().StringVarP(&targetWorkspace, "workspace", "w", "", "Workspace name to distill from (default: auto-detect)")
 	cmd.Flags().StringVar(&dataDir, "data-dir", "", "Registry data directory (default: ~/.agent-memory)")
-	cmd.Flags().BoolVar(&force, "force", false, "Overwrite the skill files if they already exist")
+	cmd.Flags().BoolVar(&force, "force", false, "Compatibility flag; never overwrites the active skill and creates a draft")
 	cmd.Flags().StringVarP(&format, "format", "f", "text", "Output format: json|text")
+	cmd.Flags().StringSliceVar(&sourceMemoryIDs, "memory-id", nil, "Source memory ID for a focused skill seed (repeatable)")
+	cmd.Flags().StringSliceVar(&sourceToolLessonIDs, "tool-lesson-id", nil, "Source tool lesson ID recorded in provenance (repeatable)")
 
 	_ = cmd.MarkFlagRequired("name")
 

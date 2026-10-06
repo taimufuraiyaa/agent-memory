@@ -3,6 +3,7 @@ package application
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -10,16 +11,18 @@ import (
 
 	"github.com/taimufuraiyaa/agent-memory/internal/core"
 	"github.com/taimufuraiyaa/agent-memory/internal/engine"
+	baseobservability "github.com/taimufuraiyaa/agent-memory/internal/observability"
 	"github.com/taimufuraiyaa/agent-memory/internal/storage/sqlite"
 )
 
 // MemoryService is the canonical write and single-workspace search surface
 // shared by CLI, HTTP, and protocol adapters.
 type MemoryService struct {
-	store     *sqlite.Store
-	writer    *engine.WritePipeline
-	retrieval *engine.RetrievalEngine
-	termIndex *TermIndexRuntime
+	store        *sqlite.Store
+	writer       *engine.WritePipeline
+	retrieval    *engine.RetrievalEngine
+	termIndex    *TermIndexRuntime
+	graphObserve func(baseobservability.GraphObservation) error
 }
 
 type FeedbackInput struct {
@@ -49,8 +52,24 @@ func (s *MemoryService) Feedback(ctx context.Context, input FeedbackInput) (*cor
 	return updated, nil
 }
 
+// GraphFeedback records a correction against one precise graph recall target.
+func (s *MemoryService) GraphFeedback(ctx context.Context, feedback core.GraphFeedback) error {
+	if s.store == nil {
+		return fmt.Errorf("graph feedback store is unavailable")
+	}
+	return s.store.RecordGraphFeedback(ctx, feedback)
+}
+
 func NewMemoryService(store *sqlite.Store, writer *engine.WritePipeline, retrieval *engine.RetrievalEngine) *MemoryService {
-	return &MemoryService{store: store, writer: writer, retrieval: retrieval, termIndex: NewTermIndexRuntime()}
+	return &MemoryService{store: store, writer: writer, retrieval: retrieval, termIndex: NewTermIndexRuntime(), graphObserve: baseobservability.GetGraphMetrics().Observe}
+}
+
+// SetGraphObserver replaces the content-free graph observation sink. It is
+// intended for startup wiring and deterministic tests, not per-request use.
+func (s *MemoryService) SetGraphObserver(observer func(baseobservability.GraphObservation) error) {
+	if s != nil {
+		s.graphObserve = observer
+	}
 }
 
 func (s *MemoryService) Write(ctx context.Context, input engine.WriteInput) (*engine.WriteResult, error) {
