@@ -126,7 +126,7 @@ func newHarnessGrantCommand(dataDir *string) *cobra.Command {
 	}
 	create.Flags().StringVar(&client, "client", "", "Registered client profile ID")
 	create.Flags().StringSliceVarP(&workspaces, "workspace", "w", nil, "Registered workspace the grant covers (repeatable)")
-	create.Flags().StringSliceVar(&operations, "operation", nil, "Operation to grant: capabilities, start, status, continue, artifact, cancel (repeatable)")
+	create.Flags().StringSliceVar(&operations, "operation", nil, "Operation to grant: capabilities, start, status, continue, artifact, cancel, decide (repeatable)")
 	create.Flags().DurationVar(&ttl, "ttl", harnessauth.DefaultTTL, "Grant lifetime")
 	requireExplicitWorkspace(create)
 

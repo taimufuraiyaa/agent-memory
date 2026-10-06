@@ -85,17 +85,6 @@ func TestJevDecisionsDemandEveryOptInAndFailClosed(t *testing.T) {
 			t.Fatalf("composed without a credential: %v %v", gateway, err)
 		}
 	})
-	t.Run("fake mode has nothing to advise", func(t *testing.T) {
-		svc, dir := harnessService(t)
-		_ = jevconfig.NewTokenStore(dir).Save(context.Background(), jevTestToken)
-		jevEnv(t, "model")
-		t.Setenv(harnessProvidersEnv, "fake")
-		gateway, closeHarness, err := buildHarnessGatewayWith(context.Background(), svc, &bytes.Buffer{}, harnessBuildOptions{})
-		if err != nil || gateway.Decisions != nil || gateway.Decide != nil {
-			t.Fatalf("%v %v", gateway, err)
-		}
-		closeHarness()
-	})
 }
 
 func TestWithoutTheOptInNothingIsComposedOrSent(t *testing.T) {
@@ -220,5 +209,36 @@ func TestToolDescriptionsCoverEveryComposedToolAndClarify(t *testing.T) {
 		if tool.Name == "" || tool.Parameters == nil || tool.Parameters["additionalProperties"] != false {
 			t.Errorf("%s: %+v", tool.Name, tool)
 		}
+	}
+}
+
+func TestJevDecisionsCanBeAskedDirectlyWithoutARealModelProvider(t *testing.T) {
+	svc, dir := harnessService(t)
+	if err := jevconfig.NewTokenStore(dir).Save(context.Background(), jevTestToken); err != nil {
+		t.Fatal(err)
+	}
+	typesafe := newFakeTypeSafe(t)
+	jevEnv(t, "model, cache")
+	t.Setenv(harnessProvidersEnv, "fake")
+	var stderr bytes.Buffer
+	gateway, closeHarness, err := buildHarnessGatewayWith(context.Background(), svc, &stderr, harnessBuildOptions{jevBaseURL: typesafe.server.URL})
+	if err != nil || gateway == nil || !gateway.Fake || gateway.Decide == nil || gateway.Decisions == nil {
+		t.Fatalf("%v %v", gateway, err)
+	}
+	t.Cleanup(closeHarness)
+	if n := stderr.String(); !strings.Contains(n, "fake providers enabled") || !strings.Contains(n, "Jev decisions enabled") {
+		t.Fatalf("notice = %q", n)
+	}
+	// Decisions that need tools cannot be composed without them, and nothing is left running.
+	t.Setenv(harnessJevEnv, "model, tools")
+	if g, c, err := buildHarnessGatewayWith(context.Background(), svc, &stderr, harnessBuildOptions{jevBaseURL: typesafe.server.URL}); err == nil || g != nil || c != nil {
+		t.Fatalf("composed tool decisions in fake mode: %v %v", g, err)
+	}
+	// Without the opt-in the fake mode composes no decisions at all.
+	t.Setenv(harnessJevEnv, "")
+	if g, c, err := buildHarnessGatewayWith(context.Background(), svc, &stderr, harnessBuildOptions{}); err != nil || g.Decide != nil || g.Decisions != nil {
+		t.Fatalf("%v %v", g, err)
+	} else {
+		c()
 	}
 }

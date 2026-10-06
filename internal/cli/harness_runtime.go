@@ -106,6 +106,16 @@ func buildHarnessGatewayWith(ctx context.Context, svc *api.Service, errOut io.Wr
 		cfg.Model = harnessrun.Binding{Provider: "fake-model", Capability: "generation"}
 		cfg.Tool = &harnessrun.Binding{Provider: "fake-tool", Capability: "read"}
 		notice = "harness: fake providers enabled; no real model is called"
+		// Decisions can be asked directly by a granted client, so they do not need a real
+		// model provider; only the kinds that need tools are refused here.
+		var err error
+		if decisions, err = composeJev(ctx, registry, svc.BaseDir, opts); err != nil {
+			return nil, nil, err
+		}
+		if decisions != nil && (decisions.enabled[harnessdecide.KindTools] || decisions.enabled[harnessdecide.KindCommandRisk]) {
+			decisions.close()
+			return nil, nil, fmt.Errorf("%s lists a decision that needs tools, which the fake providers do not have; use only model, visibility or cache here", harnessJevEnv)
+		}
 	case "openai", "anthropic":
 		compose := composeOpenAI
 		if mode == "anthropic" {
