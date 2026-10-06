@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/taimufuraiyaa/agent-memory/internal/core"
-	exportservice "github.com/taimufuraiyaa/agent-memory/internal/saas/export"
+	"github.com/taimufuraiyaa/agent-memory/internal/portable"
 	"github.com/taimufuraiyaa/agent-memory/internal/storage/sqlite"
 )
 
@@ -49,11 +49,11 @@ func TestPortableExportWritesPrivateEncryptedBundleWithoutSourcesByDefault(t *te
 	if err != nil {
 		t.Fatalf("read bundle: %v", err)
 	}
-	plain, err := exportservice.DecryptPortable("a sufficiently long secret", sealed)
+	plain, err := portable.DecryptPortable("a sufficiently long secret", sealed)
 	if err != nil {
 		t.Fatalf("decrypt bundle: %v", err)
 	}
-	var bundle exportservice.Bundle
+	var bundle portable.Bundle
 	if err := json.Unmarshal(plain, &bundle); err != nil {
 		t.Fatalf("decode bundle: %v", err)
 	}

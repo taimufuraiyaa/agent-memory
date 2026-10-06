@@ -245,40 +245,6 @@ VALUES (?, ?, ?, ?, ?, ?)
 	return err
 }
 
-// persistRetrievalState uses merge semantics: only increment/set when values
-// are provided, never blanket-overwrite existing data.
-func (s *Store) persistRetrievalState(ctx context.Context, mem *core.MemoryEntry) error {
-	if mem == nil {
-		return errors.New("memory is nil")
-	}
-	_, err := s.db.ExecContext(ctx, `
-UPDATE memories
-SET salience_score = MAX(0, MIN(1, COALESCE(?, salience_score))),
-	suppression_score = MAX(0, MIN(1, COALESCE(?, suppression_score))),
-	useful_count = MAX(0, useful_count + COALESCE(?, 0)),
-	ignored_count = MAX(0, ignored_count + COALESCE(?, 0)),
-	rejected_count = MAX(0, rejected_count + COALESCE(?, 0)),
-	harmful_count = MAX(0, harmful_count + COALESCE(?, 0)),
-	last_helpful_at = COALESCE(NULLIF(?, ''), last_helpful_at),
-	last_rejected_at = COALESCE(NULLIF(?, ''), last_rejected_at),
-	suppression_until = COALESCE(NULLIF(?, ''), suppression_until),
-	familiarity_band_last = COALESCE(NULLIF(?, ''), familiarity_band_last)
-WHERE id = ?`,
-		mem.SalienceScore,
-		mem.SuppressionScore,
-		mem.UsefulCount,
-		mem.IgnoredCount,
-		mem.RejectedCount,
-		mem.HarmfulCount,
-		timeStringOrEmpty(mem.LastHelpfulAt),
-		timeStringOrEmpty(mem.LastRejectedAt),
-		nullTimeString(mem.SuppressionUntil),
-		mem.FamiliarityBandLast,
-		mem.ID,
-	)
-	return err
-}
-
 func rowsAffected(result sql.Result) int64 {
 	if result == nil {
 		return 0

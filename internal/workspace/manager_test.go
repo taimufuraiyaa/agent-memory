@@ -518,7 +518,7 @@ func TestManagerInitAndReinstallWriteStagedRetrievalPolicyAcrossFiles(t *testing
 }
 
 func TestHippocampusRecallHookUsesStagedRetrieval(t *testing.T) {
-	hooks := HippocampusHooks()
+	hooks := HippocampusHooks("demo")
 	found := false
 	for _, hook := range hooks {
 		if hook.Name != "memory-recall-gate.json" {
@@ -935,6 +935,141 @@ func TestNormalizeRuleTargetsIncludesCodex(t *testing.T) {
 	}
 }
 
+func TestAllRuleTargetsIncludePrimaryClients(t *testing.T) {
+	targets, err := normalizeRuleTargets(t.TempDir(), []string{"all"})
+	if err != nil {
+		t.Fatalf("normalize all: %v", err)
+	}
+	for _, target := range []string{"kiro", "cursor", "codex", "claude"} {
+		if !contains(targets, target) {
+			t.Errorf("all target missing %q: %+v", target, targets)
+		}
+	}
+
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, ".kiro"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if got := detectDefaultRuleTargets(root); !contains(got, "kiro") {
+		t.Fatalf(".kiro directory was not auto-detected: %+v", got)
+	}
+}
+
+func TestManagerInitAllWritesKiroHooks(t *testing.T) {
+	root := t.TempDir()
+	manager, err := NewManager(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.Init(context.Background(), InitOptions{CWD: root, ProjectName: "all-clients", IDEs: []string{"all"}}); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"memory-recall-gate.json", "memory-consolidation-gate.json"} {
+		content, err := os.ReadFile(filepath.Join(root, ".kiro", "hooks", name))
+		if err != nil || !strings.Contains(string(content), MemoryContractMarker) {
+			t.Fatalf("Kiro hook %s missing after init --ide all: %v %s", name, err, content)
+		}
+	}
+}
+
+func TestWriteAgentFilesExplicitTargetDoesNotConfigureDetectedClients(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, ".codex"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	result, err := WriteAgentFiles(WriteAgentFilesOptions{CWD: root, Workspace: "exact", IDEs: []string{"cursor"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.IDEs) != 1 || result.IDEs[0].IDE != "cursor" {
+		t.Fatalf("explicit target configured detected clients too: %+v", result.IDEs)
+	}
+	if _, err := os.Stat(filepath.Join(root, ".codex", "hooks.json")); !os.IsNotExist(err) {
+		t.Fatalf("explicit Cursor install unexpectedly wrote Codex hooks: %v", err)
+	}
+}
+
+func TestGeneratedRulesShareCurrentMemoryOperatingContract(t *testing.T) {
+	if MemoryContractMarker != "agent-memory operating contract: v7" {
+		t.Fatalf("mandatory workspace argument policy requires contract v7, got %q", MemoryContractMarker)
+	}
+	contents := map[string]string{
+		"generic": genericRulesSection("demo"),
+		"cursor":  cursorRuleContent("demo"),
+	}
+	for name, content := range contents {
+		if strings.HasSuffix(content, "\n\n") {
+			t.Errorf("%s rule has a redundant blank line at EOF", name)
+		}
+		for _, required := range []string{
+			MemoryContractMarker,
+			"What", "Where", "When", "How", "Feedback",
+			"literal `N/A`",
+			"agent-memory work start", "agent-memory work step", "agent-memory work checkpoint",
+			"agent-memory work end", "agent-memory work recall", "agent-memory work promote", "agent-memory session-end",
+			"Do not store private chain-of-thought",
+			"Invoke `agent-memory` through `PATH` in every connected project",
+			"Never use `./bin/agent-memory`",
+			"report the installation problem instead of guessing a project-local path",
+			"`--workspace` argument is mandatory",
+			"omission is a CLI error",
+			"environment inference does not satisfy this requirement",
+			"agent-memory search --workspace demo --query",
+			"agent-memory recall --workspace demo --task",
+			"agent-memory feedback --workspace demo --request-id",
+			"agent-memory write --workspace demo --type",
+			"agent-memory work start --workspace demo --goal",
+			"agent-memory work step --workspace demo --episode",
+			"agent-memory work checkpoint --workspace demo --episode",
+			"agent-memory work end --workspace demo --episode",
+			"agent-memory work recall --workspace demo --task",
+			"agent-memory work promote --workspace demo --episode",
+			"agent-memory session-end --workspace demo --transcript",
+		} {
+			if !strings.Contains(content, required) {
+				t.Errorf("%s rule missing %q", name, required)
+			}
+		}
+		for _, obsolete := range []string{"--episode-id", "--principal-id", "--session-id", "--client-id", "--summary-id", "--targets-json"} {
+			if strings.Contains(content, obsolete) {
+				t.Errorf("%s rule contains non-CLI flag %q", name, obsolete)
+			}
+		}
+	}
+}
+
+func TestKiroHooksCoverSolutionLifecycleWithoutPrivateReasoning(t *testing.T) {
+	hooks := HippocampusHooks("demo")
+	joined := ""
+	for _, hook := range hooks {
+		var decoded map[string]any
+		if err := json.Unmarshal([]byte(hook.Content), &decoded); err != nil {
+			t.Fatalf("%s is not valid JSON: %v", hook.Name, err)
+		}
+		for _, required := range []string{
+			MemoryContractMarker,
+			"invoke agent-memory through PATH",
+			"never use ./bin/agent-memory",
+			"report the installation problem instead of guessing a project-local path",
+			"--workspace demo",
+			"--workspace argument is mandatory",
+		} {
+			if !strings.Contains(hook.Content, required) {
+				t.Errorf("Kiro hook %s missing CLI resolution rule %q", hook.Name, required)
+			}
+		}
+		joined += hook.Content
+	}
+	for _, required := range []string{"agent-memory work start", "agent-memory work step", "agent-memory work checkpoint", "agent-memory work recall", "agent-memory work promote", "agent-memory session-end"} {
+		if !strings.Contains(joined, required) {
+			t.Errorf("Kiro hooks missing %q", required)
+		}
+	}
+	if !strings.Contains(joined, "Do not store private chain-of-thought") {
+		t.Error("Kiro hooks must prohibit private chain-of-thought capture")
+	}
+}
+
 func TestManagerInitWritesCodexArtifacts(t *testing.T) {
 	base := filepath.Join(t.TempDir(), "agent memory data")
 	cwd := t.TempDir()
@@ -1080,6 +1215,164 @@ func TestWriteCodexConfigUsesPortableHomeRelativeDataPath(t *testing.T) {
 	}
 }
 
+func TestWriteCodexConfigReusesMatchingPermissionSelection(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	dataDir := filepath.Join(t.TempDir(), "agent-memory")
+	seed := "default_permissions = \"agent-memory-workspace\"\nmodel = \"gpt-test\"\n"
+	if err := os.WriteFile(configPath, []byte(seed), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	for range 2 {
+		if err := writeCodexConfig(configPath, dataDir); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	contents, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(contents)
+	if strings.Count(got, "default_permissions") != 1 || !strings.Contains(got, `default_permissions = "agent-memory-workspace"`) {
+		t.Fatalf("matching permission selection was not reused: %s", got)
+	}
+	if strings.Count(got, filepath.ToSlash(dataDir)) != 1 {
+		t.Fatalf("expected one data-directory permission: %s", got)
+	}
+}
+
+func TestWriteCodexConfigRejectsHomeDirectoryWriteScope(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	seed := "model = \"gpt-test\"\n"
+	if err := os.WriteFile(configPath, []byte(seed), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	err = writeCodexConfig(configPath, home)
+	if err == nil || !strings.Contains(err.Error(), "entire home directory") {
+		t.Fatalf("expected broad home-directory scope rejection, got %v", err)
+	}
+	contents, readErr := os.ReadFile(configPath)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if string(contents) != seed {
+		t.Fatalf("config was modified after broad-scope rejection: %s", contents)
+	}
+}
+
+func TestWriteCodexConfigRejectsLegacySandboxWithoutModifyingFile(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	dataDir := filepath.Join(t.TempDir(), "agent-memory")
+	seed := codexConfigStart + "\n" +
+		"default_permissions = \"agent-memory-workspace\"\n" +
+		codexConfigEnd + "\n" +
+		"sandbox_mode = \"workspace-write\"\n" +
+		"model = \"gpt-test\"\n"
+	if err := os.WriteFile(configPath, []byte(seed), 0o644); err != nil {
+		t.Fatalf("seed config: %v", err)
+	}
+
+	err := writeCodexConfig(configPath, dataDir)
+	if err == nil {
+		t.Fatal("expected legacy sandbox conflict")
+	}
+	if !strings.Contains(err.Error(), "sandbox_mode") || !strings.Contains(err.Error(), "default_permissions") {
+		t.Fatalf("expected actionable permission conflict, got %v", err)
+	}
+
+	contents, readErr := os.ReadFile(configPath)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if string(contents) != seed {
+		t.Fatalf("conflicting config was modified:\n%s", contents)
+	}
+}
+
+func TestWriteCodexConfigRejectsConflictingPermissionSelection(t *testing.T) {
+	tests := []struct {
+		name      string
+		selection string
+		wantError string
+	}{
+		{
+			name:      "sandbox mode",
+			selection: "sandbox_mode = \"danger-full-access\"\n",
+			wantError: "sandbox_mode",
+		},
+		{
+			name:      "custom permission profile",
+			selection: "default_permissions = \"custom-profile\"\n",
+			wantError: "custom-profile",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			configPath := filepath.Join(t.TempDir(), "config.toml")
+			dataDir := filepath.Join(t.TempDir(), "agent-memory")
+			seed := codexConfigStart + "\n" +
+				"default_permissions = \"agent-memory-workspace\"\n" +
+				codexConfigEnd + "\n" +
+				tt.selection +
+				"model = \"gpt-test\"\n"
+			if err := os.WriteFile(configPath, []byte(seed), 0o644); err != nil {
+				t.Fatalf("seed config: %v", err)
+			}
+
+			err := writeCodexConfig(configPath, dataDir)
+			if err == nil || !strings.Contains(err.Error(), tt.wantError) {
+				t.Fatalf("expected conflict containing %q, got %v", tt.wantError, err)
+			}
+
+			contents, err := os.ReadFile(configPath)
+			if err != nil {
+				t.Fatalf("read config: %v", err)
+			}
+			if string(contents) != seed {
+				t.Errorf("conflicting user permission selection was modified: %s", contents)
+			}
+		})
+	}
+}
+
+func TestWriteAgentFilesAllPropagatesExplicitCodexPermissionConflict(t *testing.T) {
+	root := t.TempDir()
+	dataDir := filepath.Join(t.TempDir(), "agent-memory")
+	if err := os.MkdirAll(filepath.Join(root, ".codex"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	configPath := filepath.Join(root, ".codex", "config.toml")
+	if err := os.WriteFile(configPath, []byte("sandbox_mode = \"workspace-write\"\nmodel = \"gpt-test\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := WriteAgentFiles(WriteAgentFilesOptions{
+		CWD:       root,
+		Workspace: "permission-preserve",
+		DataDir:   dataDir,
+		Force:     true,
+		IDEs:      []string{"all"},
+	})
+	if err == nil || !strings.Contains(err.Error(), "sandbox_mode") {
+		t.Fatalf("expected Codex permission conflict, got %v", err)
+	}
+
+	config, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(config) != "sandbox_mode = \"workspace-write\"\nmodel = \"gpt-test\"\n" {
+		t.Errorf("conflicting config was modified: %s", config)
+	}
+}
+
 func TestWriteCodexGlobalFilesPreservesExistingSettings(t *testing.T) {
 	codexHome := t.TempDir()
 	dataDir := filepath.Join(t.TempDir(), "agent-memory")
@@ -1096,7 +1389,10 @@ func TestWriteCodexGlobalFilesPreservesExistingSettings(t *testing.T) {
 		}
 	}
 	config, _ := os.ReadFile(filepath.Join(codexHome, "config.toml"))
-	if !strings.Contains(string(config), `model = "gpt-test"`) || strings.Count(string(config), dataDir) != 1 {
+	if !strings.Contains(string(config), `model = "gpt-test"`) ||
+		strings.Count(string(config), dataDir) != 1 ||
+		strings.Count(string(config), "default_permissions") != 1 ||
+		strings.Contains(string(config), "sandbox_workspace_write") {
 		t.Fatalf("expected preserved config and one data root, got %s", config)
 	}
 	hooks, _ := os.ReadFile(filepath.Join(codexHome, "hooks.json"))
@@ -1105,7 +1401,7 @@ func TestWriteCodexGlobalFilesPreservesExistingSettings(t *testing.T) {
 	}
 }
 
-func TestWriteCodexGlobalFilesPreservesExistingWritableRoots(t *testing.T) {
+func TestWriteCodexGlobalFilesRejectsLegacyWritableRoots(t *testing.T) {
 	codexHome := t.TempDir()
 	dataDir := filepath.Join(t.TempDir(), "agent-memory")
 	existingRoot := "/existing/writable/root"
@@ -1113,14 +1409,13 @@ func TestWriteCodexGlobalFilesPreservesExistingWritableRoots(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(codexHome, "config.toml"), []byte(seed), 0o644); err != nil {
 		t.Fatalf("seed config: %v", err)
 	}
-	for range 2 {
-		if _, err := WriteCodexGlobalFiles(codexHome, dataDir); err != nil {
-			t.Fatalf("write global Codex files: %v", err)
-		}
+	_, err := WriteCodexGlobalFiles(codexHome, dataDir)
+	if err == nil || !strings.Contains(err.Error(), "sandbox_workspace_write") {
+		t.Fatalf("expected legacy writable-root conflict, got %v", err)
 	}
 	config, _ := os.ReadFile(filepath.Join(codexHome, "config.toml"))
-	if strings.Count(string(config), existingRoot) != 1 || strings.Count(string(config), dataDir) != 1 {
-		t.Fatalf("expected both writable roots exactly once, got %s", config)
+	if string(config) != seed {
+		t.Fatalf("legacy global config was modified, got %s", config)
 	}
 }
 
@@ -1195,6 +1490,11 @@ func TestRenameUpdatesAllRuleFiles(t *testing.T) {
 		filepath.Join(cwd, "AGENTS.md"),
 		filepath.Join(cwd, "CLAUDE.md"),
 	}
+	commandFiles := append(append([]string{}, ruleFiles...),
+		filepath.Join(cwd, ".codex", "hooks.json"),
+		filepath.Join(cwd, ".kiro", "hooks", "memory-recall-gate.json"),
+		filepath.Join(cwd, ".kiro", "hooks", "memory-consolidation-gate.json"),
+	)
 	for _, rp := range ruleFiles {
 		b, readErr := os.ReadFile(rp)
 		if readErr != nil {
@@ -1202,6 +1502,15 @@ func TestRenameUpdatesAllRuleFiles(t *testing.T) {
 		}
 		if !strings.Contains(string(b), "workspace: old-name") {
 			t.Fatalf("expected 'workspace: old-name' in %s, got: %s", rp, string(b))
+		}
+	}
+	for _, rp := range commandFiles {
+		b, readErr := os.ReadFile(rp)
+		if readErr != nil {
+			t.Fatalf("read command file %s: %v", rp, readErr)
+		}
+		if !strings.Contains(string(b), "--workspace old-name") {
+			t.Fatalf("expected explicit old workspace command in %s, got: %s", rp, string(b))
 		}
 	}
 
@@ -1229,6 +1538,18 @@ func TestRenameUpdatesAllRuleFiles(t *testing.T) {
 		}
 		if !strings.Contains(string(b), "workspace: new-name") {
 			t.Fatalf("%s does not reference new workspace name: %s", rp, string(b))
+		}
+	}
+	for _, rp := range commandFiles {
+		b, readErr := os.ReadFile(rp)
+		if readErr != nil {
+			t.Fatalf("read command file %s after rename: %v", rp, readErr)
+		}
+		if strings.Contains(string(b), "--workspace old-name") {
+			t.Fatalf("%s still contains the old explicit workspace command", rp)
+		}
+		if !strings.Contains(string(b), "--workspace new-name") {
+			t.Fatalf("%s does not contain the new explicit workspace command: %s", rp, string(b))
 		}
 	}
 

@@ -21,6 +21,7 @@ const (
 	KindCodex  = "codex"
 	KindClaude = "claude"
 	KindCursor = "cursor"
+	KindKiro   = "kiro"
 	KindOther  = "other"
 
 	ProfileDefault  = "default"
@@ -281,7 +282,7 @@ func validateInput(input Input, requireID bool) error {
 	if input.DisplayName == "" || len(input.DisplayName) > 80 {
 		return fmt.Errorf("%w: display_name must contain 1 to 80 characters", ErrValidation)
 	}
-	if !oneOf(input.ClientKind, KindCodex, KindClaude, KindCursor, KindOther) {
+	if !oneOf(input.ClientKind, KindCodex, KindClaude, KindCursor, KindKiro, KindOther) {
 		return fmt.Errorf("%w: unsupported client_kind %q", ErrValidation, input.ClientKind)
 	}
 	if !oneOf(input.ToolProfile, ProfileDefault, ProfileExpanded) {

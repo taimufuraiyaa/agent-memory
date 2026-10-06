@@ -15,8 +15,8 @@ func shouldOpenInstallTUI(noTUI, explicitSelection, inputTerminal, outputTermina
 	return !noTUI && !explicitSelection && inputTerminal && outputTerminal
 }
 
-func runInstallSelectionTUI(ctx context.Context, input io.Reader, output io.Writer, components []installComponent, models []localLLMOption) (installSelection, bool, error) {
-	program := tea.NewProgram(newInstallSelectionModelWithOptions(components, models), tea.WithContext(ctx), tea.WithInput(input), tea.WithOutput(output))
+func runInstallSelectionTUI(ctx context.Context, input io.Reader, output io.Writer, components []installComponent, models, graphModels []localLLMOption) (installSelection, bool, error) {
+	program := tea.NewProgram(newInstallSelectionModelWithCatalogs(components, models, graphModels), tea.WithContext(ctx), tea.WithInput(input), tea.WithOutput(output))
 	final, err := program.Run()
 	if err != nil {
 		return installSelection{}, false, err
@@ -40,8 +40,10 @@ const (
 	installComponentMiniLM       installComponentID = "minilm"
 	installComponentDashboard    installComponentID = "dashboard"
 	installComponentPlanner      installComponentID = "qwen-planner"
+	installComponentGraphModels  installComponentID = "local-graphrag-models"
 	installComponentWorkspace    installComponentID = "workspace-rules"
 	installComponentPlannerIndex                    = 4
+	installComponentGraphIndex                      = 5
 )
 
 type installDetection struct {
@@ -51,6 +53,7 @@ type installDetection struct {
 	Ollama        bool
 	QwenPlanner   bool
 	PlannerModels map[string]bool
+	GraphModels   map[string]bool
 }
 
 type installComponent struct {
@@ -64,21 +67,25 @@ type installComponent struct {
 }
 
 type installSelection struct {
-	SkipONNXRuntime bool
-	SkipModel       bool
-	NoDashboard     bool
-	InstallPlanner  bool
-	PlannerModel    string
-	NoInit          bool
+	SkipONNXRuntime      bool
+	SkipModel            bool
+	NoDashboard          bool
+	InstallPlanner       bool
+	PlannerModel         string
+	InstallGraphModels   bool
+	GraphCompletionModel string
+	GraphEmbeddingModel  string
+	NoInit               bool
 }
 
 type localLLMOption struct {
-	Model       string
-	Label       string
-	Description string
-	Disk        string
-	Recommended bool
-	Installed   bool
+	Model          string
+	EmbeddingModel string
+	Label          string
+	Description    string
+	Disk           string
+	Recommended    bool
+	Installed      bool
 }
 
 func defaultLocalLLMOptions(installed map[string]bool) []localLLMOption {
@@ -87,6 +94,14 @@ func defaultLocalLLMOptions(installed map[string]bool) []localLLMOption {
 		{Model: "qwen3:4b", Label: "Qwen3 4B", Description: "Faster and lower-memory", Disk: "2.5 GB", Installed: installed["qwen3:4b"]},
 		{Model: "qwen3:8b", Label: "Qwen3 8B", Description: "Balanced multilingual planning", Disk: "5.2 GB", Recommended: true, Installed: installed["qwen3:8b"]},
 		{Model: "qwen3:14b", Label: "Qwen3 14B", Description: "Higher quality and resource use", Disk: "9.3 GB", Installed: installed["qwen3:14b"]},
+	}
+}
+
+func defaultGraphModelOptions(installed map[string]bool) []localLLMOption {
+	embeddingModel := "qwen3-embedding:0.6b"
+	return []localLLMOption{
+		{Model: "qwen3:8b", EmbeddingModel: embeddingModel, Label: "Qwen3 8B bundle", Description: "Balanced local extraction plus Qwen3 Embedding 0.6B", Disk: "~5.8 GB", Recommended: true, Installed: installed["qwen3:8b"] && installed[embeddingModel]},
+		{Model: "qwen3:14b", EmbeddingModel: embeddingModel, Label: "Qwen3 14B bundle", Description: "Higher-quality local extraction plus Qwen3 Embedding 0.6B", Disk: "~9.9 GB", Installed: installed["qwen3:14b"] && installed[embeddingModel]},
 	}
 }
 
@@ -119,18 +134,32 @@ func anyLocalLLMInstalled(installed map[string]bool) bool {
 	return false
 }
 
+func anyLocalGraphBundleInstalled(installed map[string]bool) bool {
+	for _, option := range defaultGraphModelOptions(nil) {
+		if installed[option.Model] && installed[option.EmbeddingModel] {
+			return true
+		}
+	}
+	return false
+}
+
 func defaultInstallComponents(detected installDetection) []installComponent {
 	return []installComponent{
 		{ID: installComponentCore, Label: "Agent Memory core", Description: "CLI binary and private data directories", Disk: "~50 MB", Required: true, Selected: true, Installed: true},
 		{ID: installComponentONNX, Label: "ONNX Runtime", Description: "Local embedding execution runtime", Disk: "~25 MB", Selected: true, Installed: detected.ONNXRuntime},
 		{ID: installComponentMiniLM, Label: "MiniLM embeddings", Description: "Current 384-dimension local search projection", Disk: "~90 MB", Selected: true, Installed: detected.MiniLM},
 		{ID: installComponentDashboard, Label: "Unified dashboard", Description: "Human Library, Memory, Data, and Settings UI", Disk: "embedded", Selected: true, Installed: detected.Dashboard},
-		{ID: installComponentPlanner, Label: "Local LLM planner", Description: "Choose None, Qwen3 4B, 8B, or 14B next", Disk: "0–9.3 GB", Selected: true, Installed: detected.Ollama && (detected.QwenPlanner || anyLocalLLMInstalled(detected.PlannerModels))},
+		{ID: installComponentPlanner, Label: "Local LLM planner", Description: "Optional local query planning; choose a Qwen3 model next", Disk: "0–9.3 GB", Installed: detected.Ollama && (detected.QwenPlanner || anyLocalLLMInstalled(detected.PlannerModels))},
+		{ID: installComponentGraphModels, Label: "Local GraphRAG models", Description: "Optional on-device graph extraction and embeddings; no project is indexed", Disk: "~5.8–9.9 GB", Installed: detected.Ollama && anyLocalGraphBundleInstalled(detected.GraphModels)},
 		{ID: installComponentWorkspace, Label: "Workspace agent rules", Description: "Connect the current project to Agent Memory", Disk: "<1 MB", Selected: true},
 	}
 }
 
 func resolveInstallSelection(components []installComponent, plannerModel string) (installSelection, error) {
+	return resolveInstallSelectionWithModels(components, plannerModel, "")
+}
+
+func resolveInstallSelectionWithModels(components []installComponent, plannerModel, graphCompletionModel string) (installSelection, error) {
 	selected := map[installComponentID]bool{}
 	for _, component := range components {
 		if component.Required && !component.Selected {
@@ -144,18 +173,40 @@ func resolveInstallSelection(components []installComponent, plannerModel string)
 	if plannerModel != "" && !supportedLocalLLMModel(plannerModel) {
 		return installSelection{}, fmt.Errorf("unsupported local LLM model %q", plannerModel)
 	}
+	if graphCompletionModel != "" && !supportedGraphCompletionModel(graphCompletionModel) {
+		return installSelection{}, fmt.Errorf("unsupported local GraphRAG completion model %q", graphCompletionModel)
+	}
 	installPlanner := selected[installComponentPlanner] && plannerModel != ""
 	if !installPlanner {
 		plannerModel = ""
 	}
+	installGraphModels := selected[installComponentGraphModels] && graphCompletionModel != ""
+	graphEmbeddingModel := ""
+	if installGraphModels {
+		graphEmbeddingModel = "qwen3-embedding:0.6b"
+	} else {
+		graphCompletionModel = ""
+	}
 	return installSelection{
-		SkipONNXRuntime: !selected[installComponentONNX],
-		SkipModel:       !selected[installComponentMiniLM],
-		NoDashboard:     !selected[installComponentDashboard],
-		InstallPlanner:  installPlanner,
-		PlannerModel:    plannerModel,
-		NoInit:          !selected[installComponentWorkspace],
+		SkipONNXRuntime:      !selected[installComponentONNX],
+		SkipModel:            !selected[installComponentMiniLM],
+		NoDashboard:          !selected[installComponentDashboard],
+		InstallPlanner:       installPlanner,
+		PlannerModel:         plannerModel,
+		InstallGraphModels:   installGraphModels,
+		GraphCompletionModel: graphCompletionModel,
+		GraphEmbeddingModel:  graphEmbeddingModel,
+		NoInit:               !selected[installComponentWorkspace],
 	}, nil
+}
+
+func supportedGraphCompletionModel(model string) bool {
+	for _, option := range defaultGraphModelOptions(nil) {
+		if option.Model == model {
+			return true
+		}
+	}
+	return false
 }
 
 type installTUIPhase int
@@ -163,22 +214,26 @@ type installTUIPhase int
 const (
 	installPhaseComponents installTUIPhase = iota
 	installPhaseModel
+	installPhaseGraphModels
 	installPhaseReview
 )
 
 type installSelectionModel struct {
-	components    []installComponent
-	models        []localLLMOption
-	cursor        int
-	modelCursor   int
-	selectedModel string
-	phase         installTUIPhase
-	confirmed     bool
-	cancelled     bool
-	width         int
-	height        int
-	filtering     bool
-	filterQuery   string
+	components         []installComponent
+	models             []localLLMOption
+	graphModels        []localLLMOption
+	cursor             int
+	modelCursor        int
+	selectedModel      string
+	graphModelCursor   int
+	selectedGraphModel string
+	phase              installTUIPhase
+	confirmed          bool
+	cancelled          bool
+	width              int
+	height             int
+	filtering          bool
+	filterQuery        string
 }
 
 func newInstallSelectionModel(components []installComponent) installSelectionModel {
@@ -186,8 +241,13 @@ func newInstallSelectionModel(components []installComponent) installSelectionMod
 }
 
 func newInstallSelectionModelWithOptions(components []installComponent, models []localLLMOption) installSelectionModel {
+	return newInstallSelectionModelWithCatalogs(components, models, defaultGraphModelOptions(nil))
+}
+
+func newInstallSelectionModelWithCatalogs(components []installComponent, models, graphModels []localLLMOption) installSelectionModel {
 	copyOfComponents := append([]installComponent(nil), components...)
 	copyOfModels := append([]localLLMOption(nil), models...)
+	copyOfGraphModels := append([]localLLMOption(nil), graphModels...)
 	modelCursor := 0
 	selectedModel := ""
 	for index, option := range copyOfModels {
@@ -197,11 +257,59 @@ func newInstallSelectionModelWithOptions(components []installComponent, models [
 			break
 		}
 	}
-	return installSelectionModel{components: copyOfComponents, models: copyOfModels, modelCursor: modelCursor, selectedModel: selectedModel, phase: installPhaseComponents}
+	graphModelCursor := 0
+	selectedGraphModel := ""
+	for index, option := range copyOfGraphModels {
+		if option.Recommended {
+			graphModelCursor = index
+			selectedGraphModel = option.Model
+			break
+		}
+	}
+	return installSelectionModel{components: copyOfComponents, models: copyOfModels, graphModels: copyOfGraphModels, modelCursor: modelCursor, selectedModel: selectedModel, graphModelCursor: graphModelCursor, selectedGraphModel: selectedGraphModel, phase: installPhaseComponents}
 }
 
 func (m installSelectionModel) selection() (installSelection, error) {
-	return resolveInstallSelection(m.components, m.selectedModel)
+	return resolveInstallSelectionWithModels(m.components, m.selectedModel, m.selectedGraphModel)
+}
+
+func (m installSelectionModel) graphModelsSelected() bool {
+	for _, component := range m.components {
+		if component.ID == installComponentGraphModels {
+			return component.Selected
+		}
+	}
+	return false
+}
+
+func (m *installSelectionModel) currentModelList() ([]localLLMOption, *int, *string) {
+	if m.phase == installPhaseGraphModels {
+		return m.graphModels, &m.graphModelCursor, &m.selectedGraphModel
+	}
+	return m.models, &m.modelCursor, &m.selectedModel
+}
+
+func (m installSelectionModel) stepLabel() string {
+	total := 2 // Components and review.
+	if m.plannerSelected() {
+		total++
+	}
+	if m.graphModelsSelected() {
+		total++
+	}
+	position := 1
+	switch m.phase {
+	case installPhaseModel:
+		position = 2
+	case installPhaseGraphModels:
+		position = 2
+		if m.plannerSelected() {
+			position++
+		}
+	case installPhaseReview:
+		position = total
+	}
+	return fmt.Sprintf("STEP %d OF %d", position, total)
 }
 
 func (m installSelectionModel) plannerSelected() bool {
@@ -267,7 +375,9 @@ func (m installSelectionModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			m.confirmed = true
 			return m, tea.Quit
 		case "esc", "b", "backspace":
-			if m.plannerSelected() {
+			if m.graphModelsSelected() {
+				m.phase = installPhaseGraphModels
+			} else if m.plannerSelected() {
 				m.phase = installPhaseModel
 			} else {
 				m.phase = installPhaseComponents
@@ -280,24 +390,33 @@ func (m installSelectionModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 	}
-	if m.phase == installPhaseModel {
+	if m.phase == installPhaseModel || m.phase == installPhaseGraphModels {
+		options, cursor, selection := m.currentModelList()
 		visible := m.visibleModelIndexes()
 		switch pressed {
 		case "up", "k":
-			m.modelCursor = previousVisibleIndex(visible, m.modelCursor)
+			*cursor = previousVisibleIndex(visible, *cursor)
 		case "down", "j":
-			m.modelCursor = nextVisibleIndex(visible, m.modelCursor)
+			*cursor = nextVisibleIndex(visible, *cursor)
 		case " ", "space":
-			if containsIndex(visible, m.modelCursor) {
-				m.selectedModel = m.models[m.modelCursor].Model
+			if containsIndex(visible, *cursor) {
+				*selection = options[*cursor].Model
 			}
 		case "enter":
-			if containsIndex(visible, m.modelCursor) {
-				m.selectedModel = m.models[m.modelCursor].Model
-				m.phase = installPhaseReview
+			if containsIndex(visible, *cursor) {
+				*selection = options[*cursor].Model
+				if m.phase == installPhaseModel && m.graphModelsSelected() {
+					m.phase = installPhaseGraphModels
+				} else {
+					m.phase = installPhaseReview
+				}
 			}
 		case "esc", "b", "backspace":
-			m.phase = installPhaseComponents
+			if m.phase == installPhaseGraphModels && m.plannerSelected() {
+				m.phase = installPhaseModel
+			} else {
+				m.phase = installPhaseComponents
+			}
 		case "q", "ctrl+c":
 			m.cancelled = true
 			return m, tea.Quit
@@ -318,6 +437,8 @@ func (m installSelectionModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		if containsIndex(visible, m.cursor) {
 			if m.plannerSelected() {
 				m.phase = installPhaseModel
+			} else if m.graphModelsSelected() {
+				m.phase = installPhaseGraphModels
 			} else {
 				m.phase = installPhaseReview
 			}
@@ -335,9 +456,13 @@ func (m installSelectionModel) View() tea.View {
 	var body []string
 	var summary, footer string
 	switch m.phase {
-	case installPhaseModel:
+	case installPhaseModel, installPhaseGraphModels:
 		body = m.renderModelRows(width, compact)
-		summary = fmt.Sprintf("CHOICES %d  │  SELECTED %s", len(m.models), displayModel(m.selectedModel))
+		options, _, selected := m.currentModelList()
+		summary = fmt.Sprintf("CHOICES %d  │  SELECTED %s", len(options), displayModel(*selected))
+		if m.phase == installPhaseGraphModels {
+			summary += " + Qwen3 Embedding 0.6B"
+		}
 		footer = "↑/↓ Navigate  │  Space Select  │  / Filter  │  Enter Continue  │  Esc Back  │  Q Quit"
 	case installPhaseReview:
 		body = m.renderReviewRows(width)
@@ -391,12 +516,7 @@ func (m installSelectionModel) viewport() (int, int) {
 
 func (m installSelectionModel) renderFrame(width, height int, summary string, body []string, footer string) string {
 	inner := width - 4
-	step := "STEP 1 OF 3"
-	if m.phase == installPhaseModel {
-		step = "STEP 2 OF 3"
-	} else if m.phase == installPhaseReview {
-		step = "STEP 3 OF 3"
-	}
+	step := m.stepLabel()
 	left := "◆  AGENT MEMORY  /  LOCAL SETUP"
 	headerGap := inner - lipgloss.Width(left) - lipgloss.Width(step)
 	if headerGap < 1 {
@@ -456,19 +576,20 @@ func (m installSelectionModel) renderComponentRows(width int, compact bool) []st
 
 func (m installSelectionModel) renderModelRows(width int, compact bool) []string {
 	inner := width - 4
-	rows := make([]string, 0, len(m.models)*2)
+	options, cursorIndex, selectedModel := (&m).currentModelList()
+	rows := make([]string, 0, len(options)*3)
 	visible := m.visibleModelIndexes()
 	if len(visible) == 0 {
 		return []string{"  " + installerMutedStyle.Render("No options match /"+m.filterQuery)}
 	}
 	for _, index := range visible {
-		option := m.models[index]
+		option := options[index]
 		cursor := " "
-		if index == m.modelCursor {
+		if index == *cursorIndex {
 			cursor = "›"
 		}
 		mark := "( )"
-		if option.Model == m.selectedModel {
+		if option.Model == *selectedModel {
 			mark = "(●)"
 		}
 		state := ""
@@ -482,8 +603,11 @@ func (m installSelectionModel) renderModelRows(width int, compact bool) []string
 			state += "installed"
 		}
 		row := fmt.Sprintf("%s  %s  %-18s %-12s %-9s %s", cursor, mark, option.Label, displayModel(option.Model), option.Disk, state)
-		rows = append(rows, renderInstallerRow(row, index == m.modelCursor, inner))
-		if !compact {
+		rows = append(rows, renderInstallerRow(row, index == *cursorIndex, inner))
+		if m.phase == installPhaseGraphModels {
+			rows = append(rows, "       "+installerMutedStyle.Render("completion: "+option.Model))
+			rows = append(rows, "       "+installerMutedStyle.Render("embedding: "+option.EmbeddingModel))
+		} else if !compact {
 			rows = append(rows, "       "+installerMutedStyle.Render(option.Description))
 		}
 	}
@@ -507,8 +631,9 @@ func (m installSelectionModel) visibleComponentIndexes() []int {
 }
 
 func (m installSelectionModel) visibleModelIndexes() []int {
-	indexes := make([]int, 0, len(m.models))
-	for index, option := range m.models {
+	options, _, _ := (&m).currentModelList()
+	indexes := make([]int, 0, len(options))
+	for index, option := range options {
 		state := ""
 		if option.Recommended {
 			state = "recommended"
@@ -516,7 +641,7 @@ func (m installSelectionModel) visibleModelIndexes() []int {
 		if option.Installed {
 			state += " installed"
 		}
-		if matchesInstallFilter(m.filterQuery, option.Label, option.Description, option.Model, option.Disk, state) {
+		if matchesInstallFilter(m.filterQuery, option.Label, option.Description, option.Model, option.EmbeddingModel, option.Disk, state) {
 			indexes = append(indexes, index)
 		}
 	}
@@ -532,10 +657,11 @@ func matchesInstallFilter(query string, values ...string) bool {
 }
 
 func (m *installSelectionModel) normalizeFilteredCursor() {
-	if m.phase == installPhaseModel {
+	if m.phase == installPhaseModel || m.phase == installPhaseGraphModels {
 		visible := m.visibleModelIndexes()
-		if len(visible) > 0 && !containsIndex(visible, m.modelCursor) {
-			m.modelCursor = visible[0]
+		_, cursor, _ := m.currentModelList()
+		if len(visible) > 0 && !containsIndex(visible, *cursor) {
+			*cursor = visible[0]
 		}
 		return
 	}
@@ -587,11 +713,31 @@ func (m installSelectionModel) renderReviewRows(width int) []string {
 				label, detail = "Local LLM planner", m.selectedModel
 			}
 		}
+		if component.ID == installComponentGraphModels {
+			option := m.selectedGraphOption()
+			rows = append(rows, "  "+installerReadyStyle.Render(fitTerminalText("   ✓  GraphRAG completion: "+option.Model, inner-2)))
+			rows = append(rows, "  "+installerReadyStyle.Render(fitTerminalText("      GraphRAG embedding: "+option.EmbeddingModel, inner-2)))
+			rows = append(rows, "  "+installerReadyStyle.Render(fitTerminalText("      Approximate download: "+option.Disk, inner-2)))
+			continue
+		}
 		row := fmt.Sprintf("   ✓  %-28s %s", label, detail)
 		rows = append(rows, "  "+installerReadyStyle.Render(fitTerminalText(row, inner-2)))
 	}
 	rows = append(rows, "", "  "+installerMutedStyle.Render("Downloads and local changes begin only after confirmation."))
+	if m.graphModelsSelected() {
+		rows = append(rows, "  "+installerMutedStyle.Render("A configured GraphRAG adapter must pass readiness before model downloads."))
+		rows = append(rows, "  "+installerMutedStyle.Render("No workspace is reindexed; use project Settings when ready."))
+	}
 	return rows
+}
+
+func (m installSelectionModel) selectedGraphOption() localLLMOption {
+	for _, option := range m.graphModels {
+		if option.Model == m.selectedGraphModel {
+			return option
+		}
+	}
+	return localLLMOption{Model: m.selectedGraphModel, EmbeddingModel: "qwen3-embedding:0.6b"}
 }
 
 func (m installSelectionModel) selectedComponentCount() int {

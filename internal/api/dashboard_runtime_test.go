@@ -1,10 +1,16 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/taimufuraiyaa/agent-memory/internal/api/dashboard"
 )
 
 func TestStandaloneDashboardRuntimeManifest(t *testing.T) {
@@ -34,5 +40,84 @@ func TestStandaloneDashboardRuntimeManifest(t *testing.T) {
 	handler.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/dashboard/runtime.json", nil))
 	if response.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("POST runtime status=%d", response.Code)
+	}
+}
+
+func TestServiceFixedWorkspaceUsesExactDBPath(t *testing.T) {
+	exact := filepath.Join(t.TempDir(), "custom-name.db")
+	service := &Service{Workspace: "workspace-name", BaseDir: filepath.Dir(exact), DBPath: exact}
+	defer func() { _ = service.Close() }()
+	assets, err := service.resolve(context.Background(), "workspace-name")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if assets.DBPath != exact {
+		t.Fatalf("resolved %q, want exact database %q", assets.DBPath, exact)
+	}
+}
+
+func TestWorkspaceRouteServesEmbeddedSPAShell(t *testing.T) {
+	server := httptest.NewServer(NewMux(&Service{}))
+	defer server.Close()
+	for _, method := range []string{http.MethodGet, http.MethodHead} {
+		req, _ := http.NewRequest(method, server.URL+"/w/agent-memory/knowledge/history", nil)
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = res.Body.Close()
+		if res.StatusCode != http.StatusOK {
+			t.Fatalf("%s workspace route returned %d", method, res.StatusCode)
+		}
+	}
+	req, _ := http.NewRequest(http.MethodPost, server.URL+"/w/agent-memory/knowledge/history", strings.NewReader("{}"))
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusMethodNotAllowed {
+		t.Fatalf("workspace route mutation returned %d", res.StatusCode)
+	}
+}
+
+func TestWorkspaceRouteServesEmbeddedAssetsUnderWorkspacePrefix(t *testing.T) {
+	if !dashboard.HasEmbeddedAssets() {
+		t.Skip("embedded dashboard assets are unavailable")
+	}
+
+	server := httptest.NewServer(NewMux(&Service{}))
+	defer server.Close()
+
+	tests := []struct {
+		name        string
+		path        string
+		contentType string
+	}{
+		{name: "javascript", path: "/w/agent-memory/assets/app.js", contentType: "text/javascript"},
+		{name: "stylesheet", path: "/w/agent-memory/assets/app.css", contentType: "text/css"},
+		{name: "lazy javascript", path: "/w/agent-memory/assets/chunk-init.js", contentType: "text/javascript"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			res, err := http.Get(server.URL + tt.path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = res.Body.Close() }()
+			body, err := io.ReadAll(res.Body)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if res.StatusCode != http.StatusOK {
+				t.Fatalf("asset status=%d body=%s", res.StatusCode, body)
+			}
+			if !strings.HasPrefix(res.Header.Get("Content-Type"), tt.contentType) {
+				t.Fatalf("asset content type=%q, want prefix %q", res.Header.Get("Content-Type"), tt.contentType)
+			}
+			if strings.Contains(string(body), "<!doctype html>") {
+				t.Fatalf("asset request returned the SPA HTML shell")
+			}
+		})
 	}
 }

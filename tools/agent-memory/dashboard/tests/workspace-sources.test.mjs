@@ -35,6 +35,14 @@ test('codebase Study preserves preview, bounded pages, errors, and continuation'
   assert.match(sourcesSource, /result\.errors/)
 })
 
+test('codebase Study explains automatic chunking and bounded-prefix ingestion', () => {
+  assert.match(sourcesSource, /result\.chunkedFiles/)
+  assert.match(sourcesSource, /result\.extractedChunks/)
+  assert.match(sourcesSource, /result\.truncatedFiles/)
+  assert.match(sourcesSource, /chunked automatically/)
+  assert.match(sourcesSource, /bounded prefix/)
+})
+
 test('study completion leads directly to Ask, Search, and Browse while preview can be written', () => {
   assert.match(sourcesSource, /Ask this workspace/)
   assert.match(sourcesSource, /Search memories/)
