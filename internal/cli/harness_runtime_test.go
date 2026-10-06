@@ -73,7 +73,7 @@ func TestHarnessIsNotComposedUnlessExplicitlyEnabled(t *testing.T) {
 
 func TestHarnessCompositionFailsClosedOnUnsupportedConfiguration(t *testing.T) {
 	svc, _ := harnessService(t)
-	for _, value := range []string{"real", "anthropic", "OPENAI", "FAKE", "fake,real", "openai,fake", "1"} {
+	for _, value := range []string{"real", "gemini", "OPENAI", "FAKE", "fake,real", "openai,fake", "1"} {
 		t.Setenv(harnessProvidersEnv, value)
 		gateway, closeHarness, err := buildHarnessGateway(context.Background(), svc, io.Discard)
 		if err == nil || gateway != nil || closeHarness != nil || !strings.Contains(err.Error(), harnessProvidersEnv) {
@@ -190,7 +190,7 @@ func TestOpenAICompositionDemandsEveryExplicitOptInAndFailsClosed(t *testing.T) 
 	for name, mutate := range map[string]func(*testing.T){
 		"no egress confirmation":  func(t *testing.T) { t.Setenv(harnessEgressEnv, "") },
 		"wrong egress value":      func(t *testing.T) { t.Setenv(harnessEgressEnv, "yes") },
-		"egress for another host": func(t *testing.T) { t.Setenv(harnessEgressEnv, "anthropic") },
+		"egress for another host": func(t *testing.T) { t.Setenv(harnessEgressEnv, "gemini") },
 		"no key":                  func(t *testing.T) { t.Setenv("OPENAI_API_KEY", "  ") },
 		"no model":                func(t *testing.T) { t.Setenv(harnessOpenAIModelEnv, "") },
 		"no price":                func(t *testing.T) { t.Setenv(harnessOpenAIPriceEnv, "") },

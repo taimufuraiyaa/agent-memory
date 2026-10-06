@@ -321,7 +321,7 @@ Enable it with all of: `AGENT_MEMORY_HARNESS_PROVIDERS=openai` and its settings,
 
 **More MCP tools.** After the four above, a granted adapter also gets `harness_continue` (answer a clarification; it can never approve), `harness_events` (cursor-paged event log), `harness_artifact` (read one bounded result) and `harness_readiness` (what is composed and healthy, with no provider call). HTTP: `GET .../runs/{id}/events`, `POST .../runs/{id}/continue`, `GET .../runs/{id}/artifacts/{aid}` and `GET .../readiness`.
 
-**Limits.** Windows and sandboxing limits of the command tool apply; no hosted path exists; the live coding task against OpenAI has not been run.
+**Limits.** Windows and sandboxing limits of the command tool apply; no hosted path exists; the live coding task has not been run against OpenAI or Claude.
 
 ### Real model provider (OpenAI, opt-in)
 
@@ -338,6 +338,10 @@ By default the harness composes only fakes. A single real provider is available 
 | `AGENT_MEMORY_HARNESS_OPENAI_CONTEXT_TOKENS` | optional window, default 32000 |
 
 What is sent is one stateless request: the model, the assembled prompt (the fixed policy, the project's `CLAUDE.md` and `AGENTS.md` as pinned instructions, and the run's own goal and history, all redacted for secrets and personal data), the output cap, and `store` and `stream` turned off. No tools, files or stored conversations. Prompt caching is never assumed: a saving is counted only when the provider itself reports cached tokens for a stable prompt prefix. The adapter has been tested against a fake service that mimics the documented API; **it has not been run against the live service**. To make one tiny real call yourself, which costs a few tokens: `AGENT_MEMORY_LIVE_OPENAI=1 AGENT_MEMORY_LIVE_OPENAI_MODEL=<model> OPENAI_API_KEY=<key> go test ./internal/harnessmodel -run TestOpenAILive -v`.
+
+### Real model provider (Anthropic Claude, opt-in)
+
+The same opt-ins, with Anthropic names: `AGENT_MEMORY_HARNESS_PROVIDERS=anthropic`, `AGENT_MEMORY_HARNESS_ALLOW_EGRESS=anthropic`, `ANTHROPIC_API_KEY`, `AGENT_MEMORY_HARNESS_ANTHROPIC_MODEL`, `AGENT_MEMORY_HARNESS_ANTHROPIC_PRICE` (`input,cached,output`), and optionally `..._MAX_CLASS` and `..._CONTEXT_TOKENS`. It uses the official Go SDK for one stateless, non-streaming Messages request with no retries and no redirects; the key is read at call time and never stored or logged. When tools are composed in (`AGENT_MEMORY_HARNESS_TOOLS`), the offered tools are sent as Claude tools with parallel tool use disabled, and a tool call is returned only if the tool was offered. A prompt-cache marker is sent only when the run supplies a stable prefix, and cached tokens are credited only when Anthropic reports them. It has been tested against a fake service; **it has not been run against the live service**.
 
 Interactive `agent-memory install` also offers an optional masked Jev token prompt after setup. Interactive `agent-memory upgrade` offers it after a successful upgrade only when no token is configured. Answer `y` to approve or press Enter to skip. Existing tokens are never replaced by upgrade; non-interactive, JSON, dry-run, and hooks-only runs do not prompt. The TUI remains the place to replace or remove a token later.
 

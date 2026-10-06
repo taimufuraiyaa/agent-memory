@@ -43,8 +43,9 @@ const (
 
 // harnessBuildOptions exists for tests. Production code never sets it.
 type harnessBuildOptions struct {
-	openAIBaseURL string
-	jevBaseURL    string
+	openAIBaseURL    string
+	jevBaseURL       string
+	anthropicBaseURL string
 }
 
 const harnessFakeReply = "Fake harness provider: no real model was called."
@@ -64,8 +65,8 @@ func buildHarnessGatewayWith(ctx context.Context, svc *api.Service, errOut io.Wr
 	if mode == "fake" && strings.TrimSpace(os.Getenv(harnessToolsEnv)) != "" {
 		return nil, nil, fmt.Errorf("%s needs the openai composition; the fake model never asks for a tool", harnessToolsEnv)
 	}
-	if mode != "fake" && mode != "openai" {
-		return nil, nil, fmt.Errorf("unsupported %s %q; use \"fake\" or \"openai\"", harnessProvidersEnv, mode)
+	if mode != "fake" && mode != "openai" && mode != "anthropic" {
+		return nil, nil, fmt.Errorf("unsupported %s %q; use \"fake\", \"openai\" or \"anthropic\"", harnessProvidersEnv, mode)
 	}
 	if svc == nil || svc.ClientProfiles == nil || strings.TrimSpace(svc.BaseDir) == "" {
 		return nil, nil, fmt.Errorf("harness requires the local client profile store")
@@ -105,8 +106,12 @@ func buildHarnessGatewayWith(ctx context.Context, svc *api.Service, errOut io.Wr
 		cfg.Model = harnessrun.Binding{Provider: "fake-model", Capability: "generation"}
 		cfg.Tool = &harnessrun.Binding{Provider: "fake-tool", Capability: "read"}
 		notice = "harness: fake providers enabled; no real model is called"
-	case "openai":
-		composed, err := composeOpenAI(ctx, registry, workspaces, svc.BaseDir, opts)
+	case "openai", "anthropic":
+		compose := composeOpenAI
+		if mode == "anthropic" {
+			compose = composeAnthropic
+		}
+		composed, err := compose(ctx, registry, workspaces, svc.BaseDir, opts)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -187,8 +192,9 @@ type openAIComposition struct {
 // leaves the machine or what it costs must be stated explicitly, and nothing has a default
 // that could silently widen egress or misreport spend: the key, the model, an egress
 // confirmation and the prices are all required, and the data class is capped at internal.
-func composeOpenAI(ctx context.Context, registry *harness.Registry, workspaces *workspace.Manager, baseDir string, opts harnessBuildOptions) (openAIComposition, error) {
-	var none openAIComposition
+// openAIBackend validates every explicit opt-in for the OpenAI provider and registers it.
+func openAIBackend(registry *harness.Registry, opts harnessBuildOptions) (modelBackend, error) {
+	var none modelBackend
 	if strings.TrimSpace(os.Getenv(harnessEgressEnv)) != "openai" {
 		return none, fmt.Errorf("set %s=openai to confirm that assembled prompts are sent to OpenAI", harnessEgressEnv)
 	}
@@ -228,13 +234,40 @@ func composeOpenAI(ctx context.Context, registry *harness.Registry, workspaces *
 	if err := provider.Register(registry); err != nil {
 		return none, err
 	}
+	return modelBackend{id: harnessmodel.OpenAIProviderID, capability: harnessmodel.OpenAICapability, pricing: pricing, class: class, window: window,
+		notice: fmt.Sprintf("harness: OpenAI provider enabled (model %s); assembled prompts with up to %s data are sent to OpenAI and may incur charges", model, harnessClassName(class))}, nil
+}
+
+// modelBackend is the one real model provider a composition serves, already registered.
+type modelBackend struct {
+	id         harness.ProviderID
+	capability harness.CapabilityID
+	pricing    harnessmodel.Pricing
+	class      harnessmodel.Class
+	window     int
+	notice     string
+}
+
+// composeOpenAI wires one real OpenAI provider; composeAnthropic one Claude provider. Both
+// then share everything else.
+func composeOpenAI(ctx context.Context, registry *harness.Registry, workspaces *workspace.Manager, baseDir string, opts harnessBuildOptions) (openAIComposition, error) {
+	backend, err := openAIBackend(registry, opts)
+	if err != nil {
+		return openAIComposition{}, err
+	}
+	return composeRuntime(ctx, registry, workspaces, baseDir, opts, backend)
+}
+
+func composeRuntime(ctx context.Context, registry *harness.Registry, workspaces *workspace.Manager, baseDir string, opts harnessBuildOptions, backend modelBackend) (openAIComposition, error) {
+	var none openAIComposition
+	pricing, class, window := backend.pricing, backend.class, backend.window
 	meter := harnessmodel.NewMeter(nil)
 	decisions, err := composeJev(ctx, registry, baseDir, opts)
 	if err != nil {
 		return none, err
 	}
 	routerConfig := harnessmodel.RouterConfig{
-		Profiles: []harnessmodel.Profile{{Provider: harnessmodel.OpenAIProviderID, Capability: harnessmodel.OpenAICapability, Pricing: pricing,
+		Profiles: []harnessmodel.Profile{{Provider: backend.id, Capability: backend.capability, Pricing: pricing,
 			MaxClass: class, ContextTokens: window, MaxOutputTokens: harnessOpenAIOutputCap}},
 		Prober: &harnessmodel.RegistryProber{Registry: registry, Workspace: "harness-router"},
 		Meter:  meter,
@@ -269,7 +302,7 @@ func composeOpenAI(ctx context.Context, registry *harness.Registry, workspaces *
 		if decisions.enabled[harnessdecide.KindCache] {
 			source.CacheFor = func(runID string) harnesscontext.CacheAdvisor {
 				return harnesscontext.ServiceCacheAdvisor{Service: decisions.hub.Service(runID), Stats: func(string) harnesscontext.CacheStats {
-					st := meter.Stats(harnessmodel.OpenAIProviderID)
+					st := meter.Stats(backend.id)
 					if st.Calls == 0 || st.InputTokens == 0 {
 						return harnesscontext.CacheStats{}
 					}
@@ -280,10 +313,10 @@ func composeOpenAI(ctx context.Context, registry *harness.Registry, workspaces *
 	}
 	return openAIComposition{
 		jev:     decisions,
-		model:   harnessrun.Binding{Provider: harnessmodel.OpenAIProviderID, Capability: harnessmodel.OpenAICapability},
+		model:   harnessrun.Binding{Provider: backend.id, Capability: backend.capability},
 		router:  harnessmodel.LoopRouter{Router: router, Meter: meter},
 		context: source,
-		notice:  fmt.Sprintf("harness: OpenAI provider enabled (model %s); assembled prompts with up to %s data are sent to OpenAI and may incur charges", model, harnessClassName(class)),
+		notice:  backend.notice,
 	}, nil
 }
 
@@ -297,21 +330,26 @@ func harnessClassName(c harnessmodel.Class) string {
 // parseHarnessPricing reads "input,cached,output" in micro currency units per million
 // tokens. It is required, because a stale built-in price would silently misreport spend.
 func parseHarnessPricing(raw string) (harnessmodel.Pricing, error) {
+	return parsePricingFrom(raw, harnessOpenAIPriceEnv)
+}
+
+// parsePricingFrom reads "input,cached,output" naming the setting it came from in any error.
+func parsePricingFrom(raw, env string) (harnessmodel.Pricing, error) {
 	parts := strings.Split(strings.TrimSpace(raw), ",")
 	if len(parts) != 3 {
-		return harnessmodel.Pricing{}, fmt.Errorf("%s is required as \"input,cached,output\" micro units per million tokens", harnessOpenAIPriceEnv)
+		return harnessmodel.Pricing{}, fmt.Errorf("%s is required as \"input,cached,output\" micro units per million tokens", env)
 	}
 	var values [3]int64
 	for i, part := range parts {
 		v, err := strconv.ParseInt(strings.TrimSpace(part), 10, 64)
 		if err != nil {
-			return harnessmodel.Pricing{}, fmt.Errorf("%s must be three whole numbers", harnessOpenAIPriceEnv)
+			return harnessmodel.Pricing{}, fmt.Errorf("%s must be three whole numbers", env)
 		}
 		values[i] = v
 	}
 	pricing := harnessmodel.Pricing{InputPerMTok: values[0], CachedInputPerMTok: values[1], OutputPerMTok: values[2]}
 	if err := pricing.Validate(); err != nil {
-		return harnessmodel.Pricing{}, fmt.Errorf("%s is out of range or inconsistent", harnessOpenAIPriceEnv)
+		return harnessmodel.Pricing{}, fmt.Errorf("%s is out of range or inconsistent", env)
 	}
 	return pricing, nil
 }
