@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import inspect
 import json
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Awaitable, Callable
@@ -12,6 +13,7 @@ import pandas as pd
 from graphrag.api import build_index
 from graphrag.config.models.graph_rag_config import GraphRagConfig
 
+from .incremental import configure_incremental_reconciliation
 from .progress import CancellationToken, ProgressRecorder
 
 
@@ -40,6 +42,18 @@ class IndexResult:
 BuildIndex = Callable[..., Awaitable[list[Any]]]
 
 
+def _safe_identifier(value: str, limit: int, fallback: str) -> str:
+    return value if len(value) <= limit and re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*", value) else fallback
+
+
+class _WorkflowFailure(Exception):
+    def __init__(self, output: Any) -> None:
+        self.workflow = _safe_identifier(str(getattr(output, "workflow", "")), 40, "unknown")
+        self.error_type = _safe_identifier(type(output.error).__name__, 24, "Error")
+        self.code = f"workflow_{self.workflow}_{self.error_type}"
+        super().__init__(self.code)
+
+
 class Indexer:
     def __init__(self, build_index_fn: BuildIndex = build_index) -> None:
         self._build_index = build_index_fn
@@ -55,6 +69,8 @@ class Indexer:
         if not request.revision_id or request.method not in {"standard", "fast"} or not 0 <= request.max_retries <= 5:
             raise ValueError("index request is invalid")
         config = GraphRagConfig.model_validate(request.settings)
+        if update:
+            configure_incremental_reconciliation(config, request.method)
         job_root = Path(config.output_storage.base_dir).parent
         if (job_root / "FINALIZED").exists():
             raise ValueError("finalized revision directory cannot be mutated")
@@ -63,6 +79,12 @@ class Indexer:
         frame = pd.DataFrame(request.documents, columns=["id", "title", "text"])
         if frame[["id", "text"]].isnull().any().any():
             raise ValueError("documents are incomplete")
+        # Supplying a DataFrame skips GraphRAG's document loader in both modes.
+        # Supply its standard metadata too: update_final_documents computes the
+        # next ordinal from the previous numeric human_readable_id column.
+        frame["human_readable_id"] = pd.RangeIndex(len(frame))
+        frame["creation_date"] = ""
+        frame["raw_data"] = None
         progress = ProgressRecorder(cancellation)
         additional_context = {"revision_id": request.revision_id}
         if update:
@@ -75,13 +97,16 @@ class Indexer:
                 outputs = await result if inspect.isawaitable(result) else result
                 failures = [output for output in outputs if getattr(output, "error", None) is not None]
                 if failures:
-                    raise RuntimeError("workflow_failed")
+                    failure = _WorkflowFailure(failures[0])
+                    progress.workflow_error(failure.workflow, failure.error_type)
+                    raise failure
                 return IndexResult("completed", len(outputs), attempt, [event.to_dict() for event in progress.events], _usage(outputs))
             except asyncio.CancelledError:
                 return IndexResult("cancelled", 0, attempt, [event.to_dict() for event in progress.events], failure_code="cancelled")
             except Exception as error:
                 if attempt >= request.max_retries:
-                    return IndexResult("failed", 0, attempt, [event.to_dict() for event in progress.events], failure_code=type(error).__name__)
+                    failure_code = error.code if isinstance(error, _WorkflowFailure) else _safe_identifier(type(error).__name__, 24, "Error")
+                    return IndexResult("failed", 0, attempt, [event.to_dict() for event in progress.events], failure_code=failure_code)
         raise AssertionError("unreachable")
 
     @staticmethod

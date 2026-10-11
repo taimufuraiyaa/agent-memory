@@ -80,3 +80,18 @@ def test_finalized_revision_directory_is_never_mutated(tmp_path: Path) -> None:
     request = IndexRequest(revision_id="revision-final", method="standard", settings=_settings(tmp_path), documents=[{"id": "m1", "title": "Book", "text": "text"}])
     with pytest.raises(ValueError, match="finalized"):
         asyncio.run(Indexer(lambda **_: []).full_index(request))
+
+
+def test_workflow_failure_retains_safe_stage_and_class_without_exception_text(tmp_path: Path) -> None:
+    async def failing_build_index(**kwargs):
+        return [SimpleNamespace(workflow="update_final_documents", error=ValueError("private model response must not be emitted"), result=None)]
+
+    request = IndexRequest(revision_id="failure", method="standard", settings=_settings(tmp_path), documents=[{"id": "m1", "title": "memory", "text": "synthetic text"}], max_retries=0)
+    result = asyncio.run(Indexer(failing_build_index).full_index(request))
+    assert result.status == "failed"
+    assert result.failure_code == "workflow_update_final_documents_ValueError"
+    event = next(event for event in result.progress_events if event["kind"] == "workflow_error")
+    assert event["workflow"] == "update_final_documents"
+    assert event["detail"] == "ValueError"
+    assert "private model response" not in json.dumps(result.progress_events)
+    assert "private model response" not in result.failure_code

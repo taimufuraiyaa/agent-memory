@@ -54,6 +54,9 @@ class ProgressRecorder:
         del instance
         self._append("workflow_end", name)
 
+    def workflow_error(self, name: str, error_type: str) -> None:
+        self._append("workflow_error", name, error_type)
+
     def progress(self, progress: object) -> None:
         self._append("progress", detail=str(progress)[:512])
 
