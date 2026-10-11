@@ -21,9 +21,9 @@
 - [x] 7. Expose hybrid modes through CLI and HTTP while preserving legacy modes.
   - Acceptance: auto/basic/local/global and required/stale controls; same shared behavior and metadata; terms and graph-expand retain their contracts.
   - Verification: CLI/API parity and query-mode regressions; no query-time adapter invocation.
-- [ ] 8. Verify real packaged local-model synthetic index and full insert → index → hybrid retrieval.
+- [x] 8. Verify real packaged local-model synthetic index and full insert → index → hybrid retrieval.
   - Acceptance: real adapter artifacts activate and retrieval returns original evidence; incremental update is proven, cancellation remains safe.
   - Verification: isolated real-adapter smoke with local Ollama models, captured safe state/counters and bounded run.
-- [ ] 9. Complete repository verification, installed runtime rollout and reusable operational guidance.
+- [x] 9. Complete repository verification, installed runtime rollout and reusable operational guidance.
   - Acceptance: focused/full Go tests, vet/build, adapter pytest and diff checks pass; PATH CLI installed; native daemon enabled with authoritative status; skills/runbook describe actual behavior and recovery.
   - Verification: `go test ./...`, `go vet ./...`, build, adapter suite, installed CLI/daemon smoke; requirement-by-requirement audit and checked tasks.

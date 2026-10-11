@@ -118,6 +118,7 @@ func startServeProcess(cfg runtimeConfig, addr string, pidFile string) (int, err
 	}
 	args := buildServeProcessArgs(cfg, addr, pidFile)
 	c := exec.Command(exe, args...)
+	configureBackgroundProcess(c)
 	c.Stdout = io.Discard
 	c.Stderr = io.Discard
 	if err := c.Start(); err != nil {
