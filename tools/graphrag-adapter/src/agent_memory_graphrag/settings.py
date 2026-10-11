@@ -69,7 +69,7 @@ def _fingerprint(value: object) -> str:
     return "sha256:" + hashlib.sha256(encoded).hexdigest()
 
 
-def _model_config(provider: str, model: str, key_name: str) -> dict[str, str]:
+def _model_config(provider: str, model: str, key_name: str) -> dict[str, object]:
     if provider in {"ollama", "ollama_chat"}:
         # GraphRAG's LiteLLM schema requires a key even for Ollama, which does
         # not authenticate this API. Only the containerized dev API can opt in
@@ -77,13 +77,18 @@ def _model_config(provider: str, model: str, key_name: str) -> dict[str, str]:
         api_base = "http://127.0.0.1:11434"
         if os.environ.get("AGENT_MEMORY_GRAPH_OLLAMA_HOST_GATEWAY") == "true":
             api_base = "http://host.docker.internal:11434"
-        return {
+        configuration: dict[str, object] = {
             "type": "litellm",
             "model_provider": provider,
             "model": model,
             "api_base": api_base,
             "api_key": "ollama",
         }
+        if provider == "ollama_chat" and model in {"qwen3:8b", "qwen3:14b"}:
+            # The pinned transport maps this to top-level Ollama think=false.
+            # Keep full extraction/gleaning while avoiding per-call reasoning.
+            configuration["call_args"] = {"reasoning_effort": "none"}
+        return configuration
     return {"type": "litellm", "model_provider": provider, "model": model, "api_key": f"${{{key_name}}}"}
 
 

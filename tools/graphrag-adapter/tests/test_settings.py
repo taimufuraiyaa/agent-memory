@@ -167,3 +167,34 @@ def test_cloud_routes_keep_environment_key_placeholders(tmp_path: Path) -> None:
     )
     assert generated.settings["completion_models"]["index_completion"]["api_key"] == "${INDEX_COMPLETION_API_KEY}"
     assert generated.settings["embedding_models"]["index_embedding"]["api_key"] == "${INDEX_EMBEDDING_API_KEY}"
+
+
+@pytest.mark.parametrize("model", ["qwen3:8b", "qwen3:14b"])
+def test_local_qwen3_indexing_transport_disables_thinking(tmp_path: Path, model: str) -> None:
+    from litellm.llms.ollama.chat.transformation import OllamaChatConfig
+
+    generated = _generate_settings(
+        tmp_path, completion_provider="ollama_chat", completion_model=model,
+        embedding_provider="ollama", embedding_model="qwen3-embedding:0.6b",
+    )
+    completion = GraphRagConfig.model_validate(generated.settings).completion_models["index_completion"]
+    transport = OllamaChatConfig()
+    mapped = transport.map_openai_params(dict(completion.call_args), {}, model, False)
+    assert mapped.get("think") is False
+    serialized = transport.transform_request(model, [{"role": "user", "content": "Synthetic extraction."}], mapped, {}, {})
+    assert serialized["think"] is False
+    assert "think" not in serialized["options"]
+    assert generated.settings["extract_graph"]["max_gleanings"] == 1
+    assert generated.prompt_fingerprint == "sha256:54293829a35e2f911cbd85bcdfc5733423c3f7dd12327869f22fc6daee6104fd"
+    assert generated.settings["embedding_models"]["index_embedding"]["call_args"] == {}
+
+
+@pytest.mark.parametrize(("provider", "model"), [
+    ("openai", "qwen3:8b"), ("ollama_chat", "different-model"), ("ollama", "qwen3:8b"),
+])
+def test_non_supported_completion_routes_preserve_call_arguments(tmp_path: Path, provider: str, model: str) -> None:
+    generated = _generate_settings(
+        tmp_path, completion_provider=provider, completion_model=model,
+        embedding_provider="ollama", embedding_model="qwen3-embedding:0.6b",
+    )
+    assert generated.settings["completion_models"]["index_completion"]["call_args"] == {}
