@@ -81,6 +81,10 @@ func (s *MemoryService) Delete(ctx context.Context, workspace string, memoryIDs 
 }
 
 func (s *MemoryService) Search(ctx context.Context, options engine.RetrievalOptions) (*engine.RetrievalResult, error) {
+	return s.search(ctx, options, true)
+}
+
+func (s *MemoryService) search(ctx context.Context, options engine.RetrievalOptions, recordTokens bool) (*engine.RetrievalResult, error) {
 	requestID := uuid.NewString()
 	if s.store != nil {
 		_ = s.store.LogRetrievalRequest(ctx, requestID, options.Workspace, "search", options.Query)
@@ -90,7 +94,7 @@ func (s *MemoryService) Search(ctx context.Context, options engine.RetrievalOpti
 		return nil, err
 	}
 	result.RequestID = requestID
-	if s.store != nil {
+	if s.store != nil && recordTokens {
 		tokens := hitTokens(result.Hits)
 		_ = s.store.AddTokenMetricV2(ctx, options.Workspace, "search", tokens, tokens, engine.RunLabel(), engine.MemoryEnabled())
 	}

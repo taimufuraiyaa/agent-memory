@@ -47,6 +47,22 @@ func TestGraphArtifactRejectsMalformedDuplicateCrossReferenceAndEvidenceFree(t *
 	}
 }
 
+func TestGraphArtifactPreservesRelationshipDescriptionSeparatelyFromKind(t *testing.T) {
+	root := t.TempDir()
+	files := map[string][]byte{
+		"entities.jsonl":      []byte(`{"id":"e1","name":"Runtime","type":"service","evidence":[{"canonical_kind":"memory","canonical_id":"m1","canonical_fingerprint":"f"}]}` + "\n"),
+		"relationships.jsonl": []byte(`{"id":"r1","source_id":"e1","target_id":"e1","kind":"related","description":"Runtime cost determines pricing","evidence":[{"canonical_kind":"memory","canonical_id":"m1","canonical_fingerprint":"f"}]}` + "\n"),
+	}
+	manifest := graphArtifactFixture(t, root, files)
+	validated, err := ValidateGraphArtifact(context.Background(), root, manifest, GraphArtifactPolicy{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if validated.Relationships[0].Description != "Runtime cost determines pricing" {
+		t.Fatalf("description lost: %+v", validated.Relationships[0])
+	}
+}
+
 func TestGraphArtifactRejectsSymlinkOversizeAndSchemaDrift(t *testing.T) {
 	root := t.TempDir()
 	target := filepath.Join(t.TempDir(), "entities.jsonl")

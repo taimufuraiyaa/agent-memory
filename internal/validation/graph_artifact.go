@@ -34,11 +34,12 @@ type GraphArtifactEntity struct {
 }
 
 type GraphArtifactRelationship struct {
-	ID       string                  `json:"id"`
-	SourceID string                  `json:"source_id"`
-	TargetID string                  `json:"target_id"`
-	Kind     string                  `json:"kind"`
-	Evidence []GraphArtifactEvidence `json:"evidence"`
+	ID          string                  `json:"id"`
+	SourceID    string                  `json:"source_id"`
+	TargetID    string                  `json:"target_id"`
+	Kind        string                  `json:"kind"`
+	Description string                  `json:"description,omitempty"`
+	Evidence    []GraphArtifactEvidence `json:"evidence"`
 }
 
 type GraphArtifactCommunity struct {
@@ -211,7 +212,9 @@ func validateGraphArtifactReferences(artifact ValidatedGraphArtifact) error {
 	}
 	relationships := map[string]struct{}{}
 	for _, relationship := range artifact.Relationships {
-		if !boundedGraphGeneratedText(relationship.ID, 256) || !boundedGraphGeneratedText(relationship.Kind, 256) || len(relationship.Evidence) == 0 {
+		// Older adapter revisions placed description text in kind. Accept its
+		// bounded legacy envelope while new adapters supply a separate field.
+		if !boundedGraphGeneratedText(relationship.ID, 256) || !boundedGraphGeneratedText(relationship.Kind, 16<<10) || len(relationship.Description) > 16<<10 || len(relationship.Evidence) == 0 {
 			return fmt.Errorf("graph artifact relationship is invalid or evidence-free")
 		}
 		if _, duplicate := relationships[relationship.ID]; duplicate {

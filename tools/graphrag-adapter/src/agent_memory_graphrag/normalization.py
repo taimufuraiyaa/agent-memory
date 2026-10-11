@@ -29,6 +29,7 @@ def normalize_graphrag_artifacts(root: Path, correlations: dict[str, dict[str, s
 
     entities_frame = _frame(root / "entities.parquet", required=True)
     entity_evidence: dict[str, list[dict[str, str]]] = {}
+    entity_ids_by_reference: dict[str, str] = {}
     entities: list[dict[str, Any]] = []
     for row in _records(entities_frame):
         external_id = _required(row, "id")
@@ -38,9 +39,15 @@ def normalize_graphrag_artifacts(root: Path, correlations: dict[str, dict[str, s
         if not evidence:
             raise ValueError("entity evidence is unresolved")
         entity_evidence[external_id] = evidence
+        name = _required_any(row, "title", "name")
+        for reference in (external_id, name):
+            previous = entity_ids_by_reference.get(reference)
+            if previous and previous != external_id:
+                raise ValueError("GraphRAG entity identity is ambiguous")
+            entity_ids_by_reference[reference] = external_id
         entities.append({
             "id": external_id,
-            "name": _required_any(row, "title", "name"),
+            "name": name,
             "type": _required_any(row, "type", "entity_type"),
             "evidence": evidence,
         })
@@ -49,8 +56,10 @@ def normalize_graphrag_artifacts(root: Path, correlations: dict[str, dict[str, s
     relationships_frame = _frame(root / "relationships.parquet", required=True)
     relationships: list[dict[str, Any]] = []
     for row in _records(relationships_frame):
-        source = _required_any(row, "source", "source_id")
-        target = _required_any(row, "target", "target_id")
+        source = entity_ids_by_reference.get(_required_any(row, "source", "source_id"), "")
+        target = entity_ids_by_reference.get(_required_any(row, "target", "target_id"), "")
+        if not source or not target:
+            raise ValueError("GraphRAG relationship entity reference is unresolved")
         evidence = _merge_evidence(
             *(evidence_by_text_unit.get(value, []) for value in _ids(row.get("text_unit_ids"))),
             entity_evidence.get(source, []), entity_evidence.get(target, []),
@@ -59,7 +68,8 @@ def normalize_graphrag_artifacts(root: Path, correlations: dict[str, dict[str, s
             raise ValueError("relationship evidence is unresolved")
         relationships.append({
             "id": _required(row, "id"), "source_id": source, "target_id": target,
-            "kind": _optional_any(row, "type", "kind", "description") or "related",
+            "kind": _optional_any(row, "type", "kind") or "related",
+            "description": _optional(row.get("description")),
             "evidence": evidence,
         })
     _write_jsonl(output / "relationships.jsonl", relationships)

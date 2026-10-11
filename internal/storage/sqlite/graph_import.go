@@ -17,7 +17,7 @@ func (s *Store) ImportGraphRevisionBatch(ctx context.Context, batch contracts.Gr
 	if err := validateGraphRevisionBatch(batch); err != nil {
 		return err
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.beginGraphWriteTx(ctx)
 	if err != nil {
 		return err
 	}

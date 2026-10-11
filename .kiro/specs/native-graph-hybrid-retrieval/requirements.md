@@ -1,0 +1,26 @@
+# Native graph indexing and hybrid memory retrieval
+
+## Objective and accepted scope
+
+Implement the hybrid retrieval architecture accepted on 2026-10-11 and the native background indexing execution needed to make its derived graph usable. Canonical memories remain authoritative. A graph discovers evidence-bound memory IDs; independent vector and exact-term candidates preserve coverage of unindexed or unextracted knowledge. Original memories are resolved by ID and ranked using semantic relevance, graph evidence/trust, recency and usefulness. The local product uses the existing pinned adapter and installed local model routes.
+
+## Requirements
+
+1. A native `serve` background worker processes registered workspaces only when both runtime graph configuration and workspace graph configuration are enabled. Writes remain fast and only append durable change intent. Disabled/unavailable graph execution must not block canonical writes or basic retrieval.
+2. Coalesce journal changes into bounded jobs. Build an initial full revision; subsequently use incremental updates when compatible retained adapter state exists, and rebuild after deletion, configuration change or missing state. Never lose changes arriving during an index run.
+3. Claim jobs with scoped leases; renew leases while running; cancel on shutdown/operator cancellation or lost ownership. Recover expired claims safely and expose bounded sanitized failure reasons. Use finite retry/backoff and dead-letter handling rather than infinite model calls.
+4. Project eligible current canonical memory text with original IDs/fingerprints and immutable cutoffs. Preserve source correlation and validate adapter/artifact contracts and output hashes before importing.
+5. Validate and import a complete candidate revision, carry forward review decisions, then atomically activate it and reconcile the exact journal cutoff. Failed, cancelled, superseded or changed-content evidence must never become valid query evidence. Completion must be fenced by current job ownership/configuration intent.
+6. Expose graph health/job/pending state through existing CLI/API surfaces. Enablement is explicit; existing disabled workspaces remain disabled. Readiness must distinguish adapter availability from a fresh active graph. An explicit absolute `AGENT_MEMORY_ENV_FILE` selects the CLI's persisted settings for isolated runtime verification; default file location and file-over-process precedence remain unchanged, and toggle writes use the selected file.
+7. Add hybrid graph modes to ordinary search through shared application behavior used by CLI and HTTP: `auto`, `basic`, `local_graph`, `global`, plus required-graph and explicit stale-policy controls. Preserve legacy `terms` and `graph-expand` semantics.
+8. Auto uses graph discovery for relationship/dependency questions and community context for collection-wide questions; direct lookups use basic retrieval. Explicit local graph mode supports keyword queries. Keep independent vector/term candidates even when graph discovery returns nonempty results.
+9. Bound graph snapshot/traversal/seeds/candidates and exact-term candidate generation. Resolve graph and term memory IDs against current workspace, supersession and content fingerprint; batch canonical resolution where practical. Search never invokes the GraphRAG indexing adapter or a generative model. Normal query/candidate embedding remains available for semantic scoring.
+10. Rank graph candidates with actual query similarity where embeddings are available, path trust/evidence and existing lifecycle signals. Low semantic similarity alone must not discard connected supporting evidence. Deduplicate and diversify results while respecting requested top-k and filters.
+11. Optional graph failures/staleness yield visible basic fallback; required graph mode fails clearly. Query graph metadata identifies selected mode, revision, freshness and paths/communities. Cache identity and invalidation account for graph changes and canonical writes.
+12. Prove the complete write → job → adapter → import → activation → hybrid-search flow with isolated synthetic data; prove a newly inserted unindexed direct hit remains retrievable, graph-only related evidence is discovered, and shutdown/cancellation/failure do not activate partial revisions. Verify a packaged-adapter local-model smoke, full Go tests/vet/build, CLI/HTTP parity, and installed runtime behavior. No unrelated UI or hosted deployment work is included.
+
+## Verification and boundaries
+
+Use focused Go regressions, fake-adapter integration tests, adapter pytest and a bounded local-model synthetic smoke. Build and install the updated PATH CLI only after checks pass. Real workspace processing is an operational rollout of already enabled projects, not acceptance-test input; do not change disabled projects or forward arbitrary environment/remote model endpoints. Preserve existing worktree changes, including terminal interface work. No new dependency or cloud fallback is required.
+
+Commands: `go test ./internal/storage/sqlite ./internal/application ./internal/retrieval ./internal/cli ./internal/api`; `go test ./...`; `go vet ./...`; `go build ./cmd/agent-memory`; `tools/graphrag-adapter/.venv/bin/python -m pytest tools/graphrag-adapter/tests`; `git diff --check`.

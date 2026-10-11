@@ -3,8 +3,10 @@ package application
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 
+	"github.com/taimufuraiyaa/agent-memory/internal/config"
 	"github.com/taimufuraiyaa/agent-memory/internal/contracts"
 	"github.com/taimufuraiyaa/agent-memory/internal/core"
 )
@@ -19,6 +21,7 @@ var (
 type GraphOperationAction = contracts.GraphOperationAction
 
 const (
+	GraphOperationEnable   = contracts.GraphOperationEnable
 	GraphOperationUpdate   = contracts.GraphOperationUpdate
 	GraphOperationRebuild  = contracts.GraphOperationRebuild
 	GraphOperationCancel   = contracts.GraphOperationCancel
@@ -34,17 +37,45 @@ type GraphOperationResult = contracts.GraphOperationResult
 type GraphOperationController = contracts.GraphOperationController
 type GraphOperationStore = contracts.GraphOperationStore
 
-type GraphOperationService struct{ store GraphOperationStore }
+type GraphOperationService struct {
+	store   GraphOperationStore
+	runtime *config.GraphConfig
+}
 
 func NewGraphOperationService(store GraphOperationStore) *GraphOperationService {
 	return &GraphOperationService{store: store}
+}
+
+func NewLocalGraphOperationService(store GraphOperationStore, configuration config.GraphConfig) *GraphOperationService {
+	return &GraphOperationService{store: store, runtime: &configuration}
 }
 
 func (s *GraphOperationService) Readiness(ctx context.Context, scope core.GraphScope, configurationID string) (GraphIndexReadiness, error) {
 	if err := validateGraphOperationIdentity(scope, configurationID); err != nil {
 		return GraphIndexReadiness{}, err
 	}
-	return s.store.GraphIndexReadiness(ctx, scope, strings.TrimSpace(configurationID))
+	readiness, err := s.store.GraphIndexReadiness(ctx, scope, strings.TrimSpace(configurationID))
+	if err != nil || !readiness.Ready || s.runtime == nil {
+		return readiness, err
+	}
+	if !s.runtime.Enabled {
+		readiness.Ready = false
+		readiness.State = "disabled"
+		readiness.ReasonCode = "runtime_disabled"
+		readiness.Reason = "Enable local graph runtime and start agent-memory serve"
+		return readiness, nil
+	}
+	result, runErr := NewLocalGraphRunner(*s.runtime).Run(ctx, LocalGraphReadiness, nil)
+	if result.JobDir != "" {
+		defer os.RemoveAll(result.JobDir)
+	}
+	if runErr != nil || result.State != "ready" {
+		readiness.Ready = false
+		readiness.State = "unavailable"
+		readiness.ReasonCode = "adapter_unavailable"
+		readiness.Reason = "Configured local adapter did not pass readiness"
+	}
+	return readiness, nil
 }
 
 func (s *GraphOperationService) Status(ctx context.Context, scope core.GraphScope, configurationID string) (GraphIndexStatus, error) {
@@ -67,7 +98,7 @@ func (s *GraphOperationService) Operate(ctx context.Context, request GraphOperat
 		if strings.TrimSpace(request.JobID) == "" {
 			return GraphOperationResult{}, fmt.Errorf("%w: job_id is required", ErrGraphOperationInvalid)
 		}
-	case GraphOperationDisable, GraphOperationRollback:
+	case GraphOperationEnable, GraphOperationDisable, GraphOperationRollback:
 	default:
 		return GraphOperationResult{}, fmt.Errorf("%w: unsupported action %q", ErrGraphOperationInvalid, request.Action)
 	}

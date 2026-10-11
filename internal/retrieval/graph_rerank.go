@@ -10,6 +10,7 @@ import (
 type GraphHybridCandidate struct {
 	Memory        core.MemoryEntry     `json:"memory"`
 	BaseScore     float64              `json:"base_score"`
+	BaseScored    bool                 `json:"-"`
 	PathScore     float64              `json:"path_score,omitempty"`
 	AdjustedScore float64              `json:"adjusted_score"`
 	Trust         core.GraphTrustState `json:"trust,omitempty"`
@@ -72,7 +73,7 @@ func RerankGraphCandidates(input []GraphHybridCandidate, policy GraphRerankPolic
 
 func graphAdjustedScore(candidate GraphHybridCandidate) float64 {
 	base := clampGraphScore(candidate.BaseScore)
-	if !candidate.Direct {
+	if !candidate.Direct && !candidate.BaseScored {
 		base = 0.12*clampGraphScore(candidate.Memory.Confidence) + 0.08*clampGraphScore(candidate.Memory.DecayScore) + 0.05*clampGraphScore(candidate.Memory.SalienceScore)
 		feedbackTotal := candidate.Memory.UsefulCount + candidate.Memory.IgnoredCount + candidate.Memory.RejectedCount + candidate.Memory.HarmfulCount
 		if feedbackTotal > 0 {

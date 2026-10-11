@@ -4,6 +4,8 @@ import "github.com/taimufuraiyaa/agent-memory/internal/core"
 
 const SupportedGraphAdapterVersion = "0.1.0"
 
+const NativeGraphPromptFingerprint = "sha256:54293829a35e2f911cbd85bcdfc5733423c3f7dd12327869f22fc6daee6104fd"
+
 func GraphAdapterCompatible(name, version, artifactSchema string) bool {
 	return (name == "agent-memory-graphrag-adapter" || name == "agent-memory-graphrag") &&
 		version == SupportedGraphAdapterVersion && artifactSchema == GraphArtifactSchemaV1
@@ -20,7 +22,7 @@ func PopulateGraphStatusPolicy(status *GraphIndexStatus) {
 		status.AuthorizedOperations = []GraphOperationAction{GraphOperationDisable}
 	case "disabled":
 		status.RemediationCode = "enable_configuration"
-		status.AuthorizedOperations = nil
+		status.AuthorizedOperations = []GraphOperationAction{GraphOperationEnable}
 	case "queued", "running":
 		status.RemediationCode = "wait_or_cancel"
 		status.AuthorizedOperations = []GraphOperationAction{GraphOperationCancel}

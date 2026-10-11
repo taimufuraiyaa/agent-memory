@@ -186,6 +186,18 @@ func (r *LocalGraphRunner) createJobRequest(command LocalGraphCommand, request a
 		return "", "", err
 	}
 	requestPath := filepath.Join(jobDir, "request.json")
+	if payload, ok := request.(map[string]any); ok {
+		if baseDir, ok := payload["native_base_job_dir"].(string); ok && baseDir != "" {
+			copied := make(map[string]any, len(payload))
+			for key, value := range payload {
+				copied[key] = value
+			}
+			if err := prepareNativeGraphBase(jobDir, baseDir, copied, r.configuration.MaxDiskBytes); err != nil {
+				return "", "", err
+			}
+			request = copied
+		}
+	}
 	payload, err := json.Marshal(struct {
 		ContractVersion string            `json:"contract_version"`
 		Command         LocalGraphCommand `json:"command"`

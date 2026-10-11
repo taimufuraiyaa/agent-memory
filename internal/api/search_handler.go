@@ -11,6 +11,7 @@ import (
 	"github.com/taimufuraiyaa/agent-memory/internal/application"
 	"github.com/taimufuraiyaa/agent-memory/internal/core"
 	"github.com/taimufuraiyaa/agent-memory/internal/engine"
+	graphretrieval "github.com/taimufuraiyaa/agent-memory/internal/retrieval"
 )
 
 // searchHandler implements POST /api/v1/memories/search: runs a
@@ -24,17 +25,20 @@ func searchHandler(svc *Service) http.HandlerFunc {
 			return
 		}
 		var req struct {
-			Query       string            `json:"query"`
-			Workspace   string            `json:"workspace"`
-			TopK        int               `json:"top_k"`
-			TokenBudget int               `json:"token_budget"`
-			Mode        string            `json:"mode"`
-			Operator    string            `json:"operator"`
-			Depth       int               `json:"depth"`
-			Explain     bool              `json:"explain"`
-			Tiers       []string          `json:"tiers"`
-			Types       []core.MemoryType `json:"types"`
-			Filters     *struct {
+			Query           string                        `json:"query"`
+			Workspace       string                        `json:"workspace"`
+			TopK            int                           `json:"top_k"`
+			TokenBudget     int                           `json:"token_budget"`
+			Mode            string                        `json:"mode"`
+			Operator        string                        `json:"operator"`
+			Depth           int                           `json:"depth"`
+			Explain         bool                          `json:"explain"`
+			GraphMode       graphretrieval.GraphQueryMode `json:"graph_mode"`
+			GraphRequired   bool                          `json:"graph_required"`
+			GraphAllowStale bool                          `json:"graph_allow_stale"`
+			Tiers           []string                      `json:"tiers"`
+			Types           []core.MemoryType             `json:"types"`
+			Filters         *struct {
 				Type             []core.MemoryType `json:"type"`
 				Tiers            []string          `json:"tiers"`
 				OutcomeResult    string            `json:"outcome_result"`
@@ -88,6 +92,10 @@ func searchHandler(svc *Service) http.HandlerFunc {
 		topK := req.TopK
 		if topK <= 0 {
 			topK = 10
+		}
+		if topK > 1000 {
+			writeErr(w, http.StatusBadRequest, "validation", "top_k must not exceed 1000")
+			return
 		}
 		mode := engine.RetrievalMode(strings.ToLower(strings.TrimSpace(req.Mode)))
 		if mode == "" {
@@ -264,7 +272,11 @@ func searchHandler(svc *Service) http.HandlerFunc {
 			suppressedHits []engine.RetrievalHit
 			policySnapshot engine.RetrievalPolicySnapshot
 			tokenTotal     int
+			graphRoute     graphretrieval.GraphRouteDecision
+			graphContext   *application.RecallGraphContext
 		)
+		graphRoutes := map[string]graphretrieval.GraphRouteDecision{}
+		graphContexts := map[string]*application.RecallGraphContext{}
 		if ws == allProjectsScope {
 			projectNames, err := svc.listProjectNames(r.Context())
 			if err != nil {
@@ -277,7 +289,7 @@ func searchHandler(svc *Service) http.HandlerFunc {
 					log.Printf("[agent-memory] failed to resolve project %q during all-projects search: %v", projectName, err)
 					continue
 				}
-				projectOut, err := projectAssets.Retrieval.Retrieve(r.Context(), engine.RetrievalOptions{
+				projectOut, err := projectAssets.Application.SearchHybrid(r.Context(), application.GraphSearchOptions{GraphMode: req.GraphMode, GraphRequired: req.GraphRequired, GraphAllowStale: req.GraphAllowStale, Retrieval: engine.RetrievalOptions{
 					Workspace: projectName,
 					Query:     opt.Query,
 					TopK:      opt.TopK,
@@ -285,10 +297,18 @@ func searchHandler(svc *Service) http.HandlerFunc {
 					Depth:     opt.Depth,
 					Filters:   opt.Filters,
 					Policy:    opt.Policy,
-				})
+				}})
 				if err != nil {
+					if req.GraphRequired {
+						writeErr(w, http.StatusBadRequest, "graph_unavailable", err.Error())
+						return
+					}
 					log.Printf("[agent-memory] failed to retrieve memories from project %q during all-projects search: %v", projectName, err)
 					continue
+				}
+				graphRoutes[projectName] = projectOut.GraphRoute
+				if projectOut.GraphContext != nil {
+					graphContexts[projectName] = projectOut.GraphContext
 				}
 				hits = append(hits, projectOut.Hits...)
 				strongHits = append(strongHits, projectOut.StrongHits...)
@@ -297,9 +317,6 @@ func searchHandler(svc *Service) http.HandlerFunc {
 				policySnapshot = projectOut.Policy
 				projectTokens := sumHitTokens(projectOut.Hits)
 				tokenTotal += projectTokens
-				if projectAssets.Store != nil {
-					_ = projectAssets.Store.AddTokenMetricV2(r.Context(), projectName, "search", projectTokens, projectTokens, engine.RunLabel(), engine.MemoryEnabled())
-				}
 			}
 			rankRetrievalHits(hits)
 			rankRetrievalHits(strongHits)
@@ -310,7 +327,7 @@ func searchHandler(svc *Service) http.HandlerFunc {
 			weakHits = trimRetrievalHits(weakHits, topK)
 			suppressedHits = trimRetrievalHits(suppressedHits, topK)
 		} else {
-			out, err := assets.Application.Search(r.Context(), engine.RetrievalOptions{
+			out, err := assets.Application.SearchHybrid(r.Context(), application.GraphSearchOptions{GraphMode: req.GraphMode, GraphRequired: req.GraphRequired, GraphAllowStale: req.GraphAllowStale, Retrieval: engine.RetrievalOptions{
 				Workspace: opt.Workspace,
 				Query:     opt.Query,
 				TopK:      opt.TopK,
@@ -318,12 +335,14 @@ func searchHandler(svc *Service) http.HandlerFunc {
 				Depth:     opt.Depth,
 				Filters:   opt.Filters,
 				Policy:    opt.Policy,
-			})
+			}})
 			if err != nil {
 				writeErr(w, http.StatusBadRequest, "runtime", err.Error())
 				return
 			}
 			hits = out.Hits
+			graphRoute = out.GraphRoute
+			graphContext = out.GraphContext
 			requestID = out.RequestID
 			strongHits = out.StrongHits
 			weakHits = out.WeakHits
@@ -346,11 +365,15 @@ func searchHandler(svc *Service) http.HandlerFunc {
 				string(engine.BandWeakFamiliarity): len(weakResults),
 				string(engine.BandSuppressed):      len(suppressedResults),
 			},
-			"retrieval_policy": policySnapshot,
-			"total_tokens":     tokenTotal,
-			"search_time_ms":   time.Since(started).Milliseconds(),
-			"workspace":        ws,
-			"requested_query":  req.Query,
+			"retrieval_policy":            policySnapshot,
+			"total_tokens":                tokenTotal,
+			"search_time_ms":              time.Since(started).Milliseconds(),
+			"workspace":                   ws,
+			"requested_query":             req.Query,
+			"graph_route":                 graphRoute,
+			"graph_context":               graphContext,
+			"graph_routes_by_workspace":   graphRoutes,
+			"graph_contexts_by_workspace": graphContexts,
 		})
 	}
 }

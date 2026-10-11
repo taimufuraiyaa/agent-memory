@@ -23,6 +23,48 @@ type MemoryVectorRow struct {
 	UpdatedAt             time.Time
 }
 
+// MemoryVectorsByIDs reads only the selected canonical candidates. Query-time
+// graph scoring must not scan the entire vector corpus a second time.
+func (s *Store) MemoryVectorsByIDs(ctx context.Context, workspace, provider string, ids []string) (map[string][]float32, error) {
+	result := make(map[string][]float32, len(ids))
+	for start := 0; start < len(ids); start += 500 {
+		end := min(start+500, len(ids))
+		args := []any{workspace, provider}
+		for _, id := range ids[start:end] {
+			args = append(args, id)
+		}
+		rows, err := s.db.QueryContext(ctx, `SELECT memory_id,embedding_blob,embedding_json FROM memory_vectors WHERE workspace=? AND embedding_provider=? AND memory_id IN (`+strings.TrimSuffix(strings.Repeat("?,", end-start), ",")+`)`, args...)
+		if err != nil {
+			return nil, err
+		}
+		for rows.Next() {
+			var id, raw string
+			var blob []byte
+			if err = rows.Scan(&id, &blob, &raw); err == nil {
+				var vector []float32
+				if len(blob) > 0 {
+					vector, err = decodeFloat32Slice(blob)
+				} else {
+					err = json.Unmarshal([]byte(raw), &vector)
+				}
+				if err == nil {
+					result[id] = vector
+				}
+			}
+			if err != nil {
+				rows.Close()
+				return nil, err
+			}
+		}
+		err = rows.Err()
+		rows.Close()
+		if err != nil {
+			return nil, err
+		}
+	}
+	return result, nil
+}
+
 // UpsertMemoryVector writes or updates an embedding for a memory row.
 func (s *Store) UpsertMemoryVector(ctx context.Context, memoryID, workspace, provider, modelVersion string, embedding []float32) error {
 	_start := time.Now()

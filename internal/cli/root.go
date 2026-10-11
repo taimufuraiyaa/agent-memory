@@ -53,7 +53,10 @@ func NewRootCommand() *cobra.Command {
 				return nil
 			}
 
-			envPath := filepath.Join(defaultAgentMemoryDataDir(), "agent-memory.env")
+			envPath, err := configuredEnvFilePath()
+			if err != nil {
+				return err
+			}
 			if err := os.MkdirAll(filepath.Dir(envPath), 0o755); err != nil {
 				return err
 			}
@@ -169,7 +172,17 @@ func workspaceFlagWasExplicitlySet(cmd *cobra.Command) bool {
 	return false
 }
 
-// loadEnvFile reads KEY=VALUE assignments from ~/.agent-memory/agent-memory.env
+func configuredEnvFilePath() (string, error) {
+	if selected := strings.TrimSpace(os.Getenv("AGENT_MEMORY_ENV_FILE")); selected != "" {
+		if !filepath.IsAbs(selected) {
+			return "", errors.New("AGENT_MEMORY_ENV_FILE must be an absolute path")
+		}
+		return filepath.Clean(selected), nil
+	}
+	return filepath.Join(defaultAgentMemoryDataDir(), "agent-memory.env"), nil
+}
+
+// loadEnvFile reads KEY=VALUE assignments from the selected persisted file.
 // and applies them to the process environment. It is called during CLI startup,
 // before engine configuration is resolved, so that persisted toggles affect
 // every invocation even when the shell rc-autoload is not installed. Precedence
@@ -178,7 +191,11 @@ func workspaceFlagWasExplicitlySet(cmd *cobra.Command) bool {
 // ignored; malformed lines are skipped with a warning to stderr and do not
 // abort the run.
 func loadEnvFile(cmd *cobra.Command) {
-	envPath := filepath.Join(defaultAgentMemoryDataDir(), "agent-memory.env")
+	envPath, err := configuredEnvFilePath()
+	if err != nil {
+		fmt.Fprintf(cmd.ErrOrStderr(), "warning: %v\n", err)
+		return
+	}
 	data, err := os.ReadFile(envPath)
 	if err != nil {
 		if !errors.Is(err, os.ErrNotExist) {

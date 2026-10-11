@@ -22,17 +22,19 @@ func (s *Store) LoadActiveGraphSnapshot(ctx context.Context, scope core.GraphSco
 	}
 	snapshot := contracts.GraphQuerySnapshot{Scope: scope}
 	var pending int
+	var indexedVersion int64
 	var configurationVersion int64
 	var configurationUpdated, reviewEpoch, deletionEpoch string
 	err := s.db.QueryRowContext(ctx, `SELECT id,active_revision_id,version,updated_at,
-		(SELECT count(*) FROM graph_change_journal journal WHERE journal.workspace=configuration.workspace AND journal.processed_revision_id=''),
+		(SELECT count(*) FROM graph_change_journal journal WHERE journal.workspace=configuration.workspace AND journal.configuration_version=configuration.id||'@'||configuration.version AND journal.processed_revision_id=''),
 		COALESCE((SELECT MAX(created_at) FROM graph_reviews review WHERE review.tenant_id=configuration.tenant_id AND review.workspace=configuration.workspace),''),
-		COALESCE((SELECT MAX(deleted_at) FROM graph_deletion_tombstones tombstone WHERE tombstone.tenant_id=configuration.tenant_id AND tombstone.workspace=configuration.workspace),'')
-		FROM graph_configurations configuration WHERE tenant_id=? AND workspace=? AND enabled=1 AND active_revision_id<>'' ORDER BY version DESC,id LIMIT 1`, scope.TenantID, scope.WorkspaceID).Scan(&snapshot.ConfigurationID, &snapshot.RevisionID, &configurationVersion, &configurationUpdated, &pending, &reviewEpoch, &deletionEpoch)
+		COALESCE((SELECT MAX(deleted_at) FROM graph_deletion_tombstones tombstone WHERE tombstone.tenant_id=configuration.tenant_id AND tombstone.workspace=configuration.workspace),''),
+		COALESCE((SELECT configuration_version FROM graph_revisions revision WHERE revision.id=configuration.active_revision_id AND revision.tenant_id=configuration.tenant_id AND revision.workspace=configuration.workspace),0)
+		FROM graph_configurations configuration WHERE tenant_id=? AND workspace=? AND enabled=1 AND active_revision_id<>'' ORDER BY version DESC,id LIMIT 1`, scope.TenantID, scope.WorkspaceID).Scan(&snapshot.ConfigurationID, &snapshot.RevisionID, &configurationVersion, &configurationUpdated, &pending, &reviewEpoch, &deletionEpoch, &indexedVersion)
 	if err != nil {
 		return contracts.GraphQuerySnapshot{}, err
 	}
-	snapshot.Fresh = pending == 0
+	snapshot.Fresh = pending == 0 && indexedVersion == configurationVersion
 	snapshot.CacheIdentity = core.FingerprintText(strings.Join([]string{snapshot.ConfigurationID, fmt.Sprint(configurationVersion), configurationUpdated, snapshot.RevisionID, reviewEpoch, deletionEpoch}, "\x00"))
 	rows, err := s.db.QueryContext(ctx, `SELECT entity.id,entity.tenant_id,entity.workspace,entity.trust,entity.record_version,entity.first_revision_id,entity.last_revision_id,entity.superseded_by,entity.created_at,entity.updated_at,
 		version.external_id,version.name,version.entity_type,version.description,version.aliases_json,version.occurrence_count,version.degree
@@ -209,20 +211,24 @@ func (s *Store) ResolveGraphCanonicalMemories(ctx context.Context, scope core.Gr
 		ids = append(ids, id)
 	}
 	sort.Strings(ids)
+	current, err := s.GetMemoriesByIDs(ctx, ids)
+	if err != nil {
+		return nil, nil, err
+	}
 	memories := make(map[string]core.MemoryEntry, len(ids))
 	authorized := make(map[string]struct{})
 	for _, id := range ids {
-		memory, err := s.GetMemory(ctx, id)
-		if err != nil {
+		memory, exists := current[id]
+		if !exists {
 			continue
 		}
-		if memory.Workspace != scope.WorkspaceID || memory.SupersededBy != nil {
+		if memory.Workspace != scope.WorkspaceID || memory.SupersededBy != nil || memory.StorageTier == core.TierCold || memory.SuppressionScore >= 1 {
 			continue
 		}
 		fingerprint := core.FingerprintText(memory.Content)
 		for _, item := range byID[id] {
 			if item.CanonicalFingerprint == fingerprint {
-				memories[id] = *memory
+				memories[id] = memory
 				authorized[graphEvidenceAuthorizationKey(item)] = struct{}{}
 			}
 		}
@@ -232,4 +238,59 @@ func (s *Store) ResolveGraphCanonicalMemories(ctx context.Context, scope core.Gr
 
 func graphEvidenceAuthorizationKey(evidence core.GraphEvidence) string {
 	return evidence.Scope.TenantID + "\x00" + evidence.Scope.WorkspaceID + "\x00" + evidence.CanonicalKind + "\x00" + evidence.CanonicalID + "\x00" + evidence.CanonicalFingerprint
+}
+
+// LoadGraphEntityRevisionCatalog includes rejected and superseded identities
+// for reconciliation. Filtering those identities is a query responsibility;
+// excluding them here could resurrect a reviewed rejection under a new ID.
+func (s *Store) LoadGraphEntityRevisionCatalog(ctx context.Context, scope core.GraphScope, revision string) ([]contracts.GraphEntityImportRecord, error) {
+	if err := scope.Validate(); err != nil {
+		return nil, err
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT e.id,e.trust,e.first_revision_id,e.last_revision_id,e.superseded_by,e.created_at,e.updated_at,
+		v.external_id,v.name,v.entity_type,v.description,v.aliases_json,v.occurrence_count,v.degree
+		FROM graph_entities e JOIN graph_entity_versions v ON v.entity_id=e.id AND v.revision_id=? WHERE e.tenant_id=? AND e.workspace=? ORDER BY e.id LIMIT 100001`, revision, scope.TenantID, scope.WorkspaceID)
+	if err != nil {
+		return nil, err
+	}
+	result := []contracts.GraphEntityImportRecord{}
+	for rows.Next() {
+		record := contracts.GraphEntityImportRecord{}
+		var created, updated, aliases string
+		if err = rows.Scan(&record.Entity.ID, &record.Entity.Trust, &record.Entity.FirstRevisionID, &record.Entity.LastRevisionID, &record.Entity.SupersededBy, &created, &updated, &record.Version.ExternalID, &record.Version.Name, &record.Version.EntityType, &record.Version.Description, &aliases, &record.Version.OccurrenceCount, &record.Version.Degree); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		record.Entity.Scope = scope
+		record.Version.EntityID = record.Entity.ID
+		record.Version.RevisionID = revision
+		record.Entity.CreatedAt, err = parseGraphTime(created)
+		if err == nil {
+			record.Entity.UpdatedAt, err = parseGraphTime(updated)
+		}
+		if err == nil {
+			err = json.Unmarshal([]byte(aliases), &record.Version.Aliases)
+		}
+		if err != nil {
+			rows.Close()
+			return nil, err
+		}
+		result = append(result, record)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return nil, err
+	}
+	if len(result) > 100000 {
+		return nil, fmt.Errorf("graph reconciliation catalog exceeds limits")
+	}
+	evidence, err := s.graphQueryEvidenceByTarget(ctx, "graph_entity_evidence", "entity_id", scope, revision)
+	if err != nil {
+		return nil, err
+	}
+	for i := range result {
+		result[i].Evidence = evidence[result[i].Entity.ID]
+	}
+	return result, nil
 }

@@ -21,10 +21,28 @@ type RecallGraphContext struct {
 }
 
 func (s *MemoryService) enrichRecallWithGraph(ctx context.Context, task string, direct []engine.RetrievalHit, snapshot contracts.GraphQuerySnapshot, mode graphretrieval.GraphQueryMode) ([]engine.RetrievalHit, *RecallGraphContext, error) {
+	return s.enrichWithGraph(ctx, engine.RetrievalOptions{Workspace: snapshot.Scope.WorkspaceID, Query: task, Mode: engine.ModeRecall}, direct, snapshot, mode)
+}
+
+func (s *MemoryService) enrichWithGraph(ctx context.Context, options engine.RetrievalOptions, direct []engine.RetrievalHit, snapshot contracts.GraphQuerySnapshot, mode graphretrieval.GraphQueryMode) ([]engine.RetrievalHit, *RecallGraphContext, error) {
+	task := options.Query
 	evidence := graphSnapshotEvidence(snapshot)
 	memories, authorized, err := s.store.ResolveGraphCanonicalMemories(ctx, snapshot.Scope, evidence)
 	if err != nil {
 		return nil, nil, err
+	}
+	ineligible := map[string]bool{}
+	for id, memory := range memories {
+		if engine.MatchCandidateFilters(memory, options) {
+			continue
+		}
+		delete(memories, id)
+		ineligible[id] = true
+	}
+	for _, item := range evidence {
+		if ineligible[item.CanonicalID] {
+			delete(authorized, GraphEvidenceAuthorizationKey(item))
+		}
 	}
 	contextResult := &RecallGraphContext{RevisionID: snapshot.RevisionID, Fresh: snapshot.Fresh}
 	pathScores := map[string]float64{}
@@ -76,6 +94,9 @@ func (s *MemoryService) enrichRecallWithGraph(ctx context.Context, task string, 
 	directByID := make(map[string]engine.RetrievalHit, len(direct))
 	candidates := make([]graphretrieval.GraphHybridCandidate, 0, len(direct)+len(memories))
 	for _, hit := range direct {
+		if !engine.MatchCandidateFilters(hit.Memory, options) {
+			continue
+		}
 		directByID[hit.Memory.ID] = hit
 		candidates = append(candidates, graphretrieval.GraphHybridCandidate{
 			Memory: hit.Memory, BaseScore: hit.Score, PathScore: pathScores[hit.Memory.ID],
@@ -83,12 +104,30 @@ func (s *MemoryService) enrichRecallWithGraph(ctx context.Context, task string, 
 			SourceKey: graphMemorySourceKey(hit.Memory), Direct: true,
 		})
 	}
+	additional := make([]core.MemoryEntry, 0, len(memories))
 	for id, memory := range memories {
 		if _, directHit := directByID[id]; directHit || pathScores[id] <= 0 {
 			continue
 		}
+		if !engine.MatchCandidateFilters(memory, options) {
+			continue
+		}
+		additional = append(additional, memory)
+	}
+	scored := map[string]engine.RetrievalHit{}
+	if s.retrieval != nil {
+		hits, scoreErr := s.retrieval.ScoreCandidates(ctx, options, additional)
+		if scoreErr != nil {
+			return nil, nil, scoreErr
+		}
+		for _, hit := range hits {
+			scored[hit.Memory.ID] = hit
+		}
+	}
+	for _, memory := range additional {
+		id := memory.ID
 		candidates = append(candidates, graphretrieval.GraphHybridCandidate{
-			Memory: memory, PathScore: pathScores[id], Trust: pathTrust[id], EvidenceCount: evidenceCounts[id], SourceKey: graphMemorySourceKey(memory),
+			Memory: memory, BaseScore: scored[id].Score, BaseScored: s.retrieval != nil, PathScore: pathScores[id], Trust: pathTrust[id], EvidenceCount: evidenceCounts[id], SourceKey: graphMemorySourceKey(memory),
 		})
 	}
 	ranked := graphretrieval.RerankGraphCandidates(candidates, graphretrieval.DefaultGraphRerankPolicy())
@@ -96,7 +135,10 @@ func (s *MemoryService) enrichRecallWithGraph(ctx context.Context, task string, 
 	for _, candidate := range ranked {
 		hit, ok := directByID[candidate.Memory.ID]
 		if !ok {
-			hit = engine.RetrievalHit{Memory: candidate.Memory, Band: engine.BandWeakFamiliarity}
+			hit, ok = scored[candidate.Memory.ID]
+			if !ok {
+				hit = engine.RetrievalHit{Memory: candidate.Memory, Band: engine.BandWeakFamiliarity}
+			}
 		}
 		hit.Score = candidate.AdjustedScore
 		hit.Breakdown.Total = candidate.AdjustedScore
@@ -223,9 +265,21 @@ func SelectRecallGlobalGraph(task string, snapshot contracts.GraphQuerySnapshot,
 				evidence = append(evidence, edgeEvidence[member.TargetID]...)
 			}
 		}
+		// A generated report spans all its evidence. Authorizing a surviving
+		// subset cannot make text derived from deleted/changed sources current.
+		completeEvidence := len(evidence) > 0
+		evidenceKeys := map[string]bool{}
+		for _, item := range evidence {
+			evidenceKeys[GraphEvidenceAuthorizationKey(item)] = true
+			if _, ok := authorized[GraphEvidenceAuthorizationKey(item)]; !ok {
+				completeEvidence = false
+				break
+			}
+		}
+		completeEvidence = completeEvidence && len(evidenceKeys) >= community.Community.SourceCount
 		candidates = append(candidates, graphretrieval.GraphGlobalCommunity{
 			ID: community.Community.ID, Level: community.Community.Level, Rank: community.Report.Rank,
-			Trust: community.Report.Trust, Fresh: !community.Report.Stale, SourceCount: community.Community.SourceCount,
+			Trust: community.Report.Trust, Fresh: !community.Report.Stale && completeEvidence, SourceCount: community.Community.SourceCount,
 			UnresolvedCount: community.Community.UnresolvedCount + community.Report.UnresolvedCount,
 			Title:           community.Report.Title, Summary: community.Report.Summary, Findings: community.Report.Findings, Evidence: evidence,
 		})

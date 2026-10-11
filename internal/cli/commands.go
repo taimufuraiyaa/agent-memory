@@ -187,6 +187,8 @@ func newSearchCommand() *cobra.Command {
 	var tokenBudget int
 	var depth int
 	var operator string
+	var graphMode string
+	var graphRequired, graphAllowStale bool
 	cmd := &cobra.Command{
 		Use:   "search",
 		Short: "Semantic multi-signal search",
@@ -350,13 +352,17 @@ Use --explain to see per-signal score breakdowns.`,
 					filters["date_range"] = map[string]any{"from": from, "to": to}
 				}
 				body := map[string]any{
-					"query":        query,
-					"workspace":    cfg.workspace,
-					"top_k":        topK,
-					"token_budget": tokenBudget,
-					"mode":         mode,
-					"operator":     operator,
-					"explain":      explain,
+					"query":             query,
+					"workspace":         cfg.workspace,
+					"top_k":             topK,
+					"token_budget":      tokenBudget,
+					"mode":              mode,
+					"operator":          operator,
+					"explain":           explain,
+					"graph_mode":        graphMode,
+					"graph_required":    graphRequired,
+					"graph_allow_stale": graphAllowStale,
+					"depth":             depth,
 				}
 				if len(filters) > 0 {
 					body["filters"] = filters
@@ -399,7 +405,7 @@ Use --explain to see per-signal score breakdowns.`,
 			searcher := engine.NewVectorSearcher(store, provider)
 			retrieval := engine.NewRetrievalEngine(searcher)
 			app := application.NewMemoryService(store, nil, retrieval)
-			res, err := app.Search(ctx, engine.RetrievalOptions{
+			res, err := app.SearchHybrid(ctx, application.GraphSearchOptions{GraphMode: graphretrieval.GraphQueryMode(graphMode), GraphRequired: graphRequired, GraphAllowStale: graphAllowStale, Retrieval: engine.RetrievalOptions{
 				Workspace: cfg.workspace,
 				Query:     query,
 				TopK:      topK,
@@ -411,7 +417,7 @@ Use --explain to see per-signal score breakdowns.`,
 					MinTotalScore:       floatPtrIfChanged(cmd, "min-total-score", minTotalScore),
 					RelativeScoreCutoff: floatPtrIfChanged(cmd, "relative-cutoff", relativeCutoff),
 				},
-			})
+			}})
 			if err != nil {
 				return err
 			}
@@ -423,6 +429,9 @@ Use --explain to see per-signal score breakdowns.`,
 	cmd.Flags().IntVar(&topK, "top-k", 10, "Top K results")
 	cmd.Flags().StringVar(&mode, "mode", string(engine.ModeSearch), "Mode: search|recall|relate|outcomes|graph-expand|terms")
 	cmd.Flags().StringVar(&operator, "operator", string(application.TermOperatorAND), "Term operator for mode=terms: and|or")
+	cmd.Flags().StringVar(&graphMode, "graph-mode", "auto", "Derived graph discovery: auto|basic|local_graph|global")
+	cmd.Flags().BoolVar(&graphRequired, "graph-required", false, "Require an available graph (explicit local_graph or global)")
+	cmd.Flags().BoolVar(&graphAllowStale, "graph-allow-stale", false, "Allow stale graph discovery while retaining current direct hits")
 	cmd.Flags().IntVar(&depth, "depth", 2, "Graph expansion depth limit (mode=graph-expand only)")
 	cmd.Flags().BoolVar(&explain, "explain", false, "Include per-signal score breakdown")
 	cmd.Flags().StringSliceVar(&tiers, "tier", nil, "Filter by storage tier (repeatable): markdown|vector|vector+graph|document")

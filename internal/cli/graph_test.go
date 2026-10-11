@@ -65,3 +65,24 @@ func TestGraphIndexOperationCLIHasNoArtifactRootOverride(t *testing.T) {
 		}
 	}
 }
+
+func TestGraphIndexEnableCLICreatesExplicitWorkspaceOptIn(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "graph.db")
+	cmd := NewRootCommand()
+	var output bytes.Buffer
+	cmd.SetOut(&output)
+	cmd.SetErr(&output)
+	cmd.SetArgs([]string{"graph-index", "enable", "--workspace", "ws", "--db", dbPath})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("enable: %v (%s)", err, output.String())
+	}
+	store, err := sqlite.Open(context.Background(), dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	status, err := store.GraphIndexStatus(context.Background(), core.GraphScope{WorkspaceID: "ws"}, "default")
+	if err != nil || !status.Enabled || !status.Compatible || status.ActiveRevisionID != "" {
+		t.Fatalf("enable did not create opted-in configuration: %+v %v", status, err)
+	}
+}

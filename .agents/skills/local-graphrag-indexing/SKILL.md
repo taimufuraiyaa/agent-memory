@@ -1,36 +1,41 @@
 ---
 name: local-graphrag-indexing
-description: Configure, debug, or validate Agent Memory's local GraphRAG development indexing bridge and per-project reindex flow.
+description: Configure, debug, or validate Agent Memory's native GraphRAG worker, local Ollama adapter, indexing after memory inserts, and hybrid graph retrieval.
 ---
 
-# Local GraphRAG indexing
+# Local GraphRAG indexing and retrieval
 
-Use this workflow for Agent Memory's local GraphRAG adapter, local Ollama model routes, or workspace/project Reindex failures.
+Use this skill for graph indexing after memory inserts, local model adapter failures, native daemon jobs, or graph-assisted search. Read [memory insert diagnostics](references/memory-insert-diagnostics.md) for the distinction between memory relations, durable indexing intent, and an active derived graph. Read [native worker operations](references/native-worker-operations.md) for the current execution and retrieval flow.
 
-## Before changing code or configuration
+## Before investigation or changes
 
-- Read `.kiro/specs/graphrag-derived-index-integration/requirements.md`, `design.md`, and `tasks.md` in that order. For installer model setup, also read `.kiro/specs/install-local-graphrag-setup/`.
-- Search project memory using `agent-memory` on `PATH` with `--workspace agent-memory`; submit feedback immediately after search or recall.
-- Keep Graph indexing opt-in. Adapter readiness, model availability, and successful inference are separate checks. Basic retrieval must remain available when GraphRAG is disabled or unavailable.
-- Keep local routes device-local: standalone uses Ollama loopback; only the dev Compose API may opt into its fixed host gateway. Never pass ambient environment variables or arbitrary user model-server URLs into the adapter.
+- Use `agent-memory` through PATH with `--workspace agent-memory` for project knowledge. Search before research and immediately submit honest retrieval feedback. Continue substantial work in a solution episode.
+- Read `.kiro/specs/native-graph-hybrid-retrieval/requirements.md`, `design.md`, and `tasks.md` in that order. Consult `.kiro/specs/install-local-graphrag-setup/` for installer/model configuration. Historical GraphRAG specs may exist on other revisions; do not assume they exist in this checkout.
+- Verify the installed binary's source/build identity. A declaration or enabled configuration does not prove a native worker exists in that build.
+- Indexing requires both runtime enablement and explicit workspace enablement. Preserve disabled workspaces. Readiness of the adapter, installed models, successful inference and an active graph are separate observations.
+- Keep local routes device-local. The native adapter uses Ollama loopback; only a supported dev container may use its fixed host gateway. Do not forward ambient environment variables or caller-provided model-server URLs.
 
-## Debug a queue or worker failure
+## Diagnose a recorded but unfinished update
 
-1. Check the UI's Reindex readiness and the latest durable `graph_jobs` and `graph_revisions` rows before retrying. After a `202`/accepted result, do not click Reindex again; monitor that job.
-2. For registered local projects, open **Settings → System → Graph index → Project queue** to see queued/running jobs across the local registry. Queued age is measured from job creation; running age is measured from its claim/update timestamp. The view is read-only and reports projects whose status could not be checked, so an incomplete scan is not mistaken for an empty queue. Use the selected project's existing controls for supported operations.
-3. The local development worker currently visits registered projects in sorted name order and processes each claimed job synchronously. A long running job can therefore delay jobs in projects visited later; compare the queue state and elapsed time before deciding whether it is stuck.
-4. If the queue request gets an unstructured HTTP 404, the API process may predate `/v1/local-projects/graph-index/queue`; check the response code and deployed API version instead of retrying the job. Confirm durable job/revision state and worker progress before rebuilding or restarting an API that may be processing a real index.
-5. For container preflight, verify the adapter's image-pinned dependency lock path is present in the adapter's minimal environment. Do not forward the host's complete environment to fix a missing path.
-6. Preserve the adapter's private per-job directory boundary. GraphRAG 3.1.2 reads prompt settings as file paths, so write reviewed prompts with exclusive creation and restrictive permissions inside that directory; do not accept prompt paths from a request or corpus record.
-7. Match the configured vector-store width to the embedding model. `ollama/qwen3-embedding:0.6b` emits 1,024 dimensions; GraphRAG's default width is 3,072.
-8. Validate the pinned artifact schema before normalization. In GraphRAG 3.1.2, text-unit evidence is in singular `document_id`; community reports reference numeric community ordinals while community `id` is a UUID, and `-1` represents no parent. Resolve these through explicit maps and fail closed on missing or ambiguous evidence.
-9. Keep user-facing errors sanitized. Diagnose with safe state, stage, and progress metadata; never dump request JSON, prompts, corpus text, or raw model responses into logs or chat.
+1. Read supported `graph-index readiness` and `graph-index status` surfaces for the explicitly authorized workspace. Compare active revision, pending count, current job, last state and successful timestamp.
+2. Verify `serve` is running the updated native implementation. `internal/cli/native_graph_daemon.go` invokes `NativeGraphWorker.RunWorkspace`; `internal/application/native_graph_worker.go` owns projection, adapter execution, import and publication. Older installed builds may only have lifecycle scheduling.
+3. The worker visits registered projects synchronously with one adapter at a time. A long build can delay projects visited later. A new memory is durable immediately, but subsequent graph batches coalesce at 50 changes or 15 minutes. An initial build or explicit operator job can run immediately.
+4. Do not repeat an accepted operation blindly. Monitor its durable state. Failed work uses finite retry/backoff and becomes dead-letter; operator retry creates a fresh revision. Cancel/disable/lease loss prevents activation, and shutdown terminates the adapter process group.
+5. Adapter/model failures and corrupt output preserve the previous active graph. Diagnose with safe state, field names, stage and counters. Do not print request JSON, corpus text, raw model responses or credentials.
 
-## Verify without indexing a user's corpus
+## Verify adapter contracts
 
-- Run focused adapter settings, normalization, Go runner, configuration parser, and Graph Settings tests.
-- Build and check the locked adapter in its development container; verify that absent configuration or unavailable models disables Reindex.
-- Run one complete packaged-adapter smoke with synthetic text only, the configured local completion and embedding models, and no cloud credentials. Readiness alone is insufficient: verify all workflows finish, entities are extracted, and evidence-bound normalized artifacts are emitted.
-- Validate the Compose files and `git diff --check`.
-- Never use an existing workspace's memories as acceptance-test input. A separate real project reindex is a user operation and should run only after the user explicitly requests it.
-- For a real reindex, check the persistent job state and adapter progress metadata. Local inference over a large project can take hours. A transient status-endpoint error does not prove the worker failed; confirm both job/revision state and worker process before retrying or restarting the API.
+- Keep private per-job directories and reviewed prompts. GraphRAG reads prompt settings as paths; use exclusive private files rather than caller-supplied prompt paths.
+- Match vector width to the model: `ollama/qwen3-embedding:0.6b` emits 1,024 dimensions. GraphRAG's default is 3,072.
+- Compare the reviewed prompt fingerprint against the installed pinned package. Do not bypass a mismatched fingerprint. The native worker supports a versioned upgrade from the previous shipped reviewed fingerprint and rebuilds under the current one.
+- In GraphRAG 3.1.2, text-unit evidence uses singular `document_id`; relationship endpoints use entity titles although entity IDs are UUIDs; reports use numeric community ordinals although community IDs are UUIDs. Resolve explicit unambiguous maps before normalization. `-1` means no community parent.
+- Relationship descriptions are prose, not relationship-kind labels. Preserve them in the separate description field. Opaque inferred relationships stay proposed and do not become typed supporting facts by text guessing.
+- Incremental indexing needs the complete verified raw base table/vector-store state copied into a new private directory, a bound base manifest, delta documents and the full current correlation map. A command flag or base revision ID alone is insufficient. Missing/incompatible state causes a full rebuild.
+
+## Verification and knowledge capture
+
+Run focused worker, graph query, hybrid, CLI/API and adapter tests, followed by required repository checks. Use the opt-in real packaged local-model integration with isolated synthetic data. Readiness alone is insufficient: prove full activation, incremental activation and original canonical memories returned by hybrid search. Never use a user's existing corpus as acceptance-test data; operational processing of already enabled projects is distinct from testing.
+
+Use [the isolated native daemon smoke](references/native-daemon-smoke.py) to validate automatic insert processing, fresh unindexed retrieval and CLI/HTTP parity through a PATH CLI. The synthetic adapter and real ONNX embedding smoke complements the real GraphRAG/Ollama integration test.
+
+Record durable verified findings with source paths/build identity and terminal status. Update the spec's completed tasks and this skill's runbook when behavior changes. Each skill file must remain below 12,000 characters.

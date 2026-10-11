@@ -17,7 +17,8 @@ def test_normalization_maps_parquet_references_to_owned_evidence_jsonl(tmp_path:
         {"id": "e1", "title": "Retry Handler", "type": "service", "description": "Retries checkout", "text_unit_ids": ["tu1"]},
         {"id": "e2", "title": "Checkout", "type": "service", "description": "Checkout service", "text_unit_ids": ["tu1"]},
     ]).to_parquet(raw / "entities.parquet")
-    pd.DataFrame([{"id": "r1", "source": "e1", "target": "e2", "description": "depends on", "text_unit_ids": ["tu1"]}]).to_parquet(raw / "relationships.parquet")
+    relationship_description = "Pricing depends on runtime costs and benchmark throughput. " * 20
+    pd.DataFrame([{"id": "r1", "source": "Retry Handler", "target": "Checkout", "description": relationship_description, "text_unit_ids": ["tu1"]}]).to_parquet(raw / "relationships.parquet")
     pd.DataFrame([{"id": "c1", "community": 0, "parent": -1, "entity_ids": ["e1", "e2"]}]).to_parquet(raw / "communities.parquet")
     pd.DataFrame([{"id": "cr1", "community": 0, "title": "Payments", "summary": "Retry and checkout", "rank": 0.8}]).to_parquet(raw / "community_reports.parquet")
 
@@ -29,6 +30,8 @@ def test_normalization_maps_parquet_references_to_owned_evidence_jsonl(tmp_path:
     report = json.loads((output / "community_reports.jsonl").read_text(encoding="utf-8").splitlines()[0])
     assert entity["evidence"][0]["canonical_id"] == "passage-a"
     assert relationship["source_id"] == "e1" and relationship["target_id"] == "e2"
+    assert relationship["kind"] == "related"
+    assert relationship["description"] == relationship_description.strip()
     assert community["id"] == "c1" and community.get("parent_id") in (None, "")
     assert report["community_id"] == "c1" and report["evidence"][0]["canonical_id"] == "passage-a"
     assert not list(output.glob("*.parquet"))

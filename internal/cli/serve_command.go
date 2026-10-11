@@ -21,6 +21,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/taimufuraiyaa/agent-memory/internal/api"
+	"github.com/taimufuraiyaa/agent-memory/internal/config"
 	"github.com/taimufuraiyaa/agent-memory/internal/embeddings"
 	"github.com/taimufuraiyaa/agent-memory/internal/engine"
 	"github.com/taimufuraiyaa/agent-memory/internal/storage/sqlite"
@@ -274,11 +275,19 @@ func newServeCommand() *cobra.Command {
 			}
 			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "active embedding provider: %s (%s)\n", provider.Name(), provider.ModelVersion())
 			scheduler := newServeScheduler(cfg, provider, cmd.ErrOrStderr())
+			installedConfig, err := config.Load("")
+			if err != nil {
+				return err
+			}
+			if err = installedConfig.Graph.Validate(installedConfig.DataDir); err != nil {
+				return err
+			}
 			svc := &api.Service{
 				Workspace:         cfg.workspace,
 				BaseDir:           filepath.Dir(cfg.dbPath),
 				EmbeddingProvider: provider,
 				Scheduler:         scheduler,
+				GraphRuntime:      &installedConfig.Graph,
 			}
 			if err := api.ConfigureLocalRightsAttestation(ctx, svc); err != nil {
 				return err
@@ -314,6 +323,10 @@ func newServeCommand() *cobra.Command {
 			}
 
 			go scheduler.Run(ctx)
+			graphCtx, graphCancel := context.WithCancel(ctx)
+			graphDone := make(chan struct{})
+			go func() { defer close(graphDone); scheduler.runNativeGraphWorker(graphCtx, installedConfig.Graph) }()
+			defer func() { graphCancel(); <-graphDone }()
 
 			errCh := make(chan error, 1)
 			go func() { errCh <- server.Serve(ln) }()

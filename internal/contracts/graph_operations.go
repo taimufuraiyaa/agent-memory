@@ -18,6 +18,7 @@ var (
 type GraphOperationAction string
 
 const (
+	GraphOperationEnable   GraphOperationAction = "enable"
 	GraphOperationUpdate   GraphOperationAction = "update"
 	GraphOperationRebuild  GraphOperationAction = "rebuild"
 	GraphOperationCancel   GraphOperationAction = "cancel"

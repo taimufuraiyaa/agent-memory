@@ -68,12 +68,12 @@ func (s *Store) CreateGraphRevision(ctx context.Context, revision core.GraphRevi
 	_, err := s.db.ExecContext(ctx, `INSERT INTO graph_revisions (
 		id, tenant_id, workspace, configuration_id, base_revision_id, state,
 		cutoff_sequence, cutoff_event_time, cutoff_digest, projection_hash, artifact_hash,
-		previous_revision_id, created_at, updated_at
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		previous_revision_id, created_at, updated_at,configuration_version
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,(SELECT version FROM graph_configurations WHERE id=? AND tenant_id=? AND workspace=?))`,
 		revision.ID, revision.Scope.TenantID, revision.Scope.WorkspaceID, revision.ConfigurationID,
 		revision.BaseRevisionID, revision.State, revision.Cutoff.Sequence, formatGraphTime(revision.Cutoff.EventTime),
 		revision.Cutoff.Digest, revision.ProjectionHash, revision.ArtifactHash, revision.PreviousRevisionID,
-		formatGraphTime(revision.CreatedAt), formatGraphTime(revision.UpdatedAt))
+		formatGraphTime(revision.CreatedAt), formatGraphTime(revision.UpdatedAt), revision.ConfigurationID, revision.Scope.TenantID, revision.Scope.WorkspaceID)
 	return err
 }
 
@@ -150,7 +150,7 @@ func (s *Store) ClaimGraphJobs(ctx context.Context, scope core.GraphScope, owner
 	if strings.TrimSpace(owner) == "" || limit < 1 || limit > 100 || lease <= 0 {
 		return nil, fmt.Errorf("invalid graph job claim")
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.beginGraphWriteTx(ctx)
 	if err != nil {
 		return nil, err
 	}

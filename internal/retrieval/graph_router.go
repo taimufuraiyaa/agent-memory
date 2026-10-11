@@ -40,6 +40,7 @@ const (
 	GraphReasonReadFailed        GraphRouteReason = "graph_read_failed"
 	GraphReasonIndexStale        GraphRouteReason = "graph_index_stale"
 	GraphReasonIndexStaleAllowed GraphRouteReason = "graph_index_stale_allowed"
+	GraphReasonNoEvidence        GraphRouteReason = "graph_no_evidence"
 )
 
 var (

@@ -18,6 +18,7 @@ import (
 	"github.com/taimufuraiyaa/agent-memory/internal/application"
 	"github.com/taimufuraiyaa/agent-memory/internal/attestation"
 	"github.com/taimufuraiyaa/agent-memory/internal/clientprofile"
+	"github.com/taimufuraiyaa/agent-memory/internal/config"
 	"github.com/taimufuraiyaa/agent-memory/internal/embeddings"
 	"github.com/taimufuraiyaa/agent-memory/internal/engine"
 	"github.com/taimufuraiyaa/agent-memory/internal/localllm"
@@ -46,6 +47,7 @@ type Service struct {
 	// GraphOperations is optional and primarily supports embedding/tests. When
 	// nil, handlers bind a controller to the resolved workspace store.
 	GraphOperations           application.GraphOperationController
+	GraphRuntime              *config.GraphConfig
 	SkillEvaluationRunner     application.RestrictedSkillEvaluationRunner
 	SkillApprovalAuthorizer   application.SkillApprovalAuthorizer
 	SkillResolutionAuthorizer application.SkillResolutionAuthorizer

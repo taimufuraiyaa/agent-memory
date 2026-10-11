@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/taimufuraiyaa/agent-memory/internal/application"
+	"github.com/taimufuraiyaa/agent-memory/internal/config"
 	"github.com/taimufuraiyaa/agent-memory/internal/core"
 )
 
@@ -23,7 +24,7 @@ func newGraphCommand() *cobra.Command {
 	cmd.PersistentFlags().StringVar(&flags.expectedRevision, "expected-revision", "", "Expected active revision (compare-and-swap)")
 	cmd.PersistentFlags().StringVar(&flags.jobID, "job-id", "", "Graph job identity for cancel or retry")
 	cmd.AddCommand(newGraphReadCommand("readiness", &flags), newGraphReadCommand("status", &flags))
-	for _, action := range []application.GraphOperationAction{application.GraphOperationUpdate, application.GraphOperationRebuild, application.GraphOperationCancel, application.GraphOperationRetry, application.GraphOperationDisable, application.GraphOperationRollback} {
+	for _, action := range []application.GraphOperationAction{application.GraphOperationEnable, application.GraphOperationUpdate, application.GraphOperationRebuild, application.GraphOperationCancel, application.GraphOperationRetry, application.GraphOperationDisable, application.GraphOperationRollback} {
 		cmd.AddCommand(newGraphOperationCommand(action, &flags))
 	}
 	return cmd
@@ -51,7 +52,11 @@ func newGraphReadCommand(kind string, flags *graphCommandFlags) *cobra.Command {
 			return err
 		}
 		defer store.Close()
-		service := application.NewGraphOperationService(store)
+		installedConfig, err := config.Load("")
+		if err != nil {
+			return err
+		}
+		service := application.NewLocalGraphOperationService(store, installedConfig.Graph)
 		scope := core.GraphScope{WorkspaceID: cfg.workspace}
 		if kind == "readiness" {
 			out, err := service.Readiness(cmd.Context(), scope, flags.configurationID)

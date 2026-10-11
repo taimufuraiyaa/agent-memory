@@ -48,6 +48,9 @@ var schemaMigrations = []migrationStep{
 	{28, "scoped-skill-orchestrator-custody", migrateScopedSkillOrchestratorCustody},
 	{29, "skill-orchestrator-evaluation-budget", migrateSkillOrchestratorEvaluationBudget},
 	{30, "skill-orchestrator-migration-control", migrateSkillOrchestratorMigrationControl},
+	{31, "native-graph-configuration-version", func(ctx context.Context, s *Store) error {
+		return s.ensureColumn(ctx, "graph_revisions", "configuration_version", `ALTER TABLE graph_revisions ADD COLUMN configuration_version INTEGER NOT NULL DEFAULT 0`)
+	}},
 }
 
 func migrateSkillOrchestratorMigrationControl(ctx context.Context, s *Store) error {

@@ -44,8 +44,9 @@ func (s *Store) GraphIndexStatus(ctx context.Context, scope core.GraphScope, con
 		return status, err
 	}
 	configurationID = status.ConfigurationID
+	configurationCurrent := true
 	status.Compatible = contracts.GraphAdapterCompatible(status.AdapterName, status.AdapterVersion, status.ArtifactSchemaVersion)
-	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM graph_change_journal WHERE workspace=? AND processed_revision_id=''`, scope.WorkspaceID).Scan(&status.PendingChanges); err != nil {
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM graph_change_journal WHERE workspace=? AND configuration_version=? AND processed_revision_id=''`, scope.WorkspaceID, fmt.Sprintf("%s@%d", configurationID, status.ConfigurationVersion)).Scan(&status.PendingChanges); err != nil {
 		return status, err
 	}
 	status.PendingRecords = status.PendingChanges
@@ -61,9 +62,11 @@ func (s *Store) GraphIndexStatus(ctx context.Context, scope core.GraphScope, con
 	}
 	if status.ActiveRevisionID != "" {
 		var eventTime string
-		if err := s.db.QueryRowContext(ctx, `SELECT cutoff_sequence,cutoff_event_time,cutoff_digest FROM graph_revisions WHERE tenant_id=? AND workspace=? AND configuration_id=? AND id=?`, scope.TenantID, scope.WorkspaceID, configurationID, status.ActiveRevisionID).Scan(&status.IndexedWatermark.Sequence, &eventTime, &status.IndexedWatermark.Digest); err != nil {
+		var indexedVersion int64
+		if err := s.db.QueryRowContext(ctx, `SELECT cutoff_sequence,cutoff_event_time,cutoff_digest,configuration_version FROM graph_revisions WHERE tenant_id=? AND workspace=? AND configuration_id=? AND id=?`, scope.TenantID, scope.WorkspaceID, configurationID, status.ActiveRevisionID).Scan(&status.IndexedWatermark.Sequence, &eventTime, &status.IndexedWatermark.Digest, &indexedVersion); err != nil {
 			return status, err
 		}
+		configurationCurrent = indexedVersion == status.ConfigurationVersion
 		if eventTime != "" {
 			status.IndexedWatermark.EventTime, err = parseGraphTime(eventTime)
 			if err != nil {
@@ -82,7 +85,7 @@ func (s *Store) GraphIndexStatus(ctx context.Context, scope core.GraphScope, con
 	} else if !errors.Is(err, sql.ErrNoRows) {
 		return status, err
 	}
-	status.Fresh = status.Enabled && status.Compatible && status.ActiveRevisionID != "" && status.PendingChanges == 0 && status.CurrentJob == nil
+	status.Fresh = status.Enabled && status.Compatible && configurationCurrent && status.ActiveRevisionID != "" && status.PendingChanges == 0 && status.CurrentJob == nil
 	switch {
 	case !status.Enabled:
 		status.State = "disabled"
@@ -92,7 +95,7 @@ func (s *Store) GraphIndexStatus(ctx context.Context, scope core.GraphScope, con
 		status.State = string(status.CurrentJob.State)
 	case status.ActiveRevisionID == "":
 		status.State = "not_indexed"
-	case status.PendingChanges > 0:
+	case status.PendingChanges > 0 || !configurationCurrent:
 		status.State = "stale"
 	default:
 		status.State = "ready"
@@ -109,6 +112,18 @@ func (s *Store) ApplyGraphOperation(ctx context.Context, request contracts.Graph
 	var result contracts.GraphOperationResult
 	result.Action = request.Action
 	switch request.Action {
+	case contracts.GraphOperationEnable:
+		res, err := s.db.ExecContext(ctx, `INSERT INTO graph_configurations(id,tenant_id,workspace,version,enabled,adapter_name,adapter_version,index_method,projection_version,artifact_schema_version,prompt_fingerprint,model_route,active_revision_id,previous_revision_id,created_at,updated_at)
+		VALUES(?,?,?,1,1,'agent-memory-graphrag-adapter',?,'standard','sqlite-memory-v1',?,?,'index-text-primary','','',?,?)
+		ON CONFLICT(id) DO UPDATE SET enabled=1,version=graph_configurations.version+CASE WHEN graph_configurations.enabled=0 THEN 1 ELSE 0 END,updated_at=excluded.updated_at
+		WHERE graph_configurations.tenant_id=excluded.tenant_id AND graph_configurations.workspace=excluded.workspace AND graph_configurations.active_revision_id=?`, request.ConfigurationID, request.Scope.TenantID, request.Scope.WorkspaceID, contracts.SupportedGraphAdapterVersion, contracts.GraphArtifactSchemaV1, contracts.NativeGraphPromptFingerprint, formatGraphTime(now), formatGraphTime(now), request.ExpectedRevision)
+		if err != nil {
+			return result, err
+		}
+		if err = requireScopedGraphUpsert(res); err != nil {
+			return result, contracts.ErrGraphOperationConflict
+		}
+		result.Accepted = true
 	case contracts.GraphOperationUpdate, contracts.GraphOperationRebuild:
 		var enabled bool
 		var active string
@@ -177,13 +192,11 @@ func (s *Store) ApplyGraphOperation(ctx context.Context, request contracts.Graph
 		if key == "" {
 			key = prior.IdempotencyKey + fmt.Sprintf("-retry-%d", prior.Attempt+1)
 		}
-		digest := fmt.Sprintf("%x", sha256.Sum256([]byte(prior.ID+"\x00"+key)))
-		job := core.GraphJob{ID: "gj-" + digest[:24], Scope: request.Scope, ConfigurationID: request.ConfigurationID, RevisionID: prior.RevisionID, IdempotencyKey: key, State: core.GraphJobQueued, CreatedAt: now, UpdatedAt: now}
-		stored, created, err := s.EnqueueGraphJob(ctx, job)
+		stored, created, err := s.retryNativeGraphOperation(ctx, request, prior, key, now)
 		if err != nil {
 			return result, err
 		}
-		result.Accepted, result.Coalesced, result.Job, result.RevisionID = true, !created, &stored, prior.RevisionID
+		result.Accepted, result.Coalesced, result.Job, result.RevisionID = true, !created, &stored, stored.RevisionID
 	case contracts.GraphOperationDisable:
 		res, err := s.db.ExecContext(ctx, `UPDATE graph_configurations SET enabled=0, version=version+1, updated_at=? WHERE tenant_id=? AND workspace=? AND id=? AND active_revision_id=?`, formatGraphTime(now), request.Scope.TenantID, request.Scope.WorkspaceID, request.ConfigurationID, request.ExpectedRevision)
 		if err != nil {

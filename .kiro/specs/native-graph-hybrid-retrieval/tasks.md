@@ -1,0 +1,29 @@
+# Native graph indexing and hybrid retrieval tasks
+
+- [x] 1. Establish accepted requirements, architectural contracts, alternatives and rollout.
+  - Acceptance: requirements cover indexing execution and candidate-union retrieval; design addresses lease fencing, cutoffs, freshness, incremental state, resource limits and unrelated worktree preservation.
+  - Verification: review requirements → design → tasks against accepted conversation and current source.
+- [x] 2. Add scoped coordinator/projection/journal reconciliation and worker lease storage operations.
+  - Acceptance: bounded enabled configurations and immutable cutoffs; concurrent writes preserved; activation/completion fenced; no disabled/cross-workspace publication.
+  - Verification: focused SQLite regressions including lease loss, concurrent change and disabled configuration.
+- [x] 3. Implement adapter request and validated normalized artifact import bridge.
+  - Acceptance: source correlations, hashes, schemas, trust/review carry-forward and private paths checked; complete snapshot only; compatible incremental state supported with rebuild fallback.
+  - Verification: fake-adapter import tests plus existing adapter tests; malformed output and unknown evidence rejected.
+- [x] 4. Implement native coordinator/leased worker execution, retries, cancellation and heartbeat.
+  - Acceptance: initial full build, incremental later batches, bounded backoff/dead-letter, expiry recovery and shutdown; writes and basic retrieval unaffected.
+  - Verification: synthetic lifecycle tests; no pending record lost during run; no failed/cancelled job activated.
+- [x] 5. Wire worker into current native serve startup/shutdown and expose truthful readiness/status.
+  - Acceptance: only enabled registered workspaces execute; adapter failure visible; explicit persisted-file selection isolates daemon verification and toggle writes; no removed UI/hosted service restored.
+  - Verification: daemon tests and isolated foreground/background CLI smoke.
+- [x] 6. Implement shared hybrid search with independent vector/term and graph candidate union.
+  - Acceptance: direct fresh hits retained, graph-only evidence discovered, exact canonical resolution/filtering, semantic/path/lifecycle ranking, dedupe/diversity/top-k bounds and visible fallback.
+  - Verification: application regressions for fresh unindexed memory, connected low-similarity memory, changed/deleted/superseded references and weak/stale graph.
+- [x] 7. Expose hybrid modes through CLI and HTTP while preserving legacy modes.
+  - Acceptance: auto/basic/local/global and required/stale controls; same shared behavior and metadata; terms and graph-expand retain their contracts.
+  - Verification: CLI/API parity and query-mode regressions; no query-time adapter invocation.
+- [ ] 8. Verify real packaged local-model synthetic index and full insert → index → hybrid retrieval.
+  - Acceptance: real adapter artifacts activate and retrieval returns original evidence; incremental update is proven, cancellation remains safe.
+  - Verification: isolated real-adapter smoke with local Ollama models, captured safe state/counters and bounded run.
+- [ ] 9. Complete repository verification, installed runtime rollout and reusable operational guidance.
+  - Acceptance: focused/full Go tests, vet/build, adapter pytest and diff checks pass; PATH CLI installed; native daemon enabled with authoritative status; skills/runbook describe actual behavior and recovery.
+  - Verification: `go test ./...`, `go vet ./...`, build, adapter suite, installed CLI/daemon smoke; requirement-by-requirement audit and checked tasks.

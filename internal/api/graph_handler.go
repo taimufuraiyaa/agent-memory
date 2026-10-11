@@ -21,6 +21,9 @@ func graphController(r *http.Request, svc *Service, workspace string) (applicati
 	if err != nil {
 		return nil, err
 	}
+	if svc.GraphRuntime != nil {
+		return application.NewLocalGraphOperationService(assets.Store, *svc.GraphRuntime), nil
+	}
 	return application.NewGraphOperationService(assets.Store), nil
 }
 

@@ -24,7 +24,7 @@ func TestSQLiteSkillMigrationInventoryIsReadOnlyScopedAndRestoreAware(t *testing
 	}
 	before := countSkillMigrationRows(t, store)
 	inventory, err := store.InspectSkillOrchestratorMigration(ctx, scope, 100)
-	if err != nil || inventory.SchemaVersion != "30" || inventory.RestorePaused || inventory.ConfigurationMode != core.SkillOrchestratorDisabled || len(inventory.Items) != 1 || !inventory.Items[0].ExistingOpenWorkflow || inventory.ExistingWorkflows != 1 {
+	if err != nil || inventory.SchemaVersion != "31" || inventory.RestorePaused || inventory.ConfigurationMode != core.SkillOrchestratorDisabled || len(inventory.Items) != 1 || !inventory.Items[0].ExistingOpenWorkflow || inventory.ExistingWorkflows != 1 {
 		t.Fatalf("inventory=%+v err=%v", inventory, err)
 	}
 	if after := countSkillMigrationRows(t, store); after != before {
