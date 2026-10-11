@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/taimufuraiyaa/agent-memory/internal/core"
 )
 
 const maxAuditTargetIDs = 100
@@ -111,14 +112,27 @@ func (s *Store) DeleteByIDsAudited(ctx context.Context, ids []string, input Audi
 	defer tx.Rollback()
 	placeholders := strings.TrimRight(strings.Repeat("?,", len(clean)), ",")
 	args := make([]any, len(clean))
+	memories := make([]*core.MemoryEntry, 0, len(clean))
 	for index, id := range clean {
 		args[index] = id
+		memory, err := memoryForGraphChangeTx(ctx, tx, id)
+		if err != nil {
+			return err
+		}
+		if memory != nil {
+			memories = append(memories, memory)
+		}
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM memories WHERE id IN (`+placeholders+`)`, args...); err != nil {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, auditInsertSQL, event.ID, event.SchemaVersion, event.Workspace, event.Operation, event.Outcome, event.Actor, event.Source, event.RequestID, event.SessionID, event.TargetType, idsJSON, event.TargetCount, event.Reason, metadataJSON, event.OccurredAt.Format(time.RFC3339Nano)); err != nil {
 		return err
+	}
+	for _, memory := range memories {
+		if err := appendGraphChangesForMemoryTx(ctx, tx, memory, "delete", event.OccurredAt); err != nil {
+			return err
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return err

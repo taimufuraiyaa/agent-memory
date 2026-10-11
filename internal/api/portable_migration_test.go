@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	exportservice "github.com/taimufuraiyaa/agent-memory/internal/saas/export"
+	"github.com/taimufuraiyaa/agent-memory/internal/portable"
 )
 
 func TestPortableMigrationExportIsEncryptedCopyWithoutSourceOriginals(t *testing.T) {
@@ -50,11 +50,11 @@ func TestPortableMigrationExportIsEncryptedCopyWithoutSourceOriginals(t *testing
 	if bytes.Contains(encrypted, []byte("portable private")) || bytes.Contains(encrypted, []byte(passphrase)) {
 		t.Fatal("encrypted response exposed content or passphrase")
 	}
-	plain, err := exportservice.DecryptPortable(passphrase, encrypted)
+	plain, err := portable.DecryptPortable(passphrase, encrypted)
 	if err != nil {
 		t.Fatalf("decrypt portable export: %v", err)
 	}
-	var bundle exportservice.Bundle
+	var bundle portable.Bundle
 	if err := json.Unmarshal(plain, &bundle); err != nil {
 		t.Fatalf("decode portable export: %v", err)
 	}

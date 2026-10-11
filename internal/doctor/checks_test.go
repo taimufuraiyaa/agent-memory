@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/taimufuraiyaa/agent-memory/internal/workspace"
 )
 
 func TestDefaultChecksWarnWhenExecutableDirectoryIsMissingFromPATH(t *testing.T) {
@@ -101,5 +103,39 @@ func TestServiceHealthRequiresMultiWorkspaceDaemon(t *testing.T) {
 	}
 	if result := serviceHealthResult([]byte(`{"ok":true,"data":{"service_mode":"multi_workspace","registered_workspaces":8}}`)); result.Status != StatusPass {
 		t.Fatalf("multi-workspace daemon should pass: %+v", result)
+	}
+}
+
+func TestMemoryContractCheckRejectsStaleDetectedClientAndReportsEnforcement(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, ".cursor", "rules"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".cursor", "rules", "agent-memory.mdc"), []byte("stale"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	result := memoryContractCheck(root)
+	if result.Status != StatusFail || result.Err == nil || !strings.Contains(result.Err.Error(), "cursor") {
+		t.Fatalf("expected stale Cursor failure, got %+v", result)
+	}
+
+	current := workspace.MemoryContractMarker
+	if err := os.WriteFile(filepath.Join(root, ".cursor", "rules", "agent-memory.mdc"), []byte(current), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	result = memoryContractCheck(root)
+	if result.Status != StatusPass || !strings.Contains(result.Evidence, "instruction-enforced=cursor") {
+		t.Fatalf("expected truthful Cursor pass, got %+v", result)
+	}
+}
+
+func TestMemoryContractCheckReportsRuleOnlyClaudeTruthfully(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "CLAUDE.md"), []byte(workspace.MemoryContractMarker), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	result := memoryContractCheck(root)
+	if result.Status != StatusPass || !strings.Contains(result.Evidence, "instruction-enforced=claude") {
+		t.Fatalf("expected rule-only Claude evidence, got %+v", result)
 	}
 }

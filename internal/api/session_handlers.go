@@ -4,7 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/taimufuraiyaa/agent-memory/internal/engine"
+	"github.com/taimufuraiyaa/agent-memory/internal/application"
+	"github.com/taimufuraiyaa/agent-memory/internal/core"
 )
 
 // sessionEndHandler implements POST /api/v1/memories/session-end and
@@ -17,7 +18,11 @@ func sessionEndHandler(svc *Service) http.HandlerFunc {
 			return
 		}
 		var req struct {
-			Transcript string `json:"transcript"`
+			Transcript     string `json:"transcript"`
+			SessionID      string `json:"session_id,omitempty"`
+			PrincipalID    string `json:"principal_id,omitempty"`
+			TerminalStatus string `json:"terminal_status,omitempty"`
+			IdempotencyKey string `json:"idempotency_key,omitempty"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
@@ -29,7 +34,10 @@ func sessionEndHandler(svc *Service) http.HandlerFunc {
 			writeWorkspaceResolveError(w, err)
 			return
 		}
-		out, err := engine.RunSessionEndLifecycle(r.Context(), ws, req.Transcript, assets.Store, assets.Writer)
+		out, err := application.RunSessionEnd(r.Context(), application.SessionEndInput{
+			Workspace: ws, SessionID: req.SessionID, PrincipalID: req.PrincipalID, Transcript: req.Transcript,
+			TerminalStatus: core.SolutionEpisodeStatus(req.TerminalStatus), IdempotencyKey: req.IdempotencyKey,
+		}, assets.Store, assets.Writer)
 		if err != nil {
 			writeErr(w, http.StatusBadRequest, "runtime", err.Error())
 			return

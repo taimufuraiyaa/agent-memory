@@ -130,6 +130,9 @@ func TestEmbeddedDashboardIsUnifiedWorkspaceAndSelfContained(t *testing.T) {
 	if !bytes.Contains(index, []byte(`src="./assets/app.js"`)) || !bytes.Contains(index, []byte(`href="./assets/app.css"`)) {
 		t.Fatalf("embedded index must use dashboard-relative assets: %s", index)
 	}
+	if !bytes.Contains(index, []byte(`rel="icon" href="data:image/svg+xml,`)) {
+		t.Fatal("embedded dashboard must provide an inline favicon so browsers do not issue a failing root request")
+	}
 	if bytes.Contains(index, []byte("fonts.googleapis.com")) || bytes.Contains(index, []byte("fonts.gstatic.com")) {
 		t.Fatal("embedded dashboard must not request external font assets")
 	}

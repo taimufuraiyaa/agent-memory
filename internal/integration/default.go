@@ -2,7 +2,7 @@ package integration
 
 func NewDefaultRegistry() (*Registry, error) {
 	registry := NewRegistry()
-	for _, adapter := range []Adapter{NewCodexAdapter(), NewClaudeAdapter()} {
+	for _, adapter := range []Adapter{NewCodexAdapter(), NewClaudeAdapter(), NewCursorAdapter(), NewKiroAdapter()} {
 		if err := registry.Register(adapter); err != nil {
 			return nil, err
 		}

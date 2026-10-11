@@ -13,7 +13,6 @@ import (
 	"github.com/taimufuraiyaa/agent-memory/internal/api"
 	"github.com/taimufuraiyaa/agent-memory/internal/engine"
 	"github.com/taimufuraiyaa/agent-memory/internal/portable"
-	exportservice "github.com/taimufuraiyaa/agent-memory/internal/saas/export"
 	"github.com/taimufuraiyaa/agent-memory/internal/storage/sqlite"
 )
 
@@ -160,7 +159,7 @@ func newExportCommand() *cobra.Command {
 			}
 			if format == "portable" {
 				if cfg.apiURL != "" {
-					return errors.New("portable export is local-only; use the hosted export API for hosted data")
+					return errors.New("portable export is local-only; run it against the local database")
 				}
 				if strings.TrimSpace(outFile) == "" {
 					return errors.New("portable export requires --out")
@@ -193,7 +192,7 @@ func newExportCommand() *cobra.Command {
 				if err != nil {
 					return err
 				}
-				sealed, err := exportservice.EncryptPortable(passphrase, plain)
+				sealed, err := portable.EncryptPortable(passphrase, plain)
 				if err != nil {
 					return err
 				}

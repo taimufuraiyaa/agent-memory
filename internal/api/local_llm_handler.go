@@ -11,6 +11,12 @@ import (
 
 const maxLocalLLMConfigBytes = 64 << 10
 
+type localTranslationRequest struct {
+	Workspace      string `json:"workspace"`
+	Text           string `json:"text"`
+	TargetLanguage string `json:"target_language"`
+}
+
 type localLLMConfigRequest struct {
 	Enabled        bool   `json:"enabled"`
 	BaseURL        string `json:"base_url"`
@@ -98,6 +104,45 @@ func libraryLocalLLMTestHandler(svc *Service) http.HandlerFunc {
 	}
 }
 
+func libraryLocalLLMTranslateHandler(svc *Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !requireLibrary(w) {
+			return
+		}
+		if r.Method != http.MethodPost {
+			writeErr(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+			return
+		}
+		request, err := decodeLocalTranslationRequest(r)
+		if err != nil {
+			writeErr(w, http.StatusBadRequest, "invalid_translation", err.Error())
+			return
+		}
+		if strings.TrimSpace(request.Workspace) == "" {
+			writeErr(w, http.StatusBadRequest, "invalid_translation", "workspace is required")
+			return
+		}
+		store, checker := svc.localLLMRuntime()
+		result, err := localllm.NewTranslator(store, checker.HTTPClient).Translate(r.Context(), localllm.TranslationInput{
+			Text: request.Text, TargetLanguage: request.TargetLanguage,
+		})
+		if err != nil {
+			switch {
+			case localllm.IsTranslationInvalidInput(err):
+				writeErr(w, http.StatusBadRequest, "invalid_translation", err.Error())
+			case localllm.IsTranslationUnavailable(err):
+				writeErr(w, http.StatusServiceUnavailable, "translation_unavailable", err.Error())
+			case localllm.IsTranslationProviderFailure(err), localllm.IsTranslationInvalidOutput(err):
+				writeErr(w, http.StatusBadGateway, "translation_failed", err.Error())
+			default:
+				writeErr(w, http.StatusInternalServerError, "translation_failed", "local translation failed")
+			}
+			return
+		}
+		writeOK(w, http.StatusOK, result)
+	}
+}
+
 func decodeLocalLLMConfigRequest(r *http.Request) (localLLMConfigRequest, error) {
 	if contentType := r.Header.Get("content-type"); contentType != "application/json" && !strings.HasPrefix(contentType, "application/json;") {
 		return localLLMConfigRequest{}, errors.New("content-type must be application/json")
@@ -107,6 +152,19 @@ func decodeLocalLLMConfigRequest(r *http.Request) (localLLMConfigRequest, error)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&request); err != nil {
 		return localLLMConfigRequest{}, err
+	}
+	return request, nil
+}
+
+func decodeLocalTranslationRequest(r *http.Request) (localTranslationRequest, error) {
+	if contentType := r.Header.Get("content-type"); contentType != "application/json" && !strings.HasPrefix(contentType, "application/json;") {
+		return localTranslationRequest{}, errors.New("content-type must be application/json")
+	}
+	var request localTranslationRequest
+	decoder := json.NewDecoder(http.MaxBytesReader(nil, r.Body, localllm.MaxTranslationInputBytes+(4<<10)))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&request); err != nil {
+		return localTranslationRequest{}, err
 	}
 	return request, nil
 }

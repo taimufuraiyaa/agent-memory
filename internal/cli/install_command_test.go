@@ -3,8 +3,11 @@ package cli
 import (
 	"bytes"
 	"context"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -175,6 +178,185 @@ func TestPlannerEnvironmentUsesExactModelOrExplicitlyDisables(t *testing.T) {
 	if untouched := plannerEnvironment(false, false, ""); len(untouched) != 0 {
 		t.Fatalf("implicit parser-only changed planner environment=%v", untouched)
 	}
+}
+
+func TestResolveHeadlessGraphModelValidatesLocalCatalog(t *testing.T) {
+	for _, test := range []struct {
+		model   string
+		want    string
+		wantErr bool
+	}{
+		{model: "", want: ""},
+		{model: "none", want: ""},
+		{model: "qwen3:8b", want: "qwen3:8b"},
+		{model: "qwen3:14b", want: "qwen3:14b"},
+		{model: "openai/gpt", wantErr: true},
+	} {
+		got, err := resolveHeadlessGraphModel(test.model)
+		if (err != nil) != test.wantErr || got != test.want {
+			t.Fatalf("model=%q got=%q err=%v", test.model, got, err)
+		}
+	}
+}
+
+func TestLocalGraphEnvironmentRequiresBothReadinessChecks(t *testing.T) {
+	if got := localGraphEnvironment(false, true, "qwen3:8b", "/opt/adapter"); len(got) != 0 {
+		t.Fatalf("partial model readiness configured Graph: %v", got)
+	}
+	if got := localGraphEnvironment(true, false, "qwen3:8b", "/opt/adapter"); len(got) != 0 {
+		t.Fatalf("adapter failure configured Graph: %v", got)
+	}
+	if got := localGraphEnvironment(true, true, "qwen3:8b", "relative/adapter"); len(got) != 0 {
+		t.Fatalf("relative adapter path configured Graph: %v", got)
+	}
+	got := localGraphEnvironment(true, true, "qwen3:14b", "/opt/adapter")
+	want := map[string]string{
+		"AGENT_MEMORY_GRAPH_ENABLED":             "true",
+		"AGENT_MEMORY_GRAPH_ADAPTER":             "/opt/adapter",
+		"AGENT_MEMORY_GRAPH_COMPLETION_PROVIDER": "ollama_chat",
+		"AGENT_MEMORY_GRAPH_COMPLETION_MODEL":    "qwen3:14b",
+		"AGENT_MEMORY_GRAPH_EMBEDDING_PROVIDER":  "ollama",
+		"AGENT_MEMORY_GRAPH_EMBEDDING_MODEL":     "qwen3-embedding:0.6b",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("environment=%v want=%v", got, want)
+	}
+}
+
+func TestLocalGraphAdapterReadinessRequiresPinnedExecutable(t *testing.T) {
+	t.Setenv("AGENT_MEMORY_GRAPH_ADAPTER", "relative/adapter")
+	if _, err := localGraphAdapterReadiness(context.Background()); err == nil {
+		t.Fatal("relative adapter path passed readiness")
+	}
+
+	adapterDir := t.TempDir()
+	adapter := filepath.Join(adapterDir, "adapter")
+	if err := os.WriteFile(adapter, []byte("#!/bin/sh\n[ \"$1\" = readiness ]\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("AGENT_MEMORY_GRAPH_ADAPTER", adapter)
+	if readyPath, err := localGraphAdapterReadiness(context.Background()); err != nil || readyPath != adapter {
+		t.Fatalf("valid pinned adapter failed readiness: %v", err)
+	}
+
+	symlink := filepath.Join(adapterDir, "adapter-link")
+	if err := os.Symlink(adapter, symlink); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("AGENT_MEMORY_GRAPH_ADAPTER", symlink)
+	if _, err := localGraphAdapterReadiness(context.Background()); err == nil {
+		t.Fatal("symlinked adapter passed readiness")
+	}
+}
+
+func TestInstallLocalGraphModelsPersistsRoutesOnlyAfterAllReadiness(t *testing.T) {
+	t.Run("ready model pair configures local routes", func(t *testing.T) {
+		originalInstaller := ensureOllamaGraphModel
+		originalReadiness := checkLocalGraphAdapter
+		var calls []string
+		dataDir := t.TempDir()
+		adapterPath := filepath.Join(dataDir, "configured-adapter")
+		ensureOllamaGraphModel = func(_ context.Context, options bootstrap.OllamaPlannerOptions) (bootstrap.OllamaPlannerResult, error) {
+			calls = append(calls, options.Model)
+			return bootstrap.OllamaPlannerResult{Endpoint: options.Endpoint, Model: options.Model, ModelAvailable: true}, nil
+		}
+		checkLocalGraphAdapter = func(context.Context) (string, error) { return adapterPath, nil }
+		t.Cleanup(func() { ensureOllamaGraphModel = originalInstaller; checkLocalGraphAdapter = originalReadiness })
+
+		cmd := newInstallCommand()
+		var stdout, stderr bytes.Buffer
+		cmd.SetOut(&stdout)
+		cmd.SetErr(&stderr)
+		cmd.SetArgs([]string{"--data-dir", dataDir, "--bin-dir", t.TempDir(), "--src", "", "--no-model", "--skip-onnx-runtime", "--no-dashboard", "--no-init", "--ide", "cursor", "--local-graph-model", "qwen3:8b", "--write-env"})
+		if err := cmd.ExecuteContext(context.Background()); err != nil {
+			t.Fatalf("install failed: %v; stderr: %s", err, stderr.String())
+		}
+		if !reflect.DeepEqual(calls, []string{"qwen3:8b", "qwen3-embedding:0.6b"}) {
+			t.Fatalf("installed models=%v", calls)
+		}
+		content, err := os.ReadFile(filepath.Join(dataDir, "agent-memory.env"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, expected := range []string{
+			`AGENT_MEMORY_GRAPH_ENABLED="true"`,
+			`AGENT_MEMORY_GRAPH_ADAPTER="` + adapterPath + `"`,
+			`AGENT_MEMORY_GRAPH_COMPLETION_PROVIDER="ollama_chat"`,
+			`AGENT_MEMORY_GRAPH_COMPLETION_MODEL="qwen3:8b"`,
+			`AGENT_MEMORY_GRAPH_EMBEDDING_PROVIDER="ollama"`,
+			`AGENT_MEMORY_GRAPH_EMBEDDING_MODEL="qwen3-embedding:0.6b"`,
+		} {
+			if !strings.Contains(string(content), expected) {
+				t.Fatalf("env file missing %s:\n%s", expected, content)
+			}
+		}
+		if strings.Contains(string(content), "INDEX_COMPLETION_API_KEY") || strings.Contains(string(content), "INDEX_EMBEDDING_API_KEY") {
+			t.Fatalf("local install wrote API key variables:\n%s", content)
+		}
+		if !strings.Contains(stdout.String()+stderr.String(), "project Reindex remains a manual Settings action") {
+			t.Fatalf("installer did not explain explicit Reindex:\nstdout:\n%s\nstderr:\n%s", stdout.String(), stderr.String())
+		}
+	})
+
+	t.Run("partial model or adapter readiness preserves existing routes", func(t *testing.T) {
+		for _, stage := range []string{"second-model-unready", "adapter-unready"} {
+			name := stage
+			t.Run(name, func(t *testing.T) {
+				originalInstaller := ensureOllamaGraphModel
+				originalReadiness := checkLocalGraphAdapter
+				var models []string
+				adapterChecks := 0
+				ensureOllamaGraphModel = func(_ context.Context, options bootstrap.OllamaPlannerOptions) (bootstrap.OllamaPlannerResult, error) {
+					models = append(models, options.Model)
+					available := stage == "adapter-unready" || options.Model == "qwen3:8b"
+					return bootstrap.OllamaPlannerResult{Endpoint: options.Endpoint, Model: options.Model, ModelAvailable: available}, nil
+				}
+				checkLocalGraphAdapter = func(context.Context) (string, error) {
+					adapterChecks++
+					if stage == "adapter-unready" {
+						return "", fmt.Errorf("adapter unavailable")
+					}
+					return "/configured/adapter", nil
+				}
+				t.Cleanup(func() { ensureOllamaGraphModel = originalInstaller; checkLocalGraphAdapter = originalReadiness })
+
+				dataDir := t.TempDir()
+				const existing = `AGENT_MEMORY_GRAPH_ENABLED="false"
+AGENT_MEMORY_GRAPH_COMPLETION_PROVIDER="openai"
+AGENT_MEMORY_GRAPH_COMPLETION_MODEL="old-model"
+`
+				if err := os.WriteFile(filepath.Join(dataDir, "agent-memory.env"), []byte(existing), 0o600); err != nil {
+					t.Fatal(err)
+				}
+				cmd := newInstallCommand()
+				var stderr bytes.Buffer
+				cmd.SetErr(&stderr)
+				cmd.SetOut(io.Discard)
+				cmd.SetArgs([]string{"--data-dir", dataDir, "--bin-dir", t.TempDir(), "--src", "", "--no-model", "--skip-onnx-runtime", "--no-dashboard", "--no-init", "--ide", "cursor", "--local-graph-model", "qwen3:8b", "--write-env"})
+				if err := cmd.ExecuteContext(context.Background()); err != nil {
+					t.Fatalf("install failed: %v; stderr: %s", err, stderr.String())
+				}
+				content, err := os.ReadFile(filepath.Join(dataDir, "agent-memory.env"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				for _, expected := range []string{`AGENT_MEMORY_GRAPH_ENABLED="false"`, `AGENT_MEMORY_GRAPH_COMPLETION_PROVIDER="openai"`, `AGENT_MEMORY_GRAPH_COMPLETION_MODEL="old-model"`} {
+					if !strings.Contains(string(content), expected) {
+						t.Fatalf("existing route %s changed:\n%s", expected, content)
+					}
+				}
+				if stage == "adapter-unready" && len(models) != 0 {
+					t.Fatalf("unready adapter should avoid downloading models, got %v", models)
+				}
+				if stage == "second-model-unready" && len(models) != 2 {
+					t.Fatalf("model inventory failure should stop setup, got %v", models)
+				}
+				if adapterChecks != 1 {
+					t.Fatalf("adapter preflight checks=%d want=1", adapterChecks)
+				}
+			})
+		}
+	})
 }
 
 func TestInstallOrCopyBinaryBuildsAbsoluteSourceOutsideClientWorkspace(t *testing.T) {

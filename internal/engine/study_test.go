@@ -48,6 +48,152 @@ func TestStudyEngineWritesValidUTF8WhenSummaryBudgetCutsRune(t *testing.T) {
 	}
 }
 
+func TestStudyEngineChunksOversizedTextByDefault(t *testing.T) {
+	root := t.TempDir()
+	sourcePath := filepath.Join(root, "large.json")
+	content := strings.Repeat("0123456789", 4)
+	if err := os.WriteFile(sourcePath, []byte(content), 0o644); err != nil {
+		t.Fatalf("write oversized source: %v", err)
+	}
+
+	store, err := sqlite.Open(context.Background(), filepath.Join(t.TempDir(), "chunked-study.db"))
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	study := NewStudyEngine(NewWritePipeline(store))
+	first, err := study.IngestWithOptions(context.Background(), StudyOptions{
+		Workspace:   "chunked-project",
+		Sources:     []string{root},
+		Depth:       "medium",
+		MaxFiles:    1,
+		MaxFileSize: 16,
+	})
+	if err != nil {
+		t.Fatalf("study oversized source: %v", err)
+	}
+	if first.ScannedFiles != 1 || first.Extracted != 1 || first.ChunkedFiles != 1 || first.ExtractedChunks != 3 {
+		t.Fatalf("unexpected chunked result counts: %+v", first)
+	}
+	if first.Skipped != 0 || first.TruncatedFiles != 0 || len(first.Errors) != 0 || len(first.WrittenIDs) != 3 {
+		t.Fatalf("expected complete chunk ingestion without file errors: %+v", first)
+	}
+
+	memories, err := store.ListMemoriesByWorkspace(context.Background(), "chunked-project")
+	if err != nil {
+		t.Fatalf("list chunk memories: %v", err)
+	}
+	if len(memories) != 3 {
+		t.Fatalf("expected one memory per source chunk, got %d", len(memories))
+	}
+	for _, memory := range memories {
+		if memory.Source.FilePath != sourcePath || len(memory.Source.LineRange) != 2 {
+			t.Fatalf("chunk memory is missing source provenance: %+v", memory.Source)
+		}
+		if !utf8.ValidString(memory.Content) {
+			t.Fatalf("chunk memory is not valid UTF-8: %q", memory.Content)
+		}
+	}
+
+	second, err := study.IngestWithOptions(context.Background(), StudyOptions{
+		Workspace:   "chunked-project",
+		Sources:     []string{root},
+		Depth:       "medium",
+		MaxFiles:    1,
+		MaxFileSize: 16,
+	})
+	if err != nil {
+		t.Fatalf("repeat chunked study: %v", err)
+	}
+	memories, err = store.ListMemoriesByWorkspace(context.Background(), "chunked-project")
+	if err != nil {
+		t.Fatalf("list repeated chunk memories: %v", err)
+	}
+	if len(memories) != 3 || len(second.WrittenIDs) != 3 {
+		t.Fatalf("expected stable per-chunk deduplication, memories=%d result=%+v", len(memories), second)
+	}
+}
+
+func TestStudyEngineBoundsChunksWithoutFailingTheStudy(t *testing.T) {
+	root := t.TempDir()
+	sourcePath := filepath.Join(root, "huge.txt")
+	content := strings.Repeat("a", 16*(maxStudyChunksPerFile+2))
+	if err := os.WriteFile(sourcePath, []byte(content), 0o644); err != nil {
+		t.Fatalf("write huge source: %v", err)
+	}
+
+	result, err := NewStudyEngine(nil).IngestWithOptions(context.Background(), StudyOptions{
+		Sources:     []string{root},
+		Depth:       "medium",
+		DryRun:      true,
+		MaxFiles:    1,
+		MaxFileSize: 16,
+	})
+	if err != nil {
+		t.Fatalf("bounded chunking must not fail the study: %v", err)
+	}
+	if result.ScannedFiles != 1 || result.Extracted != 1 || result.ChunkedFiles != 1 || result.ExtractedChunks != maxStudyChunksPerFile {
+		t.Fatalf("unexpected bounded chunk counts: %+v", result)
+	}
+	if result.Skipped != 0 || result.TruncatedFiles != 1 {
+		t.Fatalf("bounded prefix must not be reported as a skipped file: %+v", result)
+	}
+	if len(result.Errors) != 1 || result.Errors[0].Path != sourcePath || !strings.Contains(result.Errors[0].Reason, "bounded chunk limit") {
+		t.Fatalf("expected one truthful bounded-prefix diagnostic, got %+v", result.Errors)
+	}
+}
+
+func TestStudyEngineChunksRejectInvalidUTF8WithoutFailingTheStudy(t *testing.T) {
+	root := t.TempDir()
+	sourcePath := filepath.Join(root, "invalid.txt")
+	if err := os.WriteFile(sourcePath, []byte{'v', 'a', 'l', 'i', 'd', '\n', 0xff, 0xfe}, 0o644); err != nil {
+		t.Fatalf("write invalid UTF-8 source: %v", err)
+	}
+
+	result, err := NewStudyEngine(nil).IngestWithOptions(context.Background(), StudyOptions{
+		Sources:     []string{root},
+		Depth:       "medium",
+		DryRun:      true,
+		MaxFiles:    1,
+		MaxFileSize: 4,
+	})
+	if err != nil {
+		t.Fatalf("invalid UTF-8 must remain an isolated file failure: %v", err)
+	}
+	if result.ScannedFiles != 0 || result.Extracted != 0 || result.Skipped != 1 {
+		t.Fatalf("unexpected invalid UTF-8 counts: %+v", result)
+	}
+	if len(result.Errors) != 1 || result.Errors[0].Path != sourcePath || !strings.Contains(result.Errors[0].Reason, "invalid UTF-8") {
+		t.Fatalf("expected invalid UTF-8 diagnostic, got %+v", result.Errors)
+	}
+}
+
+func TestStudyEngineDeepChunkSummaryHonorsWriteAdmissionLimit(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "deep.md"), []byte(strings.Repeat("a", 3000)), 0o644); err != nil {
+		t.Fatalf("write deep source: %v", err)
+	}
+	store, err := sqlite.Open(context.Background(), filepath.Join(t.TempDir(), "deep-study.db"))
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	result, err := NewStudyEngine(NewWritePipeline(store)).IngestWithOptions(context.Background(), StudyOptions{
+		Workspace: "deep-project",
+		Sources:   []string{root},
+		Depth:     "deep",
+		MaxFiles:  1,
+	})
+	if err != nil {
+		t.Fatalf("deep study: %v", err)
+	}
+	if len(result.Errors) != 0 || len(result.WrittenIDs) != 1 {
+		t.Fatalf("deep summary must fit the write admission limit: %+v", result)
+	}
+}
+
 func TestStudyEngineDryRunAndWrite(t *testing.T) {
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "README.md"), []byte("# Project\nThis service handles orders.\n"), 0o644); err != nil {
@@ -175,8 +321,8 @@ func TestStudyEnginePagesEligibleFilesWithoutRepeatingTheFirstPage(t *testing.T)
 
 func TestStudyEngineSkippedEligibleFileAdvancesPageOffset(t *testing.T) {
 	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "a.md"), []byte(strings.Repeat("a", 64)), 0o644); err != nil {
-		t.Fatalf("write oversized page item: %v", err)
+	if err := os.WriteFile(filepath.Join(root, "a.md"), []byte("binary\x00page item"), 0o644); err != nil {
+		t.Fatalf("write binary page item: %v", err)
 	}
 	for _, name := range []string{"b.md", "c.md"} {
 		if err := os.WriteFile(filepath.Join(root, name), []byte("ok"), 0o644); err != nil {
@@ -311,40 +457,33 @@ func TestStudyEngineBoundedIngestion_GitignoreBinaryOversizeAndErrors(t *testing
 		t.Fatalf("ingest: %v", err)
 	}
 
-	// Only README.md should be scanned and extracted.
-	// large.go: .go extension (in isStudyFile) → too large → skipped with error.
+	// README.md and large.go should be scanned and extracted.
+	// large.go: .go extension (in isStudyFile) → chunked automatically.
 	// binary.txt: .txt extension (in isStudyFile) → binary sniff → skipped with error.
 	// token.txt: .txt extension (in isStudyFile) → gitignored → skipped silently.
-	if out.ScannedFiles != 1 {
-		t.Fatalf("expected 1 scanned file (README.md), got %d", out.ScannedFiles)
+	if out.ScannedFiles != 2 {
+		t.Fatalf("expected README.md and large.go to be scanned, got %d", out.ScannedFiles)
 	}
-	if out.Extracted != 1 {
-		t.Fatalf("expected 1 extracted, got %d", out.Extracted)
+	if out.Extracted != 2 || out.ChunkedFiles != 1 || out.ExtractedChunks != 3 {
+		t.Fatalf("expected one regular and one two-chunk extraction, got %+v", out)
 	}
-	if out.Skipped < 2 {
-		t.Fatalf("expected at least 2 skipped (large.go + binary.txt), got %d", out.Skipped)
+	if out.Skipped < 1 {
+		t.Fatalf("expected binary.txt to be skipped, got %d", out.Skipped)
 	}
 
 	// Verify errors contain the expected file paths and reasons.
-	foundLarge := false
 	foundBinary := false
 	for _, e := range out.Errors {
-		if strings.Contains(e.Path, "large.go") && strings.Contains(e.Reason, "too large") {
-			foundLarge = true
-		}
 		if strings.Contains(e.Path, "binary.txt") && strings.Contains(e.Reason, "binary") {
 			foundBinary = true
 		}
-	}
-	if !foundLarge {
-		t.Fatalf("expected error for large.go too large, errors: %+v", out.Errors)
 	}
 	if !foundBinary {
 		t.Fatalf("expected error for binary.txt, errors: %+v", out.Errors)
 	}
 }
 
-func TestStudyEngineIgnoresGeneratedDashboardBundlesButReportsLargeSource(t *testing.T) {
+func TestStudyEngineIgnoresGeneratedDashboardBundlesButChunksLargeSource(t *testing.T) {
 	root := t.TempDir()
 	assetsDir := filepath.Join(root, "internal", "api", "dashboard", "dist", "assets")
 	if err := os.MkdirAll(assetsDir, 0o755); err != nil {
@@ -383,11 +522,11 @@ func TestStudyEngineIgnoresGeneratedDashboardBundlesButReportsLargeSource(t *tes
 	if out.PageFiles != 2 {
 		t.Fatalf("expected ordinary source.js and large.go to be eligible, got %d page files", out.PageFiles)
 	}
-	if out.ScannedFiles != 1 || out.Extracted != 1 || out.Skipped != 1 {
+	if out.ScannedFiles != 2 || out.Extracted != 2 || out.Skipped != 0 || out.ChunkedFiles != 1 || out.ExtractedChunks != 3 {
 		t.Fatalf("unexpected result counts: %+v", out)
 	}
-	if len(out.Errors) != 1 || out.Errors[0].Path != largeSource || !strings.Contains(out.Errors[0].Reason, "too large") {
-		t.Fatalf("expected only the handwritten large source error, got %+v", out.Errors)
+	if len(out.Errors) != 0 {
+		t.Fatalf("expected generated bundles ignored and handwritten source chunked without errors, got %+v", out.Errors)
 	}
 }
 

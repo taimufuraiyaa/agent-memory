@@ -26,13 +26,7 @@ func newProviderWithFactories(
 		return nil, fmt.Errorf("resolve embedding provider: mkdir model dir: %w", err)
 	}
 
-	opt := ModelLifecycleOptions{
-		AutoDownload: parseBoolEnv(os.Getenv("AGENT_MEMORY_MODEL_AUTODOWNLOAD")),
-		URLs: map[string]string{
-			"model.onnx":     strings.TrimSpace(os.Getenv("AGENT_MEMORY_MINILM_ONNX_URL")),
-			"tokenizer.json": strings.TrimSpace(os.Getenv("AGENT_MEMORY_MINILM_TOKENIZER_URL")),
-		},
-	}
+	opt := modelLifecycleOptionsFromEnv()
 
 	onnxProvider, onnxErr := onnxFactory(modelDir, opt)
 	if onnxErr != nil {

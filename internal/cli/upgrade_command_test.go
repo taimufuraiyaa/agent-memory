@@ -405,7 +405,7 @@ func TestUpgradeAllProjects(t *testing.T) {
 	}
 
 	cmd := newUpgradeCommand()
-	cmd.SetArgs([]string{"--hooks-only", "--all", "--yes", "--format", "json"})
+	cmd.SetArgs([]string{"--hooks-only", "--all", "--ide", "all", "--yes", "--format", "json"})
 
 	err = cmd.Execute()
 	if err != nil {
@@ -423,6 +423,18 @@ func TestUpgradeAllProjects(t *testing.T) {
 	}
 	if err2 != nil {
 		t.Errorf("proj2 rules not written: %v", err2)
+	}
+	for _, root := range []string{proj1Root, proj2Root} {
+		for _, relative := range []string{
+			filepath.Join(".kiro", "hooks", "memory-recall-gate.json"),
+			filepath.Join(".cursor", "rules", "agent-memory.mdc"),
+			filepath.Join(".codex", "hooks.json"),
+			"CLAUDE.md",
+		} {
+			if _, err := os.Stat(filepath.Join(root, relative)); err != nil {
+				t.Errorf("all-client upgrade missing %s: %v", filepath.Join(root, relative), err)
+			}
+		}
 	}
 	if _, err := os.Stat(filepath.Join(dataDir, "proj1.db")); !os.IsNotExist(err) {
 		t.Fatalf("hooks-only upgrade mutated project database: %v", err)

@@ -2,12 +2,19 @@ package application
 
 import (
 	"context"
+	"database/sql"
+	"errors"
+	"fmt"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 
+	"github.com/taimufuraiyaa/agent-memory/internal/contracts"
+	"github.com/taimufuraiyaa/agent-memory/internal/core"
 	"github.com/taimufuraiyaa/agent-memory/internal/engine"
+	baseobservability "github.com/taimufuraiyaa/agent-memory/internal/observability"
+	graphretrieval "github.com/taimufuraiyaa/agent-memory/internal/retrieval"
 )
 
 type RecallOptions struct {
@@ -18,6 +25,10 @@ type RecallOptions struct {
 	IncludeObservations bool
 	ObservationSession  string
 	ObservationLimit    int
+	GraphMode           graphretrieval.GraphQueryMode
+	GraphRequired       bool
+	GraphPolicy         graphretrieval.GraphRoutePolicy
+	GraphAvailability   graphretrieval.GraphRouteAvailability
 }
 
 type RecallResult struct {
@@ -37,14 +48,40 @@ type RecallResult struct {
 	Included             []engine.RetrievalHit
 	Clip                 engine.ClipMetadata
 	ContextBlock         string
+	GraphRoute           graphretrieval.GraphRouteDecision
+	GraphContext         *RecallGraphContext
 }
 
 func (s *MemoryService) Recall(ctx context.Context, options RecallOptions) (*RecallResult, error) {
-	result := &RecallResult{
+	var snapshot *contracts.GraphQuerySnapshot
+	var graphReadErr error
+	if s.store != nil && options.GraphMode != "" && options.GraphMode != graphretrieval.GraphQueryBasic {
+		loaded, err := s.store.LoadActiveGraphSnapshot(ctx, core.GraphScope{WorkspaceID: options.Workspace}, 4096, 16384, 256)
+		if err == nil {
+			snapshot = &loaded
+			options.GraphAvailability = graphretrieval.GraphRouteAvailability{Readable: true, Fresh: loaded.Fresh, ActiveRevisionID: loaded.RevisionID}
+		} else if !errors.Is(err, sql.ErrNoRows) {
+			graphReadErr = err
+		}
+	}
+	graphRoute, err := ResolveRecallGraphRoute(options)
+	if err != nil {
+		return nil, err
+	}
+	started := time.Now()
+	completed := false
+	var result *RecallResult
+	defer func() {
+		if s.graphObserve != nil {
+			_ = s.graphObserve(graphRecallObservation(started, completed, graphRoute, result))
+		}
+	}()
+	result = &RecallResult{
 		RequestID:           uuid.NewString(),
 		Task:                strings.TrimSpace(options.Task),
 		TopK:                options.TopK,
 		IncludeObservations: options.IncludeObservations,
+		GraphRoute:          graphRoute,
 	}
 	if result.TopK <= 0 {
 		result.TopK = 50
@@ -74,7 +111,11 @@ func (s *MemoryService) Recall(ctx context.Context, options RecallOptions) (*Rec
 		}
 	}
 
-	retrieved, decision, err := s.retrieveForRecall(ctx, options.Workspace, result.Task, result.TopK)
+	graphCacheIdentity := ""
+	if snapshot != nil {
+		graphCacheIdentity = snapshot.CacheIdentity
+	}
+	retrieved, decision, err := s.retrieveForRecall(ctx, options.Workspace, result.Task, result.TopK, graphCacheIdentity)
 	if err != nil {
 		return nil, err
 	}
@@ -86,6 +127,25 @@ func (s *MemoryService) Recall(ctx context.Context, options RecallOptions) (*Rec
 	result.Decision = decision
 	result.Reconstruction = reconstruction
 	result.Rebalanced = engine.RebalanceRecallHits(result.Task, retrieved.Hits)
+	if graphReadErr != nil {
+		if options.GraphRequired {
+			return nil, fmt.Errorf("required graph read failed: %w", graphReadErr)
+		}
+		result.GraphRoute = degradedGraphRoute(result.GraphRoute, graphretrieval.GraphReasonReadFailed)
+		result.GraphContext = &RecallGraphContext{DegradedReason: graphretrieval.GraphReasonReadFailed}
+	} else if snapshot != nil && (result.GraphRoute.SelectedMode == graphretrieval.GraphQueryLocal || result.GraphRoute.SelectedMode == graphretrieval.GraphQueryGlobal) {
+		hybrid, graphContext, enrichErr := s.enrichRecallWithGraph(ctx, result.Task, result.Rebalanced, *snapshot, result.GraphRoute.SelectedMode)
+		if enrichErr != nil {
+			if options.GraphRequired {
+				return nil, fmt.Errorf("required graph enrichment failed: %w", enrichErr)
+			}
+			result.GraphRoute = degradedGraphRoute(result.GraphRoute, graphretrieval.GraphReasonReadFailed)
+			result.GraphContext = &RecallGraphContext{RevisionID: snapshot.RevisionID, Fresh: snapshot.Fresh, DegradedReason: graphretrieval.GraphReasonReadFailed}
+		} else {
+			result.Rebalanced = hybrid
+			result.GraphContext = graphContext
+		}
+	}
 	result.Included, result.Clip = engine.NewTokenClipper(nil).Clip(result.Rebalanced, budget)
 	result.ContextBlock = engine.AssembleRecallSectionsWithObservations(result.Task, result.ObservationBlock, result.Included)
 	if s.store != nil {
@@ -93,16 +153,86 @@ func (s *MemoryService) Recall(ctx context.Context, options RecallOptions) (*Rec
 		baseline := hitTokens(result.Rebalanced) + result.ObservationTokens
 		_ = s.store.AddTokenMetricV2(ctx, options.Workspace, "recall", used, baseline, engine.RunLabel(), engine.MemoryEnabled())
 	}
+	completed = true
 	return result, nil
 }
 
-func (s *MemoryService) retrieveForRecall(ctx context.Context, workspace, task string, topK int) (*engine.RetrievalResult, engine.RecallGateDecision, error) {
+func graphRecallObservation(started time.Time, completed bool, initial graphretrieval.GraphRouteDecision, result *RecallResult) baseobservability.GraphObservation {
+	decision := initial
+	records := int64(0)
+	if result != nil {
+		decision = result.GraphRoute
+		records = int64(len(result.Rebalanced))
+	}
+	mode := string(decision.SelectedMode)
+	if mode == "" {
+		mode = string(graphretrieval.GraphQueryBasic)
+	}
+	route := mode
+	if decision.Fallback {
+		switch decision.RequestedMode {
+		case graphretrieval.GraphQueryLocal, graphretrieval.GraphQueryGlobal:
+			route = string(decision.RequestedMode)
+		case graphretrieval.GraphQueryAuto:
+			if decision.Intent == graphretrieval.GraphIntentGlobal {
+				route = string(graphretrieval.GraphQueryGlobal)
+			} else if decision.Intent == graphretrieval.GraphIntentRelational {
+				route = string(graphretrieval.GraphQueryLocal)
+			}
+		}
+	}
+	observation := baseobservability.GraphObservation{Stage: "query", Mode: mode, Route: route, Outcome: "failed", Duration: time.Since(started), Records: records}
+	if completed {
+		observation.Outcome = "completed"
+	}
+	if decision.Fallback {
+		observation.Outcome = "fallback"
+		observation.Fallback = true
+		observation.Reason = graphMetricFallbackReason(decision.ReasonCode)
+	}
+	if decision.ActiveRevisionID != "" {
+		observation.Freshness = "fresh"
+		if !decision.Fresh {
+			observation.Freshness = "stale"
+		}
+	}
+	return observation
+}
+
+func graphMetricFallbackReason(reason graphretrieval.GraphRouteReason) string {
+	switch reason {
+	case graphretrieval.GraphReasonPolicyDisabled:
+		return "policy_disabled"
+	case graphretrieval.GraphReasonModeDisallowed:
+		return "mode_disallowed"
+	case graphretrieval.GraphReasonIndexUnavailable:
+		return "index_unavailable"
+	case graphretrieval.GraphReasonIndexStale:
+		return "index_stale"
+	case graphretrieval.GraphReasonReadFailed:
+		return "read_failed"
+	default:
+		return "read_failed"
+	}
+}
+
+// ResolveRecallGraphRoute plans enrichment around the existing Basic recall.
+// Later retrieval stages consume the selected normalized route; this function
+// never calls the indexing adapter or an upstream GraphRAG query API.
+func ResolveRecallGraphRoute(options RecallOptions) (graphretrieval.GraphRouteDecision, error) {
+	return graphretrieval.NewGraphRouter().Route(graphretrieval.GraphRouteRequest{
+		Mode: options.GraphMode, Query: strings.TrimSpace(options.Task), RequireGraph: options.GraphRequired,
+		Policy: options.GraphPolicy, Availability: options.GraphAvailability,
+	})
+}
+
+func (s *MemoryService) retrieveForRecall(ctx context.Context, workspace, task string, topK int, graphCacheIdentity string) (*engine.RetrievalResult, engine.RecallGateDecision, error) {
 	if engine.IsContinuationPrompt(task) {
 		decision := engine.DecideRecallGate(task, nil)
-		retrieved, err := s.retrieval.Retrieve(ctx, engine.RetrievalOptions{Workspace: workspace, Query: task, TopK: topK, Mode: engine.ModeRecall})
+		retrieved, err := s.retrieval.Retrieve(ctx, engine.RetrievalOptions{Workspace: workspace, Query: task, GraphCacheIdentity: graphCacheIdentity, TopK: topK, Mode: engine.ModeRecall})
 		return retrieved, decision, err
 	}
-	probe, err := s.retrieval.Retrieve(ctx, engine.RetrievalOptions{Workspace: workspace, Query: task, TopK: topK, Mode: engine.ModeSearch})
+	probe, err := s.retrieval.Retrieve(ctx, engine.RetrievalOptions{Workspace: workspace, Query: task, GraphCacheIdentity: graphCacheIdentity, TopK: topK, Mode: engine.ModeSearch})
 	if err != nil {
 		return nil, engine.RecallGateDecision{}, err
 	}
@@ -118,7 +248,7 @@ func (s *MemoryService) retrieveForRecall(ctx context.Context, workspace, task s
 			SuppressedHits: append([]engine.RetrievalHit(nil), probe.SuppressedHits...),
 		}, decision, nil
 	}
-	retrieved, err := s.retrieval.Retrieve(ctx, engine.RetrievalOptions{Workspace: workspace, Query: task, TopK: topK, Mode: engine.ModeRecall})
+	retrieved, err := s.retrieval.Retrieve(ctx, engine.RetrievalOptions{Workspace: workspace, Query: task, GraphCacheIdentity: graphCacheIdentity, TopK: topK, Mode: engine.ModeRecall})
 	return retrieved, decision, err
 }
 

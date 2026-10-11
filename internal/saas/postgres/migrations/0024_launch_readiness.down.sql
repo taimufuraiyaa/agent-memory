@@ -1,9 +1,0 @@
-DROP TABLE IF EXISTS saas_release_evidence;
-DROP TABLE IF EXISTS saas_game_day_drills;
-DROP TABLE IF EXISTS saas_failure_ownership;
-DROP TABLE IF EXISTS saas_product_analytics;
-DROP TABLE IF EXISTS saas_tenant_launch_controls;
-DROP TABLE IF EXISTS saas_signup_attempts;
-DROP TABLE IF EXISTS saas_signup_reservations;
-DROP TABLE IF EXISTS saas_launch_invitations;
-DROP TABLE IF EXISTS saas_launch_policy;

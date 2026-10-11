@@ -502,7 +502,7 @@ This phase implements the first vertical slice of the [Whole-Book Ingestion and 
 
 ### Task F2: Add model-independent role execution ✅
 
-**Description:** Introduce a role runner interface and validated run result envelope without selecting a hosted provider.
+**Description:** Introduce a role runner interface and validated run result envelope without selecting an external provider.
 
 **Acceptance criteria:**
 
@@ -854,5 +854,5 @@ These do not block Phase A:
 - PDF parser dependency before G2
 - OCR provider and confidence policy before G3
 - Web capture networking and robots policy before G4
-- Hosted model providers before production implementations of `RoleRunner`
+- Remote model providers before production implementations of `RoleRunner`
 - Organization identity provider before external membership administration; local principal contracts are sufficient for C1

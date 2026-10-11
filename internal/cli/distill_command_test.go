@@ -17,6 +17,14 @@ import (
 func TestDistillCommand(t *testing.T) {
 	dataDir := t.TempDir()
 	cwd := t.TempDir()
+	t.Cleanup(func() {
+		_ = filepath.Walk(cwd, func(path string, info os.FileInfo, err error) error {
+			if err == nil {
+				_ = os.Chmod(path, 0o700)
+			}
+			return nil
+		})
+	})
 
 	// Switch working directory to cwd for workspace init testing
 	oldCwd, err := os.Getwd()
@@ -77,10 +85,21 @@ func TestDistillCommand(t *testing.T) {
 		t.Fatalf("execute failed: %v, stderr: %s", err, stderr.String())
 	}
 
-	// Verify skill file was created
-	skillPath := filepath.Join(cwd, ".agents", "skills", "cli-skill", "SKILL.md")
-	if _, err := os.Stat(skillPath); err != nil {
-		t.Fatalf("expected skill file: %v", err)
+	if _, err := os.Stat(filepath.Join(cwd, ".agents", "skills", "cli-skill", "SKILL.md")); !os.IsNotExist(err) {
+		t.Fatalf("draft unexpectedly replaced the active skill: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "Created immutable draft") || !strings.Contains(stdout.String(), "active skill remains unchanged") {
+		t.Fatalf("unexpected compatibility output: %s", stdout.String())
+	}
+	var skillPath string
+	_ = filepath.Walk(filepath.Join(cwd, ".agent-memory", "skill-revisions"), func(path string, info os.FileInfo, err error) error {
+		if err == nil && info.Name() == "SKILL.md" {
+			skillPath = path
+		}
+		return nil
+	})
+	if skillPath == "" {
+		t.Fatal("immutable draft SKILL.md was not created")
 	}
 
 	b, err := os.ReadFile(skillPath)

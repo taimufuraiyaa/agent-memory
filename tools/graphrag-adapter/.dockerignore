@@ -1,0 +1,8 @@
+.venv
+.pytest_cache
+tests
+**/__pycache__
+**/*.pyc
+sbom.cdx.json
+licenses.txt
+vulnerabilities.json

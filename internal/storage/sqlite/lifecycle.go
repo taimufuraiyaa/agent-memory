@@ -2,7 +2,9 @@ package sqlite
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"time"
 
 	"github.com/taimufuraiyaa/agent-memory/internal/core"
@@ -73,6 +75,18 @@ func (s *Store) MarkSuperseded(ctx context.Context, sourceIDs []string, successo
 			_ = tx.Rollback()
 			return err
 		}
+		memory, err := memoryForGraphChangeTx(ctx, tx, id)
+		if err != nil {
+			_ = tx.Rollback()
+			return err
+		}
+		if memory == nil {
+			continue
+		}
+		if err := appendGraphChangesForMemoryTx(ctx, tx, memory, "supersede", memory.UpdatedAt); err != nil {
+			_ = tx.Rollback()
+			return err
+		}
 	}
 	return tx.Commit()
 }
@@ -93,7 +107,19 @@ func (s *Store) DeleteByIDs(ctx context.Context, ids []string) error {
 	}
 	defer func() { _ = stmt.Close() }()
 	for _, id := range ids {
+		memory, err := memoryForGraphChangeTx(ctx, tx, id)
+		if err != nil {
+			_ = tx.Rollback()
+			return err
+		}
 		if _, err := stmt.ExecContext(ctx, id); err != nil {
+			_ = tx.Rollback()
+			return err
+		}
+		if memory == nil {
+			continue
+		}
+		if err := appendGraphChangesForMemoryTx(ctx, tx, memory, "delete", time.Now().UTC()); err != nil {
 			_ = tx.Rollback()
 			return err
 		}
@@ -107,6 +133,30 @@ func (s *Store) DeleteByIDs(ctx context.Context, ids []string) error {
 		}
 	}
 	return nil
+}
+
+func memoryForGraphChangeTx(ctx context.Context, tx *sql.Tx, id string) (*core.MemoryEntry, error) {
+	var memory core.MemoryEntry
+	var sourceJSON, entitiesJSON, tagsJSON, updatedAt string
+	err := tx.QueryRowContext(ctx, `SELECT id,type,content,workspace,source_json,entities_json,tags_json,superseded_by,updated_at FROM memories WHERE id=?`, id).
+		Scan(&memory.ID, &memory.Type, &memory.Content, &memory.Workspace, &sourceJSON, &entitiesJSON, &tagsJSON, &memory.SupersededBy, &updatedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal([]byte(sourceJSON), &memory.Source); err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal([]byte(entitiesJSON), &memory.Entities); err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal([]byte(tagsJSON), &memory.Tags); err != nil {
+		return nil, err
+	}
+	memory.UpdatedAt, err = time.Parse(time.RFC3339Nano, updatedAt)
+	return &memory, err
 }
 
 // UpdateTier changes storage tier for one memory.

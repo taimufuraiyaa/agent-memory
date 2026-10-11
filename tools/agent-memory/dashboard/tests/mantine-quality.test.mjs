@@ -9,12 +9,14 @@ const theme = await readFile(new URL('../src/ui/theme.ts', import.meta.url), 'ut
 const vite = await readFile(new URL('../vite.config.ts', import.meta.url), 'utf8')
 
 test('responsive shell retains scope and navigation at 320 px', () => {
-  assert.match(app, /header=\{\{ height: \{ base: 132, sm: 72 \} \}\}/)
-  assert.match(app, /<Burger[^>]*aria-label="Open primary navigation"/s)
-  assert.match(app, /className="workspaceAddSource"[^>]*aria-label="Add source"/s)
+  assert.match(app, /header=\{\{ height: 68 \}\}/)
+  assert.match(app, /<Burger[^>]*aria-label="Open workspace explorer"/s)
+  assert.match(app, /navbar=\{\{ width: 288, breakpoint: 'sm'/)
+  assert.match(app, /aria-label="Workspace explorer"/)
   assert.match(app, /<Drawer[^>]*hiddenFrom="sm"/s)
-  assert.match(css, /@media \(max-width: 520px\)/)
-  assert.match(css, /\.workspacePicker \{ min-width: 0;/)
+  assert.match(css, /@media \(max-width: 600px\)/)
+  assert.match(css, /\.workspaceHeaderContext \{[^}]*min-width: 0/)
+  assert.match(css, /\.workspaceChatPanelOption \{ flex: 1;/)
   assert.match(css, /\.activityFilterScroller \{[^}]*overflow-x: auto/s)
 })
 

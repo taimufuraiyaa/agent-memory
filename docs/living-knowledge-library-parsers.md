@@ -1,6 +1,6 @@
 # Library parser boundaries
 
-The library core does not depend on a hosted parser or model provider.
+The library core does not depend on a remote parser or model provider.
 
 | Format | Implemented boundary | Version/provenance rule |
 |---|---|---|

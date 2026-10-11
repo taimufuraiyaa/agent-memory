@@ -174,18 +174,6 @@ func newStatsCommand() *cobra.Command {
 	return cmd
 }
 
-func sumHitTokens(hits []engine.RetrievalHit) int {
-	total := 0
-	for _, h := range hits {
-		total += len(strings.Fields(h.Memory.Content))
-	}
-	return total
-}
-
-func recallBaselineTokens(hits []engine.RetrievalHit, observationTokens int) int {
-	return sumHitTokens(hits) + observationTokens
-}
-
 func percentSaved(baseline, saved int) float64 {
 	if baseline <= 0 || saved <= 0 {
 		return 0

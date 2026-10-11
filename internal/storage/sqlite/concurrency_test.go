@@ -190,13 +190,10 @@ func TestConcurrentVectorOperations(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			vectors, err := store.ListMemoryVectorRowsByWorkspace(ctx, "vector-test")
+			_, err := store.ListMemoryVectorRowsByWorkspace(ctx, "vector-test")
 			if err != nil {
 				errors <- fmt.Errorf("list vectors: %w", err)
 				return
-			}
-			if len(vectors) < 0 {
-				errors <- fmt.Errorf("invalid vector count")
 			}
 		}()
 	}

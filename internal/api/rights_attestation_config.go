@@ -12,7 +12,7 @@ import (
 
 // ConfigureLocalRightsAttestation enables the control-plane boundary for the
 // single-installation product. Its stable local subject is a development
-// identity, not a replacement for authenticated SaaS request context.
+// identity for the local installation.
 func ConfigureLocalRightsAttestation(ctx context.Context, svc *Service) error {
 	if svc == nil {
 		return errors.New("API service is required")

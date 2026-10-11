@@ -45,6 +45,26 @@ type ObserveUpsertSessionInput struct {
 	Kind        string
 }
 
+func (s *Store) GetObservation(ctx context.Context, id string) (core.Observation, error) {
+	var observation core.Observation
+	var occurredAt, createdAt string
+	var tool sql.NullString
+	err := s.db.QueryRowContext(ctx, `SELECT id, workspace, session_id, occurred_at, kind, tool_name, summary,
+		source_agent, source_adapter, hook_event, external_event_id, schema_version, capture_mode, created_at
+		FROM observations WHERE id = ?`, strings.TrimSpace(id)).Scan(&observation.ID, &observation.Workspace, &observation.SessionID,
+		&occurredAt, &observation.Kind, &tool, &observation.Summary, &observation.SourceAgent, &observation.SourceAdapter,
+		&observation.HookEvent, &observation.ExternalEventID, &observation.SchemaVersion, &observation.CaptureMode, &createdAt)
+	if err != nil {
+		return core.Observation{}, err
+	}
+	if tool.Valid {
+		observation.ToolName = &tool.String
+	}
+	observation.OccurredAt, _ = time.Parse(time.RFC3339Nano, occurredAt)
+	observation.CreatedAt, _ = time.Parse(time.RFC3339Nano, createdAt)
+	return observation, nil
+}
+
 func ComputeObservationHash(parts ...string) string {
 	h := sha256.New()
 	for _, p := range parts {

@@ -385,7 +385,7 @@ Always:
 
 Ask first:
 
-- add a hosted provider or external model dependency
+- add a remote provider or external model dependency
 - export private or organization data for training
 - enable automatic memory promotion
 - introduce organization-specific fine-tuning
@@ -457,5 +457,4 @@ The first code slice is complete when:
 - dataset consent UI and organization administrator policy
 - evaluation thresholds required before automatic retention
 - whether organization adapters use LoRA, prompt/profile packages, or retrieval-only customization
-- deployment targets for local and hosted inference
-
+- deployment targets for local and external inference

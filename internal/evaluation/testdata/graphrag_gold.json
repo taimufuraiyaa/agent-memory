@@ -1,0 +1,72 @@
+{
+  "schema": "agent-memory-graphrag-evaluation/v1",
+  "approved_cost_microusd": 100000,
+  "cases": [
+    {
+      "id": "day1-book-a-direct", "topology": "standalone", "scope": "local", "language": "en", "scenario": "direct", "episode": "day1", "category": "direct",
+      "gold_ids": ["local:book-a"], "basic_ids": ["local:book-a"], "graph_ids": ["local:book-a"],
+      "authorized_evidence_ids": ["local:book-a"], "claims": [{"id": "local:claim-book-a", "evidence_ids": ["local:book-a"]}],
+      "basic_available": true, "shadow_only": true, "basic_latency_us": 10000, "shadow_basic_latency_us": 10050, "graph_selection_latency_us": 5000, "cost_microusd": 1000
+    },
+    {
+      "id": "day10-book-a-relationship", "topology": "standalone", "scope": "local", "language": "en", "scenario": "relational", "episode": "day10", "category": "relational",
+      "gold_ids": ["local:book-a", "local:day10"], "basic_ids": ["local:day10"], "graph_ids": ["local:day10", "local:book-a"],
+      "authorized_evidence_ids": ["local:book-a", "local:day10"], "claims": [{"id": "local:claim-association", "evidence_ids": ["local:book-a", "local:day10"]}],
+      "basic_available": true, "shadow_only": true, "basic_latency_us": 10500, "shadow_basic_latency_us": 10600, "graph_selection_latency_us": 24000, "cost_microusd": 1500
+    },
+    {
+      "id": "global-pattern-local", "topology": "standalone", "scope": "local", "language": "en", "scenario": "global", "episode": "day10", "category": "global",
+      "gold_ids": ["local:incident-1", "local:incident-2"], "basic_ids": ["local:incident-1"], "graph_ids": ["local:incident-1", "local:incident-2"],
+      "authorized_evidence_ids": ["local:incident-1", "local:incident-2"], "claims": [{"id": "local:claim-pattern", "evidence_ids": ["local:incident-1", "local:incident-2"]}],
+      "basic_available": true, "shadow_only": true, "basic_latency_us": 11200, "shadow_basic_latency_us": 11300, "graph_selection_latency_us": 120000, "cost_microusd": 2200
+    },
+    {
+      "id": "contradiction-local", "topology": "standalone", "scope": "local", "language": "en", "scenario": "contradiction", "episode": "day10", "category": "relational",
+      "gold_ids": ["local:decision-old", "local:decision-new"], "basic_ids": ["local:decision-new"], "graph_ids": ["local:decision-old", "local:decision-new"],
+      "authorized_evidence_ids": ["local:decision-old", "local:decision-new"], "claims": [{"id": "local:claim-conflict", "evidence_ids": ["local:decision-old", "local:decision-new"]}],
+      "basic_available": true, "shadow_only": true, "basic_latency_us": 9800, "shadow_basic_latency_us": 9900, "graph_selection_latency_us": 31000, "cost_microusd": 1800
+    },
+    {
+      "id": "ambiguity-local", "topology": "standalone", "scope": "local", "language": "en", "scenario": "ambiguity", "episode": "day1", "category": "global",
+      "gold_ids": ["local:memory-1", "local:memory-2"], "basic_ids": [], "graph_ids": ["local:memory-1", "local:memory-2"],
+      "authorized_evidence_ids": ["local:memory-1", "local:memory-2"], "claims": [{"id": "local:claim-ambiguous", "evidence_ids": ["local:memory-1", "local:memory-2"]}],
+      "basic_available": true, "shadow_only": true, "basic_latency_us": 12100, "shadow_basic_latency_us": 12200, "graph_selection_latency_us": 145000, "cost_microusd": 2500
+    },
+    {
+      "id": "deletion-local", "topology": "standalone", "scope": "local", "language": "en", "scenario": "deletion", "episode": "day1", "category": "direct",
+      "gold_ids": ["local:retained"], "basic_ids": ["local:retained"], "graph_ids": ["local:retained"], "deleted_ids": ["local:deleted"],
+      "authorized_evidence_ids": ["local:retained"], "claims": [{"id": "local:claim-retained", "evidence_ids": ["local:retained"]}],
+      "basic_available": true, "shadow_only": true, "basic_latency_us": 10900, "shadow_basic_latency_us": 11000, "graph_selection_latency_us": 6000, "cost_microusd": 900
+    },
+    {
+      "id": "cache-hit-local", "topology": "standalone", "scope": "local", "language": "en", "scenario": "cache_hit", "episode": "day10", "category": "relational",
+      "gold_ids": ["local:service", "local:owner"], "basic_ids": ["local:service"], "graph_ids": ["local:service", "local:owner"],
+      "authorized_evidence_ids": ["local:service", "local:owner"], "claims": [{"id": "local:claim-owner", "evidence_ids": ["local:service", "local:owner"]}],
+      "basic_available": true, "shadow_only": true, "basic_latency_us": 9500, "shadow_basic_latency_us": 9550, "graph_selection_latency_us": 8000, "cost_microusd": 100
+    },
+    {
+      "id": "provider-failure-local", "topology": "standalone", "scope": "local", "language": "en", "scenario": "provider_failure", "episode": "day1", "category": "direct",
+      "gold_ids": ["local:basic-memory"], "basic_ids": ["local:basic-memory"], "graph_ids": ["local:basic-memory"],
+      "authorized_evidence_ids": ["local:basic-memory"], "claims": [{"id": "local:claim-basic", "evidence_ids": ["local:basic-memory"]}],
+      "basic_available": true, "shadow_only": true, "basic_latency_us": 10200, "shadow_basic_latency_us": 10300, "graph_selection_latency_us": 0, "cost_microusd": 0
+    },
+    {
+      "id": "multilingual-local", "topology": "standalone", "scope": "local", "language": "vi", "scenario": "multilingual", "episode": "day10", "category": "relational",
+      "gold_ids": ["local:sach-a", "local:ngay-10"], "basic_ids": ["local:ngay-10"], "graph_ids": ["local:sach-a", "local:ngay-10"],
+      "authorized_evidence_ids": ["local:sach-a", "local:ngay-10"], "claims": [{"id": "local:claim-lien-quan", "evidence_ids": ["local:sach-a", "local:ngay-10"]}],
+      "basic_available": true, "shadow_only": true, "basic_latency_us": 11800, "shadow_basic_latency_us": 11900, "graph_selection_latency_us": 42000, "cost_microusd": 2100
+    },
+    {
+      "id": "adversarial-local", "topology": "standalone", "scope": "local", "language": "ja", "scenario": "adversarial", "episode": "day10", "category": "global",
+      "gold_ids": ["local:safe-1", "local:safe-2"], "basic_ids": [], "graph_ids": ["local:safe-1", "local:safe-2"],
+      "authorized_evidence_ids": ["local:safe-1", "local:safe-2"], "claims": [{"id": "local:claim-safe", "evidence_ids": ["local:safe-1", "local:safe-2"]}],
+      "basic_available": true, "shadow_only": true, "basic_latency_us": 11600, "shadow_basic_latency_us": 11700, "graph_selection_latency_us": 160000, "cost_microusd": 2800
+    },
+    {
+      "id": "large-corpus-local", "topology": "standalone", "scope": "local", "language": "en", "scenario": "large_corpus", "episode": "day1", "category": "global",
+      "gold_ids": ["local:pattern-1", "local:pattern-2", "local:pattern-3"], "basic_ids": ["local:pattern-1"], "graph_ids": ["local:pattern-1", "local:pattern-2", "local:pattern-3"],
+      "authorized_evidence_ids": ["local:pattern-1", "local:pattern-2", "local:pattern-3"], "claims": [{"id": "local:claim-large-pattern", "evidence_ids": ["local:pattern-1", "local:pattern-2", "local:pattern-3"]}],
+      "basic_available": true, "shadow_only": true, "basic_latency_us": 12500, "shadow_basic_latency_us": 12600, "graph_selection_latency_us": 220000, "cost_microusd": 4000
+    }
+  ]
+}

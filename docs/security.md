@@ -178,7 +178,7 @@ Email (when in sensitive contexts):
 **Write Operation:**
 ```bash
 # Original content
-agent-memory write --type semantic \
+agent-memory write --workspace my-project --type semantic \
   --content "API key is sk-abc123xyz...token123"
 
 # Stored as (filtered)
@@ -188,7 +188,7 @@ agent-memory write --type semantic \
 **Search Results:**
 ```bash
 # Filtered content is never returned
-agent-memory search --query "api key"
+agent-memory search --workspace my-project --query "api key"
 # Results show [FILTERED:*] placeholders
 ```
 
@@ -198,9 +198,9 @@ Periodically audit your memories:
 
 ```bash
 # Search for potential secrets that might have been missed
-agent-memory search --query "password" --top-k 20
-agent-memory search --query "secret" --top-k 20
-agent-memory search --query "token" --top-k 20
+agent-memory search --workspace my-project --query "password" --top-k 20
+agent-memory search --workspace my-project --query "secret" --top-k 20
+agent-memory search --workspace my-project --query "token" --top-k 20
 
 # Export and review manually
 agent-memory export --format json > memories.json
