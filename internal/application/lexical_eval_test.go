@@ -40,11 +40,13 @@ func TestLexicalComparison(t *testing.T) {
 		t.Fatal(err)
 	}
 	chunks := evalLoadChunks(t, root)
-	queries := evalBuildQueries(chunks)
-	if len(chunks) < 200 || len(queries) < 50 {
-		t.Fatalf("corpus too small for a comparison: %d chunks, %d queries", len(chunks), len(queries))
+	generated := evalBuildQueries(chunks)
+	paraphrases := evalBuildParaphraseQueries(t, chunks)
+	queries := append(append([]evalQuery{}, generated...), paraphrases...)
+	if len(chunks) < 200 || len(generated) < 50 {
+		t.Fatalf("corpus too small for a comparison: %d chunks, %d queries", len(chunks), len(generated))
 	}
-	t.Logf("corpus: %d chunks, %d queries", len(chunks), len(queries))
+	t.Logf("corpus: %d chunks, %d generated queries, %d paraphrase queries", len(chunks), len(generated), len(paraphrases))
 
 	// The stand-in embedder is used unless a real local model directory is
 	// supplied through AGENT_MEMORY_LEXICAL_EVAL_MODEL_DIR.
@@ -65,76 +67,14 @@ func TestLexicalComparison(t *testing.T) {
 	t.Cleanup(func() { _ = store.Close() })
 	service := NewMemoryService(store, nil, engine.NewRetrievalEngine(engine.NewVectorSearcher(store, provider)))
 
+	embedStart := time.Now()
+	vectors := evalEmbedChunks(t, ctx, provider, chunks)
+	embedElapsed := time.Since(embedStart)
 	loadStart := time.Now()
-	evalLoadMemories(t, ctx, store, provider, chunks)
+	evalLoadMemories(t, ctx, store, provider, chunks, vectors, nil)
 	loadElapsed := time.Since(loadStart)
 
-	floor := 0.05
-	options := func(query string) engine.RetrievalOptions {
-		o := engine.RetrievalOptions{Workspace: evalWorkspace, Query: query, TopK: 10, Mode: engine.ModeSearch}
-		if standIn {
-			o.Policy.MinSemanticScore = &floor
-		}
-		return o
-	}
-	hybrid := func(env, weight string) func(string) ([]string, error) {
-		return func(query string) ([]string, error) {
-			t.Setenv("AGENT_MEMORY_LEXICAL_MODE", env)
-			t.Setenv("AGENT_MEMORY_LEXICAL_WEIGHT", weight)
-			result, err := service.SearchHybrid(ctx, GraphSearchOptions{Retrieval: options(query), GraphMode: graphretrieval.GraphQueryBasic})
-			if err != nil {
-				return nil, err
-			}
-			ids := make([]string, 0, len(result.Hits))
-			for _, hit := range result.Hits {
-				ids = append(ids, hit.Memory.ID)
-			}
-			return ids, nil
-		}
-	}
-	arms := []evalArm{
-		{Name: "vector", Run: func(query string) ([]string, error) {
-			result, err := service.Search(ctx, options(query))
-			if err != nil {
-				return nil, err
-			}
-			ids := make([]string, 0, len(result.Hits))
-			for _, hit := range result.Hits {
-				ids = append(ids, hit.Memory.ID)
-			}
-			return ids, nil
-		}},
-		{Name: "exact-term (locator, <=3 terms)", Run: func(query string) ([]string, error) {
-			seed := graphTermSeedQuery(query)
-			if seed == "" {
-				return nil, nil
-			}
-			result, err := service.SearchTerms(ctx, TermSearchOptions{Workspace: evalWorkspace, Query: seed, Operator: TermOperatorOR, TopK: 10})
-			if err != nil {
-				return nil, err
-			}
-			ids := make([]string, 0, len(result.Hits))
-			for _, hit := range result.Hits {
-				ids = append(ids, hit.Memory.ID)
-			}
-			return ids, nil
-		}},
-		{Name: "BM25 only (FTS5)", Run: func(query string) ([]string, error) {
-			matches, err := store.SearchMemoryLexical(ctx, sqlite.LexicalQuery{Workspace: evalWorkspace, Text: query, Limit: 10})
-			if err != nil {
-				return nil, err
-			}
-			ids := make([]string, 0, len(matches))
-			for _, match := range matches {
-				ids = append(ids, match.MemoryID)
-			}
-			return ids, nil
-		}},
-		{Name: "hybrid current (vector + exact-term, lexical off)", Run: hybrid("off", "")},
-		{Name: "hybrid + BM25 candidates only (weight 0)", Run: hybrid("on", "0")},
-		{Name: "hybrid + BM25 weighted (weight 0.25)", Run: hybrid("on", "0.25")},
-		{Name: "hybrid + BM25 weighted (weight 0.5)", Run: hybrid("on", "0.5")},
-	}
+	arms := evalMemoryArms(ctx, t, service, store, standIn)
 
 	// Warm query and embedding caches so latency compares retrieval work.
 	for _, q := range queries {
@@ -146,8 +86,11 @@ func TestLexicalComparison(t *testing.T) {
 
 	passageResults := evalPassageArms(t, ctx, dbPath, chunks, queries)
 	overhead := evalWriteOverhead(t, ctx, chunks)
+	curated := evalCuratedExperiment(t, ctx, provider, chunks, vectors, paraphrases, standIn)
+	bloom := evalBloomExperiment(t, ctx, service, queries)
 
 	report := evalRenderReport(chunks, queries, loadElapsed, memoryResults, passageResults, overhead, provider.Name(), standIn)
+	report += evalRenderExtras(embedElapsed, curated, bloom)
 	t.Log("\n" + report)
 	if path := os.Getenv("AGENT_MEMORY_LEXICAL_EVAL_REPORT"); path != "" {
 		if err := os.WriteFile(path, []byte(report), 0o644); err != nil {
@@ -420,7 +363,7 @@ func evalBuildQueries(chunks []evalChunk) []evalQuery {
 	return out
 }
 
-func evalLoadMemories(t *testing.T, ctx context.Context, store *sqlite.Store, provider embeddings.Provider, chunks []evalChunk) {
+func evalEmbedChunks(t *testing.T, ctx context.Context, provider embeddings.Provider, chunks []evalChunk) [][]float32 {
 	t.Helper()
 	texts := make([]string, len(chunks))
 	for i, c := range chunks {
@@ -430,9 +373,16 @@ func evalLoadMemories(t *testing.T, ctx context.Context, store *sqlite.Store, pr
 	if err != nil {
 		t.Fatal(err)
 	}
+	return vectors
+}
+
+// evalLoadMemories stores every chunk with its vector. curated, when non-nil,
+// adds explicit agent-curated keywords on top of the automatic extraction.
+func evalLoadMemories(t *testing.T, ctx context.Context, store *sqlite.Store, provider embeddings.Provider, chunks []evalChunk, vectors [][]float32, curated map[string][]string) {
+	t.Helper()
 	now := time.Now().UTC()
 	for i, c := range chunks {
-		keywords, err := locator.Extract(locator.Input{Content: c.Text})
+		keywords, err := locator.Extract(locator.Input{Content: c.Text, Explicit: curated[c.ID]})
 		if err != nil {
 			keywords = nil
 		}
@@ -495,7 +445,12 @@ func evalScore(overall *evalFamilyMetrics, byFamily map[string]*evalFamilyMetric
 			break
 		}
 	}
-	for _, m := range []*evalFamilyMetrics{overall, family} {
+	targets := []*evalFamilyMetrics{family}
+	if q.Family != "paraphrase" && q.Family != "tag-lookup" {
+		// Hand-written families are reported on their own rows only.
+		targets = append(targets, overall)
+	}
+	for _, m := range targets {
 		m.Queries++
 		if rank == 1 {
 			m.Hit1++
@@ -688,15 +643,17 @@ func evalRenderReport(chunks []evalChunk, queries []evalQuery, load time.Duratio
 	fmt.Fprintf(&b, "Generated by `TestLexicalComparison` on %s.\n\n", time.Now().UTC().Format("2006-01-02"))
 	fmt.Fprintf(&b, "## Setup\n\n")
 	fmt.Fprintf(&b, "- Corpus: %d chunks cut from this repository's own Markdown (docs, specs, skills, README, SECURITY), excluding this spec.\n", len(chunks))
-	fmt.Fprintf(&b, "- Queries: %d total (identifier %d, keywords %d, heading %d), generated deterministically from the corpus; gold is every chunk that contains the query tokens (identifier/keywords) or sits under the unique heading (heading). Top-k = 10.\n",
-		len(queries), families["identifier"], families["keywords"], families["heading"])
+	generated := families["identifier"] + families["keywords"] + families["heading"]
+	fmt.Fprintf(&b, "- Generated queries: %d (identifier %d, keywords %d, heading %d), deterministic from the corpus; gold is every chunk that contains the query tokens (identifier/keywords) or sits under the unique heading (heading). Top-k = 10. The overall row of each table covers only these.\n",
+		generated, families["identifier"], families["keywords"], families["heading"])
+	fmt.Fprintf(&b, "- Paraphrase queries: %d hand-written questions that avoid the gold chunk's distinctive tokens; gold chunks were located by anchor text and verified by reading. Reported as their own family and excluded from the overall row.\n", families["paraphrase"])
 	if standIn {
 		fmt.Fprintf(&b, "- Embedder: deterministic hashed word/character-trigram stand-in (384 dimensions), **not** a semantic model. Semantic floor lowered to 0.05 for all arms. Vector-arm numbers therefore do not represent MiniLM-class paraphrase quality.\n")
 	} else {
 		fmt.Fprintf(&b, "- Embedder: real local model provider `%s`; default semantic floor.\n", embedder)
 	}
-	fmt.Fprintf(&b, "- Exact-term index is populated only by automatic extraction (`locator.Extract` on content); no curated explicit keywords exist in this corpus, so that arm measures the fallback extraction path, not curated keyword recall.\n")
-	fmt.Fprintf(&b, "- Query construction favors lexical methods (queries reuse corpus tokens); there is no paraphrase family. Treat absolute numbers as a lexical-component comparison, not an end-to-end quality claim.\n")
+	fmt.Fprintf(&b, "- The main run's exact-term index is populated only by automatic extraction (`locator.Extract`); curated keywords are measured separately in the curated experiment below.\n")
+	fmt.Fprintf(&b, "- Generated-query construction favors lexical methods (queries reuse corpus tokens); the paraphrase family is the counterweight. Treat absolute numbers as a retrieval-component comparison on one repository's documentation, not an end-to-end quality claim.\n")
 	fmt.Fprintf(&b, "- Corpus load (memories, vectors, terms, triggers): %s.\n\n", load.Round(time.Millisecond))
 	writeTable := func(title string, results []evalArmResult) {
 		fmt.Fprintf(&b, "## %s\n\n", title)
@@ -706,7 +663,7 @@ func evalRenderReport(chunks []evalChunk, queries []evalQuery, load time.Duratio
 			fmt.Fprintf(&b, "| %s | %s | %s | %s | %.3f | %.2f | %.2f | %d |\n", r.Name, evalPct(m.Hit1, m.Queries), evalPct(m.Hit5, m.Queries), evalPct(m.Hit10, m.Queries), m.RRSum/float64(max(1, m.Queries)), r.P50ms, r.P95ms, r.Errors)
 		}
 		b.WriteString("\n")
-		for _, family := range []string{"identifier", "keywords", "heading"} {
+		for _, family := range []string{"identifier", "keywords", "heading", "paraphrase"} {
 			fmt.Fprintf(&b, "**%s queries**\n\n| Arm | R@1 | R@5 | R@10 | MRR@10 |\n|---|---|---|---|---|\n", family)
 			for _, r := range results {
 				m := r.ByFamily[family]

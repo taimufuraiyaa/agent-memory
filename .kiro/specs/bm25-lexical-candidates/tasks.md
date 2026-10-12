@@ -28,3 +28,19 @@
 - [x] 9. Split passage ranking into its own rollout flag.
   - Acceptance: `AGENT_MEMORY_PASSAGE_RANKING_MODE` (`off` default) controls the ranker; `AGENT_MEMORY_LEXICAL_MODE` no longer affects passage search; both flags independent in tests; docs, skill and report follow-up updated.
   - Verification: engine flag unit tests, API wiring test for all four flag combinations, existing retrieval and lexical tests, `go vet ./internal/...`, `git diff --check`.
+- [x] 10. Run the harness with a real local embedding model.
+  - Acceptance: model directory and ONNX runtime located through the documented install flow (`docs/manual-installation.md`, `~/.agent-memory/models/all-MiniLM-L6-v2`); report states the model name actually loaded; no stand-in is labelled real.
+  - Verification: `AGENT_MEMORY_LEXICAL_EVAL=1 AGENT_MEMORY_LEXICAL_EVAL_MODEL_DIR=<dir> ... go test ./internal/application -run 'TestLexicalComparison$'`; raw output embedded in the report; `uptime` recorded because latency is measured.
+- [x] 11. Add a hand-written paraphrase query family.
+  - Acceptance: 40+ queries that avoid the gold chunk's distinctive tokens; gold resolved from a verified anchor that must match exactly one chunk; reported as its own family, excluded from the original overall row.
+  - Verification: a harness self-check fails when an anchor is ambiguous or missing and when a paraphrase shares a rare gold token.
+- [x] 12. Weight sweep with the real embedder.
+  - Acceptance: weights 0, 0.25, 0.5, 0.75, 1.0 reported per family (R@1/R@10/MRR); default stays 0.25 unless real-model numbers justify a change, with the reason written down.
+  - Verification: harness output.
+- [x] 13. Curated exact-term fixture and Bloom measurement.
+  - Acceptance: memories carry explicit curated `core.MemoryTerm` keywords; exact-term stream compared with BM25 and vector; Bloom pre-check time compared with the indexed lookup alone. Recommendation only.
+  - Verification: harness output and a micro-benchmark of `internal/engine/term_bloom.go` versus the lookup.
+- [x] 14. Publish the real-embedder report and decision.
+  - Acceptance: `comparison-report-real-embedder.md` with corpus, embedder, per-arm and per-family results, caveats, raw output and an explicit promote / keep-flagged / reject decision; skill and retrieval-ablation decision doc updated only if usage or decision changed.
+  - Verification: every figure traceable to harness output; `git diff --check`; focused tests; build and vet.
+  - Result (2026-10-12): all of 10-14 ran against real `onnx-minilm-l6-v2`; decision for the memory stream is keep flagged, weight stays 0.25; see `comparison-report-real-embedder.md`.

@@ -13,20 +13,20 @@ Use this skill when changing the FTS5 lexical index, the lexical stream in `Sear
 - Index, triggers, queries: `internal/storage/sqlite/lexical_index.go` (migration 32).
 - Hybrid stream and signal: `internal/application/lexical_search.go`, `internal/application/hybrid_search.go`, `internal/engine/lexical_signal.go`.
 - Passage ranking: `internal/retrieval/passages.go` (`WithRanker`), wired in `internal/api/library_handlers.go`.
-- Harness: `internal/application/lexical_eval_test.go` (skipped unless requested).
+- Harness: `internal/application/lexical_eval_test.go` (main run), `lexical_eval_paraphrase_test.go` (50 hand-written paraphrases with anchor-resolved gold, curated keywords) and `lexical_eval_experiments_test.go` (weight sweep arms, curated exact-term experiment, Bloom timing). Skipped unless requested.
 - Flags (independent, both default off): `AGENT_MEMORY_LEXICAL_MODE=on|off` for the memory stream, `AGENT_MEMORY_LEXICAL_WEIGHT` (default 0.25, 0 = candidates only), `AGENT_MEMORY_PASSAGE_RANKING_MODE=on|off` for library passage ranking. Passage evidence is lexical-vs-lexical and needs no embedder; memory-stream evidence needs a real embedder before promotion.
 
 ## Run the comparison
 
-1. `AGENT_MEMORY_LEXICAL_EVAL=1 AGENT_MEMORY_LEXICAL_EVAL_REPORT=<file> go test ./internal/application -run 'TestLexicalComparison$' -count=1 -timeout 25m -v` (about 6 minutes; do not run other heavy jobs at the same time, latency is measured).
-2. Optional real model: add `AGENT_MEMORY_LEXICAL_EVAL_MODEL_DIR=<local ONNX model dir>`. Without it the harness uses a hashed n-gram stand-in embedder that is not a semantic model; say so in any report.
-3. Read the report by family (identifier, keywords, heading), not only the overall row.
+1. `AGENT_MEMORY_LEXICAL_EVAL=1 AGENT_MEMORY_LEXICAL_EVAL_REPORT=<file> go test ./internal/application -run 'TestLexicalComparison$' -count=1 -timeout 25m -v` (about 2 minutes with a real model on a quiet machine, 6 with the stand-in; run `uptime` first and do not run other heavy jobs, latency is measured). Add `-timeout 25m`.
+2. Real model: add `AGENT_MEMORY_LEXICAL_EVAL_MODEL_DIR=$HOME/.agent-memory/models/all-MiniLM-L6-v2` (install flow in `docs/manual-installation.md`). Without it the harness uses a hashed n-gram stand-in embedder that is not a semantic model; say so in any report.
+3. Read the report by family (identifier, keywords, heading, paraphrase), not only the overall row; paraphrase is excluded from the overall row. The harness fails if an anchor matches no chunk, is ambiguous, or a paraphrase repeats a rare gold token.
 
 ## Interpretation rules
 
-- Candidate-only (weight 0) adds BM25 hits that are then ranked by the old signals; measured to be inert for top-10. The value comes from the lexical signal.
+- Candidate-only (weight 0) adds BM25 hits ranked by the old signals. With the stand-in it was inert; with real MiniLM it lifts keyword R@10 from 31% to 56% and leaves paraphrase results unchanged. The lexical signal still delivers R@1, and on paraphrases it costs R@10 (52% to 42% at 0.25). See `comparison-report-real-embedder.md`.
 - Queries are built from corpus tokens, which favors lexical methods; the stand-in embedder cannot judge paraphrase quality. Do not claim end-to-end quality from this harness.
-- The exact-term arm only has auto-extracted terms (no curated keywords) in this corpus.
+- The main run's exact-term arm has auto-extracted terms only; the curated experiment adds explicit keywords for the paraphrase gold chunks (same author as the queries, so an upper bound).
 - Latency: arms run interleaved per query so write-side drift is shared; still compare p50 and p95, not single runs.
 
 ## Pitfalls already paid for
