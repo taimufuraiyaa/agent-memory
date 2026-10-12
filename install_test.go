@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -48,8 +47,8 @@ func TestReleaseBuildUsesTrimpath(t *testing.T) {
 		t.Fatal(err)
 	}
 	makefile := string(contents)
-	if strings.Count(makefile, "go build -trimpath -o $(BIN_DIR)/$(APP) ./cmd/agent-memory") != 2 {
-		t.Fatalf("development and embedded release builds must both use -trimpath")
+	if strings.Count(makefile, "go build -trimpath -o $(BIN_DIR)/$(APP) ./cmd/agent-memory") != 1 {
+		t.Fatalf("the Go build must use -trimpath")
 	}
 }
 
@@ -58,8 +57,8 @@ func TestBuildAndReleaseArtifactsIncludeConciseExecutable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Count(string(makefileBytes), "cp $(BIN_DIR)/$(APP) $(BIN_DIR)/am") != 2 {
-		t.Fatal("development and embedded builds must publish bin/am")
+	if strings.Count(string(makefileBytes), "cp $(BIN_DIR)/$(APP) $(BIN_DIR)/am") != 1 {
+		t.Fatal("the Go build must publish bin/am")
 	}
 	releaseBytes, err := os.ReadFile(".github/workflows/release.yml")
 	if err != nil {
@@ -142,44 +141,6 @@ func TestMergeEnvFilePreservesExistingTermBloomMode(t *testing.T) {
 	}
 	if !strings.Contains(merged, "AGENT_MEMORY_TERM_BLOOM_MODE=gate") || strings.Contains(merged, "AGENT_MEMORY_TERM_BLOOM_MODE=shadow") {
 		t.Fatalf("existing operator mode was not preserved: %q", merged)
-	}
-}
-
-func TestRunDashboardInstallRetriesAfterCleanup(t *testing.T) {
-	dst := t.TempDir()
-	t.Setenv("PATH", fakeInstallNPMScriptDir(t, `#!/bin/sh
-set -eu
-marker=".npm-ci-attempt"
-if [ ! -f "$marker" ]; then
-  touch "$marker"
-  mkdir -p node_modules/esbuild
-  echo "simulated failure" >&2
-  exit 1
-fi
-if [ -d node_modules ]; then
-  echo "node_modules should have been removed before retry" >&2
-  exit 1
-fi
-touch npm-ci-success
-`)+string(os.PathListSeparator)+os.Getenv("PATH"))
-
-	if err := bootstrap.RunDashboardInstall(dst, io.Discard, io.Discard); err != nil {
-		t.Fatalf("bootstrap.RunDashboardInstall: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(dst, "npm-ci-success")); err != nil {
-		t.Fatalf("expected retry success marker: %v", err)
-	}
-}
-
-func TestRunDashboardInstallReturnsFailureAfterRetry(t *testing.T) {
-	dst := t.TempDir()
-	t.Setenv("PATH", fakeInstallNPMScriptDir(t, `#!/bin/sh
-echo "still broken" >&2
-exit 1
-`)+string(os.PathListSeparator)+os.Getenv("PATH"))
-
-	if err := bootstrap.RunDashboardInstall(dst, io.Discard, io.Discard); err == nil {
-		t.Fatalf("expected retry failure")
 	}
 }
 
@@ -292,16 +253,6 @@ esac
 	if _, err := os.Stat(markerPath); err != nil {
 		t.Fatalf("expected ide flag marker: %v", err)
 	}
-}
-
-func fakeInstallNPMScriptDir(t *testing.T, script string) string {
-	t.Helper()
-	dir := t.TempDir()
-	path := filepath.Join(dir, "npm")
-	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
-		t.Fatalf("write fake npm: %v", err)
-	}
-	return dir
 }
 
 func TestValidateModelDirAcceptsValidFiles(t *testing.T) {

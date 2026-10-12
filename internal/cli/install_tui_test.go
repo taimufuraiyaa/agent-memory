@@ -19,7 +19,7 @@ func TestInstallTUIRendersFullScreenHierarchyAndActiveRow(t *testing.T) {
 	rendered := model.View().Content
 	plain := ansi.Strip(rendered)
 	for _, expected := range []string{
-		"AGENT MEMORY", "LOCAL SETUP", "STEP 1 OF 2", "SELECTED 5/7",
+		"AGENT MEMORY", "LOCAL SETUP", "STEP 1 OF 2", "SELECTED 4/6",
 		"›  [x]  Agent Memory core", "↑/↓ Navigate", "Space Toggle", "Enter Continue", "Q/Esc Quit",
 	} {
 		if !strings.Contains(plain, expected) {
@@ -416,7 +416,7 @@ func TestInstallSelectionMapsComponentsToLegacyFlags(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !selection.InstallPlanner || selection.PlannerModel != "qwen3:4b" || !selection.SkipONNXRuntime || !selection.SkipModel || !selection.NoDashboard || !selection.NoInit {
+	if !selection.InstallPlanner || selection.PlannerModel != "qwen3:4b" || !selection.SkipONNXRuntime || !selection.SkipModel || !selection.NoInit {
 		t.Fatalf("selection=%+v", selection)
 	}
 }

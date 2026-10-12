@@ -18,6 +18,12 @@ type ClaudeAdapter struct{}
 const claudeHookMarker = "agent-memory managed hook"
 const claudeSkillMarker = "agent-memory managed Claude skill"
 
+// claudeMCPServiceURL is the service URL written into .mcp.json. Claude Code expands
+// ${VAR:-default} from its own environment, so the stable local URL stays the default
+// while one session (for example another macOS user on the same machine, who must not
+// share this user's daemon) can point elsewhere by exporting AGENT_MEMORY_URL.
+const claudeMCPServiceURL = "${AGENT_MEMORY_URL:-http://127.0.0.1:3211}"
+
 func NewClaudeAdapter() ClaudeAdapter { return ClaudeAdapter{} }
 func (ClaudeAdapter) Name() string    { return "claude-code" }
 
@@ -50,7 +56,7 @@ func (ClaudeAdapter) Connect(_ context.Context, options Options) (Result, error)
 	servers["agent-memory"] = map[string]any{
 		"command": "agent-memory-mcp",
 		"env": map[string]any{
-			"AGENT_MEMORY_URL": "http://127.0.0.1:3211",
+			"AGENT_MEMORY_URL": claudeMCPServiceURL,
 		},
 	}
 	if err := writeJSONObject(path, root); err != nil {

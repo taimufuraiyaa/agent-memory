@@ -24,8 +24,8 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.Retrieval.DefaultTopK != 8 {
 		t.Errorf("expected default top-k 8, got %d", cfg.Retrieval.DefaultTopK)
 	}
-	if cfg.Dashboard.Port != 3042 {
-		t.Errorf("expected dashboard port 3042, got %d", cfg.Dashboard.Port)
+	if cfg.Server.Port != 8042 {
+		t.Errorf("expected server port 8042, got %d", cfg.Server.Port)
 	}
 }
 
@@ -50,9 +50,8 @@ retrieval:
   default_top_k: 10
   semantic_weight: 0.60
 
-dashboard:
+server:
   port: 4000
-  auto_launch: true
 
 observe:
   log_level: debug
@@ -92,11 +91,8 @@ observe:
 	if cfg.Retrieval.SemanticWeight != 0.60 {
 		t.Errorf("expected semantic weight 0.60, got %f", cfg.Retrieval.SemanticWeight)
 	}
-	if cfg.Dashboard.Port != 4000 {
-		t.Errorf("expected port 4000, got %d", cfg.Dashboard.Port)
-	}
-	if !cfg.Dashboard.AutoLaunch {
-		t.Error("expected AutoLaunch to be true")
+	if cfg.Server.Port != 4000 {
+		t.Errorf("expected port 4000, got %d", cfg.Server.Port)
 	}
 	if cfg.Observe.LogLevel != "debug" {
 		t.Errorf("expected log level 'debug', got %q", cfg.Observe.LogLevel)
@@ -112,7 +108,7 @@ func TestConfigPrecedence(t *testing.T) {
 run_label: user-label
 retrieval:
   default_top_k: 5
-dashboard:
+server:
   port: 3000
 `
 	if err := os.WriteFile(userConfigPath, []byte(userYAML), 0644); err != nil {
@@ -144,8 +140,8 @@ retrieval:
 	if cfg.Retrieval.DefaultTopK != 5 {
 		t.Errorf("expected top-k 5, got %d", cfg.Retrieval.DefaultTopK)
 	}
-	if cfg.Dashboard.Port != 3000 {
-		t.Errorf("expected port 3000, got %d", cfg.Dashboard.Port)
+	if cfg.Server.Port != 3000 {
+		t.Errorf("expected port 3000, got %d", cfg.Server.Port)
 	}
 
 	// Load workspace config (should override)
@@ -160,9 +156,9 @@ retrieval:
 	if cfg.Retrieval.DefaultTopK != 15 {
 		t.Errorf("expected top-k 15, got %d", cfg.Retrieval.DefaultTopK)
 	}
-	// Dashboard port should remain from user config (not in workspace config)
-	if cfg.Dashboard.Port != 3000 {
-		t.Errorf("expected port 3000 (from user config), got %d", cfg.Dashboard.Port)
+	// Server port should remain from user config (not in workspace config)
+	if cfg.Server.Port != 3000 {
+		t.Errorf("expected port 3000 (from user config), got %d", cfg.Server.Port)
 	}
 }
 
@@ -171,7 +167,6 @@ func TestEnvOverrides(t *testing.T) {
 	t.Setenv("AGENT_MEMORY_ENABLED", "0")
 	t.Setenv("AGENT_MEMORY_RUN_LABEL", "env-label")
 	t.Setenv("AGENT_MEMORY_DATA_DIR", "/tmp/env-data")
-	t.Setenv("AGENT_MEMORY_DASHBOARD_PORT", "5000")
 	t.Setenv("AGENT_MEMORY_LOG_LEVEL", "error")
 	t.Setenv("AGENT_MEMORY_ONNX_RUNTIME_PATH", "/custom/runtime.so")
 
@@ -186,9 +181,6 @@ func TestEnvOverrides(t *testing.T) {
 	}
 	if cfg.DataDir != "/tmp/env-data" {
 		t.Errorf("expected DataDir '/tmp/env-data', got %q", cfg.DataDir)
-	}
-	if cfg.Dashboard.Port != 5000 {
-		t.Errorf("expected port 5000, got %d", cfg.Dashboard.Port)
 	}
 	if cfg.Observe.LogLevel != "error" {
 		t.Errorf("expected log level 'error', got %q", cfg.Observe.LogLevel)
@@ -259,11 +251,11 @@ func TestValidateErrors(t *testing.T) {
 			wantError: "retrieval weights must sum to 1.0",
 		},
 		{
-			name: "invalid dashboard port",
+			name: "invalid server upper port",
 			modify: func(c *Config) {
-				c.Dashboard.Port = 99999
+				c.Server.Port = 99999
 			},
-			wantError: "invalid dashboard.port",
+			wantError: "invalid server.port",
 		},
 		{
 			name: "invalid server port",
@@ -313,7 +305,7 @@ func TestSaveAndLoad(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.RunLabel = "test-save"
 	cfg.Retrieval.DefaultTopK = 12
-	cfg.Dashboard.Port = 4500
+	cfg.Server.Port = 4500
 	cfg.Observe.LogLevel = "debug"
 
 	// Save config
@@ -334,8 +326,8 @@ func TestSaveAndLoad(t *testing.T) {
 	if loaded.Retrieval.DefaultTopK != 12 {
 		t.Errorf("expected top-k 12, got %d", loaded.Retrieval.DefaultTopK)
 	}
-	if loaded.Dashboard.Port != 4500 {
-		t.Errorf("expected port 4500, got %d", loaded.Dashboard.Port)
+	if loaded.Server.Port != 4500 {
+		t.Errorf("expected port 4500, got %d", loaded.Server.Port)
 	}
 	if loaded.Observe.LogLevel != "debug" {
 		t.Errorf("expected log level 'debug', got %q", loaded.Observe.LogLevel)
@@ -402,7 +394,7 @@ func TestEnvInt(t *testing.T) {
 
 func TestMergePreservesDefaults(t *testing.T) {
 	cfg := DefaultConfig()
-	originalPort := cfg.Dashboard.Port
+	originalPort := cfg.Server.Port
 	originalTopK := cfg.Retrieval.DefaultTopK
 
 	// Merge empty config with no presence information (simulates a layer
@@ -411,8 +403,8 @@ func TestMergePreservesDefaults(t *testing.T) {
 	cfg.merge(other, nil)
 
 	// Verify defaults preserved
-	if cfg.Dashboard.Port != originalPort {
-		t.Errorf("expected port %d preserved, got %d", originalPort, cfg.Dashboard.Port)
+	if cfg.Server.Port != originalPort {
+		t.Errorf("expected port %d preserved, got %d", originalPort, cfg.Server.Port)
 	}
 	if cfg.Retrieval.DefaultTopK != originalTopK {
 		t.Errorf("expected top-k %d preserved, got %d", originalTopK, cfg.Retrieval.DefaultTopK)
@@ -427,9 +419,6 @@ func TestMergePreservesDefaults(t *testing.T) {
 	}
 	if !cfg.Embeddings.CacheEnabled {
 		t.Error("expected Embeddings.CacheEnabled to remain true after merging an empty layer")
-	}
-	if !cfg.Dashboard.Enabled {
-		t.Error("expected Dashboard.Enabled to remain true after merging an empty layer")
 	}
 	if !cfg.Server.EnableCORS {
 		t.Error("expected Server.EnableCORS to remain true after merging an empty layer")
@@ -450,7 +439,7 @@ func TestLoadFromFile_PreservesUnspecifiedBooleanDefaults(t *testing.T) {
 	// None of the true-by-default booleans are mentioned, and loading this
 	// file must not flip any of them to false.
 	configYAML := `
-dashboard:
+server:
   port: 9999
 `
 	if err := os.WriteFile(configPath, []byte(configYAML), 0644); err != nil {
@@ -462,8 +451,8 @@ dashboard:
 		t.Fatalf("loading config: %v", err)
 	}
 
-	if cfg.Dashboard.Port != 9999 {
-		t.Errorf("expected dashboard port 9999, got %d", cfg.Dashboard.Port)
+	if cfg.Server.Port != 9999 {
+		t.Errorf("expected server port 9999, got %d", cfg.Server.Port)
 	}
 	if !cfg.Enabled {
 		t.Error("expected Enabled to remain true when not specified in config file")
@@ -473,9 +462,6 @@ dashboard:
 	}
 	if !cfg.Embeddings.CacheEnabled {
 		t.Error("expected Embeddings.CacheEnabled to remain true when not specified in config file")
-	}
-	if !cfg.Dashboard.Enabled {
-		t.Error("expected Dashboard.Enabled to remain true when not specified in config file")
 	}
 	if !cfg.Server.EnableCORS {
 		t.Error("expected Server.EnableCORS to remain true when not specified in config file")
@@ -499,8 +485,6 @@ storage:
   auto_vacuum: false
 embeddings:
   cache_enabled: false
-dashboard:
-  enabled: false
 server:
   enable_cors: false
 observe:
@@ -525,9 +509,6 @@ adaptive:
 	}
 	if cfg.Embeddings.CacheEnabled {
 		t.Error("expected Embeddings.CacheEnabled to be false")
-	}
-	if cfg.Dashboard.Enabled {
-		t.Error("expected Dashboard.Enabled to be false")
 	}
 	if cfg.Server.EnableCORS {
 		t.Error("expected Server.EnableCORS to be false")

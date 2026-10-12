@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -66,6 +67,9 @@ type Model struct {
 	backend            Backend
 	jevCredentials     JevCredentialStore
 	context            context.Context
+	consoleBackend     ConsoleBackend
+	console            consoleState
+	ux                 workspaceUX
 	destination        Destination
 	query              string
 	searchFocused      bool
@@ -103,6 +107,8 @@ type Model struct {
 
 const browseLimit = 100
 const searchLimit = 20
+
+var modelGeneration atomic.Int64
 
 type overviewLoadedMsg struct {
 	generation int
@@ -142,15 +148,21 @@ func NewModelWithCredentials(ctx context.Context, workspace string, backend Back
 		context:        ctx,
 		destination:    DestinationHome,
 	}
+	// Reserve a distinct generation range so a workspace switch cannot accept
+	// a late result from a previous model instance.
+	seed := int(modelGeneration.Add(1)) * 1000000
+	model.overviewGeneration = seed
+	model.browseGeneration = seed
+	model.searchGeneration = seed
+	model.jevGeneration = seed
+	model.console.generation = seed
 	if backend != nil {
+		model.consoleBackend, _ = backend.(ConsoleBackend)
 		model.overviewLoading = true
 		model.browseLoading = true
-		model.overviewGeneration = 1
-		model.browseGeneration = 1
 	}
 	if credentials != nil {
 		model.jevLoading = true
-		model.jevGeneration = 1
 	}
 	return model
 }
@@ -184,6 +196,63 @@ func loadRecentCmd(ctx context.Context, backend Backend, generation int) tea.Cmd
 }
 
 func (m Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
+	if pasted, ok := message.(tea.PasteMsg); ok && m.console.filtering {
+		if len(m.console.filter)+len(pasted.Content) <= 256 {
+			m.console.filter += sanitizeTerminalText(pasted.Content, false)
+			m.console.cursor = 0
+		}
+		return m, nil
+	}
+	if pasted, ok := message.(tea.PasteMsg); ok && m.ux.palette != 0 {
+		if len(m.ux.paletteQuery)+len(pasted.Content) <= 256 {
+			m.ux.paletteQuery += sanitizeTerminalText(pasted.Content, false)
+			m.ux.paletteCursor = 0
+		}
+		return m, nil
+	}
+	if edited, ok := message.(editorResultMsg); ok {
+		if edited.generation != m.console.generation || m.console.form == nil || edited.cursor >= len(m.console.form.values) {
+			return m, nil
+		}
+		if edited.err != nil {
+			m.console.err = edited.err.Error()
+		} else {
+			m.console.form.values[edited.cursor] = edited.text
+			m.console.form.caret = -1
+			m.console.form.preferredColumn = -1
+			m.console.err = ""
+		}
+		return m, nil
+	}
+	if switched, ok := message.(workspaceSelectedMsg); ok {
+		if switched.generation != m.console.generation {
+			return m, nil
+		}
+		if switched.err != nil {
+			m.console.loading = false
+			m.console.err = sanitizeTerminalText(switched.err.Error(), false)
+			return m, nil
+		}
+		next := NewModelWithCredentials(m.context, switched.workspace, switched.backend, m.jevCredentials)
+		next.width, next.height = m.width, m.height
+		return next, next.Init()
+	}
+	if loaded, ok := message.(consoleLoadedMsg); ok {
+		return m.acceptConsoleResult(loaded), nil
+	}
+	if pasted, ok := message.(tea.PasteMsg); ok && m.console.form != nil && !m.console.confirm && !m.console.busy {
+		return m.updateConsoleInput(pasted.Content), nil
+	}
+	if pasted, ok := message.(tea.PasteMsg); ok {
+		if m.searchFocused && len(m.query)+len(pasted.Content) <= 4096 {
+			m.query += sanitizeTerminalText(pasted.Content, false)
+		}
+		if m.jevInput && len(m.jevDraft)+len(pasted.Content) <= 4096 && !strings.ContainsAny(pasted.Content, "\r\n") {
+			m.jevDraft += pasted.Content
+		}
+		return m, nil
+	}
+
 	switch loaded := message.(type) {
 	case overviewLoadedMsg:
 		if loaded.generation != m.overviewGeneration {
@@ -256,6 +325,12 @@ func (m Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	if size, ok := message.(tea.WindowSizeMsg); ok {
 		m.width = size.Width
 		m.height = size.Height
+		if m.ux.navFocused && (size.Width < 100 || size.Height < 20) {
+			m.ux.navFocused = false
+			m.ux.palette = 1
+			m.ux.paletteQuery = ""
+			m.ux.paletteCursor = m.ux.navCursor
+		}
 		return m, nil
 	}
 	key, ok := message.(tea.KeyPressMsg)
@@ -274,6 +349,14 @@ func (m Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 		return m, nil
+	}
+	if next, command, handled := m.updateWorkspaceUXKey(key); handled {
+		return next, command
+	}
+	if !m.searchFocused {
+		if next, command, handled := m.updateConsoleKey(key); handled {
+			return next, command
+		}
 	}
 	if m.detail != nil {
 		switch pressed {
@@ -332,9 +415,9 @@ func (m Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		m.destination = DestinationSearch
 		m.searchFocused = true
 	case "tab":
-		m.destination = nextDestination(m.destination)
+		return m.cycleWorkspaceDestination(1)
 	case "shift+tab":
-		m.destination = previousDestination(m.destination)
+		return m.cycleWorkspaceDestination(-1)
 	case "1":
 		m.destination = DestinationHome
 	case "2":
@@ -446,30 +529,4 @@ func clampCursor(cursor, length int) int {
 		return length - 1
 	}
 	return cursor
-}
-
-func nextDestination(current Destination) Destination {
-	switch current {
-	case DestinationHome:
-		return DestinationSearch
-	case DestinationSearch:
-		return DestinationBrowse
-	case DestinationBrowse:
-		return DestinationJev
-	default:
-		return DestinationHome
-	}
-}
-
-func previousDestination(current Destination) Destination {
-	switch current {
-	case DestinationHome:
-		return DestinationJev
-	case DestinationBrowse:
-		return DestinationSearch
-	case DestinationJev:
-		return DestinationBrowse
-	default:
-		return DestinationHome
-	}
 }

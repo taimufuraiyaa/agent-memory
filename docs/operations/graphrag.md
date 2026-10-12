@@ -38,7 +38,7 @@ Track queue age, coalescing, projection/entity/relationship/rejection counts, in
 7. Use `rollback` with the expected active revision. It atomically restores the previous compatible normalized revision.
 8. Use `disable` to force Basic immediately. Disabling does not delete canonical data.
 
-All mutations require the correct workspace scope, graph operator authorization, an idempotency key where applicable, optimistic revision intent, and a durable audit event. Use the dashboard controls or the `/api/v1/graph-index/*` endpoints; do not modify graph tables directly.
+All mutations require the correct workspace scope, graph operator authorization, an idempotency key where applicable, optimistic revision intent, and a durable audit event. Use Ctrl-K → Graph in the TUI or the `/api/v1/graph-index/*` endpoints; do not modify graph tables directly.
 
 ## Freshness, review, and query policy
 

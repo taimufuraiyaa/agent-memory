@@ -2,8 +2,10 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
+	"sync"
 
 	"github.com/taimufuraiyaa/agent-memory/internal/application"
 	"github.com/taimufuraiyaa/agent-memory/internal/core"
@@ -14,9 +16,24 @@ import (
 )
 
 type localTUIBackend struct {
-	store     *sqlite.Store
-	service   *application.MemoryService
-	workspace string
+	operations sync.RWMutex
+	closed     bool
+	console    memorytui.ConsoleBackend
+	store      *sqlite.Store
+	service    *application.MemoryService
+	workspace  string
+}
+
+func (backend *localTUIBackend) Execute(ctx context.Context, request memorytui.Request) (json.RawMessage, error) {
+	unlock, err := backend.beginOperation()
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+	if backend.console == nil {
+		return nil, errors.New("TUI workspace console is not configured")
+	}
+	return backend.console.Execute(ctx, request)
 }
 
 func newLocalTUIBackend(store *sqlite.Store, provider embeddings.Provider, workspace string) *localTUIBackend {
@@ -33,6 +50,11 @@ func newLocalTUIBackend(store *sqlite.Store, provider embeddings.Provider, works
 }
 
 func (backend *localTUIBackend) LoadOverview(ctx context.Context) (memorytui.Overview, error) {
+	unlock, err := backend.beginOperation()
+	if err != nil {
+		return memorytui.Overview{}, err
+	}
+	defer unlock()
 	if backend == nil || backend.store == nil || backend.workspace == "" {
 		return memorytui.Overview{}, errors.New("TUI backend is not configured")
 	}
@@ -63,6 +85,11 @@ func (backend *localTUIBackend) LoadOverview(ctx context.Context) (memorytui.Ove
 }
 
 func (backend *localTUIBackend) ListRecent(ctx context.Context, limit int) ([]memorytui.MemoryItem, error) {
+	unlock, err := backend.beginOperation()
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
 	if backend == nil || backend.store == nil || backend.workspace == "" {
 		return nil, errors.New("TUI backend is not configured")
 	}
@@ -81,6 +108,11 @@ func (backend *localTUIBackend) ListRecent(ctx context.Context, limit int) ([]me
 }
 
 func (backend *localTUIBackend) Search(ctx context.Context, query string, limit int) ([]memorytui.MemoryItem, error) {
+	unlock, err := backend.beginOperation()
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
 	if backend == nil || backend.service == nil || backend.workspace == "" {
 		return nil, errors.New("TUI search backend is not configured")
 	}
@@ -134,4 +166,33 @@ func tuiMemoryItem(memory core.MemoryEntry, score *float64) memorytui.MemoryItem
 		}
 	}
 	return item
+}
+
+func (backend *localTUIBackend) beginOperation() (func(), error) {
+	if backend == nil {
+		return nil, errors.New("TUI backend unavailable")
+	}
+	backend.operations.RLock()
+	if backend.closed {
+		backend.operations.RUnlock()
+		return nil, errors.New("TUI backend closed")
+	}
+	return backend.operations.RUnlock, nil
+}
+func (backend *localTUIBackend) shutdown() {
+	backend.operations.Lock()
+	backend.closed = true
+	backend.operations.Unlock()
+}
+func (backend *localTUIBackend) SelectWorkspace(ctx context.Context, name string) (memorytui.Backend, error) {
+	unlock, err := backend.beginOperation()
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+	selector, ok := backend.console.(memorytui.WorkspaceSelector)
+	if !ok {
+		return nil, errors.New("workspace switching unavailable")
+	}
+	return selector.SelectWorkspace(ctx, name)
 }

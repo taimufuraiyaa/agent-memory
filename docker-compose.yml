@@ -8,16 +8,16 @@ services:
     volumes:
       - .:/workspace
       - go-mod-cache:/go/pkg/mod
-      - node-modules-cache:/workspace/tools/agent-memory/dashboard/node_modules
       - ~/.agent-memory:/root/.agent-memory
     working_dir: /workspace
+    stdin_open: true
+    tty: true
     command: sleep infinity
     environment:
       - CGO_ENABLED=1
       - AGENT_MEMORY_ENABLED=1
       - AGENT_MEMORY_OBSERVE_ENABLED=1
     ports:
-      - "3210:3210"  # Dashboard
       - "8080:8080"  # API server
 
   test:
@@ -34,4 +34,3 @@ services:
 
 volumes:
   go-mod-cache:
-  node-modules-cache:

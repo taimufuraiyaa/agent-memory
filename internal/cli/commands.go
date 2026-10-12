@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -99,15 +100,23 @@ The memory will be automatically:
 			}
 			if cfg.apiURL != "" {
 				body := map[string]any{
-					"type":     mType,
-					"content":  content,
-					"keywords": keywords,
+					"workspace": cfg.workspace,
+					"type":      mType,
+					"content":   content,
+					"keywords":  keywords,
 				}
-				if strings.TrimSpace(outcomeResult) != "" {
-					body["outcome_result"] = outcomeResult
-				}
-				if strings.TrimSpace(outcomeApproach) != "" {
-					body["outcome_approach"] = outcomeApproach
+				// The handler reads one "outcome" object, as the in-process path builds it.
+				if core.MemoryType(mType) == core.OutcomeMemory {
+					outcome := map[string]any{}
+					if v := strings.ToLower(strings.TrimSpace(outcomeResult)); v != "" {
+						outcome["result"] = v
+					}
+					if v := strings.TrimSpace(outcomeApproach); v != "" {
+						outcome["approach"] = v
+					}
+					if len(outcome) > 0 {
+						body["outcome"] = outcome
+					}
 				}
 				var out any
 				err := postAPI(ctx, cfg.apiURL, "/api/v1/memories/write", body, &out)
@@ -865,7 +874,8 @@ func newSessionEndCommand() *cobra.Command {
 			}
 			if cfg.apiURL != "" {
 				var out any
-				err := postAPI(ctx, cfg.apiURL, "/api/v1/memories/session-end", map[string]any{
+				// The handler resolves the workspace from the request, not from the body.
+				err := postAPI(ctx, cfg.apiURL, "/api/v1/memories/session-end?workspace="+url.QueryEscape(cfg.workspace), map[string]any{
 					"transcript": transcript, "session_id": sessionID, "principal_id": principalID,
 					"terminal_status": terminalStatus, "idempotency_key": idempotencyKey,
 				}, &out)

@@ -24,9 +24,6 @@ type config struct {
 	src             string
 	skipModel       bool
 	skipONNXRuntime bool
-	noDashboard     bool
-	dashboardSrc    string
-	dashboardDir    string
 	writeEnvFile    bool
 	uninstall       bool
 	status          bool
@@ -78,9 +75,6 @@ func parseFlags() config {
 	flag.StringVar(&cfg.src, "src", "./cmd/agent-memory", "path to the agent-memory main package")
 	flag.BoolVar(&cfg.skipModel, "no-model", false, "skip downloading the MiniLM ONNX model")
 	flag.BoolVar(&cfg.skipONNXRuntime, "skip-onnx-runtime", false, "skip downloading ONNX Runtime shared libraries")
-	flag.BoolVar(&cfg.noDashboard, "no-dashboard", false, "skip installing the standalone dashboard (React/Vite)")
-	flag.StringVar(&cfg.dashboardSrc, "dashboard-src", "./tools/agent-memory/dashboard", "path to dashboard source folder (contains package.json)")
-	flag.StringVar(&cfg.dashboardDir, "dashboard-dir", "", "dashboard install dir (default: <data-dir>/dashboard)")
 	flag.BoolVar(&cfg.writeEnvFile, "write-env", true, "write an env file under <data-dir>/agent-memory.env")
 	flag.BoolVar(&cfg.uninstall, "uninstall", false, "remove the installed binary (data is preserved)")
 	flag.BoolVar(&cfg.status, "status", false, "show install state and exit")
@@ -96,9 +90,6 @@ func parseFlags() config {
 	if cfg.dataDir == "" {
 		cfg.dataDir = defaultDataDir()
 	}
-	if cfg.dashboardDir == "" {
-		cfg.dashboardDir = filepath.Join(cfg.dataDir, "dashboard")
-	}
 	return cfg
 }
 
@@ -106,13 +97,13 @@ func runInstall(cfg config) {
 	header(cfg, "agent-memory installer")
 	checkGo(cfg)
 
-	step(cfg, "1/6 data directories")
+	step(cfg, "1/5 data directories")
 	if err := ensureDataDirs(cfg); err != nil {
 		die("failed to create data dirs: %v", err)
 	}
 	ok(cfg, "ready at %s", cfg.dataDir)
 
-	step(cfg, "2/6 binary")
+	step(cfg, "2/5 binary")
 	installed, err := buildAndInstall(cfg)
 	if err != nil {
 		die("build/install failed: %v", err)
@@ -121,7 +112,7 @@ func runInstall(cfg config) {
 	checkPATHAdvice(cfg, filepath.Dir(installed))
 
 	runtimePath := ""
-	step(cfg, "3/6 onnx runtime")
+	step(cfg, "3/5 onnx runtime")
 	if cfg.skipONNXRuntime {
 		info(cfg, "skipped (--skip-onnx-runtime)")
 	} else if p, err := bootstrap.EnsureONNXRuntime(cfg.dataDir, cfg.quiet); err != nil {
@@ -132,7 +123,7 @@ func runInstall(cfg config) {
 		ok(cfg, "installed: %s", runtimePath)
 	}
 
-	step(cfg, "4/6 local embedding model")
+	step(cfg, "4/5 local embedding model")
 	if cfg.skipModel {
 		info(cfg, "skipped (--no-model)")
 	} else if err := bootstrap.EnsureModel(cfg.dataDir, cfg.quiet); err != nil {
@@ -140,18 +131,6 @@ func runInstall(cfg config) {
 		warn(cfg, "agent-memory will work for everything except local embeddings until this succeeds")
 	} else {
 		ok(cfg, "ready at %s", filepath.Join(cfg.dataDir, "models", modelDirName))
-	}
-
-	step(cfg, "5/6 dashboard (React + TypeScript)")
-	dashInstalled := ""
-	if cfg.noDashboard {
-		info(cfg, "skipped (--no-dashboard)")
-	} else if err := bootstrap.EnsureDashboard(cfg.dashboardSrc, cfg.dashboardDir, streamOrDiscard(cfg), streamOrDiscard(cfg)); err != nil {
-		warn(cfg, "dashboard setup failed: %v", err)
-		warn(cfg, "re-run with --no-dashboard to skip, or install Node/npm and try again")
-	} else {
-		dashInstalled = cfg.dashboardDir
-		ok(cfg, "ready at %s", dashInstalled)
 	}
 
 	if cfg.writeEnvFile {
@@ -162,9 +141,6 @@ func runInstall(cfg config) {
 		}
 		if strings.TrimSpace(runtimePath) != "" {
 			vars["AGENT_MEMORY_ONNX_RUNTIME_PATH"] = runtimePath
-		}
-		if strings.TrimSpace(dashInstalled) != "" {
-			vars["AGENT_MEMORY_DASHBOARD_DIR"] = cfg.dashboardDir
 		}
 		if root := detectRepoRoot(cfg); strings.TrimSpace(root) != "" {
 			vars["AGENT_MEMORY_SRC_DIR"] = root
@@ -180,7 +156,7 @@ func runInstall(cfg config) {
 		}
 	}
 
-	step(cfg, "6/6 next steps")
+	step(cfg, "5/5 next steps")
 	printNextSteps(cfg, installed)
 	if cfg.initHere {
 		if err := runInitHere(cfg, installed); err != nil {
@@ -205,7 +181,6 @@ func runStatus(cfg config) {
 	fmt.Fprintf(os.Stderr, "  data dir    : %s\n", existsLabel(cfg.dataDir))
 	fmt.Fprintf(os.Stderr, "  runtime     : %s\n", existsLabel(runtimePath))
 	fmt.Fprintf(os.Stderr, "  model       : %s\n", modelStatus)
-	fmt.Fprintf(os.Stderr, "  dashboard   : %s\n", existsLabel(filepath.Join(cfg.dataDir, "dashboard", "package.json")))
 	fmt.Fprintf(os.Stderr, "  env file    : %s\n", existsLabel(filepath.Join(cfg.dataDir, "agent-memory.env")))
 	fmt.Fprintf(os.Stderr, "  PATH ok     : %v\n", isOnPath(cfg.binDir))
 	fmt.Fprintf(os.Stderr, "  go version  : %s\n", runtime.Version())
@@ -417,17 +392,8 @@ func printNextSteps(cfg config, binPath string) {
 	fmt.Fprintln(os.Stderr, "       am reinstall --project-name <name> --ide trae")
 	fmt.Fprintln(os.Stderr, "     Or do it now: go run install.go --init-here --ide trae")
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "  3) Dashboard env (standalone React UI):")
-	if runtime.GOOS == "windows" {
-		fmt.Fprintln(os.Stderr, "       setx AGENT_MEMORY_DASHBOARD_DIR \"<path-to-dashboard>\"")
-		fmt.Fprintf(os.Stderr, "     Current: %s\n", cfg.dashboardDir)
-	} else {
-		fmt.Fprintf(os.Stderr, "       export AGENT_MEMORY_DASHBOARD_DIR=%q\n", cfg.dashboardDir)
-		if cfg.writeEnvFile {
-			fmt.Fprintf(os.Stderr, "     Auto-added to shell rc (restart terminal if needed): %q\n", filepath.Join(cfg.dataDir, "agent-memory.env"))
-		}
-	}
-	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "  3) Open the terminal workspace:")
+	fmt.Fprintln(os.Stderr, "       am tui --workspace <name>")
 	fmt.Fprintln(os.Stderr, "  4) Inspect adaptive runtime tuning:")
 	fmt.Fprintln(os.Stderr, "       am tuning")
 }

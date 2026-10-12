@@ -48,7 +48,7 @@ remove "err.log"
 remove "out.log"
 
 # --- Ad-hoc debug/test scripts left at the repo root -------------------------
-# If you still actively use these for manual menubar/dashboard debugging,
+# If you still actively use these for historical UI debugging,
 # move them instead of deleting, e.g.:
 #   mkdir -p scripts/debug && git mv test_cli.swift test_race.sh scripts/debug/
 remove "test_cli.swift"
@@ -59,7 +59,6 @@ remove "test_race.sh"
 # fallback path, and the scheduler binding to the dashboard placeholder DB
 # for workspace-scoped runs) are fixed in the current code and covered by:
 #   - internal/cli/serve_command_test.go: TestServeSchedulerWorkspaceDBPathUsesWorkspaceDBForPlaceholder
-#   - internal/cli/dashboard_command_test.go: TestDashboardPIDPathsFallbackOrder
 #   - internal/api/server_test.go: TestExternalServePIDCandidatesOrder,
 #     TestExternalSchedulerSummaryFindsUnsuffixedServePID
 remove "debug-dashboard-scheduler-sync.md"

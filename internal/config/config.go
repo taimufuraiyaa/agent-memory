@@ -37,9 +37,6 @@ type Config struct {
 	// the canonical write or synchronous basic-retrieval path.
 	Graph GraphConfig `yaml:"graph"`
 
-	// Dashboard settings
-	Dashboard DashboardConfig `yaml:"dashboard"`
-
 	// API server settings
 	Server ServerConfig `yaml:"server"`
 
@@ -104,14 +101,6 @@ type RetrievalConfig struct {
 	EnableReranking   bool    `yaml:"enable_reranking"`   // Enable LLM reranking
 	RetrievalTimeout  int     `yaml:"retrieval_timeout"`  // Timeout in seconds
 	EnableExplanation bool    `yaml:"enable_explanation"` // Include retrieval explanations
-}
-
-// DashboardConfig contains dashboard-related configuration.
-type DashboardConfig struct {
-	Enabled    bool   `yaml:"enabled"`
-	Dir        string `yaml:"dir"`
-	Port       int    `yaml:"port"`
-	AutoLaunch bool   `yaml:"auto_launch"`
 }
 
 // ServerConfig contains API server configuration.
@@ -207,12 +196,6 @@ func DefaultConfig() *Config {
 			EnableExplanation: false,
 		},
 		Graph: DefaultGraphConfig(dataDir),
-		Dashboard: DashboardConfig{
-			Enabled:    true,
-			Dir:        filepath.Join(dataDir, "dashboard"),
-			Port:       3042,
-			AutoLaunch: false,
-		},
 		Server: ServerConfig{
 			Host:           "localhost",
 			Port:           8042,
@@ -387,7 +370,6 @@ func (c *Config) merge(other *Config, present map[string]bool) {
 	c.mergeEmbeddings(&other.Embeddings, present)
 	c.mergeRetrieval(&other.Retrieval, present)
 	c.mergeGraph(&other.Graph, present)
-	c.mergeDashboard(&other.Dashboard, present)
 	c.mergeServer(&other.Server, present)
 	c.mergeObserve(&other.Observe, present)
 	c.mergeUpgrade(&other.Upgrade, present)
@@ -526,21 +508,6 @@ func (c *Config) mergeGraph(other *GraphConfig, present map[string]bool) {
 	}
 }
 
-func (c *Config) mergeDashboard(other *DashboardConfig, present map[string]bool) {
-	if present["dashboard.enabled"] {
-		c.Dashboard.Enabled = other.Enabled
-	}
-	if other.Dir != "" {
-		c.Dashboard.Dir = other.Dir
-	}
-	if other.Port > 0 {
-		c.Dashboard.Port = other.Port
-	}
-	if present["dashboard.auto_launch"] {
-		c.Dashboard.AutoLaunch = other.AutoLaunch
-	}
-}
-
 func (c *Config) mergeServer(other *ServerConfig, present map[string]bool) {
 	if other.Host != "" {
 		c.Server.Host = other.Host
@@ -651,16 +618,6 @@ func (c *Config) applyEnvOverrides() {
 		c.Embeddings.OpenAIKey = v
 	}
 
-	// Dashboard
-	if v := os.Getenv("AGENT_MEMORY_DASHBOARD_DIR"); v != "" {
-		c.Dashboard.Dir = v
-	}
-	if v := os.Getenv("AGENT_MEMORY_DASHBOARD_PORT"); v != "" {
-		if port := envInt(v); port > 0 {
-			c.Dashboard.Port = port
-		}
-	}
-
 	// Observability
 	if v := os.Getenv("AGENT_MEMORY_OBSERVE_ENABLED"); v != "" {
 		c.Observe.Enabled = envBool(v)
@@ -768,9 +725,6 @@ func (c *Config) Validate() error {
 	}
 
 	// Validate ports
-	if c.Dashboard.Port < 1 || c.Dashboard.Port > 65535 {
-		errors = append(errors, fmt.Sprintf("invalid dashboard.port: %d (must be 1-65535)", c.Dashboard.Port))
-	}
 	if c.Server.Port < 1 || c.Server.Port > 65535 {
 		errors = append(errors, fmt.Sprintf("invalid server.port: %d (must be 1-65535)", c.Server.Port))
 	}

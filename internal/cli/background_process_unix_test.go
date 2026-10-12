@@ -8,7 +8,7 @@ import (
 )
 
 func TestConfigureBackgroundProcessCreatesDetachedSession(t *testing.T) {
-	cmd := exec.Command("agent-memory", "dashboard")
+	cmd := exec.Command("agent-memory", "serve")
 
 	configureBackgroundProcess(cmd)
 

@@ -6,9 +6,9 @@ Release requires the permanent `TestAutomaticSkillLearningNaturalClosedLoop` reg
 
 - Fresh and upgraded SQLite migrations, revision-1 import, immutable bundle custody, and shadow-selection parity.
 - Authorization, idempotency, generation checks, accountable approval, exact resolution acknowledgement, and safety disablement.
-- Local HTTP/CLI, expanded MCP, responsive dashboard, encrypted portable backup, deletion, retention, and tombstone behavior.
+- Local HTTP/CLI, expanded MCP, Go terminal interface, encrypted portable backup, deletion, retention, and tombstone behavior.
 - Bounded content-free metrics, routed alerts, evaluator failure handling, canary analysis, materialization restoration, and rollback drills.
-- Full Go tests and vet, MCP tests, dashboard tests/typecheck/build, and the embedded-dashboard production smoke gate.
+- Full Go tests and vet, MCP tests, TUI/API/CLI tests and the real pseudo-terminal smoke gate.
 
 ## Accountable enablement
 

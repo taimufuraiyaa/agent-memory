@@ -7,7 +7,7 @@ A persistent, multi-tier memory layer for AI coding agents (Cursor, Claude Code,
 
 ## Status
 - **Core Implementation**: Complete, optimized, and ready to run.
-- **Tools**: CLI, local HTTP dashboard, and test automation scripts are available.
+- **Tools**: Go TUI, CLI, headless HTTP API, and test automation scripts are available.
 - **Integration**: Supports Cursor, Trae, Claude Code, ZCode, and custom agent integrations out-of-the-box.
 
 ---
@@ -79,7 +79,7 @@ The recommended profile includes the local `qwen3:8b` question
 planner. Selecting it opens a second terminal step with `None`, `qwen3:4b`
 (2.5 GB), recommended `qwen3:8b` (5.2 GB), and `qwen3:14b` (9.3 GB) choices
 before making any changes. The required core is locked; ONNX Runtime, MiniLM,
-the dashboard, local planner, and current-workspace rules remain independently
+the local planner and current-workspace rules remain independently
 selectable.
 
 For scripts and redirected execution, the installer never waits for terminal
@@ -144,7 +144,7 @@ projects from upgrading in `--all` mode. `upgrade --dry-run` and
 `upgrade --hooks-only` do not touch project databases.
 
 `am upgrade` updates the local installation and workspace hooks. The dry-run
-and hooks-only modes remain side-effect-limited and do not rebuild the dashboard.
+and hooks-only modes remain side-effect-limited and do not rebuild the binary.
 
 ---
 
@@ -163,7 +163,8 @@ and hooks-only modes remain side-effect-limited and do not rebuild the dashboard
 | `agent-memory advisor` | Score workspace memory health and show evidence-backed recommendations |
 | `agent-memory session-end` | Parse a session transcript to extract clean learnings |
 | `agent-memory study` | Bootstrap/learn from project documents and code files |
-| `agent-memory dashboard` (`ui`) | Start and open the local web-based dashboard |
+| `agent-memory start` | Open the Go TUI with a registered-workspace picker |
+| `agent-memory restart` | Rebuild both installed binaries and open the updated TUI |
 | `agent-memory tui --workspace <name>` | Open the local keyboard-driven terminal workspace |
 
 ---
@@ -206,13 +207,22 @@ cat session_transcript.txt | agent-memory session-end --workspace my-project --f
 
 ## Terminal UI
 
-Open one explicitly selected local workspace without starting the HTTP server or browser dashboard:
+Open the Go Bubble Tea terminal interface with the installed `agent-memory` or `am` command:
 
 ```bash
-agent-memory tui --workspace my-project
+agent-memory start
+agent-memory start --workspace my-project
+agent-memory restart --workspace my-project
 ```
 
-The terminal UI provides a workspace overview, recent-memory browsing, semantic search, memory details, loading and error states, an in-app help screen, and local Jev access-token setup. Memory browsing remains read-only except for normal retrieval telemetry recorded by semantic search. The existing React dashboard remains the interface for source ingestion, notes, graph exploration, settings, and other local mutations.
+Start shows a registered-workspace picker when `--workspace` is omitted. Restart rebuilds from the source checkout, updates both executables, and opens the new TUI; use `--source-dir` to choose the checkout explicitly. `agent-memory tui --workspace my-project` remains available. The OpenCode-inspired layout uses a right workspace/context panel, a centered Home action card, readable list previews, and a framed Ask composer beneath retrieved context. Up/down selects or scrolls; Right opens a record and then reaches the workspace panel; Left returns to the list or content. Use `Ctrl-K` to search destinations, `Ctrl-P` to search commands, and `a` for contextual actions. New notes need only a title and body. Arrow keys move the multiline caret; Tab changes fields, `Ctrl-O` reveals advanced options, `Ctrl-E` opens your terminal editor, and `Ctrl-S` reviews the prepared change. Mutations retain explicit confirmation and backend revision and rights checks. Graph, activity, skills, client profiles, settings and migration remain available through the palettes.
+
+Successful chats/searches are saved as private local records that can be reopened, renamed, deleted or repeated. Browser-only localStorage drafts are not migrated automatically. The React/HTML frontend and its launcher/build/container dependencies have been removed. See [Terminal interface guide](docs/terminal-interface.md) for keys and workflows.
+
+```bash
+# Connect the terminal client to the headless daemon instead of local services.
+agent-memory tui --workspace my-project --api http://127.0.0.1:3211
+```
 
 For Claude Code, `agent-memory connect claude-code --workspace <name> --root <project>` installs a project `/am` skill alongside the existing MCP server and lifecycle hooks. In Claude Code, run `/am listen` for bounded local Agent Memory recall, or `/am listen all` to opt into both local recall and Jev advice. `/am listen status` reports both; `/am listen off` stops both. The CLI equivalents are `agent-memory listen on [--jev]|status|off --workspace <name>`. Keep the local Agent Memory service running. The listener is off by default and only emits context when the hook's working directory is inside the registered project. Plain listen never initiates Jev consent, and actual model switching requires host integration.
 
@@ -360,7 +370,7 @@ Interactive `agent-memory install` also offers an optional masked Jev token prom
 | `?` | Toggle help |
 | `q` or `Ctrl-C` | Quit |
 
-The command requires an interactive terminal and does not support `--api` mode.
+The terminal commands require interactive input/output and support `--api` with an explicit workspace.
 
 ### Exact-term Bloom rollout
 
@@ -376,73 +386,26 @@ Missing, dirty, rebuilding, corrupt, incompatible, generation-mismatched, satura
 
 ## Local Development
 
-Build and test the local binary, embedded dashboard, and MCP server directly from the checkout:
+Build and test the Go binary/TUI and MCP server directly from the checkout:
 
 ~~~bash
 make build
 make test
 make integration-test
-make build-with-dashboard
 ~~~
 
-The Go binary serves the local API and embedded dashboard. The MCP server uses the same local API and exposes only local tools; set `AGENT_MEMORY_URL` when the API listens on a non-default address.
-## Local HTTP Dashboard
-The dashboard is served locally by the Go binary (no separate servers required) and matches the core API engine path exactly:
+The Go binary contains the terminal UI and headless API. No frontend build is required. The MCP adapter uses the same API; Node remains an independent MCP development dependency. Set `AGENT_MEMORY_URL` when the API listens on a non-default address.
+
+## Headless Local Service
 
 ```bash
-# Start and open in browser
-agent-memory dashboard
-
-# Run headlessly in the background
-agent-memory dashboard --start
-agent-memory dashboard --stop
+agent-memory serve --start
+agent-memory serve --status
+agent-memory tui --workspace my-project --api http://127.0.0.1:3211
+agent-memory serve --stop
 ```
 
-During UI development, opt into the Vite development server and hot module
-replacement while the Go binary serves the real local API:
-
-```bash
-agent-memory dashboard --hot-reload
-
-# The development server can also run in the background.
-agent-memory dashboard --hot-reload --start
-```
-
-Hot-reload mode requires npm and a source checkout containing
-`tools/agent-memory/dashboard`. It is opt-in; normal dashboard startup still
-uses the embedded UI and has no npm runtime dependency.
-
-For a source checkout, build the embedded dashboard and binary once with
-`make build-with-dashboard`, then run `./bin/agent-memory dashboard`. The
-dashboard listens on port 3100 by default, and the production binary serves
-`/dashboard/` itself; npm is not needed at runtime.
-
-The local command uses one embedded React webapp. The server publishes a small,
-no-store runtime manifest for the standalone SQLite workflow.
-
-### Notebook and dashboard capabilities
-
-- **Notebook-first workspace**: Notes is the default home, with a workspace explorer, multi-note tabs, Markdown editing, rendered preview, Mermaid diagrams, and responsive desktop/mobile layouts.
-- **Human + agent recall**: Saved note revisions are indexed asynchronously as replaceable memory chunks. Search and Ask label Human note and Agent memory evidence separately and retain note path, revision, heading, and line provenance.
-- **Safe document lifecycle**: Autosave uses optimistic revisions, revision history is immutable, normal deletion moves notes to recoverable trash, and failed indexing never blocks reading or editing.
-- **Connected notes**: `[[Internal links]]`, backlinks, outline navigation, typed properties, folder paths, and revision restore are available from the context panel.
-- **Grounded Ask**: Ask can search the active note, current workspace, or all local workspaces; citations reopen human notes, and answers can become notes only through an explicit confirmed action.
-- **System workspace**: Existing Overview, Sessions, Diagnostics, Benchmark, Lifecycle, Wiki, Feedback, Skills, raw stats, Explain Mode, Recall Preview, and Memory Advisor remain reachable under System.
-- **Per-client MCP profiles**: System → Clients registers Codex, Claude, Cursor, or custom clients and assigns Default (five workflow tools) or Expanded (adds health and session browsing). Add the displayed `AGENT_MEMORY_CLIENT_ID` value to that client's MCP environment and reconnect it. Profiles apply across all local workspaces, but each client selects its own profile.
-- **Local installation settings**: System → Diagnostics exposes local runtime health and resource signals. Saving changes local configuration only.
-- **Encrypted local backup**: System → Migration downloads an encrypted AMPB2 copy of the selected workspace's memories and active notes. It excludes source originals and never deletes local data.
-- **Keyboard workflow**: Command palette, new note, global search, Ask, save, close tab, and next/previous tab shortcuts are supported with visible focus states.
-
-The notebook is enabled by default. For the one-release rollback window, build
-the dashboard with `VITE_NOTEBOOK_ENABLED=false` to restore Overview as the
-default and hide Notes without changing stored notes or memories:
-
-```bash
-VITE_NOTEBOOK_ENABLED=false make build-with-dashboard
-```
-
-Rebuild without that environment variable to re-enable the notebook. The
-rollout is additive: existing memory rows require no destructive migration.
+For an interactive development container, use `docker compose run --rm dev` and launch the TUI inside its terminal. The container has no frontend port, node_modules volume or Node frontend runtime.
 
 ---
 
@@ -463,5 +426,5 @@ python3 benchmark/score.py --run-dir benchmark/results/continuation-full-10000 -
 - **Local Storage Only**: All data is saved inside `~/.agent-memory/` on your system.
 - **No Telemetry**: Absolutely no data collection or tracking.
 - **Secret & PII Redaction**: Automatic scanning and filtering of API keys (`sk-`, `ghp_`, etc.), private keys, credit cards, and emails on ingest.
-- **Transparent Local Host**: The local dashboard binds to `127.0.0.1` by default.
+- **Transparent Local Host**: The headless service binds to `127.0.0.1`; local TUI mode opens no listener.
 - Refer to [docs/security.md](docs/security.md) and [SECURITY.md](SECURITY.md) for more details.

@@ -86,6 +86,39 @@ func TestClaudeAdapterPreservesOtherMCPServersAndHooks(t *testing.T) {
 	}
 }
 
+func TestClaudeAdapterMCPServiceURLKeepsStableDefaultAndAllowsOverride(t *testing.T) {
+	root := t.TempDir()
+	// A project connected by an older version carries the literal URL; connecting again
+	// must migrate it to the overridable form without touching other servers.
+	seed := `{"mcpServers":{"custom":{"command":"custom-mcp"},"agent-memory":{"command":"agent-memory-mcp","env":{"AGENT_MEMORY_URL":"http://127.0.0.1:3211"}}}}`
+	if err := os.WriteFile(filepath.Join(root, ".mcp.json"), []byte(seed), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := NewClaudeAdapter().Connect(context.Background(), Options{Root: root, DataDir: t.TempDir(), Workspace: "ws"}); err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	raw, _ := os.ReadFile(filepath.Join(root, ".mcp.json"))
+	var config struct {
+		MCPServers map[string]struct {
+			Command string            `json:"command"`
+			Env     map[string]string `json:"env"`
+		} `json:"mcpServers"`
+	}
+	if err := json.Unmarshal(raw, &config); err != nil {
+		t.Fatalf("decode: %v: %s", err, raw)
+	}
+	server := config.MCPServers["agent-memory"]
+	if server.Command != "agent-memory-mcp" {
+		t.Fatalf("command changed: %q", server.Command)
+	}
+	if got, want := server.Env["AGENT_MEMORY_URL"], "${AGENT_MEMORY_URL:-http://127.0.0.1:3211}"; got != want {
+		t.Fatalf("AGENT_MEMORY_URL = %q, want %q (stable default, overridable from the environment)", got, want)
+	}
+	if config.MCPServers["custom"].Command != "custom-mcp" {
+		t.Fatalf("other servers were not preserved: %s", raw)
+	}
+}
+
 func TestClaudeAdapterDoesNotOverwriteUserAMSkill(t *testing.T) {
 	root := t.TempDir()
 	path := claudeSkillPath(root)

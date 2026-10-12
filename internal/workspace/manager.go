@@ -80,6 +80,7 @@ type ListItem struct {
 	WorkspaceRoot string    `json:"workspace_root,omitempty"`
 	SizeBytes     int64     `json:"size_bytes"`
 	MemoryCount   int       `json:"memory_count"`
+	CountStatus   string    `json:"count_status"`
 	LastActivity  time.Time `json:"last_activity"`
 }
 
@@ -695,18 +696,26 @@ func (m *Manager) Rename(_ context.Context, opt RenameOptions) (*RenameResult, e
 	return out, nil
 }
 
-func (m *Manager) List(_ context.Context) ([]ListItem, error) {
+func (m *Manager) List(ctx context.Context) ([]ListItem, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	reg, err := m.readRegistry()
 	if err != nil {
 		return nil, err
 	}
 	out := make([]ListItem, 0, len(reg.Projects))
+	scanContext, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
 	for _, p := range reg.Projects {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		size := fileSize(p.DBPath)
-		memCount := 0
-		if store, err := sqlite.Open(context.Background(), p.DBPath); err == nil {
-			memCount, _ = store.CountMemories(context.Background())
-			_ = store.Close()
+		memCount, countErr := countProjectMemories(scanContext, p)
+		countStatus := "ready"
+		if countErr != nil {
+			countStatus = "unavailable"
 		}
 		out = append(out, ListItem{
 			Name:          p.Name,
@@ -714,6 +723,7 @@ func (m *Manager) List(_ context.Context) ([]ListItem, error) {
 			WorkspaceRoot: p.WorkspaceRoot,
 			SizeBytes:     size,
 			MemoryCount:   memCount,
+			CountStatus:   countStatus,
 			LastActivity:  p.LastUsedAt,
 		})
 	}

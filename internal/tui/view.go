@@ -15,10 +15,12 @@ const (
 )
 
 var (
-	accentStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#C9A7FF")).Bold(true)
-	mutedStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#7F8B8D"))
-	activeStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#102326")).Background(lipgloss.Color("#DDF5F1")).Bold(true)
+	accentStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#A6B6ED")).Bold(true)
+	mutedStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#8A8A8A"))
+	activeStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#EEEEEE")).Background(lipgloss.Color("#303030")).Bold(true)
 	errorStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#FF8F8F")).Bold(true)
+	canvasStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#DEDEDE")).Background(lipgloss.Color("#111111"))
+	panelStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#DEDEDE")).Background(lipgloss.Color("#1C1C1C"))
 )
 
 func (m Model) View() tea.View {
@@ -27,12 +29,8 @@ func (m Model) View() tea.View {
 	if width < minimumWidth || height < minimumHeight {
 		content = errorStyle.Render("Terminal too small") + "\n" +
 			fmt.Sprintf("Resize to at least %dx%d · q Quit", minimumWidth, minimumHeight)
-	} else if m.helpVisible {
-		content = m.renderHelp(width, height)
-	} else if m.detail != nil {
-		content = m.renderDetail(width, height)
 	} else {
-		content = m.renderWorkspace(width, height)
+		content = m.renderWorkspaceShell(width, height)
 	}
 	view := tea.NewView(boundContent(content, width, height))
 	view.AltScreen = true
@@ -51,41 +49,6 @@ func (m Model) viewport() (int, int) {
 	return width, height
 }
 
-func (m Model) renderWorkspace(width, height int) string {
-	divider := mutedStyle.Render(strings.Repeat("─", width))
-	header := accentStyle.Render("◆ AGENT MEMORY") + "  " + mutedStyle.Render(m.workspace)
-	lines := []string{header, divider, m.renderNavigation(), ""}
-	switch m.destination {
-	case DestinationSearch:
-		lines = append(lines, accentStyle.Render("Search memories"))
-		query := m.query
-		if query == "" {
-			query = "Type / to enter a semantic query"
-		}
-		prefix := "  "
-		if m.searchFocused {
-			prefix = "› "
-		}
-		lines = append(lines, prefix+sanitizeTerminalText(query, false), "")
-		lines = append(lines, m.renderSearch(height-len(lines)-2)...)
-	case DestinationBrowse:
-		lines = append(lines, accentStyle.Render("Recent memories"), "")
-		lines = append(lines, m.renderBrowse(height-len(lines)-2)...)
-	case DestinationJev:
-		lines = append(lines, accentStyle.Render("Jev access token"), "")
-		lines = append(lines, m.renderJev()...)
-	default:
-		lines = append(lines, accentStyle.Render("Workspace overview"), "")
-		lines = append(lines, m.renderOverview()...)
-	}
-	footer := "Tab Switch  ·  / Search  ·  ? Help  ·  q Quit"
-	for len(lines) < height-2 {
-		lines = append(lines, "")
-	}
-	lines = append(lines, divider, mutedStyle.Render(footer))
-	return strings.Join(lines, "\n")
-}
-
 func (m Model) renderSearch(availableRows int) []string {
 	if m.searchLoading {
 		return []string{mutedStyle.Render("Searching memories…")}
@@ -97,7 +60,8 @@ func (m Model) renderSearch(availableRows int) []string {
 		return []string{mutedStyle.Render("No search submitted yet.")}
 	}
 	if len(m.searchItems) == 0 {
-		return []string{mutedStyle.Render("No memories matched “" + sanitizeTerminalText(m.lastSearchQuery, false) + "”.")}
+		return []string{mutedStyle.Render("No memories matched “" + sanitizeTerminalText(m.lastSearchQuery, false) + "”."),
+			"Scope: project " + sanitizeTerminalText(m.workspace, false), "w / Ctrl-W All projects · i Import source"}
 	}
 	if availableRows < 1 {
 		availableRows = 1
@@ -215,7 +179,9 @@ func (m Model) renderBrowse(availableRows int) []string {
 		return []string{errorStyle.Render("Browse unavailable: " + m.browseError), mutedStyle.Render("Press r to retry.")}
 	}
 	if len(m.browseItems) == 0 {
-		return []string{mutedStyle.Render("No memories in this workspace yet.")}
+		return []string{mutedStyle.Render("No memories in this workspace yet."),
+			"Project: " + sanitizeTerminalText(m.workspace, false) + " · 0 saved memories", "",
+			"w / Ctrl-W All projects", "n Save a memory · i Import source", "Sources → s Study this project"}
 	}
 	if availableRows < 1 {
 		availableRows = 1
@@ -309,48 +275,22 @@ func (m Model) renderDetail(width, height int) string {
 	return strings.Join(lines, "\n")
 }
 
-func (m Model) renderNavigation() string {
-	items := []struct {
-		destination Destination
-		label       string
-	}{
-		{DestinationHome, "1 Home"},
-		{DestinationSearch, "2 Search"},
-		{DestinationBrowse, "3 Browse"},
-		{DestinationJev, "4 Jev"},
-	}
-	parts := make([]string, 0, len(items))
-	for _, item := range items {
-		label := " " + item.label + " "
-		if item.destination == m.destination {
-			parts = append(parts, activeStyle.Render(label))
-		} else {
-			parts = append(parts, mutedStyle.Render(label))
-		}
-	}
-	return strings.Join(parts, "  ")
-}
-
 func (m Model) renderHelp(width, height int) string {
 	lines := []string{
 		accentStyle.Render("Keyboard help"),
-		mutedStyle.Render(strings.Repeat("─", width)),
-		"Tab / Shift-Tab  Switch Home, Search, Browse, and Jev",
-		"1 / 2 / 3 / 4    Open Home, Search, Browse, or Jev",
-		"/                Focus Search input",
-		"↑ / ↓ or j / k   Move through a list or detail",
-		"Enter            Search or open selected memory",
-		"Esc              Close input, detail, or help",
-		"r                Refresh the active destination",
-		"s / x            Set or remove Jev token on Jev screen",
-		"?                Toggle this help",
-		"q / Ctrl-C       Quit",
+		"Ctrl-K Go to a destination · Ctrl-P Search commands",
+		"↑↓ Select/scroll · → Read/workspace · ← Return",
+		"Ctrl-B Workspace · Ctrl-W Scope · PgUp/PgDn Scroll",
+		"Tab Cycle · 1 Home · 2 Search · 3 Browse · 5 Ask",
+		"n New note/memory · e Edit note · i Import source",
+		"f Filter list · t Active/trash notes · a Actions",
+		"Enter Read/send/review · Ctrl-S Review a form",
+		"Ctrl-O Advanced options · Ctrl-E External editor",
+		"Editing: ↑↓ Lines · ←→ Caret · Tab Fields",
+		"Ctrl-J New line · Esc Back · r Refresh · h History",
+		"? Close help · q / Ctrl-C Quit",
 	}
-	for len(lines) < height-1 {
-		lines = append(lines, "")
-	}
-	lines = append(lines, mutedStyle.Render("Esc or ? Close"))
-	return strings.Join(lines, "\n")
+	return strings.Join(fitWorkspaceLines(lines, width, height), "\n")
 }
 
 func boundContent(content string, width, height int) string {

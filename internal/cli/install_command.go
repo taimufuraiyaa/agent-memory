@@ -12,7 +12,6 @@ import (
 
 	"github.com/charmbracelet/x/term"
 	"github.com/spf13/cobra"
-	"github.com/taimufuraiyaa/agent-memory/internal/api/dashboard"
 	"github.com/taimufuraiyaa/agent-memory/internal/bootstrap"
 	"github.com/taimufuraiyaa/agent-memory/internal/workspace"
 )
@@ -25,9 +24,6 @@ func newInstallCommand() *cobra.Command {
 	var src string
 	var skipModel bool
 	var skipONNXRuntime bool
-	var noDashboard bool
-	var dashboardSrc string
-	var dashboardDir string
 	var writeEnvFile bool
 	var projectName string
 	var ideTargets []string
@@ -41,7 +37,7 @@ func newInstallCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "install",
 		Short: "Install data directories, dependencies, and initialize project workspace rules",
-		Long: `Install data directories, the MiniLM model, ONNX Runtime libraries, the standalone dashboard,
+		Long: `Install data directories, the MiniLM model, ONNX Runtime libraries, the terminal interface,
 configure environment variables, and initialize the current directory as a project workspace.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := cmd.OutOrStdout()
@@ -52,9 +48,6 @@ configure environment variables, and initialize the current directory as a proje
 			}
 			if dataDir == "" {
 				dataDir = defaultAgentMemoryDataDir()
-			}
-			if dashboardDir == "" {
-				dashboardDir = filepath.Join(dataDir, "dashboard")
 			}
 			if len(ideTargets) == 0 {
 				// A fresh install configures every supported agent surface. This keeps
@@ -72,7 +65,7 @@ configure environment variables, and initialize the current directory as a proje
 				return err
 			}
 			installGraphModels := graphCompletionModel != ""
-			explicitSelection := cmd.Flags().Changed("no-model") || cmd.Flags().Changed("skip-onnx-runtime") || cmd.Flags().Changed("no-dashboard") || cmd.Flags().Changed("no-init") || cmd.Flags().Changed("with-local-llm") || cmd.Flags().Changed("local-llm-model") || cmd.Flags().Changed("local-graph-model")
+			explicitSelection := cmd.Flags().Changed("no-model") || cmd.Flags().Changed("skip-onnx-runtime") || cmd.Flags().Changed("no-init") || cmd.Flags().Changed("with-local-llm") || cmd.Flags().Changed("local-llm-model") || cmd.Flags().Changed("local-graph-model")
 			inputFile, inputIsFile := cmd.InOrStdin().(*os.File)
 			outputFile, outputIsFile := errOut.(*os.File)
 			inputTerminal := inputIsFile && term.IsTerminal(inputFile.Fd())
@@ -83,7 +76,6 @@ configure environment variables, and initialize the current directory as a proje
 				detected := installDetection{
 					ONNXRuntime: fileExists(bootstrap.RuntimeLibraryPath(dataDir)),
 					MiniLM:      bootstrap.ValidateModelDir(filepath.Join(dataDir, "models", "all-MiniLM-L6-v2")) == nil,
-					Dashboard:   dashboard.HasEmbeddedAssets() || dirExists(dashboardDir),
 				}
 				if _, err := exec.LookPath("ollama"); err == nil {
 					detected.Ollama = true
@@ -104,7 +96,6 @@ configure environment variables, and initialize the current directory as a proje
 				}
 				skipONNXRuntime = selection.SkipONNXRuntime
 				skipModel = selection.SkipModel
-				noDashboard = selection.NoDashboard
 				installPlanner = selection.InstallPlanner
 				plannerModel = selection.PlannerModel
 				plannerSelectionExplicit = true
@@ -116,7 +107,7 @@ configure environment variables, and initialize the current directory as a proje
 			fmt.Fprintln(errOut, "— agent-memory installer —")
 
 			// Step 1: Data directories
-			fmt.Fprintln(errOut, "\n▶ 1/7 data directories")
+			fmt.Fprintln(errOut, "\n▶ 1/6 data directories")
 			for _, sub := range []string{"", "models", "logs", "onnxruntime"} {
 				if err := os.MkdirAll(filepath.Join(dataDir, sub), 0o755); err != nil {
 					return fmt.Errorf("failed to create data dir %s: %w", sub, err)
@@ -125,7 +116,7 @@ configure environment variables, and initialize the current directory as a proje
 			fmt.Fprintf(errOut, "  ✓ ready at %s\n", dataDir)
 
 			// Step 2: Binary installation / copy
-			fmt.Fprintln(errOut, "\n▶ 2/7 binary")
+			fmt.Fprintln(errOut, "\n▶ 2/6 binary")
 			installed, err := installOrCopyBinary(out, errOut, binDir, src)
 			if err != nil {
 				return err
@@ -134,7 +125,7 @@ configure environment variables, and initialize the current directory as a proje
 			checkPATHAdvice(errOut, filepath.Dir(installed))
 
 			// Step 3: ONNX runtime
-			fmt.Fprintln(errOut, "\n▶ 3/7 onnx runtime")
+			fmt.Fprintln(errOut, "\n▶ 3/6 onnx runtime")
 			runtimePath := ""
 			if skipONNXRuntime {
 				fmt.Fprintln(errOut, "    skipped (--skip-onnx-runtime)")
@@ -150,7 +141,7 @@ configure environment variables, and initialize the current directory as a proje
 			}
 
 			// Step 4: Model download
-			fmt.Fprintln(errOut, "\n▶ 4/7 local embedding model")
+			fmt.Fprintln(errOut, "\n▶ 4/6 local embedding model")
 			if skipModel {
 				fmt.Fprintln(errOut, "    skipped (--no-model)")
 			} else {
@@ -162,31 +153,7 @@ configure environment variables, and initialize the current directory as a proje
 				}
 			}
 
-			// Step 5: Dashboard
-			fmt.Fprintln(errOut, "\n▶ 5/7 dashboard (React + TypeScript)")
-			dashInstalled := ""
-			if noDashboard {
-				fmt.Fprintln(errOut, "    skipped (--no-dashboard)")
-			} else {
-				srcExists := false
-				if _, err := os.Stat(dashboardSrc); err == nil {
-					srcExists = true
-				}
-				if !srcExists && dashboard.HasEmbeddedAssets() {
-					fmt.Fprintln(errOut, "  ✓ ready: using embedded dashboard assets (no local install required)")
-				} else if !srcExists {
-					fmt.Fprintf(errOut, "  ! dashboard: source folder not found at %s and no embedded assets found, skipping\n", dashboardSrc)
-				} else {
-					if err := bootstrap.EnsureDashboard(dashboardSrc, dashboardDir, out, errOut); err != nil {
-						fmt.Fprintf(errOut, "  ! dashboard setup failed: %v\n", err)
-					} else {
-						dashInstalled = dashboardDir
-						fmt.Fprintf(errOut, "  ✓ ready at %s\n", dashInstalled)
-					}
-				}
-			}
-
-			fmt.Fprintln(errOut, "\n▶ 6/7 local question planner")
+			fmt.Fprintln(errOut, "\n▶ 5/6 local question planner")
 			plannerReady := false
 			if !installPlanner {
 				fmt.Fprintln(errOut, "    skipped (not selected)")
@@ -205,7 +172,7 @@ configure environment variables, and initialize the current directory as a proje
 				}
 			}
 
-			fmt.Fprintln(errOut, "\n▶ 7/7 optional local GraphRAG models")
+			fmt.Fprintln(errOut, "\n▶ 6/6 optional local GraphRAG models")
 			graphModelsReady, graphAdapterReady := false, false
 			graphAdapterPath := ""
 			if !installGraphModels {
@@ -245,9 +212,6 @@ configure environment variables, and initialize the current directory as a proje
 				}
 				if strings.TrimSpace(runtimePath) != "" {
 					vars["AGENT_MEMORY_ONNX_RUNTIME_PATH"] = runtimePath
-				}
-				if strings.TrimSpace(dashInstalled) != "" {
-					vars["AGENT_MEMORY_DASHBOARD_DIR"] = dashboardDir
 				}
 				if root := detectRepoRoot(src); strings.TrimSpace(root) != "" {
 					vars["AGENT_MEMORY_SRC_DIR"] = root
@@ -364,9 +328,6 @@ configure environment variables, and initialize the current directory as a proje
 	cmd.Flags().StringVarP(&src, "src", "s", "./cmd/agent-memory", "path to local agent-memory main package")
 	cmd.Flags().BoolVar(&skipModel, "no-model", false, "skip downloading the MiniLM ONNX model")
 	cmd.Flags().BoolVar(&skipONNXRuntime, "skip-onnx-runtime", false, "skip downloading ONNX Runtime libraries")
-	cmd.Flags().BoolVar(&noDashboard, "no-dashboard", false, "skip installing the standalone dashboard")
-	cmd.Flags().StringVar(&dashboardSrc, "dashboard-src", "./tools/agent-memory/dashboard", "path to local dashboard source folder")
-	cmd.Flags().StringVar(&dashboardDir, "dashboard-dir", "", "dashboard install directory")
 	cmd.Flags().BoolVar(&writeEnvFile, "write-env", true, "write an env file with environment settings")
 	cmd.Flags().StringVarP(&projectName, "project-name", "n", "", "project name for workspace setup (default: cwd basename)")
 	cmd.Flags().StringSliceVar(&ideTargets, "ide", nil, "IDE rule targets (repeatable, default: all): kiro|cursor|antigravity|claude|zcode|codex|aierules|cursorrules|trae|windsurfrules|generic|all")

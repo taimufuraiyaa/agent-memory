@@ -33,7 +33,7 @@ func TestNewTUICommandIsRegisteredAndRequiresExplicitWorkspace(t *testing.T) {
 	}
 }
 
-func TestTUICommandRejectsAPIAndNonTerminalUseBeforeOpeningDependencies(t *testing.T) {
+func TestTUICommandRejectsNonTerminalUseBeforeOpeningDependencies(t *testing.T) {
 	openCalls := 0
 	dependencies := tuiCommandDependencies{
 		isTerminal: func(any) bool { return false },
@@ -44,8 +44,8 @@ func TestTUICommandRejectsAPIAndNonTerminalUseBeforeOpeningDependencies(t *testi
 	}
 	command := newTUICommandWithDependencies(dependencies)
 	command.SetArgs([]string{"--workspace", "test", "--api", "http://127.0.0.1:9999"})
-	if err := command.Execute(); err == nil || !strings.Contains(err.Error(), "local workspaces") {
-		t.Fatalf("api rejection error=%v", err)
+	if err := command.Execute(); err == nil || !strings.Contains(err.Error(), "interactive terminal") {
+		t.Fatalf("remote non-terminal rejection error=%v", err)
 	}
 	command = newTUICommandWithDependencies(dependencies)
 	command.SetArgs([]string{"--workspace", "test"})
@@ -90,5 +90,22 @@ func TestTUICommandRunsSelectedWorkspaceAndClosesStore(t *testing.T) {
 	}
 	if _, err := store.CountMemories(ctx); err == nil {
 		t.Fatal("workspace store remained open after TUI exit")
+	}
+}
+
+func TestTUICommandAPIModeDoesNotOpenLocalModelOrDatabase(t *testing.T) {
+	dependencies := tuiCommandDependencies{isTerminal: func(any) bool { return true }, open: func(context.Context, runtimeConfig) (*sqlite.Store, embeddings.Provider, error) {
+		t.Fatal("remote mode opened local dependencies")
+		return nil, nil, nil
+	}, run: func(_ context.Context, _ io.Reader, _ io.Writer, model memorytui.Model) (tea.Model, error) {
+		if !strings.Contains(model.View().Content, "selected") {
+			t.Fatal("wrong remote workspace")
+		}
+		return model, nil
+	}}
+	command := newTUICommandWithDependencies(dependencies)
+	command.SetArgs([]string{"--workspace", "selected", "--api", "http://127.0.0.1:9999"})
+	if err := command.Execute(); err != nil {
+		t.Fatal(err)
 	}
 }

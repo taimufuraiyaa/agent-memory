@@ -26,7 +26,7 @@ agent-memory follows a **local-first** security model:
 │  │ agent-memory CLI              │ │
 │  │ - Reads/writes local DB       │ │
 │  │ - Runs local embeddings       │ │
-│  │ - Serves local dashboard      │ │
+│  │ - Serves headless JSON API      │ │
 │  └───────────────────────────────┘ │
 │             │                        │
 │             ▼                        │
@@ -66,7 +66,7 @@ agent-memory follows a **local-first** security model:
 ├── models/                   # Embedding models
 │   └── all-MiniLM-L6-v2/    # Local ONNX model
 ├── onnxruntime/              # ONNX Runtime libraries
-├── dashboard/                # Dashboard assets
+├── tui-history/              # Private terminal query history
 └── logs/                     # Application logs
 ```
 
@@ -219,34 +219,11 @@ export AGENT_MEMORY_DISABLE_FILTERING=1
 
 ## Network Security
 
-### Dashboard HTTP Server
+### Terminal Interface and Headless API
 
-**Default Binding:**
-```bash
-# Secure (localhost only)
-agent-memory dashboard --addr localhost:3042
+Local `agent-memory tui --workspace <name>` invokes Go services in-process and opens no listener. `agent-memory serve --start` starts the loopback-only JSON API; connect with `agent-memory tui --workspace <name> --api http://127.0.0.1:3211`. The backend rejects non-loopback bindings. Use `agent-memory serve --stop` to stop it.
 
-# ❌ Insecure (accessible from network)
-agent-memory dashboard --addr 0.0.0.0:3042  # Don't do this!
-```
-
-**Firewall Rules:**
-```bash
-# macOS
-sudo /usr/libexec/ApplicationFirewall/socketfilterfw --add /path/to/agent-memory
-
-# Linux (ufw)
-sudo ufw deny 3042  # Block external access to dashboard port
-
-# Linux (iptables)
-sudo iptables -A INPUT -p tcp --dport 3042 -i lo -j ACCEPT
-sudo iptables -A INPUT -p tcp --dport 3042 -j DROP
-```
-
-**HTTPS (Future):**
-- Dashboard currently uses HTTP (local only)
-- HTTPS support planned for remote access scenarios (v2.0+)
-- For now, rely on localhost-only binding
+Terminal text is sanitized against control sequences. Credentials are hidden in forms. Drafts, query history, and exports use private files. Rights acceptance and destructive operations require explicit confirmation; optimistic revisions and existing authorization remain authoritative.
 
 ### External API Calls
 
@@ -377,7 +354,7 @@ go test ./internal/storage -run TestSecurity
 - [ ] Use full-disk encryption (FileVault, BitLocker, LUKS)
 - [ ] Set restrictive file permissions (700 for dirs, 600 for files)
 - [ ] Use environment variables for secrets (not config files)
-- [ ] Bind dashboard to localhost only
+- [ ] Bind the headless API to localhost only
 - [ ] Use local embedding provider for sensitive data
 - [ ] Enable audit logging (future feature)
 - [ ] Review memory content periodically
@@ -478,8 +455,8 @@ VOLUME /data
 - **Attack**: API keys stored in memories, exposed via search
 - **Defense**: Automatic secret filtering, PII detection
 
-**Dashboard Exposure:**
-- **Attack**: Dashboard bound to 0.0.0.0, accessible from network
+**API Exposure:**
+- **Attack**: A headless API exposed outside its loopback boundary
 - **Defense**: Default localhost binding, firewall rules, warnings
 
 ### Risk Assessment
@@ -499,7 +476,7 @@ If you suspect a security incident:
 1. **Isolate**: Stop agent-memory processes immediately
    ```bash
    pkill agent-memory
-   agent-memory dashboard --stop
+   agent-memory serve --stop
    ```
 
 2. **Assess**: Check for unauthorized access

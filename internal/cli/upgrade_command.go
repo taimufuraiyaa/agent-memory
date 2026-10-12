@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -21,26 +20,23 @@ import (
 )
 
 type upgradeResult struct {
-	FromVersion      string                                      `json:"from_version"`
-	ToSpecifier      string                                      `json:"to_specifier"`
-	Module           string                                      `json:"module"`
-	Method           string                                      `json:"method"`
-	SourceDir        string                                      `json:"source_dir,omitempty"`
-	TargetPath       string                                      `json:"target_path"`
-	InstalledFrom    string                                      `json:"installed_from,omitempty"`
-	Replaced         bool                                        `json:"replaced"`
-	AgentFiles       *workspace.WriteAgentFilesResult            `json:"agent_files,omitempty"`
-	AllAgentFiles    map[string]*workspace.WriteAgentFilesResult `json:"all_agent_files,omitempty"`
-	DashboardUpdated bool                                        `json:"dashboard_updated,omitempty"`
-	DashboardDir     string                                      `json:"dashboard_dir,omitempty"`
-	DashboardSource  string                                      `json:"dashboard_source,omitempty"`
-	DashboardError   string                                      `json:"dashboard_error,omitempty"`
-	EnvFile          string                                      `json:"env_file,omitempty"`
-	EnvUpdated       bool                                        `json:"env_updated,omitempty"`
-	EnvError         string                                      `json:"env_error,omitempty"`
-	TuningCommand    string                                      `json:"tuning_command,omitempty"`
-	TermIndexes      map[string]*workspace.TermIndexSetupResult  `json:"term_indexes,omitempty"`
-	TermIndexErrors  map[string]string                           `json:"term_index_errors,omitempty"`
+	Warning         string                                      `json:"warning,omitempty"`
+	FromVersion     string                                      `json:"from_version"`
+	ToSpecifier     string                                      `json:"to_specifier"`
+	Module          string                                      `json:"module"`
+	Method          string                                      `json:"method"`
+	SourceDir       string                                      `json:"source_dir,omitempty"`
+	TargetPath      string                                      `json:"target_path"`
+	InstalledFrom   string                                      `json:"installed_from,omitempty"`
+	Replaced        bool                                        `json:"replaced"`
+	AgentFiles      *workspace.WriteAgentFilesResult            `json:"agent_files,omitempty"`
+	AllAgentFiles   map[string]*workspace.WriteAgentFilesResult `json:"all_agent_files,omitempty"`
+	EnvFile         string                                      `json:"env_file,omitempty"`
+	EnvUpdated      bool                                        `json:"env_updated,omitempty"`
+	EnvError        string                                      `json:"env_error,omitempty"`
+	TuningCommand   string                                      `json:"tuning_command,omitempty"`
+	TermIndexes     map[string]*workspace.TermIndexSetupResult  `json:"term_indexes,omitempty"`
+	TermIndexErrors map[string]string                           `json:"term_index_errors,omitempty"`
 }
 
 const canonicalUpgradeModule = "github.com/taimufuraiyaa/agent-memory"
@@ -250,141 +246,6 @@ func defaultAgentMemoryDataDir() string {
 	return filepath.Join(cwd, ".agent-memory")
 }
 
-func resolveDashboardDir(override string) string {
-	if v := strings.TrimSpace(override); v != "" {
-		return v
-	}
-	if v := strings.TrimSpace(os.Getenv("AGENT_MEMORY_DASHBOARD_DIR")); v != "" {
-		return v
-	}
-	return filepath.Join(defaultAgentMemoryDataDir(), "dashboard")
-}
-
-func copyDir(dst, src string) error {
-	dstAbs, err := filepath.Abs(dst)
-	if err != nil {
-		return err
-	}
-	srcAbs, err := filepath.Abs(src)
-	if err != nil {
-		return err
-	}
-	if dstAbs == srcAbs {
-		return nil
-	}
-	if err := os.MkdirAll(dst, 0o755); err != nil {
-		return err
-	}
-
-	return filepath.WalkDir(src, func(path string, d fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		rel, err := filepath.Rel(src, path)
-		if err != nil {
-			return err
-		}
-		if rel == "." {
-			return nil
-		}
-		if d.IsDir() {
-			name := d.Name()
-			if name == "node_modules" || name == "dist" || name == ".git" {
-				return filepath.SkipDir
-			}
-			return os.MkdirAll(filepath.Join(dst, rel), 0o755)
-		}
-		in, err := os.Open(path)
-		if err != nil {
-			return err
-		}
-		defer func() { _ = in.Close() }()
-		outPath := filepath.Join(dst, rel)
-		if err := os.MkdirAll(filepath.Dir(outPath), 0o755); err != nil {
-			return err
-		}
-		out, err := os.OpenFile(outPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
-		if err != nil {
-			return err
-		}
-		_, copyErr := io.Copy(out, in)
-		closeErr := out.Close()
-		if copyErr != nil {
-			_ = os.Remove(outPath)
-			return copyErr
-		}
-		if closeErr != nil {
-			_ = os.Remove(outPath)
-			return closeErr
-		}
-		return nil
-	})
-}
-
-func updateStandaloneDashboardFromSource(srcRoot, dstDir string) (string, error) {
-	if strings.TrimSpace(srcRoot) == "" {
-		return "", errors.New("source dir is required")
-	}
-	if strings.TrimSpace(dstDir) == "" {
-		return "", errors.New("dashboard dir is required")
-	}
-	src := filepath.Join(srcRoot, "tools", "agent-memory", "dashboard")
-	if st, err := os.Stat(src); err != nil || !st.IsDir() {
-		return src, fmt.Errorf("dashboard source not found: %s", src)
-	}
-	if !fileExists(filepath.Join(src, "package.json")) {
-		return src, fmt.Errorf("dashboard source package.json missing: %s", src)
-	}
-	if _, err := exec.LookPath("npm"); err != nil {
-		return src, errors.New("npm is required to refresh the standalone dashboard")
-	}
-	if err := copyDir(dstDir, src); err != nil {
-		return src, err
-	}
-	if err := runDashboardNPMCI(dstDir); err != nil {
-		return src, err
-	}
-	return src, nil
-}
-
-func runDashboardNPMCI(dstDir string) error {
-	if strings.TrimSpace(dstDir) == "" {
-		return errors.New("dashboard dir is required")
-	}
-	run := func() (string, error) {
-		ci := exec.Command("npm", "ci", "--ignore-scripts")
-		ci.Dir = dstDir
-		_, errOut, err := runAndCapture(ci)
-		if err == nil {
-			return "", nil
-		}
-		msg := strings.TrimSpace(errOut)
-		if msg == "" {
-			msg = err.Error()
-		}
-		return msg, err
-	}
-
-	msg, err := run()
-	if err == nil {
-		return nil
-	}
-
-	// Recover from partial/corrupt dashboard installs left by interrupted upgrades.
-	for _, sub := range []string{"node_modules", "package-lock.json.tmp", ".package-lock.json"} {
-		_ = os.RemoveAll(filepath.Join(dstDir, sub))
-	}
-	if cleanupErr := os.RemoveAll(filepath.Join(dstDir, "node_modules")); cleanupErr != nil {
-		return fmt.Errorf("npm ci failed: %s (cleanup failed: %v)", msg, cleanupErr)
-	}
-
-	retryMsg, retryErr := run()
-	if retryErr == nil {
-		return nil
-	}
-	return fmt.Errorf("npm ci failed after clean retry: %s", retryMsg)
-}
-
 func newUpgradeCommand() *cobra.Command {
 	var format string
 	var module string
@@ -396,8 +257,6 @@ func newUpgradeCommand() *cobra.Command {
 	var hooksOnly bool
 	var forceHooks bool
 	var noHooks bool
-	var noDashboard bool
-	var dashboardDir string
 	var all bool
 	var ideTargets []string
 
@@ -411,7 +270,7 @@ upgrade every registered project.
 
 Hooks are always written by default. Use --no-hooks to skip them.
 Use --hooks-only to push hooks without touching the binary (useful for existing projects).
-A source-backed --all upgrade also refreshes the local dashboard when requested.`,
+The Go binary includes the terminal interface.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			f, err := validateTextOrJSONFormat(format)
 			if err != nil {
@@ -566,7 +425,7 @@ A source-backed --all upgrade also refreshes the local dashboard when requested.
 					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "%s\n", warnMsg)
 				}
 				// Attach the warning to the result struct for both formats.
-				res.DashboardError = warnMsg
+				res.Warning = warnMsg
 			}
 
 			if dryRun {
@@ -653,18 +512,6 @@ A source-backed --all upgrade also refreshes the local dashboard when requested.
 				}
 			}
 
-			if !noDashboard && strings.TrimSpace(srcDir) != "" {
-				dst := resolveDashboardDir(dashboardDir)
-				res.DashboardDir = dst
-				src, err := updateStandaloneDashboardFromSource(srcDir, dst)
-				res.DashboardSource = src
-				if err != nil {
-					res.DashboardError = err.Error()
-				} else {
-					res.DashboardUpdated = true
-				}
-			}
-
 			if envPath, updated, err := ensureEnvVarIfPresent("AGENT_MEMORY_OBSERVE_ENABLED", "1"); err != nil {
 				res.EnvFile = envPath
 				res.EnvError = err.Error()
@@ -732,11 +579,6 @@ A source-backed --all upgrade also refreshes the local dashboard when requested.
 			} else if res.AgentFiles != nil {
 				printAgentFiles(res.AgentFiles)
 			}
-			if res.DashboardUpdated {
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  dashboard updated: %s\n", res.DashboardDir)
-			} else if strings.TrimSpace(res.DashboardError) != "" {
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  dashboard update skipped: %s\n", res.DashboardError)
-			}
 			if res.EnvUpdated {
 				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  env updated: %s\n", res.EnvFile)
 			} else if strings.TrimSpace(res.EnvError) != "" {
@@ -764,8 +606,6 @@ A source-backed --all upgrade also refreshes the local dashboard when requested.
 	cmd.Flags().BoolVar(&noHooks, "no-hooks", false, "Skip writing hippocampus hook files")
 	cmd.Flags().BoolVar(&forceHooks, "force-hooks", false, "Overwrite hook files even if already up-to-date")
 	cmd.Flags().StringSliceVar(&ideTargets, "ide", nil, "IDE rule targets to upgrade (repeatable): kiro|cursor|antigravity|claude|zcode|codex|aierules|cursorrules|trae|windsurfrules|generic|all")
-	cmd.Flags().BoolVar(&noDashboard, "no-dashboard", false, "Skip refreshing standalone dashboard from source checkout")
-	cmd.Flags().StringVar(&dashboardDir, "dashboard-dir", "", "Dashboard install dir (default: $AGENT_MEMORY_DASHBOARD_DIR or ~/.agent-memory/dashboard)")
 	cmd.Flags().BoolVarP(&all, "all", "a", false, "Upgrade all registered workspaces/projects")
 	return cmd
 }

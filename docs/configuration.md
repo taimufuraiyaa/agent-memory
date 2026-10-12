@@ -80,12 +80,6 @@ retrieval:
   decay_weight: 0.05
   tier_bias_weight: 0.10
 
-# Dashboard configuration
-dashboard:
-  enabled: true
-  port: 3042
-  auto_launch: false
-
 # Observability configuration
 observe:
   log_level: info           # Options: debug, info, warn, error
@@ -143,15 +137,6 @@ observe:
 | `retrieval.retrieval_timeout` | int | `10` | Timeout in seconds |
 | `retrieval.enable_explanation` | bool | `false` | Include retrieval explanations |
 
-### Dashboard Configuration
-
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `dashboard.enabled` | bool | `true` | Enable dashboard |
-| `dashboard.dir` | string | `~/.agent-memory/dashboard` | Dashboard installation directory |
-| `dashboard.port` | int | `3042` | Dashboard port |
-| `dashboard.auto_launch` | bool | `false` | Auto-launch dashboard in browser |
-
 ### Server Configuration
 
 | Option | Type | Default | Description |
@@ -205,10 +190,6 @@ export AGENT_MEMORY_RUN_LABEL=my-session
 export AGENT_MEMORY_EMBEDDING_PROVIDER=openai
 export AGENT_MEMORY_ONNX_RUNTIME_PATH=/path/to/libonnxruntime.so
 export OPENAI_API_KEY=sk-...
-
-# Dashboard
-export AGENT_MEMORY_DASHBOARD_DIR=/custom/dashboard
-export AGENT_MEMORY_DASHBOARD_PORT=4000
 
 # Observability
 export AGENT_MEMORY_OBSERVE_ENABLED=1

@@ -22,11 +22,7 @@ tools/graphrag-adapter/sbom.cdx.json
 tools/graphrag-adapter/licenses.txt
 tools/graphrag-adapter/vulnerabilities.json
 
-# Dashboard source build (not embedded)
-tools/agent-memory/dashboard/dist/
 
-# Allow embedded dashboard assets (built in CI)
-!internal/api/dashboard/dist/
 
 # Test artifacts
 *.db
@@ -53,7 +49,6 @@ benchmark/results/*/
 *.exe~
 *.out
 
-# Node.js / Dashboard
 node_modules/
 .npm/
 .pnpm-store/

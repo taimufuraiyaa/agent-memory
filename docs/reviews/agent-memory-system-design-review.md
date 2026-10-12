@@ -1,3 +1,5 @@
+> Historical web-interface document. The 2026-10-11 terminal replacement supersedes its frontend architecture; see [Terminal interface](../terminal-interface.md).
+
 # agent-memory — System Design & Project Review
 
 *Reviewed: local repository at `$HOME/timebooks/agent-memory` (Go 1.26, module `github.com/taimufuraiyaa/agent-memory`)*

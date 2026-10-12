@@ -1,3 +1,5 @@
+> Historical web-interface plan. The 2026-10-11 terminal replacement supersedes browser rendering; see [Terminal interface](terminal-interface.md).
+
 # Memory Visualization Implementation Plan
 
 **Task:** 4.2 - Add Memory Visualization  

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"strings"
 
@@ -85,7 +86,7 @@ func newReconstructCommand() *cobra.Command {
 			}
 			if cfg.apiURL != "" {
 				var out any
-				err := postAPI(ctx, cfg.apiURL, "/api/v1/memories/reconstruct", map[string]any{"query": query, "confirm": confirm}, &out)
+				err := postAPI(ctx, cfg.apiURL, "/api/v1/memories/reconstruct", map[string]any{"workspace": cfg.workspace, "query": query, "confirm": confirm}, &out)
 				if err != nil {
 					return err
 				}
@@ -320,7 +321,8 @@ func newImportCommand() *cobra.Command {
 			}
 			var out any
 			if cfg.apiURL != "" {
-				if err := postAPI(ctx, cfg.apiURL, "/api/v1/memories/import", bundle, &out); err != nil {
+				// The handler takes the target workspace from the request, not from the bundle.
+				if err := postAPI(ctx, cfg.apiURL, "/api/v1/memories/import?workspace="+url.QueryEscape(cfg.workspace), bundle, &out); err != nil {
 					return err
 				}
 			} else {

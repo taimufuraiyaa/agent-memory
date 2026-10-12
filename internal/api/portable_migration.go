@@ -61,9 +61,9 @@ func portableMigrationExportHandler(svc *Service) http.HandlerFunc {
 			return
 		}
 		_, err = assets.Store.AppendAuditEvent(r.Context(), sqlite.AuditEventInput{
-			Workspace: workspace, Operation: "portable_export", Outcome: "success", Actor: "http", Source: "dashboard",
+			Workspace: workspace, Operation: "portable_export", Outcome: "success", Actor: "http", Source: "api",
 			TargetType: "migration_bundle", TargetCount: len(bundle.Memories) + len(bundle.Notes) + bundle.Manifest.Counts["skill_lifecycle_records"],
-			Reason:   "copy-first browser migration export",
+			Reason:   "copy-first portable migration export",
 			Metadata: map[string]any{"memory_count": len(bundle.Memories), "note_count": len(bundle.Notes), "skill_lifecycle_record_count": bundle.Manifest.Counts["skill_lifecycle_records"], "source_originals_included": false},
 		})
 		if err != nil {

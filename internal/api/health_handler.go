@@ -69,14 +69,3 @@ func healthHandler(svc *Service) http.HandlerFunc {
 		})
 	}
 }
-
-// opsDashboardHandler implements GET /ops/dashboard: a static operator HTML
-// page (see OperatorDashboardHTML in ops_dashboard.go). It takes svc for
-// consistency with the other route-handler factories, though it does not
-// currently use it.
-func opsDashboardHandler(svc *Service) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		_, _ = w.Write([]byte(OperatorDashboardHTML))
-	}
-}

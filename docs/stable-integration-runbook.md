@@ -4,7 +4,7 @@
 
 Build with `make build`, initialize a workspace with `agent-memory init`, then
 run `agent-memory doctor`. The supported local path is macOS or Linux with Go
-1.24+, Node 20+ for MCP/dashboard builds, and SQLite storage.
+matching go.mod, Node for MCP development, and SQLite storage.
 
 Doctor is read-only by default. Preview its bounded data-directory repairs with
 `agent-memory doctor --fix --dry-run`, then apply them with `agent-memory doctor
@@ -49,7 +49,7 @@ managed here. Rules are mandatory instructions, but a prose rule cannot
 guarantee arbitrary model obedience; `agent-memory doctor` reports the actual
 installed enforcement surface.
 
-For durable per-client selection, open Dashboard → System → Clients, register a
+For durable per-client selection, open the TUI with `agent-memory tui --workspace <name>`, use Ctrl-K → Clients, register a
 stable client ID, choose Default or Expanded, and add the displayed
 `AGENT_MEMORY_CLIENT_ID=<id>` to that client's MCP environment. The saved record
 is installation-wide, but the choice is independent for every client. Restart
@@ -60,7 +60,7 @@ or reconnect that client after changing its profile. The environment-only
 
 Use `agent-memory audit` for filtered append-only mutation records and
 `agent-memory import-jsonl <path>` for resumable sanitized transcript imports.
-Replay is available through the dashboard and `/api/v1/replay/*`. Audit and
+Replay is available through Ctrl-K → Replay in the TUI and `/api/v1/replay/*`. Audit and
 replay metadata never participate in normal memory retrieval.
 
 ## Connectors
@@ -77,7 +77,7 @@ Filesystem connectors require explicit non-symlink roots. See
 | Codex | managed rules, MCP, and six lifecycle hooks | doctor reports stale/missing config |
 | Claude Code | managed rules, MCP, and stable lifecycle hooks | unsupported config is not mutated |
 | MCP | stdio server proxying local HTTP | explicit unavailable-service result |
-| Dashboard | built static assets plus local API | empty/error states when API is down |
+| TUI | Go terminal, local services or headless API | bounded loading/error/retry states |
 | Filesystem | polling, checkpointed rescans | per-instance degraded health |
 
 Back up user configuration before first adoption. Connect already creates

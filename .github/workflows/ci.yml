@@ -51,14 +51,6 @@ jobs:
       - name: local contract gate
         run: make contracts-check
 
-      - name: dashboard checks
-        working-directory: tools/agent-memory/dashboard
-        run: |
-          npm ci
-          npm test
-          npm run typecheck
-          npm run build
-
       - name: MCP adapter checks
         working-directory: tools/agent-memory/mcp-server
         run: |

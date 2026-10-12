@@ -38,18 +38,16 @@ const (
 	installComponentCore         installComponentID = "core"
 	installComponentONNX         installComponentID = "onnx-runtime"
 	installComponentMiniLM       installComponentID = "minilm"
-	installComponentDashboard    installComponentID = "dashboard"
 	installComponentPlanner      installComponentID = "qwen-planner"
 	installComponentGraphModels  installComponentID = "local-graphrag-models"
 	installComponentWorkspace    installComponentID = "workspace-rules"
-	installComponentPlannerIndex                    = 4
-	installComponentGraphIndex                      = 5
+	installComponentPlannerIndex                    = 3
+	installComponentGraphIndex                      = 4
 )
 
 type installDetection struct {
 	ONNXRuntime   bool
 	MiniLM        bool
-	Dashboard     bool
 	Ollama        bool
 	QwenPlanner   bool
 	PlannerModels map[string]bool
@@ -69,7 +67,6 @@ type installComponent struct {
 type installSelection struct {
 	SkipONNXRuntime      bool
 	SkipModel            bool
-	NoDashboard          bool
 	InstallPlanner       bool
 	PlannerModel         string
 	InstallGraphModels   bool
@@ -145,10 +142,9 @@ func anyLocalGraphBundleInstalled(installed map[string]bool) bool {
 
 func defaultInstallComponents(detected installDetection) []installComponent {
 	return []installComponent{
-		{ID: installComponentCore, Label: "Agent Memory core", Description: "CLI binary and private data directories", Disk: "~50 MB", Required: true, Selected: true, Installed: true},
+		{ID: installComponentCore, Label: "Agent Memory core", Description: "CLI, terminal workspace and private data directories", Disk: "~50 MB", Required: true, Selected: true, Installed: true},
 		{ID: installComponentONNX, Label: "ONNX Runtime", Description: "Local embedding execution runtime", Disk: "~25 MB", Selected: true, Installed: detected.ONNXRuntime},
 		{ID: installComponentMiniLM, Label: "MiniLM embeddings", Description: "Current 384-dimension local search projection", Disk: "~90 MB", Selected: true, Installed: detected.MiniLM},
-		{ID: installComponentDashboard, Label: "Unified dashboard", Description: "Human Library, Memory, Data, and Settings UI", Disk: "embedded", Selected: true, Installed: detected.Dashboard},
 		{ID: installComponentPlanner, Label: "Local LLM planner", Description: "Optional local query planning; choose a Qwen3 model next", Disk: "0–9.3 GB", Installed: detected.Ollama && (detected.QwenPlanner || anyLocalLLMInstalled(detected.PlannerModels))},
 		{ID: installComponentGraphModels, Label: "Local GraphRAG models", Description: "Optional on-device graph extraction and embeddings; no project is indexed", Disk: "~5.8–9.9 GB", Installed: detected.Ollama && anyLocalGraphBundleInstalled(detected.GraphModels)},
 		{ID: installComponentWorkspace, Label: "Workspace agent rules", Description: "Connect the current project to Agent Memory", Disk: "<1 MB", Selected: true},
@@ -190,7 +186,6 @@ func resolveInstallSelectionWithModels(components []installComponent, plannerMod
 	return installSelection{
 		SkipONNXRuntime:      !selected[installComponentONNX],
 		SkipModel:            !selected[installComponentMiniLM],
-		NoDashboard:          !selected[installComponentDashboard],
 		InstallPlanner:       installPlanner,
 		PlannerModel:         plannerModel,
 		InstallGraphModels:   installGraphModels,

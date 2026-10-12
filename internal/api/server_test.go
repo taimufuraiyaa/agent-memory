@@ -14,7 +14,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/taimufuraiyaa/agent-memory/internal/api/dashboard"
 	"github.com/taimufuraiyaa/agent-memory/internal/core"
 	"github.com/taimufuraiyaa/agent-memory/internal/embeddings"
 	"github.com/taimufuraiyaa/agent-memory/internal/engine"
@@ -395,11 +394,9 @@ func TestServerWriteSearchRecall(t *testing.T) {
 		t.Fatalf("get dashboard html: %v", err)
 	}
 	defer func() { _ = res.Body.Close() }()
-	// Both 200 OK (if assets are embedded) and 404 Not Found (if not embedded)
-	// are acceptable responses here. Dedicated route behavior is tested in
-	// TestServerDashboardRoute.
-	if res.StatusCode != http.StatusOK && res.StatusCode != http.StatusNotFound {
-		t.Fatalf("expected 200 or 404 for /dashboard/ in TestServerWriteSearchRecall, got %d", res.StatusCode)
+	// The terminal interface replaces all served frontend assets.
+	if res.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected 404 for removed /dashboard/ in TestServerWriteSearchRecall, got %d", res.StatusCode)
 	}
 }
 
@@ -1169,61 +1166,6 @@ func postRawJSON(t *testing.T, url string, payload any) map[string]any {
 // hard-coded "not yet embedded" stub. If a binary is ever built without
 // embedding assets, it should still return a helpful 404 explaining how to
 // build them.
-func TestServerDashboardRoute(t *testing.T) {
-	baseDir := t.TempDir()
-	modelDir := filepath.Join(t.TempDir(), "model")
-	if err := os.MkdirAll(modelDir, 0o755); err != nil {
-		t.Fatalf("mkdir model: %v", err)
-	}
-	provider, err := embeddings.NewLocalProvider(modelDir)
-	if err != nil {
-		t.Fatalf("provider: %v", err)
-	}
-	svc := &Service{
-		Workspace:         "ws",
-		BaseDir:           baseDir,
-		EmbeddingProvider: provider,
-	}
-	ts := httptest.NewServer(NewMux(svc))
-	defer ts.Close()
-
-	res, err := http.Get(ts.URL + "/dashboard/")
-	if err != nil {
-		t.Fatalf("get /dashboard/: %v", err)
-	}
-	defer func() { _ = res.Body.Close() }()
-	body, err := io.ReadAll(res.Body)
-	if err != nil {
-		t.Fatalf("read body: %v", err)
-	}
-
-	if !dashboard.HasEmbeddedAssets() {
-		// Binary built without embedded dashboard assets: should explain how
-		// to build them rather than a bare/unexplained 404.
-		if res.StatusCode != http.StatusNotFound {
-			t.Fatalf("expected 404 without embedded assets, got %d", res.StatusCode)
-		}
-		if !strings.Contains(string(body), "make build-with-dashboard") {
-			t.Fatalf("expected helpful message without embedded assets, got: %s", body)
-		}
-		return
-	}
-
-	if res.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200 from embedded dashboard, got %d: %s", res.StatusCode, body)
-	}
-	if !strings.Contains(string(body), "Agent Memory Dashboard") {
-		t.Fatalf("expected embedded dashboard index.html, got: %s", body)
-	}
-}
-
-// TestServerImportSanitizesAndFilters verifies that /api/v1/memories/import
-// applies the same validation, secret/PII redaction, and security-filter
-// checks as a normal write: clean memories are imported as-is, memories
-// containing secrets/private blocks are imported with that content redacted,
-// and memories that fail validation or the security filter (invalid type,
-// prompt-injection/poisoning patterns) are skipped and reported rather than
-// silently persisted or aborting the whole import.
 func TestServerImportSanitizesAndFilters(t *testing.T) {
 	baseDir := t.TempDir()
 	modelDir := filepath.Join(t.TempDir(), "model")

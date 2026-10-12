@@ -36,16 +36,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: "22"
-          cache: npm
-          cache-dependency-path: tools/agent-memory/dashboard/package-lock.json
-
-      - name: Frontend dependency scan
-        working-directory: tools/agent-memory/dashboard
-        run: npm audit --audit-level=high
-
   dependency-review:
     name: dependency review
     if: github.event_name == 'pull_request'

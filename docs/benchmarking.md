@@ -68,10 +68,6 @@ go test -bench=BenchmarkWritePipeline -benchmem ./internal/engine
 
 - **BenchmarkDecayEngineUpdateWorkspaceDecay**: Decay score computation
 
-### Dashboard Benchmarks (`internal/api/dashboard`)
-
-- **BenchmarkGetEmbeddedHandler**: Embedded asset serving
-
 ## Running Benchmarks
 
 ### Basic Benchmark Run

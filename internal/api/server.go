@@ -14,7 +14,6 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	"github.com/taimufuraiyaa/agent-memory/internal/api/dashboard"
 	"github.com/taimufuraiyaa/agent-memory/internal/application"
 	"github.com/taimufuraiyaa/agent-memory/internal/attestation"
 	"github.com/taimufuraiyaa/agent-memory/internal/clientprofile"
@@ -259,14 +258,12 @@ func NewMux(svc *Service) *http.ServeMux {
 	// Prometheus metrics scrape endpoint
 	mux.Handle("/metrics", promhttp.Handler())
 	mux.HandleFunc("/health", healthHandler(svc))
-	mux.HandleFunc("/dashboard/runtime.json", dashboardRuntime("standalone", "/api/v1", "notebook", "memory", "portable_export"))
 	mux.HandleFunc("/api/v1/capabilities", capabilitiesHandler())
 	if svc != nil && svc.Harness != nil && svc.Harness.Authority != nil && svc.Harness.Runs != nil {
 		mux.HandleFunc(harnessBasePath, harnessRouter(svc.Harness))
 	}
 	mux.HandleFunc("/api/v1/client-profiles", clientProfilesHandler(svc))
 	mux.HandleFunc("/api/v1/client-profiles/", clientProfileHandler(svc))
-	mux.HandleFunc("/ops/dashboard", opsDashboardHandler(svc))
 	mux.HandleFunc("/api/v1/scheduler/status", schedulerStatusHandler(svc))
 	mux.HandleFunc("/api/v1/scheduler/history", schedulerHistoryHandler(svc))
 	mux.HandleFunc("/api/v1/scheduler/run", schedulerRunHandler(svc))
@@ -343,7 +340,7 @@ func NewMux(svc *Service) *http.ServeMux {
 
 	mux.HandleFunc("/api/v1/observations/promote", observationsPromoteHandler(svc))
 
-	mux.HandleFunc("/api/v1/dashboard", workspaceDashboardHandler(svc))
+	mux.HandleFunc("/api/v1/dashboard", workspaceSummaryHandler(svc))
 	mux.HandleFunc("/api/v1/graph", workspaceGraphHandler(svc))
 	mux.HandleFunc("/api/v1/graph-index/readiness", graphIndexReadinessHandler(svc))
 	mux.HandleFunc("/api/v1/graph-index/status", graphIndexStatusHandler(svc))
@@ -381,10 +378,6 @@ func NewMux(svc *Service) *http.ServeMux {
 	mux.HandleFunc("/api/v1/visualizations/graph", handleMemoryGraph(svc))
 	mux.HandleFunc("/api/v1/visualizations/decay-timeline", handleDecayTimeline(svc))
 	mux.HandleFunc("/api/v1/visualizations/entity-network", handleEntityNetwork(svc))
-
-	// Serve embedded dashboard assets
-	mux.Handle("/dashboard/", serveDashboard())
-	mux.Handle("/w/", serveWorkspaceDashboard())
 
 	return mux
 }
@@ -455,47 +448,4 @@ func InstrumentedHandler(h http.Handler) http.Handler {
 		}
 		_ = duration
 	})
-}
-
-// serveDashboard returns an HTTP handler that serves the embedded dashboard
-// assets (built via `make build-dashboard`/`make embed-dashboard` and
-// embedded into the binary with go:embed in internal/api/dashboard).
-// If this binary was built without embedded assets, it returns a handler
-// that explains how to build them instead of a bare 404.
-func serveDashboard() http.Handler {
-	if !dashboard.HasEmbeddedAssets() {
-		return http.StripPrefix("/dashboard/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			http.Error(w, "Dashboard assets not embedded in this binary. Run: make build-with-dashboard", http.StatusNotFound)
-		}))
-	}
-	return http.StripPrefix("/dashboard/", dashboard.GetEmbeddedHandler())
-}
-
-func serveWorkspaceDashboard() http.Handler {
-	assets := dashboard.GetEmbeddedHandler()
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet && r.Method != http.MethodHead {
-			writeErr(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
-			return
-		}
-		clone := r.Clone(r.Context())
-		urlCopy := *r.URL
-		urlCopy.Path = workspaceDashboardAssetPath(r.URL.Path)
-		clone.URL = &urlCopy
-		assets.ServeHTTP(w, clone)
-	})
-}
-
-func workspaceDashboardAssetPath(requestPath string) string {
-	const workspacePrefix = "/w/"
-	rest := strings.TrimPrefix(requestPath, workspacePrefix)
-	workspaceEnd := strings.IndexByte(rest, '/')
-	if workspaceEnd < 0 {
-		return "/"
-	}
-	suffix := rest[workspaceEnd:]
-	if strings.HasPrefix(suffix, "/assets/") {
-		return suffix
-	}
-	return "/"
 }

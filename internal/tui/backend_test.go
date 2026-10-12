@@ -149,7 +149,8 @@ func TestDetailContentScrollsWithinTheViewport(t *testing.T) {
 
 func TestAsyncErrorsRenderAndRefreshStartsANewGeneration(t *testing.T) {
 	backend := &fakeBackend{overviewErr: errors.New("overview unavailable"), recentErr: errors.New("database busy")}
-	model := applyCommand(t, NewModel("agent-memory", backend), NewModel("agent-memory", backend).Init())
+	model := NewModel("agent-memory", backend)
+	model = applyCommand(t, model, model.Init())
 	model = resize(model, 100, 24)
 	if plain := ansi.Strip(model.View().Content); !strings.Contains(plain, "overview unavailable") {
 		t.Fatalf("overview error not rendered:\n%s", plain)

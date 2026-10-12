@@ -172,17 +172,9 @@ make lint
 - Review OpenAI's data policy before using cloud embeddings
 - Never send secrets/PII to external providers
 
-### Dashboard Security
+### Terminal and Local Service Security
 
-The local dashboard (HTTP server):
-- Binds to `localhost` by default (not accessible externally)
-- No authentication (relies on OS-level security)
-- Serves static assets and API endpoints locally
-
-**Recommendations:**
-- Never expose dashboard to the internet
-- Use `--addr localhost:PORT` (never `0.0.0.0`)
-- Stop dashboard when not in use: `agent-memory dashboard --stop`
+The terminal interface sanitizes untrusted text, binds workspace requests, hides credential fields, and uses private draft/history/export files. Local mode invokes Go services without opening a listener. The headless API retains its loopback request boundary. Use `agent-memory serve --stop` to stop the daemon. Rights, revision, and authorization checks are enforced by existing backend services.
 
 ### Multi-User Systems
 

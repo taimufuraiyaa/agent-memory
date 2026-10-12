@@ -128,7 +128,7 @@ func startServeProcess(cfg runtimeConfig, addr string, pidFile string) (int, err
 }
 
 func resolveServeRuntime(flags commonFlags) (runtimeConfig, error) {
-	cfg, err := resolveDashboardRuntime(flags)
+	cfg, err := resolveServiceRuntime(flags)
 	if err != nil {
 		return runtimeConfig{}, err
 	}
@@ -227,7 +227,7 @@ func newServeCommand() *cobra.Command {
 			}
 
 			if start {
-				if err := validateDashboardStartAddr(addr); err != nil {
+				if err := validateServeStartAddr(addr); err != nil {
 					return err
 				}
 				if v, err := readServePID(pidPath); err == nil && isProcessAlive(v.PID) {

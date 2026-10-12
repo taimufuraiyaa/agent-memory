@@ -25,3 +25,17 @@ start the daemon. Do not run one port per workspace.
 
 Hooks and MCP should use the stable URL `http://127.0.0.1:3211`. Unknown or
 deleted workspace names are rejected and never create database files.
+
+## One session pointing at a different daemon
+
+The daemon is per macOS user, but its loopback port is shared by every user on the
+machine. The generated `.mcp.json` entry therefore passes
+`AGENT_MEMORY_URL=${AGENT_MEMORY_URL:-http://127.0.0.1:3211}` to
+`agent-memory-mcp`: Claude Code expands it from its own environment, so the stable URL
+stays the default and a session can export `AGENT_MEMORY_URL` before `claude` starts to
+use another daemon. Projects connected by an older version keep the literal URL until
+`agent-memory connect claude-code` is run again.
+
+Only MCP honors this variable. Hooks still deliver to the stable URL
+(`agent-memory hook --service-url`), so a session that must not reach the default
+daemon also has to disable capture (`AGENT_MEMORY_CAPTURE_ENABLED=0`).

@@ -84,48 +84,6 @@ func TestCanonicalUpgradeTargetAndAliasSynchronization(t *testing.T) {
 	}
 }
 
-func TestRunDashboardNPMCIRetriesAfterCleanup(t *testing.T) {
-	dst := t.TempDir()
-	t.Setenv("PATH", fakeNPMScriptDir(t, `#!/bin/sh
-set -eu
-marker=".npm-ci-attempt"
-if [ ! -f "$marker" ]; then
-  touch "$marker"
-  mkdir -p node_modules/esbuild
-  echo "simulated failure" >&2
-  exit 1
-fi
-if [ -d node_modules ]; then
-  echo "node_modules should have been removed before retry" >&2
-  exit 1
-fi
-touch npm-ci-success
-`)+string(os.PathListSeparator)+os.Getenv("PATH"))
-
-	if err := runDashboardNPMCI(dst); err != nil {
-		t.Fatalf("runDashboardNPMCI: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(dst, "npm-ci-success")); err != nil {
-		t.Fatalf("expected retry success marker: %v", err)
-	}
-}
-
-func TestRunDashboardNPMCIDisablesLifecycleScripts(t *testing.T) {
-	dst := t.TempDir()
-	t.Setenv("PATH", fakeNPMScriptDir(t, `#!/bin/sh
-set -eu
-test "$1" = "ci"
-test "$2" = "--ignore-scripts"
-touch npm-args-safe
-`)+string(os.PathListSeparator)+os.Getenv("PATH"))
-	if err := runDashboardNPMCI(dst); err != nil {
-		t.Fatalf("runDashboardNPMCI: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(dst, "npm-args-safe")); err != nil {
-		t.Fatalf("npm did not receive safe arguments: %v", err)
-	}
-}
-
 func TestValidateUpgradeSourceRequiresCanonicalModule(t *testing.T) {
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, "cmd", "agent-memory"), 0o755); err != nil {
@@ -286,7 +244,6 @@ fi
 		"--src", repositoryRoot,
 		"--target", target,
 		"--no-hooks",
-		"--no-dashboard",
 	})
 	err = cmd.ExecuteContext(context.Background())
 	if err != nil {
@@ -330,32 +287,6 @@ func TestPrepareUpgradeTermIndexesScopesToCurrentProject(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(dataDir, "other.db")); !os.IsNotExist(err) {
 		t.Fatalf("plain upgrade touched other project database: %v", err)
 	}
-}
-
-func TestRunDashboardNPMCIReportsRetryFailure(t *testing.T) {
-	dst := t.TempDir()
-	t.Setenv("PATH", fakeNPMScriptDir(t, `#!/bin/sh
-echo "still broken" >&2
-exit 1
-`)+string(os.PathListSeparator)+os.Getenv("PATH"))
-
-	err := runDashboardNPMCI(dst)
-	if err == nil {
-		t.Fatalf("expected retry failure")
-	}
-	if !strings.Contains(err.Error(), "npm ci failed after clean retry") {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func fakeNPMScriptDir(t *testing.T, script string) string {
-	t.Helper()
-	dir := t.TempDir()
-	path := filepath.Join(dir, "npm")
-	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
-		t.Fatalf("write fake npm: %v", err)
-	}
-	return dir
 }
 
 func TestUpgradeAllProjects(t *testing.T) {

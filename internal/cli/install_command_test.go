@@ -55,7 +55,6 @@ func TestInstallCommandBasic(t *testing.T) {
 		"--src", "", // skip building
 		"--no-model",
 		"--skip-onnx-runtime",
-		"--no-dashboard",
 		"--local-llm-model", "qwen3:14b",
 		"--write-env",
 		"--project-name", "test-install-proj",
@@ -267,7 +266,7 @@ func TestInstallLocalGraphModelsPersistsRoutesOnlyAfterAllReadiness(t *testing.T
 		var stdout, stderr bytes.Buffer
 		cmd.SetOut(&stdout)
 		cmd.SetErr(&stderr)
-		cmd.SetArgs([]string{"--data-dir", dataDir, "--bin-dir", t.TempDir(), "--src", "", "--no-model", "--skip-onnx-runtime", "--no-dashboard", "--no-init", "--ide", "cursor", "--local-graph-model", "qwen3:8b", "--write-env"})
+		cmd.SetArgs([]string{"--data-dir", dataDir, "--bin-dir", t.TempDir(), "--src", "", "--no-model", "--skip-onnx-runtime", "--no-init", "--ide", "cursor", "--local-graph-model", "qwen3:8b", "--write-env"})
 		if err := cmd.ExecuteContext(context.Background()); err != nil {
 			t.Fatalf("install failed: %v; stderr: %s", err, stderr.String())
 		}
@@ -332,7 +331,7 @@ AGENT_MEMORY_GRAPH_COMPLETION_MODEL="old-model"
 				var stderr bytes.Buffer
 				cmd.SetErr(&stderr)
 				cmd.SetOut(io.Discard)
-				cmd.SetArgs([]string{"--data-dir", dataDir, "--bin-dir", t.TempDir(), "--src", "", "--no-model", "--skip-onnx-runtime", "--no-dashboard", "--no-init", "--ide", "cursor", "--local-graph-model", "qwen3:8b", "--write-env"})
+				cmd.SetArgs([]string{"--data-dir", dataDir, "--bin-dir", t.TempDir(), "--src", "", "--no-model", "--skip-onnx-runtime", "--no-init", "--ide", "cursor", "--local-graph-model", "qwen3:8b", "--write-env"})
 				if err := cmd.ExecuteContext(context.Background()); err != nil {
 					t.Fatalf("install failed: %v; stderr: %s", err, stderr.String())
 				}

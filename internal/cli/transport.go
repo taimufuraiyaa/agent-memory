@@ -15,6 +15,7 @@ import (
 
 	"github.com/taimufuraiyaa/agent-memory/internal/embeddings"
 	"github.com/taimufuraiyaa/agent-memory/internal/validation"
+	workspacepkg "github.com/taimufuraiyaa/agent-memory/internal/workspace"
 )
 
 type apiEnvelope struct {
@@ -39,10 +40,23 @@ func resolveRuntime(flags commonFlags) (runtimeConfig, error) {
 		return runtimeConfig{}, err
 	}
 	dbPath := strings.TrimSpace(flags.dbPath)
+	apiURL := resolveAPIURL(flags.apiURL)
 	if dbPath == "" {
 		dbPath, err = defaultDBPath(workspace)
 		if err != nil {
 			return runtimeConfig{}, err
+		}
+		if apiURL == "" {
+			manager, registryErr := workspacepkg.NewManager(defaultAgentMemoryDataDir())
+			if registryErr != nil {
+				return runtimeConfig{}, registryErr
+			}
+			project, registryErr := manager.Project(workspace)
+			if registryErr == nil {
+				dbPath = project.DBPath
+			} else if !errors.Is(registryErr, workspacepkg.ErrProjectNotRegistered) {
+				return runtimeConfig{}, fmt.Errorf("resolve registered workspace: %w", registryErr)
+			}
 		}
 	}
 	modelDir := strings.TrimSpace(flags.modelDir)
@@ -54,7 +68,7 @@ func resolveRuntime(flags commonFlags) (runtimeConfig, error) {
 		workspace: workspace,
 		dbPath:    dbPath,
 		modelDir:  modelDir,
-		apiURL:    resolveAPIURL(flags.apiURL),
+		apiURL:    apiURL,
 	}, nil
 }
 

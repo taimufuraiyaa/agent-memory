@@ -412,12 +412,6 @@ func printConfigText(cfg *config.Config) error {
 	fmt.Printf("    Decay: %.2f\n", cfg.Retrieval.DecayWeight)
 	fmt.Printf("    Tier Bias: %.2f\n", cfg.Retrieval.TierBiasWeight)
 
-	fmt.Println("\n=== Dashboard ===")
-	fmt.Printf("  Enabled: %v\n", cfg.Dashboard.Enabled)
-	fmt.Printf("  Directory: %s\n", cfg.Dashboard.Dir)
-	fmt.Printf("  Port: %d\n", cfg.Dashboard.Port)
-	fmt.Printf("  Auto Launch: %v\n", cfg.Dashboard.AutoLaunch)
-
 	fmt.Println("\n=== Server ===")
 	fmt.Printf("  Host: %s\n", cfg.Server.Host)
 	fmt.Printf("  Port: %d\n", cfg.Server.Port)
@@ -486,13 +480,6 @@ retrieval:
   enable_reranking: false         # Enable LLM-based reranking
   retrieval_timeout: 10           # Timeout in seconds
   enable_explanation: false       # Include retrieval explanations
-
-# Dashboard configuration
-dashboard:
-  enabled: true                   # Enable dashboard
-  # dir: ~/.agent-memory/dashboard  # Dashboard installation directory
-  port: 3042                      # Dashboard port
-  auto_launch: false              # Auto-launch dashboard in browser
 
 # API server configuration
 server:
