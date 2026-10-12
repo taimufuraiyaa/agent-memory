@@ -421,3 +421,56 @@ func decodeLibraryResponse(t *testing.T, response *http.Response) libraryRespons
 	}
 	return libraryResponse{Code: response.StatusCode, Data: value.Data}
 }
+
+// TestLibraryPassageRankingFollowsItsOwnFlag proves the BM25 passage ranker is
+// controlled only by AGENT_MEMORY_PASSAGE_RANKING_MODE and not by the memory
+// lexical stream mode, in all four flag combinations.
+func TestLibraryPassageRankingFollowsItsOwnFlag(t *testing.T) {
+	t.Setenv("AGENT_MEMORY_LIBRARY_ENABLED", "true")
+	modelDir := filepath.Join(t.TempDir(), "model")
+	if err := os.MkdirAll(modelDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	provider, err := embeddings.NewLocalProvider(modelDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(NewMux(&Service{Workspace: "books", BaseDir: t.TempDir(), EmbeddingProvider: provider}))
+	defer server.Close()
+
+	libraryPost(t, server.URL+"/api/v1/library/imports", map[string]any{
+		"workspace": "books", "library_id": "personal-1", "principal_id": "reader-1",
+		"title": "Astronomy", "edition_label": "First", "language": "en",
+		"markdown": "# Motion\nThe earth always spins around the sun.\n\n## Paths\nAll roads lead to Rome.",
+	}, http.StatusAccepted)
+
+	cases := []struct {
+		name    string
+		lexical string
+		passage string
+		ranked  bool
+	}{
+		{"both off", "off", "off", false},
+		{"lexical on only", "on", "off", false},
+		{"passage on only", "off", "on", true},
+		{"both on", "on", "on", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("AGENT_MEMORY_LEXICAL_MODE", tc.lexical)
+			t.Setenv("AGENT_MEMORY_PASSAGE_RANKING_MODE", tc.passage)
+			queried := libraryPost(t, server.URL+"/api/v1/library/query", map[string]any{
+				"workspace": "books", "principal_id": "reader-1", "question": "earth sun",
+			}, http.StatusOK)
+			results := queried["results"].([]any)
+			if len(results) == 0 {
+				t.Fatal("expected grounded results in every flag combination")
+			}
+			first := results[0].(map[string]any)
+			relevance, ranked := first["relevance"]
+			if ranked != tc.ranked {
+				t.Fatalf("ranked = %v (relevance %v), want %v for lexical=%s passage=%s", ranked, relevance, tc.ranked, tc.lexical, tc.passage)
+			}
+		})
+	}
+}

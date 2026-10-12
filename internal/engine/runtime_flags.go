@@ -81,6 +81,28 @@ func LexicalMode() LexicalRuntimeMode {
 	}
 }
 
+// PassageRankingRuntimeMode selects BM25 ranking for library passage search.
+// It is independent of LexicalRuntimeMode: passage ranking replaces a lexical
+// scan with a lexical index and does not depend on any embedding model.
+type PassageRankingRuntimeMode string
+
+const (
+	PassageRankingOff PassageRankingRuntimeMode = "off"
+	PassageRankingOn  PassageRankingRuntimeMode = "on"
+)
+
+// PassageRankingMode returns the requested passage ranking mode. Off is the
+// default so library passage search keeps the legacy authorized scan until the
+// ranker is explicitly enabled.
+func PassageRankingMode() PassageRankingRuntimeMode {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("AGENT_MEMORY_PASSAGE_RANKING_MODE"))) {
+	case "on", "1", "true", "yes", "enabled":
+		return PassageRankingOn
+	default:
+		return PassageRankingOff
+	}
+}
+
 // LexicalWeight returns the lexical signal weight, clamped to [0, 1]. Zero
 // keeps the stream candidate-only without influencing ranking.
 func LexicalWeight() float64 {

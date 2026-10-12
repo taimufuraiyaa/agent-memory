@@ -201,16 +201,19 @@ export AGENT_MEMORY_SRC_DIR=/path/to/source
 # Storage
 export AGENT_MEMORY_DB_PATH=/custom/db/path.db
 
-# Lexical (BM25) retrieval stream; off by default
-export AGENT_MEMORY_LEXICAL_MODE=on        # on | off
-export AGENT_MEMORY_LEXICAL_WEIGHT=0.25    # 0 = candidates only, max 1
+# Lexical (BM25) retrieval; both off by default and independent of each other
+export AGENT_MEMORY_LEXICAL_MODE=on           # memory hybrid search stream: on | off
+export AGENT_MEMORY_LEXICAL_WEIGHT=0.25       # 0 = candidates only, max 1
+export AGENT_MEMORY_PASSAGE_RANKING_MODE=on   # library passage questions: on | off
 ```
 
-`AGENT_MEMORY_LEXICAL_MODE=on` adds a BM25 candidate stream (SQLite FTS5) to
-hybrid search and ranks library passage questions with BM25. With the default
-`off`, retrieval results are unchanged. The index is maintained by database
-triggers; if it is unavailable or errors, searches fall back to the existing
-behavior.
+`AGENT_MEMORY_LEXICAL_MODE=on` adds a BM25 candidate stream (SQLite FTS5) and
+an explainable `lexical` signal to memory hybrid search.
+`AGENT_MEMORY_PASSAGE_RANKING_MODE=on` ranks library passage questions with BM25
+over authorized editions only, replacing the substring-count scan. With the
+defaults (`off`), retrieval results are unchanged. The shared index is maintained
+by database triggers regardless of either flag; if it is unavailable or errors,
+searches fall back to the existing behavior.
 
 ## Common Workflows
 

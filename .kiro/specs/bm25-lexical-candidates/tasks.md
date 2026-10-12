@@ -25,3 +25,6 @@
   - Acceptance: focused and full Go tests, vet and build pass; diff check clean; tasks checked; memory episode ended and session summary stored.
   - Verification: `go test ./...`, `go vet ./...`, `go build ./cmd/agent-memory`, `git diff --check`.
   - Result (2026-10-12): build and vet pass; `go test -p 4 ./...` has 29 failing tests in api, cli, harnesstools and integration. 27 fail identically on the base commit f21341b (`workspace is not registered`, portable migration copy-first). The other two are environmental: `TestSearchBoundsResultsFilesTimeAndOutputAndRedactsMatches` passes in isolation (timing under a load average above 200) and `TestGraphRAGStandaloneIndexLifecycle` fails on `fork/exec` permission for another user's venv.
+- [x] 9. Split passage ranking into its own rollout flag.
+  - Acceptance: `AGENT_MEMORY_PASSAGE_RANKING_MODE` (`off` default) controls the ranker; `AGENT_MEMORY_LEXICAL_MODE` no longer affects passage search; both flags independent in tests; docs, skill and report follow-up updated.
+  - Verification: engine flag unit tests, API wiring test for all four flag combinations, existing retrieval and lexical tests, `go vet ./internal/...`, `git diff --check`.

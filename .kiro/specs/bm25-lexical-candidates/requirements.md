@@ -36,8 +36,9 @@ Out of scope for this change (decided by the comparison, tracked separately):
 6. **Flag and rollback.** A single environment-controlled mode (`off` default, `on`) selects the stream. `off` produces byte-identical results to the pre-change system. Any lexical failure falls back to the existing behavior and never fails a search.
 7. **Explainability.** Lexical contribution is visible per hit through the signal breakdown and the retrieval explanation fields; vector, exact-term and lexical provenance remain distinguishable.
 8. **Bounds.** The stream contributes at most the same candidate budget as the exact-term stream; query term count, row limits and passage limits are capped.
-9. **Passage search.** With the index available, BM25 ranks passages among authorized editions only; authorization is evaluated before the index is consulted and results never include unauthorized editions. Existing per-node diversity limits and result contract remain.
-10. **No regression of contracts.** CLI, HTTP and MCP request/response shapes remain backward compatible. `terms` mode, `graph-expand` and graph routing keep their contracts.
+9. **Passage search.** With the index available and passage ranking enabled, BM25 ranks passages among authorized editions only; authorization is evaluated before the index is consulted and results never include unauthorized editions. Existing per-node diversity limits and result contract remain.
+10. **Independent passage flag.** Passage ranking has its own environment-controlled mode (`AGENT_MEMORY_PASSAGE_RANKING_MODE`, `off` default, `on`) that does not depend on `AGENT_MEMORY_LEXICAL_MODE`. The memory stream and passage ranking can each be enabled or rolled back without affecting the other. With `off`, library passage search is byte-identical to the legacy authorized scan. The shared FTS5 index is maintained regardless of either flag.
+11. **No regression of contracts.** CLI, HTTP and MCP request/response shapes remain backward compatible. `terms` mode, `graph-expand` and graph routing keep their contracts.
 
 ## Non-functional requirements
 

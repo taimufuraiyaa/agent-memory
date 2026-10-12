@@ -8,7 +8,7 @@ Arms ran interleaved per query, so relative comparisons are meaningful and absol
 
 ## Decision
 
-**Keep the memory stream flagged off (`AGENT_MEMORY_LEXICAL_MODE=off`) and do not promote it to default yet. Adopt BM25 for library passage search once a rollout flag is split out.**
+**Keep the memory stream flagged off (`AGENT_MEMORY_LEXICAL_MODE=off`) and do not promote it to default yet. BM25 for library passage search now has its own rollout flag (`AGENT_MEMORY_PASSAGE_RANKING_MODE`, default off, task 9) and is the first candidate for promotion: its comparison is lexical against lexical, so the missing real embedder does not weaken it.**
 
 | Question | Answer from this evidence |
 |---|---|
@@ -33,7 +33,7 @@ Weight 0.5 was slightly better than 0.25 on identifier R@1 (99% vs 92%) and equa
 ## Follow-ups
 
 1. Run the harness with `AGENT_MEMORY_LEXICAL_EVAL_MODEL_DIR` pointing at the real local model, and add a paraphrase family.
-2. Split a separate flag for passage ranking and promote it first.
+2. ~~Split a separate flag for passage ranking~~ done (`AGENT_MEMORY_PASSAGE_RANKING_MODE`). Promoting it to default is a separate, reviewable change gated by `docs/retrieval-ablation-decision.md`.
 3. Evaluate exact-term recall on a corpus with curated keywords before any removal decision.
 4. Consider document-frequency pruning or an AND-first pass for OR queries over very common terms; worst-case matching cost is linear in matched documents.
 

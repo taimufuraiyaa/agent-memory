@@ -14,7 +14,7 @@ Use this skill when changing the FTS5 lexical index, the lexical stream in `Sear
 - Hybrid stream and signal: `internal/application/lexical_search.go`, `internal/application/hybrid_search.go`, `internal/engine/lexical_signal.go`.
 - Passage ranking: `internal/retrieval/passages.go` (`WithRanker`), wired in `internal/api/library_handlers.go`.
 - Harness: `internal/application/lexical_eval_test.go` (skipped unless requested).
-- Flags: `AGENT_MEMORY_LEXICAL_MODE=on|off` (default off), `AGENT_MEMORY_LEXICAL_WEIGHT` (default 0.25, 0 = candidates only).
+- Flags (independent, both default off): `AGENT_MEMORY_LEXICAL_MODE=on|off` for the memory stream, `AGENT_MEMORY_LEXICAL_WEIGHT` (default 0.25, 0 = candidates only), `AGENT_MEMORY_PASSAGE_RANKING_MODE=on|off` for library passage ranking. Passage evidence is lexical-vs-lexical and needs no embedder; memory-stream evidence needs a real embedder before promotion.
 
 ## Run the comparison
 

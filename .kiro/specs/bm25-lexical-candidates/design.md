@@ -66,12 +66,22 @@ The migration creates the index only when the FTS5 module is present and otherwi
 
 Passages have their own mapping table and FTS5 table keyed by passage ID, maintained by triggers on `source_passages` (cascade deletes from editions fire them). The retrieval package keeps its authorization-first flow: resource policies are evaluated, authorized edition IDs are computed, and only then is the index consulted with an edition constraint chunked below SQLite parameter limits. Without the index the previous scan runs unchanged.
 
+### D6a: Independent passage-ranking flag
+
+The first implementation tied passage ranking to the memory lexical mode. The comparison showed the two streams have different evidence: the memory stream is gated on a real-embedder run because its gain sits on top of cosine, while the passage comparison is lexical against lexical (BM25 versus a substring-count scan) and does not depend on any embedding model. Options considered:
+
+1. Keep one shared flag. Simplest, but promoting the proven passage win would force the unproven memory stream on with it. Rejected.
+2. Passage mode as a tri-state that inherits the lexical mode when unset. Preserves the earlier behavior but adds a third state and an implicit coupling that the split exists to remove. Rejected; the earlier coupling was never released, so there is nothing to stay compatible with.
+3. Two independent two-state flags, both defaulting to `off`. Chosen.
+
+The default stays `off` because `docs/retrieval-ablation-decision.md` requires a versioned report showing improved continuation value before any stream becomes a default; the passage numbers support promotion but a default change is a separate, reviewable one-line decision. The rollout flag is read per request through the engine runtime flags, so toggling it needs no restart of tests or tooling that set the environment.
+
 ## Data contracts
 
 - Migration 32 creates `memory_lexical_docs` (doc id, memory id unique, workspace), `memory_lexical_fts` (content and metadata columns), `passage_lexical_docs`, `passage_lexical_fts`, their triggers, and backfills in one pass.
 - Store lexical query returns memory ID, BM25 score (positive, higher is better) and rank for one workspace excluding superseded rows, ordered by score then ID for determinism.
 - `SignalBreakdown` gains an optional lexical component omitted from JSON when zero so existing consumers are unaffected.
-- Runtime mode is read from one environment variable with `off` default; lexical weight has a documented default used only when the mode is `on`.
+- Runtime modes are read from two environment variables with `off` default: `AGENT_MEMORY_LEXICAL_MODE` for the memory stream and `AGENT_MEMORY_PASSAGE_RANKING_MODE` for passage ranking; lexical weight has a documented default used only when the memory mode is `on`.
 
 ## Failure modes and edge cases
 
@@ -98,9 +108,9 @@ The index stores text already present in the database and inherits its file perm
 ## Rollout
 
 1. Land schema and store operations with no behavior change (`off`).
-2. Land the flag-gated stream and passage swap with tests.
+2. Land the flag-gated stream and passage swap with tests, each behind its own flag (memory stream: `AGENT_MEMORY_LEXICAL_MODE`; passage ranking: `AGENT_MEMORY_PASSAGE_RANKING_MODE`).
 3. Run the comparison harness; publish the report in this spec directory.
-4. Only if the report supports it, a separate change proposes enabling `on` by default and evaluating removal of the Bloom machinery and absorption of the exact-term table. Rollback at any stage is setting the mode to `off`.
+4. Only if the report supports it, a separate change proposes enabling `on` by default and evaluating removal of the Bloom machinery and absorption of the exact-term table. The passage flag can be promoted first because its evidence does not depend on an embedding model. Rollback at any stage is setting the relevant mode to `off`.
 
 ## Risks
 

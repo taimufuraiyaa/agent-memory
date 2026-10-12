@@ -216,6 +216,7 @@
 //
 // The engine is optimized for local-first operation:
 //   - SQLite FTS5 BM25 lexical index, opt-in with AGENT_MEMORY_LEXICAL_MODE=on
+//     (memory search) and AGENT_MEMORY_PASSAGE_RANKING_MODE=on (library passages)
 //   - In-memory embedding cache to reduce recomputation
 //   - Batch operations for lifecycle management
 //   - Concurrent write pipeline (lock-free for different workspaces)

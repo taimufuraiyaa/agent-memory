@@ -21,7 +21,8 @@
 //	Vector Tier (sqlite/ vector tables):
 //	  - Semantic search via embedding similarity
 //	  - SQLite-backed; opt-in BM25 lexical ranking through FTS5 indexes
-//	    (memory_lexical_fts, AGENT_MEMORY_LEXICAL_MODE=on)
+//	    (memory_lexical_fts via AGENT_MEMORY_LEXICAL_MODE=on, passage_lexical_fts
+//	    via AGENT_MEMORY_PASSAGE_RANKING_MODE=on)
 //	  - Local-first, deterministic, reproducible
 //	  - Best for: Semantic memories, procedural knowledge
 //	  - Implementation: SQLite with embeddings stored as BLOB

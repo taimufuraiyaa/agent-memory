@@ -410,11 +410,12 @@ func libraryID(prefix string, values ...string) string {
 	return prefix + "_" + hex.EncodeToString(sum[:12])
 }
 
-// passageSearcher serves passage questions with BM25 ranking when the lexical
-// mode is on, and with the legacy authorized scan otherwise.
+// passageSearcher serves passage questions with BM25 ranking when passage
+// ranking is on, and with the legacy authorized scan otherwise. It is
+// independent of the memory lexical stream mode.
 func passageSearcher(store *sqlite.Store) *retrieval.LexicalPassageSearch {
 	search := retrieval.NewLexicalPassageSearch(store)
-	if engine.LexicalMode() == engine.LexicalOn {
+	if engine.PassageRankingMode() == engine.PassageRankingOn {
 		search.WithRanker(store)
 	}
 	return search
