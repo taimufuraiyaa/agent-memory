@@ -144,6 +144,22 @@ projects from upgrading in `--all` mode. `upgrade --dry-run` and
 `am upgrade` updates the local installation and workspace hooks. The dry-run
 and hooks-only modes remain side-effect-limited and do not rebuild the dashboard.
 
+### Optional: Claude Code session autosave (off by default)
+
+Claude Code can save session knowledge into the project's workspace
+automatically, using `session-end` plus an incremental re-sync of studied
+sources. It saves when a session ends, before compaction, and when context
+usage first crosses 30, 50, 80 or 100%. Enable it only if you want it:
+
+```bash
+python3 scripts/claude-autosave/autosave_ctl.py enable     # all projects
+python3 scripts/claude-autosave/autosave_ctl.py enable --scope project --project /path/to/project
+python3 scripts/claude-autosave/autosave_ctl.py status
+python3 scripts/claude-autosave/autosave_ctl.py disable
+```
+
+Details: `.agents/skills/claude-session-autosave/SKILL.md`.
+
 ---
 
 ## Command Catalog
