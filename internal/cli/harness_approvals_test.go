@@ -549,6 +549,7 @@ func TestEditStageAndCommitThroughTheRealCommandAndRuntime(t *testing.T) {
 	registry := harness.NewRegistry()
 	if _, err := harnesstest.Register(registry, harnesstest.Manifest("fake-model", harness.KindModel, "generation"), harnesstest.Behavior{Script: []harnesstest.Step{
 		{ToolID: harnesstools.ToolEditFile, Arguments: `{"path":"notes.txt","edits":[{"old_text":"beta","new_text":"BETA"}]}`},
+		{ToolID: harnesstools.ToolGitDiff, Arguments: `{}`},
 		{ToolID: harnesstools.ToolGitStage, Arguments: `{"paths":["notes.txt"]}`},
 		{ToolID: harnesstools.ToolGitCommit, Arguments: `{"message":"Shout beta"}`},
 		{ToolID: harnesstools.ToolGitLog, Arguments: `{"count":2}`},
@@ -621,6 +622,10 @@ func TestEditStageAndCommitThroughTheRealCommandAndRuntime(t *testing.T) {
 		if status, _ := manager.Status(context.Background(), owner, started.ID); status.State.Terminal() {
 			if status.State != harnessrun.StateCompleted {
 				t.Fatalf("the run ended as %+v", status)
+			}
+			// edit, diff (a read, never asked about), stage, commit and log all ran as tool calls.
+			if status.Usage.ToolCalls != 5 {
+				t.Fatalf("tool calls = %d, want 5: %+v", status.Usage.ToolCalls, status.Usage)
 			}
 			break
 		}
