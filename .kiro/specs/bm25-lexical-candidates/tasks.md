@@ -44,3 +44,6 @@
   - Acceptance: `comparison-report-real-embedder.md` with corpus, embedder, per-arm and per-family results, caveats, raw output and an explicit promote / keep-flagged / reject decision; skill and retrieval-ablation decision doc updated only if usage or decision changed.
   - Verification: every figure traceable to harness output; `git diff --check`; focused tests; build and vet.
   - Result (2026-10-12): all of 10-14 ran against real `onnx-minilm-l6-v2`; decision for the memory stream is keep flagged, weight stays 0.25; see `comparison-report-real-embedder.md`.
+- [x] 15. Record the final decision and close the spec.
+  - Acceptance: `docs/retrieval-ablation-decision.md` states that the memory lexical stream stays off by default because usage is almost entirely natural-language questions and paraphrase R@10 regresses; no further tuning planned.
+  - Verification: document review; `git diff --check`.
