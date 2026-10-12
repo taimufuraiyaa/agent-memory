@@ -19,6 +19,14 @@ type Passage struct {
 	Fingerprint      string             `json:"fingerprint"`
 }
 
+// PassageMatch is one ranked lexical passage candidate. Score is positive and
+// higher is better; Rank is one-based.
+type PassageMatch struct {
+	PassageID string  `json:"passage_id"`
+	Score     float64 `json:"score"`
+	Rank      int     `json:"rank"`
+}
+
 func (p Passage) Validate() error {
 	if strings.TrimSpace(p.ID) == "" || strings.TrimSpace(p.EditionID) == "" || strings.TrimSpace(p.SourceAssetID) == "" ||
 		strings.TrimSpace(p.StructuralNodeID) == "" || strings.TrimSpace(p.Text) == "" || strings.TrimSpace(p.Fingerprint) == "" {

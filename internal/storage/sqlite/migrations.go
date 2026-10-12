@@ -51,6 +51,7 @@ var schemaMigrations = []migrationStep{
 	{31, "native-graph-configuration-version", func(ctx context.Context, s *Store) error {
 		return s.ensureColumn(ctx, "graph_revisions", "configuration_version", `ALTER TABLE graph_revisions ADD COLUMN configuration_version INTEGER NOT NULL DEFAULT 0`)
 	}},
+	{32, "lexical-fts5-indexes", migrateLexicalIndexes},
 }
 
 func migrateSkillOrchestratorMigrationControl(ctx context.Context, s *Store) error {

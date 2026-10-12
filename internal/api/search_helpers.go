@@ -81,6 +81,14 @@ func renderSearchResults(hits []engine.RetrievalHit, explain bool) []searchResul
 }
 
 func scoreBreakdownForHit(h engine.RetrievalHit) map[string]float64 {
+	breakdown := scoreBreakdownBase(h)
+	if h.Breakdown.Lexical > 0 {
+		breakdown["lexical"] = h.Breakdown.Lexical
+	}
+	return breakdown
+}
+
+func scoreBreakdownBase(h engine.RetrievalHit) map[string]float64 {
 	return map[string]float64{
 		"semantic_similarity": h.Breakdown.Semantic,
 		"recency":             h.Breakdown.Recency,

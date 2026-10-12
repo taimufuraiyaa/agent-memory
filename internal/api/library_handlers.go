@@ -308,7 +308,7 @@ func libraryQueryHandler(svc *Service) http.HandlerFunc {
 			writeErr(w, 500, "runtime", err.Error())
 			return
 		}
-		results, err := retrieval.NewLexicalPassageSearch(assets.Store).Search(r.Context(), libraryScope(req.PrincipalID, req.OrganizationIDs), req.Question, req.Limit)
+		results, err := passageSearcher(assets.Store).Search(r.Context(), libraryScope(req.PrincipalID, req.OrganizationIDs), req.Question, req.Limit)
 		if err != nil {
 			writeErr(w, 400, "query_failed", err.Error())
 			return
@@ -408,4 +408,14 @@ func effectiveLibraryPrincipalID(workspace, principalID string) string {
 func libraryID(prefix string, values ...string) string {
 	sum := sha256.Sum256([]byte(strings.Join(values, "\x00")))
 	return prefix + "_" + hex.EncodeToString(sum[:12])
+}
+
+// passageSearcher serves passage questions with BM25 ranking when the lexical
+// mode is on, and with the legacy authorized scan otherwise.
+func passageSearcher(store *sqlite.Store) *retrieval.LexicalPassageSearch {
+	search := retrieval.NewLexicalPassageSearch(store)
+	if engine.LexicalMode() == engine.LexicalOn {
+		search.WithRanker(store)
+	}
+	return search
 }

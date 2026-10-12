@@ -115,6 +115,22 @@ func (s *MemoryService) SearchHybrid(ctx context.Context, options GraphSearchOpt
 		}
 		hits = append(hits, scored...)
 	}
+	// Lexical BM25 discovery is independent of embeddings and fail-open.
+	lexicalRelative := map[string]float64{}
+	if lexicalMemories, relative := s.lexicalCandidates(ctx, opt); len(lexicalMemories) > 0 {
+		lexicalRelative = relative
+		additional := make([]core.MemoryEntry, 0, len(lexicalMemories))
+		for _, memory := range lexicalMemories {
+			if !seen[memory.ID] {
+				seen[memory.ID] = true
+				additional = append(additional, memory)
+			}
+		}
+		if scored, scoreErr := s.retrieval.ScoreCandidates(ctx, opt, additional); scoreErr == nil {
+			hits = append(hits, scored...)
+		}
+		result.Weights.Lexical = engine.LexicalWeight()
+	}
 	// Cached direct hits are reauthorized against the current canonical rows.
 	ids := make([]string, 0, len(hits))
 	for _, hit := range hits {
@@ -133,6 +149,12 @@ func (s *MemoryService) SearchHybrid(ctx context.Context, options GraphSearchOpt
 		}
 	}
 	hits = valid
+	if len(lexicalRelative) > 0 {
+		weight := engine.LexicalWeight()
+		for i := range hits {
+			engine.ApplyLexicalSignal(&hits[i], lexicalRelative[hits[i].Memory.ID], weight)
+		}
+	}
 	if snapshot != nil && (route.SelectedMode == graphretrieval.GraphQueryLocal || route.SelectedMode == graphretrieval.GraphQueryGlobal) {
 		enriched, graphContext, enrichErr := s.enrichWithGraph(ctx, opt, hits, *snapshot, route.SelectedMode)
 		if enrichErr != nil {

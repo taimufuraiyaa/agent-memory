@@ -20,7 +20,8 @@
 //
 //	Vector Tier (sqlite/ vector tables):
 //	  - Semantic search via embedding similarity
-//	  - SQLite-backed with FTS5 for text search
+//	  - SQLite-backed; opt-in BM25 lexical ranking through FTS5 indexes
+//	    (memory_lexical_fts, AGENT_MEMORY_LEXICAL_MODE=on)
 //	  - Local-first, deterministic, reproducible
 //	  - Best for: Semantic memories, procedural knowledge
 //	  - Implementation: SQLite with embeddings stored as BLOB
@@ -37,7 +38,8 @@
 //	  - Full text search but not embedded
 //	  - Referenced by other tiers via memory IDs
 //	  - Best for: Session transcripts, large analyses
-//	  - Implementation: SQLite with FTS5 virtual table
+//	  - Implementation: planned; no dedicated document table exists yet.
+//	    Lexical search is served by memory_lexical_fts and passage_lexical_fts.
 //
 //	Cold Tier (sqlite/ tombstones + reconstruction):
 //	  - Evicted memories marked with tombstones
@@ -67,10 +69,13 @@
 //	  Outcome data for outcome-type memories.
 //	  Columns: memory_id, result, approach, reason, linked_memories (JSON)
 //
-//	memory_documents:
-//	  Document tier storage with full-text search.
-//	  Uses SQLite FTS5 virtual table for fast text queries.
-//	  Columns: id, workspace, content, created_at
+//	memory_lexical_docs / memory_lexical_fts:
+//	  BM25 lexical index over memory content, tags and entities. The docs
+//	  table maps memory IDs to FTS5 rowids; triggers on memories keep both in
+//	  sync inside the writer's transaction (migration 32).
+//
+//	passage_lexical_docs / passage_lexical_fts:
+//	  The same structure over library source_passages.
 //
 //	tombstones:
 //	  Records of evicted memories for reconstruction.
@@ -227,7 +232,7 @@
 //	  - Index on (workspace, type) for filtered queries
 //	  - Index on (workspace, storage_tier) for tier queries
 //	  - Index on (source_id) and (target_id) for relationship traversal
-//	  - FTS5 index on document content
+//	  - FTS5 indexes memory_lexical_fts and passage_lexical_fts (lexical ranking)
 //
 //	Query Optimization:
 //	  - Prepared statements for common queries

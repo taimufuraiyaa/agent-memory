@@ -1,0 +1,27 @@
+# BM25 lexical candidates tasks
+
+- [x] 1. Establish requirements, design alternatives and rollout.
+  - Acceptance: requirements, design and tasks reviewed against current source and the 2026-10-12 conversation.
+  - Verification: file review; no code changes.
+- [x] 2. Add migration 32 with memory and passage lexical indexes, triggers and backfill.
+  - Acceptance: idempotent, recorded, opens on databases without FTS5, backfills existing rows, counter-only updates do not touch the index.
+  - Verification: SQLite tests for insert, update, delete, supersede, cascade, isolation and re-open.
+- [x] 3. Add store lexical query and index status/rebuild operations.
+  - Acceptance: bounded quoted-term queries, deterministic ordering, workspace isolation, drift detection and rebuild.
+  - Verification: focused SQLite tests including hostile query text.
+- [x] 4. Add runtime mode, lexical signal and flag-gated stream in shared hybrid search.
+  - Acceptance: `off` parity, lexical-only discovery below the semantic floor, bounded candidates, fail-open, explain output.
+  - Verification: application regressions mirroring the exact-term and graph-only fixtures.
+- [x] 5. Replace passage scan ranking with BM25 behind authorization-first flow.
+  - Acceptance: authorized editions only, BM25 order on controlled corpus, per-node diversity retained, scan fallback.
+  - Verification: retrieval tests including unauthorized edition and missing index.
+- [x] 6. Add comparison harness and run it.
+  - Acceptance: arms for vector, vector plus exact-term, candidate-only lexical, weighted lexical and legacy passage scan versus BM25; recall@k, MRR, latency, index overhead.
+  - Verification: harness runs deterministically on the repository documentation corpus and writes the report.
+- [x] 7. Publish comparison report and recommendation.
+  - Acceptance: report states corpus, embedder limits, results per arm and an explicit promote / keep-flagged / reject decision.
+  - Verification: report reviewed against raw harness output.
+- [x] 8. Complete repository verification and memory handoff.
+  - Acceptance: focused and full Go tests, vet and build pass; diff check clean; tasks checked; memory episode ended and session summary stored.
+  - Verification: `go test ./...`, `go vet ./...`, `go build ./cmd/agent-memory`, `git diff --check`.
+  - Result (2026-10-12): build and vet pass; `go test -p 4 ./...` has 29 failing tests in api, cli, harnesstools and integration. 27 fail identically on the base commit f21341b (`workspace is not registered`, portable migration copy-first). The other two are environmental: `TestSearchBoundsResultsFilesTimeAndOutputAndRedactsMatches` passes in isolation (timing under a load average above 200) and `TestGraphRAGStandaloneIndexLifecycle` fails on `fork/exec` permission for another user's venv.

@@ -59,6 +59,7 @@ type SignalBreakdown struct {
 	TierBias       float64 `json:"tier_bias"`
 	Salience       float64 `json:"salience"`
 	Suppression    float64 `json:"suppression"`
+	Lexical        float64 `json:"lexical,omitempty"`
 	RelativeToBest float64 `json:"relative_to_best"`
 	Activation     float64 `json:"activation"`
 	Total          float64 `json:"total"`
@@ -135,6 +136,7 @@ type SignalWeights struct {
 	Outcome  float64 `json:"outcome"`
 	Decay    float64 `json:"decay"`
 	TierBias float64 `json:"tier_bias"`
+	Lexical  float64 `json:"lexical,omitempty"`
 }
 
 // RetrievalEngine combines semantic search and additional ranking signals.

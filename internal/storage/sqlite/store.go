@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -23,6 +24,7 @@ type Store struct {
 	turbovecIndex       *TurbovecIndex
 	useTurbovec         bool
 	migrationAdvisories []string // populated by migrations; for test observation
+	lexicalState        atomic.Int32
 }
 
 // ErrDuplicateContent indicates idempotency duplicate detection hit.
@@ -30,6 +32,7 @@ var ErrDuplicateContent = errors.New("duplicate content hash")
 
 // Open creates a SQLite store, applies pragmas, and runs migrations.
 func Open(ctx context.Context, dbPath string) (*Store, error) {
+	registerLexicalConnectionWarmup()
 	// Add query parameters for WAL mode and busy timeout
 	// These need to be in the connection string for modernc.org/sqlite
 	connStr := dbPath + "?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(10000)"
