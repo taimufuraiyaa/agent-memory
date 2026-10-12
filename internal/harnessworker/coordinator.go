@@ -212,9 +212,15 @@ func split(parent harnessrun.Status, workers, parallel int) (harnessrun.Budget, 
 		return harnessrun.Budget{}, fmt.Errorf("harnessworker: the parent is %s", parent.State)
 	}
 	n := max(workers, 1)
+	// Workers beyond the parallel bound run in waves, one after another. Each worker gets the
+	// parent's remaining time divided by the larger of the parallel bound (so a full wave stays
+	// inside it) and the number of waves (so every wave together does), which also makes
+	// MaxParallel 1 a true serialization instead of giving each worker the whole allowance.
+	parallel = max(parallel, 1)
+	waves := (n + parallel - 1) / parallel
 	left := harnessrun.Budget{
 		MaxTurns:       (parent.Budget.MaxTurns - parent.Usage.Turns) / n,
-		MaxActive:      (parent.Budget.MaxActive - time.Duration(parent.Usage.ActiveMillis)*time.Millisecond) / time.Duration(max(parallel, 1)),
+		MaxActive:      (parent.Budget.MaxActive - time.Duration(parent.Usage.ActiveMillis)*time.Millisecond) / time.Duration(max(parallel, waves)),
 		MaxToolCalls:   (parent.Budget.MaxToolCalls - parent.Usage.ToolCalls) / n,
 		MaxOutputBytes: (parent.Budget.MaxOutputBytes - parent.Usage.OutputBytes) / n,
 		MaxSpendMicros: (parent.Budget.MaxSpendMicros - parent.Usage.SpendMicros) / int64(n),

@@ -281,6 +281,27 @@ func TestTheParentsRemainingBudgetIsSplitAndNeverExceeded(t *testing.T) {
 	}
 }
 
+// Workers run in waves when there are more subgoals than parallel slots. The time they may
+// use, wave after wave, must still fit inside what the parent had left.
+func TestActiveTimeAcrossWavesNeverExceedsWhatTheParentHadLeft(t *testing.T) {
+	parent := harnessrun.Status{State: harnessrun.StateRunning, Budget: harnessrun.Budget{MaxTurns: 64, MaxActive: 10 * time.Minute, MaxToolCalls: 64, MaxOutputBytes: 1 << 20, MaxSpendMicros: 1_000_000, MaxDepth: 2}}
+	for workers := 1; workers <= MaxSubgoals; workers++ {
+		for parallel := 1; parallel <= MaxSubgoals; parallel++ {
+			share, err := split(parent, workers, parallel)
+			if err != nil {
+				t.Fatalf("workers=%d parallel=%d: %v", workers, parallel, err)
+			}
+			waves := (workers + parallel - 1) / parallel
+			if total := time.Duration(waves) * share.MaxActive; total > parent.Budget.MaxActive {
+				t.Errorf("workers=%d parallel=%d: %d waves of %s exceed the parent's %s", workers, parallel, waves, share.MaxActive, parent.Budget.MaxActive)
+			}
+			if share.MaxActive <= 0 {
+				t.Errorf("workers=%d parallel=%d: no time share", workers, parallel)
+			}
+		}
+	}
+}
+
 // fakeRuns scripts a manager: children end as the test says.
 type fakeRuns struct {
 	mu       sync.Mutex
@@ -540,5 +561,39 @@ func TestAWorkersClaimsAreReleasedWhenItEnds(t *testing.T) {
 	}
 	if _, held := c.Claims().Owner("held.go"); held {
 		t.Fatal("a finished worker still owns a file")
+	}
+}
+
+// A denied action must not take ownership of the file it was denied for.
+func TestADeniedActionHoldsNoClaim(t *testing.T) {
+	claims := NewClaims(0)
+	p := OwnershipPolicy{Base: basePolicy{harnessrun.DecisionDeny}, Claims: claims}
+	if got := p.Decide(context.Background(), harnessrun.Owner{}, prepared("run-a", "edit_file", "a.go")); got != harnessrun.DecisionDeny {
+		t.Fatalf("decision = %v", got)
+	}
+	if owner, held := claims.Owner("a.go"); held {
+		t.Fatalf("a denied action left %q holding the file", owner)
+	}
+}
+
+// More subgoals than parallel slots: no more than MaxParallel workers may be running at once,
+// even when none of them finishes.
+func TestNoMoreWorkersRunAtOnceThanTheParallelBound(t *testing.T) {
+	f := newFake()
+	f.hold = make(chan struct{}) // children never finish on their own
+	c, _ := New(Config{Runs: f, MaxParallel: 2, Poll: time.Millisecond})
+	done := make(chan struct{})
+	go func() {
+		_, _ = c.Run(context.Background(), harnessrun.Owner{}, "run_parent", []Subgoal{{"a", "one"}, {"b", "two"}, {"c", "three"}, {"d", "four"}})
+		close(done)
+	}()
+	time.Sleep(300 * time.Millisecond)
+	f.mu.Lock()
+	started := len(f.started)
+	f.parent.State = harnessrun.StateCompleted // stop the workers so Run returns
+	f.mu.Unlock()
+	<-done
+	if started != 2 {
+		t.Fatalf("%d workers were started while the bound is 2", started)
 	}
 }
