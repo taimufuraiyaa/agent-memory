@@ -1,0 +1,78 @@
+@startuml 03-package-layers
+title Agent Memory — Go package layers (internal/)
+skinparam packageStyle rectangle
+
+package "Interface" #E3F2FD {
+  [cli]
+  [api]
+  [tui]
+  [hooks]
+  [integration]
+  [openaiapi]
+}
+package "Application" #E8F5E9 {
+  [application]
+  [workspace]
+  [bootstrap]
+  [advisor]
+}
+package "Domain engines" #FFF8E1 {
+  [engine]
+  [retrieval]
+  [readingroom]
+  [library]
+  [ingestion]
+  [harness]
+  [harnessrun]
+  [harnesscontext]
+  [harnessmodel]
+  [harnesstools]
+  [harnessdecide]
+  [harnessapproval]
+  [harnessauth]
+}
+package "Domain model" #FCE4EC {
+  [core]
+  [contracts]
+}
+package "Infrastructure" #ECEFF1 {
+  [storage/sqlite]
+  [storage/markdown]
+  [embeddings]
+  [observability]
+  [config]
+  [validation]
+  [localllm]
+}
+
+[api] --> [application]
+[api] --> [harnessrun]
+[api] --> [harnessdecide]
+[cli] --> [application]
+[cli] --> [harnessrun]
+[application] --> [engine]
+[application] --> [retrieval]
+[application] --> [storage/sqlite]
+[application] --> [contracts]
+[engine] --> [storage/sqlite]
+[engine] --> [storage/markdown]
+[engine] --> [readingroom]
+[engine] --> [core]
+[retrieval] --> [library]
+[harnessrun] --> [harness]
+[harnessrun] --> [harnessapproval]
+[harnessrun] --> [harnessdecide]
+[harnesscontext] --> [harnessrun]
+[harnessmodel] --> [harnessrun]
+[harnesstools] --> [harnessrun]
+[harnessdecide] --> [harness]
+[storage/sqlite] --> [core]
+[storage/sqlite] --> [contracts]
+[embeddings] --> [observability]
+
+note right of [core]
+  core and harness import
+  no other internal package
+  (verified with go list)
+end note
+@enduml

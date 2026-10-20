@@ -1,0 +1,26 @@
+@startuml 04-large-text-tiers
+title PR01 — Large text input handling by size tier
+start
+:Estimate tokens;
+if (<= 2k tokens?) then (T0)
+  :Normalize whole text with LLM;
+  :Index as one doc;
+elseif (<= 200k tokens?) then (T1 / T2)
+  :Structure-aware chunking\n(fallback: sliding window 12% overlap);
+  :Dedup (content hash + MinHash >= 0.9);
+  fork
+    :Pick priority chunks\nwithin LLM budget (32 chunks / 20s);
+    :LLM normalize;
+  fork again
+    :Remaining chunks -> rule-based;
+    :Enqueue for background LLM;
+  fork again
+    :Document profile\n(extractive summary + reduced terms);
+  end fork
+  :Index passages + document profile in FTS5;
+else (T3 > 200k or > 5 MB)
+  :Reject input_too_large;
+  :Suggest study / library import;
+endif
+stop
+@enduml

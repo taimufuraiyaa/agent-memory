@@ -1,0 +1,59 @@
+@startuml 01-target-containers
+title PR01 — Target containers (BM25-only, embedded normalizer)
+skinparam componentStyle rectangle
+
+package "Clients" {
+  [CLI agent-memory / am] as CLI
+  [MCP adapter (Node)] as MCP
+  [Dashboard] as Dash
+  [Hooks (recall-only listen)] as Hooks
+}
+
+node "agent-memory serve  127.0.0.1:3211" {
+  [HTTP API] as API
+  [Application services] as App
+  [Ingestion pipeline\n(chunker, dedup, queue)] as Ingest
+  [Normalizer service\n(embedded LLM + rule fallback)] as Norm #FFF59D
+  [Search engine\n(BM25F + multi-signal rerank)] as Search #C8E6C9
+  [Lifecycle\n(decay, consolidation, conflict)] as Life
+  [Extension registry] as Ext
+}
+
+package "SQLite per workspace" {
+  database "memories (raw)" as Mem
+  database "memory_index_docs" as Docs
+  database "memory_fts (FTS5)" as FTS
+  database "passages" as Pass
+  database "normalization_queue" as NQ
+  database "normalized_query_cache" as QC
+}
+
+file "Normalizer model\n(GGUF, pinned hash)" as Model
+[agent-memory-harness\n(separate, optional)] as Harness #ECEFF1
+
+CLI --> API
+MCP --> API
+Dash --> API
+Hooks --> API
+API --> App
+App --> Ingest
+App --> Search
+Ingest --> Norm
+Search --> Norm
+Norm --> Model
+Ingest --> Mem
+Ingest --> Docs
+Ingest --> Pass
+Ingest --> NQ
+Docs --> FTS
+Search --> FTS
+Search --> QC
+Life --> Mem
+Harness ..> API : public HTTP only
+Ext ..> Harness : capability
+
+note bottom of Harness
+  Jev harness/advisory moved out of core.
+  Ollama planner and localllm removed.
+end note
+@enduml

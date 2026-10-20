@@ -1,0 +1,52 @@
+@startuml 02-containers
+title Agent Memory — Containers
+skinparam componentStyle rectangle
+
+package "Client surfaces" {
+  [agent-memory / am CLI\n(Go, cobra)] as CLI
+  [TUI\n(bubbletea)] as TUI
+  [MCP stdio adapter\n(Node server.js)] as MCP
+  [IDE hooks\n(Claude listen, PreToolUse)] as Hooks
+  [Dashboard SPA\n(React + Mantine)] as Dash
+  [macOS menubar\n(Swift)] as Menubar
+  [Go SDK\n(sdk/go/agentmemory)] as SDK
+}
+
+node "agent-memory serve  127.0.0.1:3211" {
+  [HTTP API\n/api/v1, /health, /metrics] as API
+  [Application services] as App
+  [Memory engine\n(retrieval, write, lifecycle)] as Engine
+  [Jev harness\n(runs, context, models, tools, approvals)] as Harness
+  [Scheduler\n(background maintenance)] as Sched
+}
+
+package "~~/.agent-memory" {
+  database "Per-workspace\nSQLite DB" as DB
+  file "workspaces.json\nregistry" as Reg
+  file "Markdown tier\n(managed rule files)" as MD
+  file "harness/runs, harness/idem" as RunStore
+  file "Private credential\nstore (Jev token)" as Cred
+}
+
+[GraphRAG adapter\n(Python, pinned graphrag 3.1.2)] as GR
+
+CLI --> API
+CLI --> Engine : local-only commands
+TUI --> API
+MCP --> API : HTTP only,\nno CLI fallback
+Hooks --> API
+Dash --> API
+SDK --> API
+Menubar --> CLI
+API --> App
+API --> Harness
+App --> Engine
+Sched --> Engine
+Engine --> DB
+Engine --> MD
+App --> Reg
+Harness --> RunStore
+Harness --> Cred
+Harness --> DB : memory / solution context
+App --> GR : index jobs,\nartifact import
+@enduml

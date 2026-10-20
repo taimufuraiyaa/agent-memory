@@ -1,0 +1,40 @@
+@startgantt 09-roadmap-proposed
+title Agent Memory — Proposed roadmap (PROPOSAL, not committed dates)
+printscale weekly
+Project starts 2026-10-19
+saturday are closed
+sunday are closed
+
+-- M1: Close Jev harness --
+[Anthropic model provider (task 12)] as [T12] lasts 10 days
+[Coding model + routing conformance (task 6)] as [T6] lasts 10 days
+[T6] starts at [T12]'s end
+[Bounded background workers (task 9)] as [T9] lasts 10 days
+[MCP controls + release gates (task 10)] as [T10] lasts 10 days
+[T10] starts at [T9]'s end
+[Tiered tools sign-off (task 7)] as [T7] lasts 3 days
+[T7] starts at [T6]'s end
+[Live coding task demo] as [DEMO] lasts 3 days
+[DEMO] starts at [T10]'s end
+[M1 Harness release] happens at [DEMO]'s end
+
+-- M2: Skill governance --
+[Product review: risk, thresholds, canary] as [PR] lasts 5 days
+[R1-R16 evidence pack] as [EV] lasts 5 days
+[Rollback SLO load test] as [SLO] lasts 5 days
+[SLO] starts at [EV]'s end
+[M2 Skills GA] happens at [SLO]'s end
+
+-- M3: Architecture hardening (from detailed-architecture backlog) --
+[Split storage/sqlite/store.go by aggregate] as [S1] lasts 10 days
+[S1] starts at [DEMO]'s end
+[Split workspace/manager.go] as [S2] lasts 5 days
+[S2] starts at [S1]'s end
+[Shared composition root for cli + api] as [S3] lasts 10 days
+[S3] starts at [S2]'s end
+[p50/p95 gates for MCP + recall] as [P1] lasts 5 days
+[P1] starts at [SLO]'s end
+[Optional ANN index spike] as [ANN] lasts 10 days
+[ANN] starts at [P1]'s end
+[M3 Hardened 1.x] happens at [S3]'s end
+@endgantt

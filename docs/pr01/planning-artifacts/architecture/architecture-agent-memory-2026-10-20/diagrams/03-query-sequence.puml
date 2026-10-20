@@ -1,0 +1,35 @@
+@startuml 03-query-sequence
+title PR01 — Query path: decoder normalizes question, then BM25
+autonumber
+
+actor Agent
+participant "api" as API
+database "normalized_query_cache" as QC
+participant "Normalizer\n(decoder LLM)" as N
+participant "Rule-based" as R
+participant "Search engine" as S
+database "memory_fts (FTS5)" as FTS
+
+Agent -> API : search / recall {query}
+API -> QC : get(normalizer_version, hash(query))
+alt cache hit
+  QC --> API : normalized query
+else identifier / keyword / <= 3 tokens
+  API -> R : fast path
+  R --> API : terms
+else cache miss
+  API -> N : normalize(mode=query, deadline 150ms)
+  alt within deadline
+    N --> API : must_terms, canonical_terms,\nexpansions, identifiers, intent
+    API -> QC : put
+  else timeout
+    API -> R : fallback
+    R --> API : terms (normalization=fallback)
+  end
+end
+API -> S : build BM25F query (weights by field)
+S -> FTS : MATCH + bm25(weights) top N
+FTS --> S : passages
+S -> S : passage -> memory aggregation,\nnormalize score, multi-signal rerank,\ngraph expansion, cutoffs, token budget
+S --> Agent : hits + explain(normalized_query, per-field bm25) + request_id
+@enduml

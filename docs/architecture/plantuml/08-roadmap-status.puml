@@ -1,0 +1,39 @@
+@startwbs 08-roadmap-status
+title Agent Memory — Roadmap status (from .kiro/specs/*/tasks.md, TASKS.md, 2026-10-19)
+<style>
+.done { BackgroundColor #C8E6C9 }
+.wip  { BackgroundColor #FFF59D }
+.todo { BackgroundColor #FFCDD2 }
+</style>
+* Agent Memory
+** Foundation (TASKS.md P1-P4) <<done>>
+*** IDE rules, installer, config, validation <<done>>
+*** Observability, visualization, plugins, benchmarks <<done>>
+** Memory core
+*** Hybrid retrieval, recall, lifecycle <<done>>
+*** Solution-path memory (51/51) <<done>>
+*** Multi-client memory enforcement (26/26) <<done>>
+*** Local answer translation (9/9) <<done>>
+** Living Knowledge Library
+*** Phases A-I (154 tasks checked) <<done>>
+** Skills
+*** Revision lifecycle (56/57) <<wip>>
+**** Product review: risk classes, thresholds, canary <<todo>>
+*** Background orchestrator (61/64) <<wip>>
+**** R1-R16 evidence complete <<todo>>
+**** Safety rollback SLO under load <<todo>>
+**** Product review approval <<todo>>
+** Jev harness
+*** 0-5 contracts, authority, run loop, MCP slice, context <<done>>
+*** 7a-7d tools, approvals, commands, git <<done>>
+*** 8 + 11-18, 20 Jev decisions, listen, routing <<done>>
+*** 6 coding model and routing <<todo>>
+*** 7 tiered tools umbrella sign-off <<todo>>
+*** 9 bounded background workers <<wip>>
+*** 10 MCP controls and release <<wip>>
+*** 12 Anthropic model provider <<wip>>
+legend right
+  green = done, yellow = in progress ([~~] or partial),
+  red = open checkbox
+endlegend
+@endwbs

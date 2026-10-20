@@ -1,0 +1,24 @@
+@startuml 06-harness-run-state
+title Jev harness — run state machine (internal/harnessrun)
+
+[*] --> queued : harness_start
+queued --> running
+running --> needs_attention : clarification\nor approval needed
+needs_attention --> running : continue /\napproval granted (local UI/CLI only)
+running --> cancelling : cancel
+needs_attention --> cancelling : cancel
+cancelling --> cancelled
+running --> completed
+running --> partial : budget exhausted
+running --> failed
+completed --> [*]
+partial --> [*]
+failed --> [*]
+cancelled --> [*]
+
+note right of needs_attention
+  Approval bound to run, generation,
+  action digest, expiry, file revisions.
+  MCP continue cannot approve.
+end note
+@enduml

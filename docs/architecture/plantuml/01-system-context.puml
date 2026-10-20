@@ -1,0 +1,29 @@
+@startuml 01-system-context
+title Agent Memory — System Context
+left to right direction
+skinparam componentStyle rectangle
+
+actor "Developer" as dev
+actor "AI coding agents\n(Claude Code, Cursor, Codex, Trae, ZCode)" as agents
+
+rectangle "Agent Memory\n(local machine, loopback)" as am #LightBlue
+
+folder "Project repositories\n(workspace roots)" as repos
+cloud "Jev / TypeSafe System One\n(opt-in, advisory only)" as jev
+cloud "Model providers\nAnthropic, OpenAI (opt-in)" as llm
+node "Local LLM endpoint\n(optional planner)" as localllm
+file "ONNX MiniLM\nembedding model" as onnx
+
+dev --> am : CLI / TUI / dashboard / menubar
+agents --> am : MCP stdio / hooks / CLI
+am --> repos : study, root-confined harness tools
+am ..> jev : typed, redacted decisions
+am ..> llm : harness model calls
+am ..> localllm : query planning, translation
+am ..> onnx : first-run download
+
+note bottom of am
+  Dotted arrows = optional egress,
+  each behind its own opt-in and credential.
+end note
+@enduml

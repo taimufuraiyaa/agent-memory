@@ -1,0 +1,38 @@
+@startuml 07-harness-tool-approval
+title Jev harness — tool call, policy and approval
+autonumber
+
+participant "harnessrun\nloop" as Loop
+participant "harnessmodel\nrouter" as Model
+participant "harnessdecide\n(Jev, advisory)" as Dec
+participant "harnesstools" as Tools
+participant "harnessapproval" as Appr
+actor "Developer\n(local CLI / dashboard)" as Dev
+participant "harnessfs / git / exec" as Exec
+
+Loop -> Model : next turn (assembled context)
+Model -> Dec : model.v1 (reorder only)
+Model --> Loop : proposed tool call
+Loop -> Tools : validate exact argument schema
+Tools -> Tools : prepare (preview, preimage, revisions)
+Tools -> Dec : command_risk.v1 (raise only)
+Tools -> Tools : policy tier
+
+alt deny
+  Tools --> Loop : denied
+else allow
+  Tools -> Exec : execute (root-confined)
+  Exec --> Loop : bounded output
+else ask
+  Tools -> Appr : pending approval
+  Loop -> Loop : state = needs_attention
+  Dev -> Appr : approve (run, generation, digest, expiry)
+  Appr -> Tools : re-check revisions
+  alt stale or symlink escape
+    Tools --> Loop : fail closed
+  else valid
+    Tools -> Exec : execute
+    Exec --> Loop : bounded output
+  end
+end
+@enduml
