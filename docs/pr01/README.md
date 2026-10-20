@@ -8,7 +8,7 @@ docs/pr01/
     briefs/brief-agent-memory-2026-10-20/         brief.md, addendum.md, .memlog.md
     prds/prd-agent-memory-2026-10-20/             prd.md, addendum.md, .memlog.md
     architecture/architecture-agent-memory-2026-10-20/
-      ARCHITECTURE-SPINE.md                       AD-1..AD-11 (lint_spine: 0 findings)
+      ARCHITECTURE-SPINE.md                       AD-1..AD-12 (lint_spine: 0 findings)
       solution-design.md                          companion: thiết kế chi tiết, phương án, rủi ro, rollout
       large-text-input.md                         companion: 10 phương án cho văn bản lớn
       diagrams/                                   PlantUML (.puml, png, svg)

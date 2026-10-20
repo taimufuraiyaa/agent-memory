@@ -52,7 +52,7 @@ Tài liệu này chia PR01 thành epic và story có thể triển khai được
 
 ### Additional Requirements
 
-- Architecture spine AD-1..AD-11 là ràng buộc bắt buộc cho mọi story.
+- Architecture spine AD-1..AD-12 là ràng buộc bắt buộc cho mọi story.
 - Spike FTS5 (Story 1.1) và spike model (Story 4.1) chặn các story phụ thuộc.
 - Open questions Q2 (cgo) và Q3 (model) chặn Epic 4.
 
@@ -363,6 +363,7 @@ So that chỉ mục bắt được paraphrase và không chứa secret.
 **When** ghi
 **Then** nội dung gốc không đổi và p95 ≤ 400 ms (SM-5)
 **And** secret đã redact không xuất hiện trong `expansions`
+**And** `go list` của `internal/ingest` không import `internal/storage`; mọi ghi nội dung và chỉ mục đi qua cổng ghi của normalization layer trong một transaction (AD-12)
 
 ### Story 4.5: Normalization queue và reindex theo version
 

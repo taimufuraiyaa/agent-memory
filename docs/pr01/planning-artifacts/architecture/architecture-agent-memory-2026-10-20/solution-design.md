@@ -69,15 +69,16 @@ flowchart TB
     App --> Ingest --> Norm
     App --> Search --> Norm
     Norm --> Model
-    Ingest --> Mem
-    Ingest --> Doc
-    Ingest --> Pass
-    Ingest --> NQ
+    Norm -->|"cổng ghi duy nhất, 1 tx"| Mem
+    Norm --> Doc
+    Norm --> Pass
+    Norm --> NQ
     Doc --> FTS
     Pass --> FTS
-    Search --> FTS
+    Search -->|"chỉ đọc"| FTS
     Search --> QC
-    Life --> Mem
+    Life -->|"nội dung mới (consolidation)"| Norm
+    Life -->|"chỉ metadata vòng đời"| Mem
     Harness -.->|"HTTP public API, không import nội bộ"| API
     Ext -.-> Harness
 ```
@@ -176,30 +177,34 @@ Tokenizer được version hoá (`tokenizer_version`). Đổi version thì phả
 sequenceDiagram
     participant C as "Client"
     participant API as "api"
-    participant ING as "Ingestion pipeline"
+    participant ING as "Ingestion pipeline (không có storage)"
     participant CH as "Chunker"
-    participant N as "Normalizer"
+    participant N as "Normalization layer (cổng ghi)"
     participant DB as "SQLite (tx)"
     C->>API: "write {workspace, type, content, keywords}"
     API->>ING: "validate (size, workspace, path safety)"
+    ING->>ING: "redact"
     ING->>CH: "size > ngưỡng?"
-    CH-->>ING: "1 hoặc nhiều passage"
+    CH-->>ING: "1 hoặc nhiều passage (dedup, ngân sách LLM)"
+    ING->>N: "submit write batch (raw + passages + budget)"
     loop "mỗi passage (song song có giới hạn)"
-        ING->>N: "normalize(passage, mode=doc)"
-        alt "LLM OK trong timeout"
-            N-->>ING: "fields (normalization=llm)"
-        else "lỗi / timeout / quá tải"
-            N-->>ING: "fields (normalization=fallback)"
-            ING->>DB: "enqueue normalization_queue"
+        alt "trong ngân sách và LLM OK trong timeout"
+            N->>N: "LLM normalize + validate (normalization=llm)"
+        else "lỗi / timeout / ngoài ngân sách"
+            N->>N: "rule-based (normalization=fallback)"
         end
     end
-    ING->>DB: "tx: memories (raw), memory_index_docs, passages, memory_fts"
-    DB-->>C: "{id, normalization, index_generation}"
+    N->>DB: "1 tx: memories (raw), memory_index_docs, passages, memory_fts, normalization_queue (doc fallback)"
+    DB-->>N: "commit"
+    N-->>ING: "{id, normalization, index_generation}"
+    ING-->>C: "{id, normalization, index_generation} hoặc job_id"
 ```
 
+**Quy tắc lớp (AD-12):** `ingest` không có quyền truy cập storage. Mọi nội dung chỉ vào DB qua normalization layer, kể cả output của consolidation/reconstruction và việc reindex khi migration hoặc đổi version. `engine` chỉ ghi trực tiếp metadata vòng đời; `search` chỉ đọc.
+
 - Văn bản ngắn chạy đồng bộ. Văn bản lớn chạy bất đồng bộ: trả về `job_id` ngay, phần còn lại xem tài liệu 04.
-- Worker nền xử lý `normalization_queue` (fallback → LLM) và reindex khi `normalizer_version` đổi, theo lô, có giới hạn CPU.
-- Consolidation và conflict detection hiện đang dùng độ tương đồng embedding. Sau thay đổi sẽ dùng **độ tương đồng BM25 / Jaccard trên `canonical_terms`** (MinHash cho tập lớn).
+- Worker nền xử lý `normalization_queue` (fallback → LLM) và reindex khi `normalizer_version` đổi, theo lô, có giới hạn CPU. Worker này thuộc normalization layer và ghi qua chính cổng ghi đó.
+- Consolidation và conflict detection hiện đang dùng độ tương đồng embedding. Sau thay đổi sẽ dùng **độ tương đồng BM25 / Jaccard trên `canonical_terms`** (MinHash cho tập lớn). Memory mới do consolidation sinh ra được gửi vào normalization layer như một write batch, không được ghi thẳng vào DB.
 
 ### 3.5 Luồng tìm (query)
 

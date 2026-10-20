@@ -12,8 +12,8 @@ package "Clients" {
 node "agent-memory serve  127.0.0.1:3211" {
   [HTTP API] as API
   [Application services] as App
-  [Ingestion pipeline\n(chunker, dedup, queue)] as Ingest
-  [Normalizer service\n(embedded LLM + rule fallback)] as Norm #FFF59D
+  [Ingestion pipeline\n(redact, chunker, dedup, budget)\nno storage access] as Ingest
+  [Normalization layer\n(embedded LLM + rule fallback)\nONLY write gateway to DB] as Norm #FFF59D
   [Search engine\n(BM25F + multi-signal rerank)] as Search #C8E6C9
   [Lifecycle\n(decay, consolidation, conflict)] as Life
   [Extension registry] as Ext
@@ -38,17 +38,18 @@ Hooks --> API
 API --> App
 App --> Ingest
 App --> Search
-Ingest --> Norm
+Ingest --> Norm : write batch
 Search --> Norm
 Norm --> Model
-Ingest --> Mem
-Ingest --> Docs
-Ingest --> Pass
-Ingest --> NQ
+Norm --> Mem : single tx
+Norm --> Docs
+Norm --> Pass
+Norm --> NQ
 Docs --> FTS
-Search --> FTS
+Search --> FTS : read only
 Search --> QC
-Life --> Mem
+Life --> Norm : new content\n(consolidation)
+Life --> Mem : lifecycle\nmetadata only
 Harness ..> API : public HTTP only
 Ext ..> Harness : capability
 

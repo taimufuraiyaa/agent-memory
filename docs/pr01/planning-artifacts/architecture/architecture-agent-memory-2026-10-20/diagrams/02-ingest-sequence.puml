@@ -1,13 +1,13 @@
 @startuml 02-ingest-sequence
-title PR01 — Write path with embedded normalizer
+title PR01 — Write path: ingest -> normalization layer -> DB
 autonumber
 
 participant Client
 participant "api" as API
-participant "Ingestion" as ING
+participant "Ingestion\n(no storage access)" as ING
 participant "Redactor" as RED
 participant "Chunker" as CH
-participant "Normalizer\n(LLM)" as N
+participant "Normalization layer\n(write gateway)" as N
 participant "Rule-based\nnormalizer" as R
 database "SQLite tx" as DB
 
@@ -23,16 +23,17 @@ else 2k - 200k tokens
 else <= 2k tokens
   CH --> ING : single passage
 end
-loop each passage within LLM budget
-  ING -> N : normalize(mode=doc, deadline)
-  alt ok
-    N --> ING : canonical_terms, identifiers, expansions
+ING -> N : submit write batch (raw + passages + LLM budget)
+loop each passage
+  alt within budget and LLM ok
+    N -> N : LLM normalize + validate (normalization=llm)
   else error / timeout / over budget
-    ING -> R : normalize
-    R --> ING : fields (normalization=fallback)
-    ING -> DB : enqueue normalization_queue
+    N -> R : normalize
+    R --> N : fields (normalization=fallback)
   end
 end
-ING -> DB : memories(raw) + memory_index_docs + passages + memory_fts
-DB --> Client : id, normalization, index_generation
+N -> DB : one tx: memories(raw) + memory_index_docs\n+ passages + memory_fts + normalization_queue
+DB --> N : commit
+N --> ING : id, normalization, index_generation
+ING --> Client : id (or job_id for async)
 @enduml

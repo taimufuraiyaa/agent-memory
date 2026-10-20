@@ -28,8 +28,8 @@ Lõi phân tầng (interface → application → domain engines → infrastructu
 |---|---|
 | Interface | `internal/cli`, `internal/api`, `tools/agent-memory/mcp-server` |
 | Application | `internal/application` |
-| Pipelines | `internal/ingest` (mới: chunker, dedup, queue), `internal/search` (mới: BM25 query builder, aggregation, rerank) |
-| Normalizer | `internal/normalize` (mới: tokenizer, rule-based, LLM adapter) |
+| Pipelines | `internal/ingest` (mới: redact, chunker, dedup, LLM budget, job orchestration — **không phụ thuộc storage**), `internal/search` (mới: BM25 query builder, aggregation, rerank — chỉ đọc storage) |
+| Normalization layer | `internal/normalize` (mới: tokenizer, rule-based, LLM adapter, validator, và **cổng ghi duy nhất** vào storage cho nội dung và chỉ mục) |
 | Domain | `internal/core`, `internal/engine` (lifecycle, recall assembly) |
 | Infrastructure | `internal/storage/sqlite` (FTS5, index tables) |
 
@@ -50,10 +50,10 @@ flowchart TB
     APP --> ING
     APP --> SRCH
     APP --> ENG
-    ING --> NORM
-    SRCH --> NORM
-    ING --> ST
-    SRCH --> ST
+    ING -->|"write batch"| NORM
+    SRCH -->|"normalize(query)"| NORM
+    NORM -->|"only write path"| ST
+    SRCH -->|"read only"| ST
     ENG --> ST
     ING --> CORE
     SRCH --> CORE
@@ -128,6 +128,12 @@ flowchart TB
 - **Prevents:** làm vỡ agent đang dùng `memory_*`, `solution_*`, `skill_*`
 - **Rule:** response hiện có chỉ được thêm field. `semantic` là alias của `lexical` trong đúng một release. Thay đổi phá vỡ duy nhất là gỡ harness/Jev/local-llm theo AD-10.
 
+### AD-12 — Mọi nội dung đi qua normalization layer rồi mới vào DB
+
+- **Binds:** FR-12, FR-13, FR-14, FR-18, FR-19, FR-21, `internal/ingest`, `internal/normalize`, `internal/engine`, `internal/storage/sqlite`
+- **Prevents:** một đường ghi bỏ qua chuẩn hoá (ingest ghi thẳng DB, consolidation tạo memory mới không có index, migration index dữ liệu cũ bằng tokenizer khác), làm chỉ mục lệch version hoặc thiếu field
+- **Rule:** `ingest` không import `storage`. Nó chỉ chuẩn bị write batch (đã redact, chunk, dedup, kèm ngân sách LLM) và chuyển cho `normalize`. `normalize` là **cổng ghi duy nhất** cho `memories.content`, `memory_index_docs`, `passages`, `memory_fts` và `normalization_queue`: nó chuẩn hoá (LLM hoặc fallback) rồi ghi tất cả trong **một transaction**. Nội dung do lifecycle sinh ra (consolidation, reconstruction) và việc reindex khi migration hay đổi version cũng phải đi qua cổng này. `engine` chỉ được ghi trực tiếp các cột metadata vòng đời (decay, access, suppression, tier, supersession). `search` chỉ đọc storage. Trạng thái job bất đồng bộ được lưu qua cổng ghi của `normalize`, không qua `ingest`.
+
 ## Consistency Conventions
 
 | Concern | Convention |
@@ -146,15 +152,17 @@ flowchart TB
 | --- | --- |
 | Go | 1.26.3 |
 | SQLite driver | modernc.org/sqlite v1.50.0 (FTS5 cần spike xác nhận) |
-| Normalizer runtime | llama.cpp nhúng qua cgo — version chốt ở spike S4.1 |
-| Normalizer model | Decoder đa ngôn ngữ 0.5–1.5B, Q4 — chốt ở spike S4.1 |
+| Normalizer runtime | llama.cpp nhúng qua cgo — version chốt ở spike Story 4.1 |
+| Normalizer model | Decoder đa ngôn ngữ 0.5–1.5B, Q4 — chốt ở spike Story 4.1 |
 | MCP adapter | Node (adapter hiện có) |
 
 ## Structural Seed
 
 ```mermaid
 flowchart LR
-    W["write"] --> RED["redact"] --> CH["chunk + dedup"] --> N1["normalize(doc)"] --> TX["tx: memories + memory_index_docs + passages + memory_fts"]
+    W["write"] --> RED["ingest: redact"] --> CH["ingest: chunk + dedup + budget"] --> N1["normalization layer: normalize(doc) + validate"] --> TX["normalization layer → storage: one tx (memories + memory_index_docs + passages + memory_fts + queue)"]
+    LC["engine: consolidation / reconstruction output"] --> N1
+    MIG["migration / version reindex"] --> N1
     Q["query"] --> FP{"fast path?"}
     FP -->|"yes"| RB["rule-based"]
     FP -->|"no"| N2["normalize(query) + cache"]
@@ -175,8 +183,8 @@ erDiagram
 
 ```text
 internal/
-  normalize/   # tokenizer, rule-based, LLM adapter, validator
-  ingest/      # chunker, dedup, LLM budget, async jobs, queue worker
+  normalize/   # tokenizer, rule-based, LLM adapter, validator, write gateway (only writer of content + index), queue worker
+  ingest/      # redact, chunker, dedup, LLM budget, job orchestration (no storage import)
   search/      # query builder, FTS5 executor, aggregation, score normalization
   engine/      # rerank signals, graph expansion, recall assembly, lifecycle
   storage/sqlite/  # FTS5 schema, index tables, migrations
@@ -189,16 +197,16 @@ internal/
 | FR-1..FR-6 truy xuất BM25 | `search`, `engine`, `storage/sqlite` | AD-1, AD-2, AD-3, AD-11 |
 | FR-7, FR-8 tách Jev/mini LLM | `cli`, `api`, module ngoài | AD-10, AD-11 |
 | FR-9..FR-11 tokenizer | `normalize` | AD-2, AD-3 |
-| FR-12..FR-14 chuẩn hoá lúc ghi | `ingest`, `normalize` | AD-4, AD-5, AD-6, AD-7, AD-8 |
+| FR-12..FR-14 chuẩn hoá lúc ghi | `ingest` → `normalize` → `storage/sqlite` | AD-4, AD-5, AD-6, AD-7, AD-8, AD-12 |
 | FR-15..FR-17 chuẩn hoá query | `search`, `normalize` | AD-4, AD-6 |
-| FR-18..FR-20 văn bản lớn | `ingest`, `search` | AD-9, AD-6 |
-| FR-21 migration | `storage/sqlite`, `cli upgrade` | AD-8, AD-11 |
+| FR-18..FR-20 văn bản lớn | `ingest` → `normalize`; `search` | AD-9, AD-6, AD-12 |
+| FR-21 migration | `cli upgrade` → `normalize` → `storage/sqlite` | AD-8, AD-11, AD-12 |
 
 ## Deferred
 
 | Hạng mục | Lý do có thể chờ |
 | --- | --- |
-| Chọn model và runtime cụ thể | Cần số đo thực tế từ spike S4.1 |
+| Chọn model và runtime cụ thể | Cần số đo thực tế từ spike Story 4.1 |
 | BM25F thật (k1/b theo field, chỉ mục postings tự viết) | Chỉ cần nếu spike FTS5 thất bại hoặc benchmark đòi hỏi |
 | Thay embedding trong consolidation/conflict (MinHash/Jaccard) | Thuộc epic migration; không chặn đường truy xuất |
 | Thời điểm drop `memory_vectors`, `memory_terms` | Sau một release ổn định ở P3 |
