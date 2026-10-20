@@ -1,0 +1,36 @@
+@startuml 05-recall-sequence
+title Agent Memory — search / recall / feedback
+autonumber
+
+actor Agent
+participant "MCP adapter\nor CLI" as Client
+participant "api" as API
+participant "engine\nquery cache" as Cache
+participant "term index\n(Bloom + memory_terms)" as Terms
+participant "embeddings\n(ONNX)" as Emb
+database "SQLite" as DB
+participant "retrieval\n(graph)" as Graph
+
+Agent -> Client : memory_recall(task, budget)
+Client -> API : POST /api/v1/memories/recall
+API -> Cache : lookup(workspace, query, mode)
+alt cache hit
+  Cache --> API : cached result
+else cache miss
+  API -> Terms : Bloom pre-check
+  Terms --> API : "no" (skip) or "maybe" (lookup)
+  API -> Emb : embed(query)
+  API -> DB : vector candidates
+  API -> Graph : depth-limited expansion
+  API -> API : score = semantic, recency, outcome,\ndecay, tier bias, salience x (1 - suppression)
+  API -> API : cutoffs -> strong / weak hits
+  API -> API : recall gate + token budget -> context_block, clipped[]
+end
+API -> DB : insert retrieval_requests
+API --> Client : context_block + request_id
+Client --> Agent : result (_transport.mode=http)
+
+Agent -> Client : memory_feedback(request_id, score 0-5)
+Client -> API : POST /api/v1/feedback
+API -> DB : update request + per-memory counters
+@enduml

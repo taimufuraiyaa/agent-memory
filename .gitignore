@@ -101,3 +101,9 @@ Thumbs.db
 # Local build and runtime state
 .build/
 .local/
+
+# Claude Code local config and installed skills (incl. BMAD)
+.claude/
+
+# BMAD-METHOD local install (regenerate with: npx bmad-method install)
+_bmad/

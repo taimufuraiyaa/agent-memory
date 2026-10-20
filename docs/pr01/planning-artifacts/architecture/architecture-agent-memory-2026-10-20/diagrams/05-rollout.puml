@@ -1,0 +1,15 @@
+@startuml 05-rollout
+title PR01 — Rollout phases (gated, no committed dates)
+skinparam defaultTextAlignment center
+rectangle "P0 Spike\nFTS5 + normalizer model" as P0
+rectangle "P1 Shadow\nBM25 in parallel, overlap@10 metrics" as P1
+rectangle "P2 Opt-in flag\nsearch.engine=bm25" as P2
+rectangle "P3 Default BM25\nvectors read-only for rollback" as P3
+rectangle "P4 Remove vectors, embeddings, Bloom\nharness/Jev moved out, Ollama removed" as P4
+P0 -right-> P1
+P1 -right-> P2 : Recall@10 within 3pp
+P2 -right-> P3 : paraphrase Recall@10 >= 85%\np95 within PRD
+P3 -right-> P4 : one stable release
+rectangle "E2 Extract Jev + mini LLM\n(parallel from P0)" as E2 #ECEFF1
+E2 .up.> P4 : breaking removals land together
+@enduml

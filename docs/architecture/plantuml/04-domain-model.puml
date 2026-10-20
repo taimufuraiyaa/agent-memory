@@ -1,0 +1,74 @@
+@startuml 04-domain-model
+title Agent Memory — Core domain model
+hide empty methods
+
+enum MemoryType {
+  episodic (7d)
+  semantic (30d)
+  procedural (90d)
+  outcome (60d)
+}
+enum StorageTier {
+  markdown
+  vector
+  vector+graph
+  document
+  cold
+}
+enum RelationType {
+  calls
+  depends_on
+  contains
+  contradicts
+  supersedes
+  led_to
+  derived_from
+}
+class MemoryEntry {
+  id
+  workspace
+  content
+  keywords [0..3]
+  source
+  confidence
+  created_at / updated_at
+  last_accessed / access_count
+  useful / ignored / rejected / harmful counts
+  decay_score
+  salience_score
+  suppression_score
+  pinned
+  importance
+  superseded_by
+}
+class Relation {
+  target_id
+  weight 0..1
+  metadata
+}
+class Outcome {
+  result: success | failure | partial
+  approach
+  reason
+}
+class Tombstone {
+  original_id
+  content_hash
+  evicted_at
+  reason
+}
+class RetrievalRequest {
+  request_id
+  mode
+  score 0..5
+  useful_count / total_count
+}
+
+MemoryEntry --> MemoryType
+MemoryEntry --> StorageTier
+MemoryEntry "1" *-- "0..*" Relation
+Relation --> RelationType
+MemoryEntry "1" -- "0..1" Outcome
+MemoryEntry "1" .. "0..1" Tombstone : evicted to >
+RetrievalRequest "1" o-- "0..*" MemoryEntry : returned hits
+@enduml
